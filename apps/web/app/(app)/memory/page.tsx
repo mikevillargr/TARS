@@ -176,11 +176,9 @@ export default function MemoryPage() {
           )}
         </div>
         <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5">
-              <Plus size={14} />
-              Add memory
-            </Button>
+          <DialogTrigger render={<Button size="sm" className="gap-1.5" />}>
+            <Plus size={14} />
+            Add memory
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -194,7 +192,7 @@ export default function MemoryPage() {
                 rows={4}
                 className="resize-none"
               />
-              <Select value={newDomain} onValueChange={setNewDomain}>
+              <Select value={newDomain} onValueChange={(v) => v && setNewDomain(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Domain" />
                 </SelectTrigger>

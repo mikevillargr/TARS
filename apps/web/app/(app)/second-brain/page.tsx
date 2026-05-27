@@ -202,7 +202,7 @@ function CaptureUrlForm({ onSuccess }: { onSuccess: () => void }) {
         value={tags}
         onChange={(e) => setTags(e.target.value)}
       />
-      <Select value={domain} onValueChange={setDomain}>
+      <Select value={domain} onValueChange={(v) => v && setDomain(v)}>
         <SelectTrigger>
           <SelectValue placeholder="Domain" />
         </SelectTrigger>
@@ -278,7 +278,7 @@ function CaptureNoteForm({ onSuccess }: { onSuccess: () => void }) {
         value={tags}
         onChange={(e) => setTags(e.target.value)}
       />
-      <Select value={domain} onValueChange={setDomain}>
+      <Select value={domain} onValueChange={(v) => v && setDomain(v)}>
         <SelectTrigger>
           <SelectValue placeholder="Domain" />
         </SelectTrigger>
@@ -360,11 +360,9 @@ export default function SecondBrainPage() {
           )}
         </div>
         <Dialog open={captureOpen} onOpenChange={setCaptureOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5">
-              <Plus size={14} />
-              Quick Capture
-            </Button>
+          <DialogTrigger render={<Button size="sm" className="gap-1.5" />}>
+            <Plus size={14} />
+            Quick Capture
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
