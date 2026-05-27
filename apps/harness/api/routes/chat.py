@@ -171,7 +171,7 @@ async def send_message(
     history = result.scalars().all()
     messages = [{"role": m.role, "content": m.content} for m in history if m.role != "system"]
 
-    system_prompt = await assemble(user_id, body.content)
+    system_prompt = await assemble(user_id, body.content, db=db)
 
     if not conv.title:
         conv.title = body.content[:60]
@@ -199,15 +199,27 @@ async def send_message(
                     pass
             yield chunk
 
+        assistant_content = "".join(full_response)
         assistant_msg = Message(
             conversation_id=conversation_id,
             role="assistant",
-            content="".join(full_response),
+            content=assistant_content,
             model_used=model_used or tier.value,
             tokens_used=tokens_used,
         )
         db.add(assistant_msg)
         await db.commit()
+
+        # Auto-save exchange to Mnemon (low importance, conversational source)
+        try:
+            from memory import mnemon as _mnemon
+            summary = f"User: {body.content[:200]}\nTARS: {assistant_content[:300]}"
+            await _mnemon.write(
+                db, user_id, summary,
+                domain="work", source="conversation", importance=2,
+            )
+        except Exception:
+            pass
 
     return StreamingResponse(
         generate(),

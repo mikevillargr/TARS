@@ -195,7 +195,7 @@ class KnowledgeItem(Base):
 class DocumentChunk(Base):
     __tablename__ = "document_chunks"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
-    knowledge_item_id: Mapped[str] = mapped_column(String, ForeignKey("knowledge_items.id"), nullable=False)
+    knowledge_item_id: Mapped[str] = mapped_column(String, ForeignKey("knowledge_items.id", ondelete="CASCADE"), nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[Optional[List[float]]] = mapped_column(Vector(768), nullable=True)

@@ -1,9 +1,10 @@
 """
 Context assembler — builds the system prompt for each conversation turn.
-Stubs for memory/second brain injection until Session 3.
+Queries Mnemon (episodic) and Second Brain (semantic) and injects into prompt.
 """
 
-from datetime import datetime, timezone
+from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 
 SYSTEM_TEMPLATE = """You are TARS, Mike Villar's personal AI operating system.
 
@@ -36,14 +37,26 @@ async def assemble(
     user_id: str,
     query: str,
     *,
-    # These will be populated in Session 3 via actual DB lookups
-    mnemon_context: str = "No memories retrieved yet.",
-    second_brain_context: str = "No knowledge retrieved yet.",
+    db: Optional[AsyncSession] = None,
     active_tasks_count: int = 0,
     todays_meetings: str = "No meetings",
     last_seen: str = "First interaction",
 ) -> str:
-    """Return the fully assembled system prompt for this turn."""
+    """Query Mnemon + Second Brain and return assembled system prompt."""
+    mnemon_context = "No relevant memories."
+    second_brain_context = "No relevant knowledge."
+
+    if db is not None:
+        try:
+            from memory import mnemon, second_brain
+            memories = await mnemon.search(db, user_id, query, limit=6)
+            mnemon_context = mnemon.format_for_context(memories)
+
+            sb_results = await second_brain.search(db, user_id, query, limit=4)
+            second_brain_context = second_brain.format_for_context(sb_results)
+        except Exception:
+            pass  # memory errors never break chat
+
     return SYSTEM_TEMPLATE.format(
         mnemon_context=mnemon_context,
         second_brain_context=second_brain_context,
