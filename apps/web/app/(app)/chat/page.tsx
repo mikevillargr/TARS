@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Send, Paperclip, Camera, Mic, Plus, Bot, User,
   Code, Terminal, ChevronLeft, PanelLeft, Maximize2,
@@ -101,6 +101,13 @@ export default function ChatPage() {
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [isContextDismissed, setContextDismissed]   = useState(false)
   const [inputValue, setInputValue]             = useState("")
+
+  // Collapse the nav sidebar when entering chat — the conversation list
+  // takes over that role. Restore it when leaving.
+  useEffect(() => {
+    setSidebarOpen(false)
+    return () => setSidebarOpen(true)
+  }, [setSidebarOpen])
 
   const activeChat = MOCK_CHATS.find((c) => c.id === activeChatId) ?? MOCK_CHATS[0]
   const isFocusMode = !sidebarOpen && isConvListCollapsed
