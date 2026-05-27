@@ -52,7 +52,7 @@ class ModelClient:
     @property
     def http(self) -> httpx.AsyncClient:
         if not self._http:
-            self._http = httpx.AsyncClient(timeout=120.0)
+            self._http = httpx.AsyncClient(timeout=25.0)
         return self._http
 
     async def stream(
