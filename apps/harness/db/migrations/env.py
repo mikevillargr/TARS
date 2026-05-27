@@ -2,6 +2,9 @@ import os
 from logging.config import fileConfig
 from sqlalchemy import create_engine, pool
 from alembic import context
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from db.base import Base
 import db.models  # noqa: F401 — import models to register them
