@@ -5,7 +5,7 @@ from sqlalchemy import String, Text, Integer, Float, Boolean, DateTime, ForeignK
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 
-from db.session import Base
+from db.base import Base
 
 
 def now_utc() -> datetime:
