@@ -1,0 +1,28 @@
+name: Deploy Web
+
+on:
+  push:
+    tags:
+      - "v*"
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+
+jobs:
+  deploy:
+    name: Deploy Next.js to production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/tars
+            CHANGED_SERVICES=web bash infrastructure/scripts/deploy.sh
