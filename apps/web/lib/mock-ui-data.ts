@@ -1,3 +1,66 @@
+export const MOCK_CHATS = [
+  {
+    id: 'c1',
+    title: 'Q3 Strategy Planning',
+    messages: [
+      { id: 'm1', role: 'user', content: 'Summarize the key decisions from our Q3 strategy meeting and what I need to do before Monday.' },
+      {
+        id: 'm2', role: 'assistant', model: 'Qwen3 32B',
+        toolCalls: ['Queried Second Brain', 'Retrieved Meeting: Weekly Sync'],
+        content: `Here's the summary from the Q3 strategy meeting:\n\n**Decisions made:**\n1. Dashboard rollout moved from Q4 → Q3. This is now the top engineering priority.\n2. Analytics revamp paused until the new engineering lead is hired.\n3. Weekly sync moved to Tuesdays at 10am.\n\n**Your actions before Monday:**\n- Review and approve Charlie's engineering lead shortlist\n- Update the Q3 strategy doc with the new dashboard priority\n- Reply to Client X confirming the revised timeline`,
+      },
+      { id: 'm3', role: 'user', content: 'Create tasks for all three of those action items and assign them to me.' },
+      {
+        id: 'm4', role: 'assistant', model: 'Qwen3 32B',
+        toolCalls: ['Created Task: Review engineering lead shortlist', 'Created Task: Update Q3 strategy doc', 'Created Task: Reply to Client X'],
+        content: 'Done. Three tasks created and assigned to you, all due Monday May 30:\n\n1. Review engineering lead shortlist (High priority)\n2. Update Q3 strategy doc (High priority)\n3. Reply to Client X re: timeline (Normal priority)\n\nThey\'re in your Tasks inbox now.',
+      },
+    ],
+  },
+  {
+    id: 'c2',
+    title: 'Fix JWT refresh bug',
+    messages: [
+      { id: 'm5', role: 'user', content: 'The JWT refresh is breaking on mobile. Token expires mid-session and the user gets logged out. Check the auth module.' },
+      {
+        id: 'm6', role: 'assistant', model: 'Qwen3 32B',
+        toolCalls: ['Queried Second Brain: JWT auth'],
+        content: 'The issue is likely a race condition in the token refresh logic. When multiple requests fire simultaneously near expiry, each triggers a refresh — only one succeeds and the rest get 401s.\n\nFix: implement a refresh mutex so only one refresh runs at a time, and queue the others to wait for it. I can write the implementation if you want.',
+      },
+      { id: 'm7', role: 'user', content: 'Yes, write it. Use the existing pattern in src/auth/context.tsx.' },
+      {
+        id: 'm8', role: 'assistant', model: 'Claude Sonnet',
+        toolCalls: ['Read: src/auth/context.tsx'],
+        content: '```typescript\n// src/auth/refresh-mutex.ts\nlet refreshPromise: Promise<string> | null = null\n\nexport async function refreshWithMutex(\n  refreshFn: () => Promise<string>\n): Promise<string> {\n  if (refreshPromise) return refreshPromise\n  refreshPromise = refreshFn().finally(() => {\n    refreshPromise = null\n  })\n  return refreshPromise\n}\n```\n\nThen in context.tsx, replace the direct `refreshToken()` call with `refreshWithMutex(refreshToken)`. This ensures only one refresh runs at a time — concurrent callers share the same promise.',
+      },
+    ],
+  },
+  {
+    id: 'c3',
+    title: 'Acme Corp proposal review',
+    messages: [
+      { id: 'm9', role: 'user', content: 'Pull up the Acme Corp context and tell me where we are with the proposal.' },
+      {
+        id: 'm10', role: 'assistant', model: 'Qwen3 32B',
+        toolCalls: ['Queried Second Brain: Acme Corp', 'Retrieved Memory: Acme Corp'],
+        content: 'Here\'s the current Acme Corp status:\n\n**Proposal:** SOW v3 sent on May 23. Client confirmed Phase 1 scope and approved the timeline in Monday\'s kickoff meeting.\n\n**Open items:**\n- Signed SOW needs to go to Acme legal (due May 27 — today)\n- First security review session to be scheduled (Marcus Tan owns this, due May 28)\n\n**Hard constraint:** All deploys are gated on Acme\'s security review. This is a legal requirement, not negotiable.',
+      },
+    ],
+  },
+  {
+    id: 'c4',
+    title: 'Morning brief',
+    messages: [
+      { id: 'm11', role: 'user', content: 'Morning. What do I have today?' },
+      {
+        id: 'm12', role: 'assistant', model: 'Qwen3 8B',
+        toolCalls: ['Queried Calendar', 'Queried Tasks', 'Retrieved Email Digest'],
+        content: 'Good morning. Here\'s your day:\n\n**Meetings (2):**\n- 10:00 AM — Weekly Sync: Product Team (45 min, Fireflies recording)\n- 3:30 PM — 1:1 with Sarah (30 min)\n\n**Tasks due today (3):**\n- Send signed SOW to Acme legal (High)\n- Fix JWT refresh bug (Urgent)\n- Review Q3 strategy draft (High)\n\n**Email:** 42 threads overnight. 3 action items flagged — Client X approved the proposal. I\'ve queued the digest for your review.',
+      },
+    ],
+  },
+]
+
 export const MOCK_MEETINGS = [
   { id: 'm1', title: 'Weekly Sync: Product Team', date: '2026-05-26T10:00:00Z', duration: '45m', source: 'Fireflies', summary: 'The team agreed to prioritize the new dashboard rollout for Q3. Charlie will finalize the engineering lead hire by Friday.', attendees: ['Alice Chen', 'Bob Patel', 'Charlie Wu'] },
   { id: 'm2', title: 'Client Kickoff: Acme Corp', date: '2026-05-25T14:00:00Z', duration: '60m', source: 'Fathom', summary: 'Acme Corp confirmed Phase 1 scope and approved the proposed timeline. Hard dependency on security review flagged.', attendees: ['David Reyes', 'Eve Larsson', 'Marcus Tan'] },
