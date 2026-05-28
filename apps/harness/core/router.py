@@ -58,6 +58,21 @@ _TIER3_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Personal/self-referential queries — always Claude (small models don't use context well)
+_PERSONAL_RE = re.compile(
+    r"\b("
+    r"what do you know about me"
+    r"|tell me about (my|myself)"
+    r"|what.?s my (name|job|role|work|background|preference|style)"
+    r"|who am i"
+    r"|do you (know|remember) (me|who i am)"
+    r"|what have (i|we) (talked|discussed|said)"
+    r"|what do you remember"
+    r"|my (background|profile|preferences?|history)"
+    r")\b",
+    re.IGNORECASE,
+)
+
 _SHORT = 30
 _LONG = 500
 
@@ -67,6 +82,8 @@ def _heuristic(prompt: str) -> ModelTier:
     n = len(s)
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
+    if _PERSONAL_RE.search(s):
+        return ModelTier.TIER3
     if _TIER3_RE.search(s) or n > _LONG:
         return ModelTier.TIER3
     if n < _SHORT:
@@ -88,6 +105,8 @@ async def classify(prompt: str) -> ModelTier:
     # Fast-path for unambiguous cases — no LLM call needed
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
+    if _PERSONAL_RE.search(s):
+        return ModelTier.TIER3
     if _TIER3_RE.search(s) or n > _LONG:
         return ModelTier.TIER3
 

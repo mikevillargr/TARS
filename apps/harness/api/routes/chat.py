@@ -170,6 +170,42 @@ async def _get_or_create_user(user_id: str, db: AsyncSession) -> User:
     return user
 
 
+async def _extract_and_save_facts(
+    db,
+    user_id: str,
+    user_content: str,
+    assistant_content: str,
+    client: ModelClient,
+) -> None:
+    """Extract personal/professional facts from the exchange and save as memories."""
+    if len(user_content) < 20 and len(assistant_content) < 80:
+        return
+
+    exchange = f"User: {user_content[:400]}\nAssistant: {assistant_content[:600]}"
+    try:
+        resp = await client.anthropic.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=200,
+            system=(
+                "Extract any personal facts, preferences, decisions, professional information, "
+                "or life details about the user (Mike) from this exchange. "
+                "Output a concise list of facts, one per line. "
+                "If this is small talk, a test, or contains no personal information, output: SKIP"
+            ),
+            messages=[{"role": "user", "content": exchange}],
+        )
+        facts = resp.content[0].text.strip()
+        if not facts or facts.upper().startswith("SKIP"):
+            return
+        from memory import mnemon as _mnemon
+        await _mnemon.write(
+            db, user_id, facts,
+            domain="work", source="conversation", importance=4,
+        )
+    except Exception as exc:
+        log.warning("Memory fact extraction failed: %s", exc)
+
+
 async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
     """Generate a 3-5 word conversation title from recent exchanges."""
     recent = messages[-8:]
@@ -403,15 +439,21 @@ async def send_message(
                     )
                     await bg_db.commit()
 
-                try:
-                    from memory import mnemon as _mnemon
-                    summary = f"User: {(content or '[attachment]')[:200]}\nTARS: {assistant_content[:300]}"
-                    await _mnemon.write(
-                        bg_db, user_id, summary,
-                        domain="work", source="conversation", importance=2,
-                    )
-                except Exception:
-                    pass
+                # Only save raw transcript for substantive exchanges
+                user_input = content or "[attachment]"
+                if len(user_input) >= 15 or len(assistant_content) >= 80:
+                    try:
+                        from memory import mnemon as _mnemon
+                        summary = f"User: {user_input[:200]}\nTARS: {assistant_content[:300]}"
+                        await _mnemon.write(
+                            bg_db, user_id, summary,
+                            domain="work", source="conversation", importance=2,
+                        )
+                    except Exception:
+                        pass
+
+                # Extract personal/professional facts as high-importance memories
+                await _extract_and_save_facts(bg_db, user_id, user_input, assistant_content, client)
 
             await queue.put(sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "title": new_title}))
             await queue.put(sse_done())

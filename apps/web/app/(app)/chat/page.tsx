@@ -205,6 +205,7 @@ export default function ChatPage() {
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
   const fileInputRef                                = useRef<HTMLInputElement>(null)
   const cameraInputRef                              = useRef<HTMLInputElement>(null)
+  const activeChatIdRef                             = useRef<string | null>(activeChatId)
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? [])
@@ -212,6 +213,13 @@ export default function ChatPage() {
     e.target.value = ""
   }
 
+
+  // Keep ref in sync; clear streaming when switching conversations
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId
+    setStreaming(null)
+    setBusy(false)
+  }, [activeChatId])
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -331,9 +339,14 @@ export default function ChatPage() {
             const evt = JSON.parse(raw)
             if (evt.type === "chunk") {
               accumulated += evt.text
-              setStreaming({ role: "assistant", content: accumulated, streaming: true })
+              // Only update UI if still on this conversation
+              if (chatId === activeChatIdRef.current) {
+                setStreaming({ role: "assistant", content: accumulated, streaming: true })
+              }
             } else if (evt.type === "calendar_suggest") {
-              setCalendarSuggestions(prev => [...prev, evt as CalendarSuggestion])
+              if (chatId === activeChatIdRef.current) {
+                setCalendarSuggestions(prev => [...prev, evt as CalendarSuggestion])
+              }
             } else if (evt.type === "done") {
               const finalMsg: Message = {
                 id: `done-${Date.now()}`,
@@ -342,9 +355,12 @@ export default function ChatPage() {
                 model_used: evt.model,
                 created_at: new Date().toISOString(),
               }
-              setMessages((prev) => [...prev.filter((m) => m.id !== tempUser.id), tempUser, finalMsg])
-              setStreaming(null)
-              // Update title directly from SSE event (no race condition)
+              // Only inject into message list if still on this conversation
+              if (chatId === activeChatIdRef.current) {
+                setMessages((prev) => [...prev.filter((m) => m.id !== tempUser.id), tempUser, finalMsg])
+                setStreaming(null)
+              }
+              // Always update the conversation title in the list
               if (evt.title && chatId) {
                 setConversations((prev) => prev.map((c) =>
                   c.id === chatId ? { ...c, title: evt.title } : c
