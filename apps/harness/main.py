@@ -1,3 +1,6 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,7 +9,23 @@ from api.routes import second_brain, agent_jobs, artifacts, email_digest
 from api.routes import cron, connectors, memory
 from core.config import settings
 
+log = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Pre-load the embedding model so first ingest/search isn't slow
+    try:
+        from memory.embeddings import _get_model
+        _get_model()
+        log.info("Embedding model loaded")
+    except Exception as e:
+        log.warning("Embedding model preload failed: %s", e)
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="TARS Harness",
     version="0.1.0",
     docs_url="/docs" if settings.debug else None,

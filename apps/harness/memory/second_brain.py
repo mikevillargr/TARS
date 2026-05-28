@@ -24,9 +24,15 @@ async def ingest_url(
     domain: str = "work",
 ) -> KnowledgeItem:
     """Fetch URL, extract clean text, chunk, embed, save."""
+    import asyncio
     import trafilatura
 
-    downloaded = trafilatura.fetch_url(url)
+    # fetch_url is blocking — run off the event loop
+    loop = asyncio.get_event_loop()
+    downloaded = await loop.run_in_executor(None, trafilatura.fetch_url, url)
+    if not downloaded:
+        raise ValueError(f"Could not fetch URL: {url}")
+
     clean = trafilatura.extract(downloaded, include_comments=False, include_tables=True) or ""
     metadata = trafilatura.extract_metadata(downloaded)
     title = metadata.title if metadata else url
