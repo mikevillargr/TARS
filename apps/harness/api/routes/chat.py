@@ -1,8 +1,9 @@
+import base64
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import json as _json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, desc, update as sa_update
@@ -54,9 +55,50 @@ class ConversationDetailOut(BaseModel):
         from_attributes = True
 
 
-class SendMessageRequest(BaseModel):
-    content: str
-    tier_override: Optional[str] = None  # "tier1"|"tier2"|"tier3"
+_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+
+
+async def _process_attachment(upload: UploadFile) -> dict:
+    data = await upload.read()
+    ct = (upload.content_type or "").lower()
+
+    if ct.startswith("image/"):
+        media_type = ct if ct in _IMAGE_TYPES else "image/jpeg"
+        return {
+            "kind": "image",
+            "block": {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64.standard_b64encode(data).decode(),
+                },
+            },
+        }
+
+    # Documents — extract text
+    text = ""
+    if ct == "application/pdf":
+        try:
+            import fitz  # pymupdf
+            doc = fitz.open(stream=data, filetype="pdf")
+            text = "\n".join(page.get_text() for page in doc)
+        except Exception as exc:
+            log.warning("PDF extraction failed: %s", exc)
+            text = "[Could not extract PDF text]"
+    elif "wordprocessingml" in ct:
+        try:
+            from io import BytesIO
+            import docx as _docx
+            document = _docx.Document(BytesIO(data))
+            text = "\n".join(p.text for p in document.paragraphs if p.text.strip())
+        except Exception as exc:
+            log.warning("DOCX extraction failed: %s", exc)
+            text = "[Could not extract DOCX text]"
+    else:
+        text = data.decode("utf-8", errors="replace")
+
+    return {"kind": "text", "filename": upload.filename or "file", "text": text}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -181,33 +223,71 @@ async def delete_conversation(
 @router.post("/conversations/{conversation_id}/messages")
 async def send_message(
     conversation_id: str,
-    body: SendMessageRequest,
+    content: str = Form(default=""),
+    files: List[UploadFile] = File(default=[]),
+    tier_override: Optional[str] = Form(default=None),
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
     """Stream an assistant reply via SSE. Saves both messages to DB after completion."""
     conv = await _get_conversation(conversation_id, user_id, db)
 
-    tier = ModelTier(body.tier_override) if body.tier_override else await classify(body.content)
+    # Process attachments
+    image_blocks: List[Any] = []
+    doc_snippets: List[str] = []
+    for upload in files:
+        result = await _process_attachment(upload)
+        if result["kind"] == "image":
+            image_blocks.append(result["block"])
+        else:
+            doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
 
+    # Images require Claude vision; force Tier 3
+    if image_blocks:
+        tier = ModelTier.TIER3
+    elif tier_override:
+        tier = ModelTier(tier_override)
+    else:
+        tier = await classify(content or " ".join(doc_snippets[:1]))
+
+    # Build the text that goes to the model (doc text prepended)
+    full_text = ("\n\n".join(doc_snippets) + "\n\n" + content).strip() if doc_snippets else content
+
+    # Store plain text in DB (don't persist image bytes)
+    db_content = content or " · ".join(
+        (f"[image]" if b["type"] == "image" else "") for b in image_blocks
+    ) or "[attachment]"
     user_msg = Message(
         conversation_id=conversation_id,
         role="user",
-        content=body.content,
+        content=db_content,
     )
     db.add(user_msg)
     await db.commit()
 
-    result = await db.execute(
+    db_result = await db.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at)
         .limit(40)
     )
-    history = result.scalars().all()
-    messages = [{"role": m.role, "content": m.content} for m in history if m.role != "system"]
+    history = db_result.scalars().all()
+    messages: List[Dict[str, Any]] = [
+        {"role": m.role, "content": m.content} for m in history if m.role != "system"
+    ]
 
-    system_prompt = await assemble(user_id, body.content, db=db)
+    # Replace last user message with rich content if needed
+    if messages and messages[-1]["role"] == "user":
+        if image_blocks:
+            parts: List[Any] = []
+            if full_text:
+                parts.append({"type": "text", "text": full_text})
+            parts.extend(image_blocks)
+            messages[-1]["content"] = parts
+        elif full_text != content:
+            messages[-1]["content"] = full_text
+
+    system_prompt = await assemble(user_id, content or "attachment", db=db)
 
     client = get_model_client()
     full_response: list[str] = []
@@ -256,7 +336,7 @@ async def send_message(
         # Auto-save exchange to Mnemon (low importance, conversational source)
         try:
             from memory import mnemon as _mnemon
-            summary = f"User: {body.content[:200]}\nTARS: {assistant_content[:300]}"
+            summary = f"User: {(content or '[attachment]')[:200]}\nTARS: {assistant_content[:300]}"
             await _mnemon.write(
                 db, user_id, summary,
                 domain="work", source="conversation", importance=2,

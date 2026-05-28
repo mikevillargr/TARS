@@ -5,6 +5,12 @@ import ReactMarkdown from "react-markdown"
 import { ModelBadge } from "./model-badge"
 import { cn } from "@/lib/utils"
 
+export interface Attachment {
+  name: string
+  url: string
+  type: string
+}
+
 export interface Message {
   id: string
   role: "user" | "assistant"
@@ -12,6 +18,7 @@ export interface Message {
   model_used?: string
   tokens_used?: number
   created_at: string
+  _attachments?: Attachment[]
 }
 
 interface StreamingMessage {
@@ -74,9 +81,31 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
             : "bg-muted text-foreground rounded-bl-sm"
         )}
       >
-        <div className={cn("prose prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
-          <ReactMarkdown>{msg.content}</ReactMarkdown>
-        </div>
+        {"_attachments" in msg && msg._attachments && msg._attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {msg._attachments.map((att, i) =>
+              att.type.startsWith("image/") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={i}
+                  src={att.url}
+                  alt={att.name}
+                  className="max-w-[240px] max-h-[180px] rounded-lg object-cover"
+                />
+              ) : (
+                <div key={i} className="flex items-center gap-1.5 bg-white/10 rounded-lg px-2 py-1 text-xs">
+                  <span>📎</span>
+                  <span className="max-w-[140px] truncate">{att.name}</span>
+                </div>
+              )
+            )}
+          </div>
+        )}
+        {msg.content && (
+          <div className={cn("prose prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
+            <ReactMarkdown>{msg.content}</ReactMarkdown>
+          </div>
+        )}
 
         {!isUser && !isStreaming && "model_used" in msg && msg.model_used && (
           <div className="mt-2 flex items-center gap-2">

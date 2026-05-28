@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { useParams } from "next/navigation"
-import { MessageThread, type Message } from "@/components/chat/message-thread"
+import { MessageThread, type Message, type Attachment } from "@/components/chat/message-thread"
 import { MessageInput } from "@/components/chat/message-input"
 import { apiGet } from "@/lib/api-client"
 
@@ -32,25 +32,34 @@ export default function ConversationPage() {
   }, [id])
 
   const handleSend = useCallback(
-    async (content: string) => {
+    async (content: string, attachments: File[]) => {
       if (busy || !id) return
       setBusy(true)
 
-      // Optimistically show user message
+      const _attachments: Attachment[] = attachments.map((f) => ({
+        name: f.name,
+        url: URL.createObjectURL(f),
+        type: f.type,
+      }))
+
       const tempUser: Message = {
         id: `temp-${Date.now()}`,
         role: "user",
         content,
         created_at: new Date().toISOString(),
+        _attachments,
       }
       setMessages((prev) => [...prev, tempUser])
       setStreaming({ role: "assistant", content: "", streaming: true })
 
       try {
+        const fd = new FormData()
+        fd.append("content", content)
+        for (const f of attachments) fd.append("files", f)
+
         const res = await fetch(`/api/proxy/chat/conversations/${id}/messages`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content }),
+          body: fd,
         })
 
         if (!res.ok || !res.body) throw new Error("Stream failed")
