@@ -26,9 +26,11 @@ async def _ollama_keepalive() -> None:
     Keep llama3.2:3b warm and auto-clear the classifier backoff when Ollama recovers.
     Runs as a background task for the lifetime of the harness process.
 
-    Two distinct timeout modes:
-    - Healthy path: 10s timeout (model already loaded, response in <1s)
-    - Recovery path: 60s timeout (model may need ~40s to cold-load from disk)
+    Three states:
+    - Healthy: 10s timeout, 240s between pings (model warm, sub-second response)
+    - Model cold: 60s timeout, 30s retry (5xx returned — model may have been ejected;
+                  classifier stays active, but we give the model time to reload)
+    - Truly down: 60s timeout, 30s retry (connection error — classifier enters backoff)
     """
     from core.router import _ollama_mark_failed, _ollama_mark_recovered, _ollama_available
 
@@ -37,11 +39,15 @@ async def _ollama_keepalive() -> None:
 
     await asyncio.sleep(5)   # let Ollama finish initialising after harness starts
 
+    # Tracks whether we've had a recent 5xx (model may be cold, need longer timeout).
+    # Separate from the classifier backoff — Ollama is reachable but model is reloading.
+    _model_may_be_cold = False
+
     while True:
-        # Use a longer timeout when we know Ollama was recently down —
-        # the model needs ~40s to load from disk on a cold start.
-        recovering = not _ollama_available()
-        timeout = 60.0 if recovering else 10.0
+        # Classifier is in backoff OR model may be cold → use 60s (handles ~40s cold-load).
+        # Otherwise → 10s is plenty (warm model responds in <1s).
+        classifier_down = not _ollama_available()
+        timeout = 60.0 if (classifier_down or _model_may_be_cold) else 10.0
 
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -55,19 +61,23 @@ async def _ollama_keepalive() -> None:
                     },
                 )
                 resp.raise_for_status()
+            # Success — model is warm and Ollama is healthy.
+            _model_may_be_cold = False
             _ollama_mark_recovered()
             await asyncio.sleep(_KEEPALIVE_HEALTHY_INTERVAL)
 
         except httpx.HTTPStatusError as exc:
             # Ollama is reachable but returned 5xx — transient error (race condition
             # during model unload/reload). Don't mark the classifier unavailable;
-            # retry quickly so the model warms back up.
-            log.warning("Ollama returned %s — retrying in %ds (not marking unavailable)",
+            # flag model as cold so the next ping uses the longer timeout.
+            _model_may_be_cold = True
+            log.warning("Ollama returned %s — model may be cold, retrying in %ds",
                         exc.response.status_code, _KEEPALIVE_RECOVERY_INTERVAL)
             await asyncio.sleep(_KEEPALIVE_RECOVERY_INTERVAL)
 
         except Exception as exc:
             # Connection error or timeout — Ollama is genuinely down.
+            _model_may_be_cold = True   # also flag cold: first request after recovery needs time
             _ollama_mark_failed()
             log.warning("Ollama keepalive failed (%s) — retrying in %ds",
                         exc, _KEEPALIVE_RECOVERY_INTERVAL)
