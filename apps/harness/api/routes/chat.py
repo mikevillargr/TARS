@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 from core.auth import require_auth
 from core.router import classify
-from core.model_client import get_model_client, ModelClient, ModelTier
+from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from db.session import get_db
@@ -359,14 +359,16 @@ async def send_message(
     full_response: list[str] = []
     model_used: str = ""
     tokens_used: int = 0
+    tools = [PROPOSE_CALENDAR_EVENT_TOOL] if tier == ModelTier.TIER3 else None
 
     async def generate():
         nonlocal model_used, tokens_used
 
-        # Stream chunks to client immediately; intercept done to post-process
-        async for event in client.stream(messages, tier, system=system_prompt):
+        async for event in client.stream(messages, tier, system=system_prompt, tools=tools):
             if event["type"] == "chunk":
                 full_response.append(event.get("text", ""))
+                yield sse_event(event)
+            elif event["type"] == "calendar_suggest":
                 yield sse_event(event)
             elif event["type"] == "done":
                 model_used = event.get("model", "")

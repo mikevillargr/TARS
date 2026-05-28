@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Send, Paperclip, Camera, Mic, Plus, Bot, User,
   Code, Terminal, ChevronLeft, PanelLeft, Maximize2,
-  Minimize2, X,
+  Minimize2, X, Calendar, Loader2,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost } from "@/lib/api-client"
@@ -29,6 +29,77 @@ interface StreamingMsg {
   role: "assistant"
   content: string
   streaming: true
+}
+
+interface CalendarSuggestion {
+  tool_use_id: string
+  title: string
+  datetime_iso: string
+  duration_min?: number
+  description?: string
+  location?: string
+}
+
+function formatSuggestTime(iso: string) {
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+  } catch { return iso }
+}
+
+function CalendarSuggestChip({ suggestion, onDismiss }: { suggestion: CalendarSuggestion; onDismiss: () => void }) {
+  const [adding, setAdding] = useState(false)
+  const [added, setAdded] = useState(false)
+
+  async function addToCalendar() {
+    setAdding(true)
+    try {
+      await apiPost("/calendar/events", {
+        title: suggestion.title,
+        start: suggestion.datetime_iso,
+        duration_min: suggestion.duration_min ?? 60,
+        description: suggestion.description,
+        location: suggestion.location,
+      })
+      setAdded(true)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  if (added) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.2)" }}>
+        <Calendar size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "#2d5a4f" }}>Added to calendar</span>
+        <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4" }}>
+      <Calendar size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
+      <div className="flex-1 min-w-0">
+        <span className="font-medium" style={{ color: "#1a1714" }}>{suggestion.title}</span>
+        <span className="ml-1.5" style={{ color: "#948a7b" }}>{formatSuggestTime(suggestion.datetime_iso)}</span>
+      </div>
+      <button
+        onClick={addToCalendar}
+        disabled={adding}
+        className="shrink-0 font-medium disabled:opacity-50 flex items-center gap-1"
+        style={{ color: "#2d5a4f" }}
+        onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+        onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+      >
+        {adding ? <Loader2 size={10} className="animate-spin" /> : null}
+        Add to Calendar
+      </button>
+      <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+    </div>
+  )
 }
 
 // ─── Message renderer ────────────────────────────────────────────
@@ -122,6 +193,7 @@ export default function ChatPage() {
   const [messages, setMessages]                     = useState<Message[]>([])
   const [streaming, setStreaming]                   = useState<StreamingMsg | null>(null)
   const [busy, setBusy]                             = useState(false)
+  const [calendarSuggestions, setCalendarSuggestions] = useState<CalendarSuggestion[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [isContextDismissed, setContextDismissed]   = useState(false)
   const [inputValue, setInputValue]                 = useState("")
@@ -209,6 +281,7 @@ export default function ChatPage() {
 
     setBusy(true)
     setInputValue("")
+    setCalendarSuggestions([])
     const pendingAttachments = attachments
     setAttachments([])
 
@@ -255,6 +328,8 @@ export default function ChatPage() {
             if (evt.type === "chunk") {
               accumulated += evt.text
               setStreaming({ role: "assistant", content: accumulated, streaming: true })
+            } else if (evt.type === "calendar_suggest") {
+              setCalendarSuggestions(prev => [...prev, evt as CalendarSuggestion])
             } else if (evt.type === "done") {
               const finalMsg: Message = {
                 id: `done-${Date.now()}`,
@@ -419,6 +494,17 @@ export default function ChatPage() {
           ) : allMessages.map((msg, i) => (
             <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
           ))}
+          {calendarSuggestions.length > 0 && (
+            <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
+              {calendarSuggestions.map((s) => (
+                <CalendarSuggestChip
+                  key={s.tool_use_id}
+                  suggestion={s}
+                  onDismiss={() => setCalendarSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+                />
+              ))}
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 

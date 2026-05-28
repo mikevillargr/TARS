@@ -28,6 +28,43 @@ class ModelTier(str, Enum):
     TIER3 = "tier3"
 
 
+PROPOSE_CALENDAR_EVENT_TOOL = {
+    "name": "propose_calendar_event",
+    "description": (
+        "Suggest adding an event to the user's Google Calendar. Use this when the "
+        "conversation establishes a specific date, time, and activity — e.g. a meeting "
+        "invitation in an email, a deadline to block time for, or a call just scheduled. "
+        "Do NOT use for vague future plans or hypotheticals."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Short event title (5 words max)",
+            },
+            "datetime_iso": {
+                "type": "string",
+                "description": "Start datetime in ISO 8601 with timezone offset (e.g. 2026-05-30T14:00:00+08:00)",
+            },
+            "duration_min": {
+                "type": "integer",
+                "description": "Duration in minutes. Default 60.",
+            },
+            "description": {
+                "type": "string",
+                "description": "Optional brief context notes",
+            },
+            "location": {
+                "type": "string",
+                "description": "Optional location",
+            },
+        },
+        "required": ["title", "datetime_iso"],
+    },
+}
+
+
 TIER_MODELS = {
     ModelTier.TIER1: "llama3.2:3b",
     ModelTier.TIER2: "qwen3-32b",
@@ -77,10 +114,11 @@ class ModelClient:
         tier: ModelTier,
         system: str = "",
         max_tokens: int = 4096,
+        tools: Optional[List[Dict]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         # Tier 3: always Claude
         if tier == ModelTier.TIER3:
-            async for event in self._stream_anthropic(messages, system, max_tokens):
+            async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools):
                 yield event
             return
 
@@ -156,20 +194,76 @@ class ModelClient:
         messages: List[Dict[str, str]],
         system: str,
         max_tokens: int,
+        tools: Optional[List[Dict]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         model = "claude-sonnet-4-6"
         try:
-            async with self.anthropic.messages.stream(
+            kwargs: Dict[str, Any] = dict(
                 model=model,
                 max_tokens=max_tokens,
                 system=system,
                 messages=messages,
-            ) as stream:
+            )
+            if tools:
+                kwargs["tools"] = tools
+
+            async with self.anthropic.messages.stream(**kwargs) as stream:
                 async for text in stream.text_stream:
                     yield {"type": "chunk", "text": text}
+
                 final = await stream.get_final_message()
-                total_tokens = final.usage.input_tokens + final.usage.output_tokens
-                yield {"type": "done", "model": model, "tokens": total_tokens}
+                tool_uses = [b for b in final.content if b.type == "tool_use"]
+
+                # Emit calendar suggestions before done event
+                for b in tool_uses:
+                    if b.name == "propose_calendar_event":
+                        yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
+
+                if final.stop_reason == "tool_use" and tool_uses:
+                    # Send tool results back and stream the continuation
+                    asst_content = []
+                    for b in final.content:
+                        if b.type == "text":
+                            asst_content.append({"type": "text", "text": b.text})
+                        elif b.type == "tool_use":
+                            asst_content.append({
+                                "type": "tool_use", "id": b.id,
+                                "name": b.name, "input": b.input,
+                            })
+
+                    tool_results = [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": b.id,
+                            "content": "Calendar suggestion shown to user.",
+                        }
+                        for b in tool_uses
+                    ]
+
+                    cont_messages = messages + [
+                        {"role": "assistant", "content": asst_content},
+                        {"role": "user", "content": tool_results},
+                    ]
+                    cont_kwargs: Dict[str, Any] = dict(
+                        model=model, max_tokens=max_tokens,
+                        system=system, messages=cont_messages,
+                    )
+                    if tools:
+                        cont_kwargs["tools"] = tools
+
+                    async with self.anthropic.messages.stream(**cont_kwargs) as cont:
+                        async for text in cont.text_stream:
+                            yield {"type": "chunk", "text": text}
+                        final2 = await cont.get_final_message()
+                        total = (
+                            final.usage.input_tokens + final.usage.output_tokens
+                            + final2.usage.input_tokens + final2.usage.output_tokens
+                        )
+                        yield {"type": "done", "model": model, "tokens": total}
+                else:
+                    total = final.usage.input_tokens + final.usage.output_tokens
+                    yield {"type": "done", "model": model, "tokens": total}
+
         except Exception as e:
             yield {"type": "error", "error": str(e)}
 
