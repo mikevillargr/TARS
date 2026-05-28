@@ -1,30 +1,103 @@
 "use client"
 
-import { useState } from "react"
-import { Database, Search, Edit2, Trash2, Zap, Plus } from "lucide-react"
-import { MOCK_MEMORIES } from "@/lib/mock-ui-data"
+import { useState, useEffect, useCallback } from "react"
+import { Database, Search, Trash2, Zap, Plus, X } from "lucide-react"
+import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 
-const DOMAINS = ["All", "Work", "Personal", "Cycling", "Client", "Health"]
-const SOURCES = ["All", "Chat", "Meeting", "Email", "Second Brain", "Manual"]
+interface Memory {
+  id: string
+  content: string
+  domain: string
+  source: string
+  importance: number
+  created_at: string
+  updated_at: string
+}
+
+const DOMAINS = ["All", "work", "personal", "cycling", "client", "health"]
+const SOURCES = ["All", "conversation", "meeting", "email", "manual"]
 
 export default function MemoryPage() {
-  const [domainFilter, setDomainFilter] = useState("All")
-  const [sourceFilter, setSourceFilter] = useState("All")
-  const [importanceFilter, setImportanceFilter] = useState("All")
-  const [sortBy, setSortBy] = useState<"Date" | "Importance">("Date")
-  const [query, setQuery] = useState("")
+  const [memories, setMemories]           = useState<Memory[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [domainFilter, setDomainFilter]   = useState("All")
+  const [sourceFilter, setSourceFilter]   = useState("All")
+  const [sortBy, setSortBy]               = useState<"date" | "importance">("date")
+  const [query, setQuery]                 = useState("")
+  const [searching, setSearching]         = useState(false)
+  const [showAdd, setShowAdd]             = useState(false)
+  const [addContent, setAddContent]       = useState("")
+  const [addDomain, setAddDomain]         = useState("work")
+  const [addImportance, setAddImportance] = useState(3)
+  const [saving, setSaving]               = useState(false)
 
-  const filtered = MOCK_MEMORIES.filter((mem) => {
-    if (domainFilter !== "All" && mem.domain !== domainFilter) return false
-    if (sourceFilter !== "All" && mem.source !== sourceFilter) return false
-    if (importanceFilter === "High (7+)" && mem.importance < 7) return false
-    if (importanceFilter === "Critical (9+)" && mem.importance < 9) return false
-    if (query.trim() && !mem.content.toLowerCase().includes(query.toLowerCase())) return false
-    return true
-  }).sort((a, b) => {
-    if (sortBy === "Importance") return b.importance - a.importance
-    return new Date(b.date).getTime() - new Date(a.date).getTime()
-  })
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await apiGet<Memory[]>("/memory/memories")
+      setMemories(data)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadAll() }, [loadAll])
+
+  // Debounced semantic search
+  useEffect(() => {
+    if (!query.trim()) { loadAll(); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const data = await apiPost<Memory[]>("/memory/search", { query: query.trim(), limit: 20 })
+        setMemories(data)
+      } catch (e) {
+        console.error(e)
+      } finally {
+        setSearching(false)
+      }
+    }, 400)
+    return () => clearTimeout(t)
+  }, [query, loadAll])
+
+  const handleDelete = async (id: string) => {
+    await apiDelete(`/memory/memories/${id}`)
+    setMemories((prev) => prev.filter((m) => m.id !== id))
+  }
+
+  const handleAdd = async () => {
+    if (!addContent.trim()) return
+    setSaving(true)
+    try {
+      const mem = await apiPost<Memory>("/memory/memories", {
+        content: addContent.trim(),
+        domain: addDomain,
+        source: "manual",
+        importance: addImportance,
+      })
+      setMemories((prev) => [mem, ...prev])
+      setAddContent("")
+      setShowAdd(false)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const filtered = memories
+    .filter((m) => {
+      if (domainFilter !== "All" && m.domain !== domainFilter) return false
+      if (sourceFilter !== "All" && m.source !== sourceFilter) return false
+      return true
+    })
+    .sort((a, b) =>
+      sortBy === "importance"
+        ? b.importance - a.importance
+        : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-canvas">
@@ -35,54 +108,35 @@ export default function MemoryPage() {
             <h1 className="font-semibold text-2xl flex items-center gap-2 text-[#1a1714]" style={{ fontFamily: "var(--font-heading), serif" }}>
               <Database size={22} className="text-moss" /> Memory Browser
             </h1>
-            <button className="btn-primary flex items-center gap-2 text-sm">
+            <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 text-sm">
               <Plus size={16} /> Add Memory
             </button>
           </div>
 
           <div className="relative mb-4">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
+            {searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-faint">searching…</span>}
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search what the AI knows about you..."
+              placeholder="Semantic search across memories…"
               className="w-full bg-canvas border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-moss focus:ring-1 focus:ring-moss"
             />
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <select
-              className="input-field py-1.5 text-xs bg-canvas"
-              value={domainFilter}
-              onChange={(e) => setDomainFilter(e.target.value)}
-            >
+            <select className="input-field py-1.5 text-xs bg-canvas" value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)}>
               {DOMAINS.map((d) => <option key={d} value={d}>{d === "All" ? "Domain: All" : d}</option>)}
             </select>
-
-            <select
-              className="input-field py-1.5 text-xs bg-canvas"
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
-            >
+            <select className="input-field py-1.5 text-xs bg-canvas" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
               {SOURCES.map((s) => <option key={s} value={s}>{s === "All" ? "Source: All" : s}</option>)}
             </select>
-
-            <select
-              className="input-field py-1.5 text-xs bg-canvas"
-              value={importanceFilter}
-              onChange={(e) => setImportanceFilter(e.target.value)}
-            >
-              <option value="All">Importance: All</option>
-              <option value="High (7+)">High (7+)</option>
-              <option value="Critical (9+)">Critical (9+)</option>
-            </select>
-
             <button
               className="btn-ghost text-xs border border-border bg-canvas px-3 py-1.5"
-              onClick={() => setSortBy(sortBy === "Date" ? "Importance" : "Date")}
+              onClick={() => setSortBy(sortBy === "date" ? "importance" : "date")}
             >
-              Sort by: {sortBy}
+              Sort: {sortBy === "date" ? "Date" : "Importance"}
             </button>
           </div>
         </div>
@@ -91,46 +145,81 @@ export default function MemoryPage() {
       {/* List */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-4xl mx-auto space-y-4">
-          {filtered.map((memory) => (
-            <div key={memory.id} className="card group">
+          {loading ? (
+            <p className="text-center py-12 text-ink-muted text-sm">Loading memories…</p>
+          ) : filtered.length === 0 ? (
+            <p className="text-center py-12 text-ink-muted text-sm">
+              {query ? "No memories matched that search." : "No memories yet. TARS will build this up from your conversations."}
+            </p>
+          ) : filtered.map((mem) => (
+            <div key={mem.id} className="card group">
               <div className="flex justify-between items-start mb-2">
                 <div className="flex gap-2">
-                  <span className="badge badge-neutral bg-surface-2">{memory.domain}</span>
+                  <span className="badge badge-neutral bg-surface-2">{mem.domain}</span>
                   <span className="text-[10px] text-ink-faint uppercase tracking-wider font-medium pt-0.5">
-                    From: {memory.source}
+                    {mem.source}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "#b8651a" }}>
-                    <Zap size={12} style={{ fill: "#b8651a" }} /> {memory.importance}/10
+                    <Zap size={12} style={{ fill: "#b8651a" }} /> {mem.importance}/5
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                    <button className="p-1 text-ink-muted hover:text-ink rounded hover:bg-surface-2">
-                      <Edit2 size={14} />
-                    </button>
-                    <button
-                      className="p-1 rounded text-ink-muted"
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc"; (e.currentTarget as HTMLElement).style.color = "#a04848" }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.color = "" }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => handleDelete(mem.id)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-ink-muted"
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc"; (e.currentTarget as HTMLElement).style.color = "#a04848" }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.color = "" }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
-              <p className="text-sm leading-relaxed text-ink">{memory.content}</p>
+              <p className="text-sm leading-relaxed text-ink">{mem.content}</p>
               <div className="mt-3 text-[10px] text-ink-faint">
-                Learned on {new Date(memory.date).toLocaleDateString()}
+                {new Date(mem.created_at).toLocaleDateString()}
               </div>
             </div>
           ))}
-          {filtered.length === 0 && (
-            <div className="text-center py-12 text-ink-muted text-sm">
-              No memories found matching these filters.
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Add Memory modal */}
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 backdrop-blur-sm">
+          <div className="bg-surface rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg text-[#1a1714]" style={{ fontFamily: "var(--font-heading), serif" }}>Add Memory</h2>
+              <button onClick={() => setShowAdd(false)} className="p-1 text-ink-muted hover:text-ink"><X size={18} /></button>
+            </div>
+            <textarea
+              value={addContent}
+              onChange={(e) => setAddContent(e.target.value)}
+              placeholder="What should TARS remember?"
+              className="input-field w-full h-28 text-sm resize-none mb-4"
+              autoFocus
+            />
+            <div className="flex gap-3 mb-4">
+              <select className="input-field text-sm flex-1" value={addDomain} onChange={(e) => setAddDomain(e.target.value)}>
+                {DOMAINS.slice(1).map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <div className="flex items-center gap-2 text-sm text-ink-muted">
+                <span>Importance</span>
+                <input
+                  type="number" min={1} max={5} value={addImportance}
+                  onChange={(e) => setAddImportance(Number(e.target.value))}
+                  className="input-field w-16 text-center"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowAdd(false)} className="btn-ghost text-sm">Cancel</button>
+              <button onClick={handleAdd} disabled={saving || !addContent.trim()} className="btn-primary text-sm disabled:opacity-40">
+                {saving ? "Saving…" : "Save Memory"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
