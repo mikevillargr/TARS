@@ -134,20 +134,23 @@ async def search(
     user_id: str,
     query: str,
     limit: int = 5,
+    threshold: float = 0.5,
 ) -> List[dict]:
     """
     Two-stage retrieval:
-    1. Find top matching items by item-level embedding
-    2. Find top matching chunks within those items
+    1. Find top matching items by item-level embedding (filtered by threshold)
+    2. Find top matching chunks within those items (filtered by threshold)
     Returns list of {item, chunk} dicts with the most relevant context.
+    Only results with cosine_distance < threshold are returned (similarity > 0.5).
     """
     query_embedding = embed_one(query)
 
-    # Stage 1: top items
+    # Stage 1: top items within similarity threshold
     item_result = await db.execute(
         select(KnowledgeItem)
         .where(KnowledgeItem.user_id == user_id)
         .where(KnowledgeItem.embedding.is_not(None))
+        .where(KnowledgeItem.embedding.cosine_distance(query_embedding) < threshold)
         .order_by(KnowledgeItem.embedding.cosine_distance(query_embedding))
         .limit(limit * 2)
     )
@@ -157,11 +160,12 @@ async def search(
 
     item_ids = [item.id for item in top_items]
 
-    # Stage 2: top chunks within those items
+    # Stage 2: top chunks within those items, also filtered by threshold
     chunk_result = await db.execute(
         select(DocumentChunk)
         .where(DocumentChunk.knowledge_item_id.in_(item_ids))
         .where(DocumentChunk.embedding.is_not(None))
+        .where(DocumentChunk.embedding.cosine_distance(query_embedding) < threshold)
         .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
         .limit(limit)
     )
@@ -178,7 +182,7 @@ async def search(
             results.append({"item": item, "chunk": chunk})
             seen_items.add(item.id)
 
-    # If no chunks found, fall back to item-level summaries
+    # If no chunks passed threshold, fall back to item-level summaries (already threshold-filtered)
     if not results:
         for item in top_items[:limit]:
             results.append({"item": item, "chunk": None})

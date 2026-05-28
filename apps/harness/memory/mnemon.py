@@ -44,14 +44,20 @@ async def search(
     query: str,
     limit: int = 6,
     domain: Optional[str] = None,
+    threshold: float = 0.5,
 ) -> List[Memory]:
-    """Semantic search over memories using pgvector cosine distance."""
+    """
+    Semantic search over memories using pgvector cosine distance.
+    Only returns results with cosine_distance < threshold (i.e. similarity > 0.5).
+    This prevents irrelevant memories from polluting the context window.
+    """
     query_embedding = embed_one(query)
 
     stmt = (
         select(Memory)
         .where(Memory.user_id == user_id)
         .where(Memory.embedding.is_not(None))
+        .where(Memory.embedding.cosine_distance(query_embedding) < threshold)
         .order_by(Memory.embedding.cosine_distance(query_embedding))
         .limit(limit)
     )

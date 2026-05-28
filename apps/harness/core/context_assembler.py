@@ -205,10 +205,10 @@ async def assemble(
     """
     Build the system prompt for a conversation turn.
 
-    Tier 1 (fast/cheap model): lightweight context — tasks only, no email body,
-    brief calendar. Keeps the prompt small so Ollama's first token is faster.
+    Tier 1 (Haiku): lightweight context — top 3 memories + tasks + calendar.
+    No second brain search (not needed for quick Q&A) and no email (keeps prompt small).
 
-    Tier 2/3: full context — memory, knowledge, email, calendar, tasks.
+    Tier 2/3: full context — top 6 memories, second brain, email, calendar, tasks.
     """
     from core.model_client import ModelTier
 
@@ -235,14 +235,19 @@ async def assemble(
 
         async def _fetch_memory():
             nonlocal mnemon_context, second_brain_context
-            if is_lightweight:
-                return  # skip vector search for simple lookups
             try:
                 from memory import mnemon, second_brain
-                memories = await mnemon.search(db, user_id, query, limit=6)
-                mnemon_context = mnemon.format_for_context(memories)
-                sb_results = await second_brain.search(db, user_id, query, limit=4)
-                second_brain_context = second_brain.format_for_context(sb_results)
+                if is_lightweight:
+                    # Tier 1 (Haiku): top 3 memories only — enough for personalization,
+                    # low token cost. Skip second brain (document search not needed for Q&A).
+                    memories = await mnemon.search(db, user_id, query, limit=3)
+                    mnemon_context = mnemon.format_for_context(memories)
+                else:
+                    # Tier 2/3: full context
+                    memories = await mnemon.search(db, user_id, query, limit=6)
+                    mnemon_context = mnemon.format_for_context(memories)
+                    sb_results = await second_brain.search(db, user_id, query, limit=4)
+                    second_brain_context = second_brain.format_for_context(sb_results)
             except Exception:
                 pass
 
