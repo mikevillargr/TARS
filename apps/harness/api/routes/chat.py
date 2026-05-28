@@ -22,6 +22,9 @@ from db.models import Conversation, Message, User, Task
 
 router = APIRouter()
 
+# Strong references so background tasks aren't GC'd before they finish
+_active_bg_tasks: set = set()
+
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -525,7 +528,9 @@ async def send_message(
         finally:
             await queue.put(None)
 
-    asyncio.create_task(background_generate())
+    task = asyncio.create_task(background_generate())
+    _active_bg_tasks.add(task)
+    task.add_done_callback(_active_bg_tasks.discard)
 
     async def generate():
         while True:

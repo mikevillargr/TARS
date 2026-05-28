@@ -287,6 +287,8 @@ export default function ChatPage() {
   const fileInputRef                                = useRef<HTMLInputElement>(null)
   const cameraInputRef                              = useRef<HTMLInputElement>(null)
   const activeChatIdRef                             = useRef<string | null>(activeChatId)
+  const abortControllerRef                          = useRef<AbortController | null>(null)
+  const pollTimerRef                                = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? [])
@@ -294,9 +296,18 @@ export default function ChatPage() {
     e.target.value = ""
   }
 
-
-  // Keep ref in sync; clear transient state when switching conversations
+  // Cancel any in-flight fetch or poll on unmount
   useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+    }
+  }, [])
+
+  // Keep ref in sync; cancel in-flight request + poll when switching conversations
+  useEffect(() => {
+    abortControllerRef.current?.abort()
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     activeChatIdRef.current = activeChatId
     setStreaming(null)
     setBusy(false)
@@ -316,20 +327,73 @@ export default function ChatPage() {
       .catch(console.error)
   }, [])
 
-  // Load messages when active conversation changes
-  // Also syncs the title back into the list — the backend backfills null titles on load
+  // Load messages when active conversation changes.
+  // If the last message is from the user and recent, the server is still generating —
+  // show a loading indicator and poll until the assistant response lands.
   useEffect(() => {
     if (!activeChatId) { setMessages([]); return }
-    apiGet<{ id: string; title: string | null; messages: Message[] }>(`/chat/conversations/${activeChatId}`)
+
+    const chatId = activeChatId
+
+    apiGet<{ id: string; title: string | null; messages: Message[] }>(`/chat/conversations/${chatId}`)
       .then((d) => {
+        if (chatId !== activeChatIdRef.current) return
         setMessages(d.messages)
         if (d.title) {
           setConversations((prev) => prev.map((c) =>
-            c.id === activeChatId ? { ...c, title: d.title } : c
+            c.id === chatId ? { ...c, title: d.title } : c
           ))
+        }
+
+        // If last message is from user and was sent in the last 10 minutes,
+        // the server is still generating — show loading and poll.
+        const msgs = d.messages
+        const lastMsg = msgs[msgs.length - 1]
+        const recentThreshold = 10 * 60 * 1000
+        const isRecent = lastMsg && (Date.now() - new Date(lastMsg.created_at).getTime()) < recentThreshold
+        if (lastMsg?.role === "user" && isRecent) {
+          setBusy(true)
+          setStreaming({ role: "assistant", content: "", streaming: true })
+
+          let attempts = 0
+          const MAX_ATTEMPTS = 60 // 2 minutes at 2s intervals
+          pollTimerRef.current = setInterval(async () => {
+            attempts++
+            if (chatId !== activeChatIdRef.current || attempts > MAX_ATTEMPTS) {
+              clearInterval(pollTimerRef.current!)
+              if (chatId === activeChatIdRef.current) {
+                setStreaming(null)
+                setBusy(false)
+              }
+              return
+            }
+            try {
+              const fresh = await apiGet<{ id: string; title: string | null; messages: Message[] }>(
+                `/chat/conversations/${chatId}`
+              )
+              const freshLast = fresh.messages[fresh.messages.length - 1]
+              if (freshLast?.role === "assistant") {
+                clearInterval(pollTimerRef.current!)
+                if (chatId === activeChatIdRef.current) {
+                  setMessages(fresh.messages)
+                  setStreaming(null)
+                  setBusy(false)
+                  if (fresh.title) {
+                    setConversations((prev) => prev.map((c) =>
+                      c.id === chatId ? { ...c, title: fresh.title } : c
+                    ))
+                  }
+                }
+              }
+            } catch { /* keep polling */ }
+          }, 2000)
         }
       })
       .catch(console.error)
+
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+    }
   }, [activeChatId])
 
   const activeChat = conversations.find((c) => c.id === activeChatId)
@@ -395,9 +459,13 @@ export default function ChatPage() {
       fd.append("content", content)
       for (const f of pendingAttachments) fd.append("files", f)
 
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+
       const res = await fetch(`/api/proxy/chat/conversations/${chatId}/messages`, {
         method: "POST",
         body: fd,
+        signal: controller.signal,
       })
 
       if (!res.ok || !res.body) throw new Error("Stream failed")
@@ -460,7 +528,9 @@ export default function ChatPage() {
           } catch { /* ignore malformed SSE */ }
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      // AbortError = user navigated away; background task on server continues
+      if (err instanceof Error && err.name === "AbortError") return
       console.error(err)
       setStreaming(null)
     } finally {
