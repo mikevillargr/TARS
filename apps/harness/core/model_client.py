@@ -1,20 +1,14 @@
 """
-Unified model client — routes to RunPod (Qwen) or Anthropic (Claude) based on tier.
+Unified model client.
 
-Tier 1: Qwen3 8B  via RunPod runsync  (~500ms warm, ~60s cold start)
-Tier 2: Qwen3 32B via RunPod runsync  (~2-4s warm, ~120s cold start)
-Tier 3: Claude Sonnet via Anthropic   (~3-8s, real streaming)
-
-RunPod tiers return full response then we chunk it to fake a stream.
-Anthropic returns real SSE chunks.
-
-Cold-start handling: on RunPod failure the tier is marked cold for a cooldown
-period. During cooldown, requests route directly to Claude without waiting.
-After cooldown the next request probes RunPod again — if it responds, the
-tier is marked warm and tiering resumes normally.
+Tier 1: Llama 3.2 3B  via local Ollama on KVM4 (always available, no cold start)
+Tier 2: Qwen3 32B     via RunPod runsync (~2-4s warm, ~120s cold start)
+         → falls back to local Ollama when RunPod is cold
+Tier 3: Claude Sonnet via Anthropic (frontier, streaming)
 """
 
 import asyncio
+import json
 import logging
 import time
 from enum import Enum
@@ -35,20 +29,16 @@ class ModelTier(str, Enum):
 
 
 TIER_MODELS = {
-    ModelTier.TIER1: "qwen3-8b",
+    ModelTier.TIER1: "llama3.2:3b",
     ModelTier.TIER2: "qwen3-32b",
     ModelTier.TIER3: "claude-sonnet-4-6",
 }
 
 TIER_ENDPOINTS = {
-    ModelTier.TIER1: settings.runpod_endpoint_8b,
     ModelTier.TIER2: settings.runpod_endpoint_32b,
 }
 
-# How long to stay on Claude after a RunPod failure before probing again.
-# 8B cold start ~60s, 32B cold start ~120s.
 _TIER_COOLDOWN = {
-    ModelTier.TIER1: 60.0,
     ModelTier.TIER2: 120.0,
 }
 
@@ -56,10 +46,7 @@ _TIER_COOLDOWN = {
 class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
-        self._http: Optional[httpx.AsyncClient] = None
-        # tier -> monotonic timestamp of last failure (None = healthy)
         self._failed_at: dict[ModelTier, Optional[float]] = {
-            ModelTier.TIER1: None,
             ModelTier.TIER2: None,
         }
 
@@ -69,22 +56,15 @@ class ModelClient:
             self._anthropic = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         return self._anthropic
 
-    @property
-    def http(self) -> httpx.AsyncClient:
-        if not self._http:
-            self._http = httpx.AsyncClient(timeout=30.0)
-        return self._http
-
     def _is_warm(self, tier: ModelTier) -> bool:
         failed_at = self._failed_at.get(tier)
         if failed_at is None:
             return True
-        return (time.monotonic() - failed_at) >= _TIER_COOLDOWN.get(tier, 60.0)
+        return (time.monotonic() - failed_at) >= _TIER_COOLDOWN.get(tier, 120.0)
 
     def _mark_failed(self, tier: ModelTier) -> None:
         self._failed_at[tier] = time.monotonic()
-        cooldown = _TIER_COOLDOWN.get(tier, 60.0)
-        logger.warning("RunPod %s marked cold — routing to Claude for %.0fs", tier, cooldown)
+        logger.warning("RunPod %s marked cold — falling back for %.0fs", tier, _TIER_COOLDOWN.get(tier, 120.0))
 
     def _mark_warm(self, tier: ModelTier) -> None:
         if self._failed_at.get(tier) is not None:
@@ -98,15 +78,77 @@ class ModelClient:
         system: str = "",
         max_tokens: int = 4096,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Yields SSE-style dicts: {"type": "chunk"|"done", "text"?: str, "model"?: str, "tokens"?: int}"""
-        endpoint = TIER_ENDPOINTS.get(tier)
-        if tier == ModelTier.TIER3 or not endpoint or not self._is_warm(tier):
-            if endpoint and not self._is_warm(tier):
-                logger.info("RunPod %s in cooldown — using Claude", tier)
+        # Tier 3: always Claude
+        if tier == ModelTier.TIER3:
             async for event in self._stream_anthropic(messages, system, max_tokens):
                 yield event
+            return
+
+        # Tier 1: local Ollama (always available, no cold start)
+        if tier == ModelTier.TIER1:
+            if settings.ollama_url:
+                async for event in self._stream_ollama(messages, system, max_tokens):
+                    yield event
+            else:
+                async for event in self._stream_anthropic(messages, system, max_tokens):
+                    yield event
+            return
+
+        # Tier 2: RunPod 32B when warm, else local Ollama, else Claude
+        endpoint = TIER_ENDPOINTS.get(ModelTier.TIER2)
+        if endpoint and self._is_warm(ModelTier.TIER2):
+            async for event in self._stream_runpod(messages, system, max_tokens):
+                yield event
+        elif settings.ollama_url:
+            logger.info("RunPod Tier2 cold — using local Ollama")
+            async for event in self._stream_ollama(messages, system, max_tokens):
+                yield event
         else:
-            async for event in self._stream_runpod(messages, tier, system, max_tokens):
+            async for event in self._stream_anthropic(messages, system, max_tokens):
+                yield event
+
+    async def _stream_ollama(
+        self,
+        messages: List[Dict[str, str]],
+        system: str,
+        max_tokens: int,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        model = settings.classifier_model  # llama3.2:3b
+        all_messages = []
+        if system:
+            all_messages.append({"role": "system", "content": system})
+        all_messages.extend(messages)
+
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    f"{settings.ollama_url}/api/chat",
+                    json={
+                        "model": model,
+                        "messages": all_messages,
+                        "stream": True,
+                        "options": {"num_predict": max_tokens},
+                    },
+                ) as resp:
+                    resp.raise_for_status()
+                    token_count = 0
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                            text = chunk.get("message", {}).get("content", "")
+                            if text:
+                                token_count += 1
+                                yield {"type": "chunk", "text": text}
+                            if chunk.get("done"):
+                                yield {"type": "done", "model": model, "tokens": token_count}
+                        except json.JSONDecodeError:
+                            pass
+        except Exception as e:
+            logger.warning("Ollama stream failed (%s: %s) — falling back to Claude", type(e).__name__, e)
+            async for event in self._stream_anthropic(messages, system, max_tokens):
                 yield event
 
     async def _stream_anthropic(
@@ -134,17 +176,17 @@ class ModelClient:
     async def _stream_runpod(
         self,
         messages: List[Dict[str, str]],
-        tier: ModelTier,
         system: str,
         max_tokens: int,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        endpoint = TIER_ENDPOINTS[tier]
-        model_name = settings.workhorse_model if tier == ModelTier.TIER2 else settings.router_model
-        model_label = TIER_MODELS[tier]
+        endpoint = TIER_ENDPOINTS[ModelTier.TIER2]
+        model_name = settings.workhorse_model
+        model_label = TIER_MODELS[ModelTier.TIER2]
 
-        all_messages = messages
+        all_messages = []
         if system:
-            all_messages = [{"role": "system", "content": system}] + messages
+            all_messages.append({"role": "system", "content": system})
+        all_messages.extend(messages)
 
         payload = {
             "input": {
@@ -158,53 +200,48 @@ class ModelClient:
             }
         }
 
-        logger.info("RunPod request: tier=%s model=%s", tier, model_name)
+        logger.info("RunPod Tier2 request: model=%s", model_name)
         try:
-            resp = await self.http.post(
-                endpoint,
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {settings.runpod_api_key}",
-                    "Content-Type": "application/json",
-                },
-            )
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    endpoint,
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {settings.runpod_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                )
             resp.raise_for_status()
             data = resp.json()
 
-            # Ollama worker returns output as a list; vLLM returned a dict
             output = data.get("output", {})
             if isinstance(output, list) and output:
                 output = output[0]
             choices = output.get("choices", []) if isinstance(output, dict) else []
 
             if not choices:
-                self._mark_failed(tier)
-                async for event in self._stream_anthropic(messages, system, max_tokens):
+                self._mark_failed(ModelTier.TIER2)
+                async for event in self._stream_ollama(messages, system, max_tokens):
                     yield event
                 return
 
-            self._mark_warm(tier)
+            self._mark_warm(ModelTier.TIER2)
             full_text: str = choices[0].get("message", {}).get("content", "")
             usage = output.get("usage", {})
             total_tokens = usage.get("total_tokens", 0)
 
-            # Fake-stream: chunk in ~40-char pieces with small delays for UX
             chunk_size = 40
             for i in range(0, len(full_text), chunk_size):
-                yield {"type": "chunk", "text": full_text[i : i + chunk_size]}
+                yield {"type": "chunk", "text": full_text[i: i + chunk_size]}
                 await asyncio.sleep(0.02)
 
             yield {"type": "done", "model": model_label, "tokens": total_tokens}
 
         except Exception as e:
-            logger.warning("RunPod %s failed (%s: %s)", tier, type(e).__name__, e)
-            self._mark_failed(tier)
-            async for event in self._stream_anthropic(messages, system, max_tokens):
+            logger.warning("RunPod Tier2 failed (%s: %s)", type(e).__name__, e)
+            self._mark_failed(ModelTier.TIER2)
+            async for event in self._stream_ollama(messages, system, max_tokens):
                 yield event
-
-    async def close(self):
-        if self._http:
-            await self._http.aclose()
 
 
 # App-level singleton
