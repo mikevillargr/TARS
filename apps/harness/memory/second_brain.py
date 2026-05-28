@@ -52,6 +52,63 @@ async def ingest_url(
     )
 
 
+async def ingest_meeting(
+    db: AsyncSession,
+    user_id: str,
+    transcript: str,
+    title: str,
+    summary: str = "",
+    attendees: List[str] = [],
+    connector_ref: str = "",
+) -> KnowledgeItem:
+    """
+    Ingest a meeting transcript into Second Brain for semantic search.
+
+    Uses the AI-generated summary for the item-level embedding (stage-1 retrieval)
+    so queries like "TenderBites meeting last week" find the right document.
+    Chunks the full transcript for stage-2 deep retrieval.
+    Uses fireflies://<connector_ref> as a dedup key via the url field.
+    """
+    url = f"fireflies://{connector_ref}" if connector_ref else None
+
+    # Item-level embedding: AI summary is far more meaningful than first 800 words
+    embed_text = summary or title
+    item_embedding = embed_one(embed_text)
+
+    item = KnowledgeItem(
+        user_id=user_id,
+        type="meeting",
+        url=url,
+        raw_content=transcript,
+        clean_content=transcript,
+        tags=["meeting", "transcript"],
+        domain="work",
+        embedding=item_embedding,
+        summary=summary[:500] if summary else None,
+        source_title=title,
+        # Re-use topics[] to store attendee list for display
+        topics=attendees[:10] if attendees else [],
+    )
+    db.add(item)
+    await db.flush()
+
+    chunks = chunk_text(transcript)
+    if chunks:
+        chunk_embeddings = embed(chunks)
+        for i, (chunk_str, emb) in enumerate(zip(chunks, chunk_embeddings)):
+            db.add(DocumentChunk(
+                knowledge_item_id=item.id,
+                chunk_index=i,
+                content=chunk_str,
+                embedding=emb,
+                token_count=len(chunk_str.split()),
+            ))
+
+    await db.commit()
+    await db.refresh(item)
+    return item
+
+
 async def ingest_text(
     db: AsyncSession,
     user_id: str,

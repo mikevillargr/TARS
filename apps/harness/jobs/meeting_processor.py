@@ -83,6 +83,9 @@ async def process_meeting(
 
         await db.commit()
         log.info("Meeting %s processed: %d action items", meeting_id, len(action_items))
+
+        # Feed into RAG stores so TARS can recall and search meeting content
+        await _save_to_rag(db, user_id, meeting, action_items)
         return True
 
     except Exception as exc:
@@ -90,6 +93,99 @@ async def process_meeting(
         meeting.status = "error"
         await db.commit()
         return False
+
+
+async def _save_to_rag(
+    db: AsyncSession,
+    user_id: str,
+    meeting: Meeting,
+    action_items: list,
+) -> None:
+    """
+    After a meeting is processed, save it to both RAG stores.
+
+    Mnemon  — compact episodic entry (title, date, attendees, summary, action items).
+              Answers: "what happened in the TenderBites meeting?"
+
+    Second Brain — full transcript, chunked sentence-aware.
+                   Answers: "what was said about pricing in the Isaacs call?"
+
+    Both stores use the Fireflies connector_ref for deduplication so re-processing
+    a meeting replaces the old entries rather than adding duplicates.
+    """
+    from sqlalchemy import delete as sa_delete
+    from db.models import Memory, KnowledgeItem, DocumentChunk
+    from memory import mnemon, second_brain
+
+    date_str = (
+        meeting.started_at.strftime("%b %-d, %Y") if meeting.started_at else "unknown date"
+    )
+    attendees_str = (
+        ", ".join(meeting.attendees[:8]) if meeting.attendees else "unknown attendees"
+    )
+
+    # ── Mnemon ────────────────────────────────────────────────────────────────
+    # Embed the connector_ref as a hidden tag so we can find and replace on re-process
+    ff_tag = f"[ff:{meeting.connector_ref}]"
+    items_str = ""
+    if action_items:
+        items_str = " Action items: " + "; ".join(
+            (f"{a['owner']}: " if a.get("owner") else "") + a.get("text", "")
+            for a in action_items[:10]
+        ) + "."
+
+    memory_text = (
+        f"{ff_tag} Meeting: {meeting.title} on {date_str}. "
+        f"Attendees: {attendees_str}. "
+        f"Summary: {meeting.summary or 'No summary.'}"
+        f"{items_str}"
+    )
+
+    # Remove stale entry for this transcript (idempotent re-processing)
+    await db.execute(
+        sa_delete(Memory).where(
+            Memory.user_id == user_id,
+            Memory.source == "meeting",
+            Memory.content.contains(meeting.connector_ref),
+        )
+    )
+    await db.commit()
+    await mnemon.write(db, user_id, memory_text, domain="work", source="meeting", importance=4)
+    log.info("Meeting %s saved to Mnemon", meeting.id)
+
+    # ── Second Brain ──────────────────────────────────────────────────────────
+    if not meeting.transcript:
+        return
+
+    ff_url = f"fireflies://{meeting.connector_ref}"
+
+    # Remove stale KnowledgeItem + its chunks (cascade not guaranteed on all DBs)
+    existing_result = await db.execute(
+        select(KnowledgeItem).where(
+            KnowledgeItem.user_id == user_id,
+            KnowledgeItem.url == ff_url,
+        )
+    )
+    existing_item = existing_result.scalar_one_or_none()
+    if existing_item:
+        await db.execute(
+            sa_delete(DocumentChunk).where(DocumentChunk.knowledge_item_id == existing_item.id)
+        )
+        await db.execute(
+            sa_delete(KnowledgeItem).where(KnowledgeItem.id == existing_item.id)
+        )
+        await db.commit()
+
+    await second_brain.ingest_meeting(
+        db=db,
+        user_id=user_id,
+        transcript=meeting.transcript,
+        title=f"{meeting.title} — {date_str}",
+        summary=meeting.summary or "",
+        attendees=meeting.attendees or [],
+        connector_ref=meeting.connector_ref,
+    )
+    log.info("Meeting %s transcript ingested into Second Brain", meeting.id)
 
 
 async def _ai_process(
