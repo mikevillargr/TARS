@@ -33,7 +33,7 @@ TIER_MODELS = {
 }
 
 TIER_ENDPOINTS = {
-    ModelTier.TIER1: settings.runpod_endpoint_32b,  # 8B endpoint pending console setup; route to 32B
+    ModelTier.TIER1: settings.runpod_endpoint_8b,
     ModelTier.TIER2: settings.runpod_endpoint_32b,
 }
 
@@ -100,7 +100,7 @@ class ModelClient:
         max_tokens: int,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         endpoint = TIER_ENDPOINTS[tier]
-        model_name = settings.workhorse_model  # Tier 1 routes to 32B endpoint until 8B is restored
+        model_name = settings.workhorse_model if tier == ModelTier.TIER2 else settings.router_model
         model_label = TIER_MODELS[tier]
 
         all_messages = messages
