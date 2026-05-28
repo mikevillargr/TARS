@@ -1,10 +1,16 @@
 """
 Unified model client.
 
-Tier 1: Llama 3.2 3B  via local Ollama on KVM4 (always available, no cold start)
-Tier 2: Qwen3 32B     via RunPod runsync (~2-4s warm, ~120s cold start)
-         → falls back to local Ollama when RunPod is cold
-Tier 3: Claude Sonnet via Anthropic (frontier, streaming)
+Tier 1: Qwen3 8B    via RunPod Serverless (GPU, ~1-3s)
+         → falls back to local Ollama llama3.2:3b (CPU, capped at 600 tokens)
+         → falls back to Claude
+Tier 2: Qwen3 32B   via RunPod Serverless (~2-4s warm, ~120s cold start)
+         → falls back to local Ollama
+         → falls back to Claude
+Tier 3: Claude Sonnet via Anthropic (frontier, streaming, tools)
+
+NOTE: llama3.2:3b is the CLASSIFIER only. It routes requests but never generates
+      Tier 1 responses — that's Qwen3 8B (or Ollama as a fallback).
 """
 
 import asyncio
@@ -28,6 +34,8 @@ class ModelTier(str, Enum):
     TIER3 = "tier3"
 
 
+# ─── Tool definitions ────────────────────────────────────────────────────────
+
 PROPOSE_CALENDAR_EVENT_TOOL = {
     "name": "propose_calendar_event",
     "description": (
@@ -39,31 +47,15 @@ PROPOSE_CALENDAR_EVENT_TOOL = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "title": {
-                "type": "string",
-                "description": "Short event title (5 words max)",
-            },
-            "datetime_iso": {
-                "type": "string",
-                "description": "Start datetime in ISO 8601 with timezone offset (e.g. 2026-05-30T14:00:00+08:00)",
-            },
-            "duration_min": {
-                "type": "integer",
-                "description": "Duration in minutes. Default 60.",
-            },
-            "description": {
-                "type": "string",
-                "description": "Optional brief context notes",
-            },
-            "location": {
-                "type": "string",
-                "description": "Optional location",
-            },
+            "title": {"type": "string", "description": "Short event title (5 words max)"},
+            "datetime_iso": {"type": "string", "description": "ISO 8601 with timezone offset (e.g. 2026-05-30T14:00:00+08:00)"},
+            "duration_min": {"type": "integer", "description": "Duration in minutes. Default 60."},
+            "description": {"type": "string", "description": "Optional brief context notes"},
+            "location": {"type": "string", "description": "Optional location"},
         },
         "required": ["title", "datetime_iso"],
     },
 }
-
 
 CREATE_CALENDAR_EVENT_TOOL = {
     "name": "create_calendar_event",
@@ -75,31 +67,12 @@ CREATE_CALENDAR_EVENT_TOOL = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "title": {
-                "type": "string",
-                "description": "Short event title",
-            },
-            "datetime_iso": {
-                "type": "string",
-                "description": "Start datetime in ISO 8601 with timezone offset (e.g. 2026-05-30T14:00:00+08:00)",
-            },
-            "duration_min": {
-                "type": "integer",
-                "description": "Duration in minutes. Default 60.",
-            },
-            "description": {
-                "type": "string",
-                "description": "Optional notes or agenda",
-            },
-            "location": {
-                "type": "string",
-                "description": "Optional location or video link",
-            },
-            "attendees": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Attendee email addresses",
-            },
+            "title": {"type": "string", "description": "Short event title"},
+            "datetime_iso": {"type": "string", "description": "ISO 8601 with timezone offset"},
+            "duration_min": {"type": "integer", "description": "Duration in minutes. Default 60."},
+            "description": {"type": "string", "description": "Optional notes or agenda"},
+            "location": {"type": "string", "description": "Optional location or video link"},
+            "attendees": {"type": "array", "items": {"type": "string"}, "description": "Attendee email addresses"},
         },
         "required": ["title", "datetime_iso"],
     },
@@ -115,23 +88,10 @@ CREATE_TASK_TOOL = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "title": {
-                "type": "string",
-                "description": "Short task title (10 words max)",
-            },
-            "description": {
-                "type": "string",
-                "description": "Optional context or details",
-            },
-            "priority": {
-                "type": "string",
-                "enum": ["urgent", "high", "normal", "low"],
-                "description": "Task priority. Default normal.",
-            },
-            "due_at": {
-                "type": "string",
-                "description": "Optional due date in ISO 8601 format",
-            },
+            "title": {"type": "string", "description": "Short task title (10 words max)"},
+            "description": {"type": "string", "description": "Optional context or details"},
+            "priority": {"type": "string", "enum": ["urgent", "high", "normal", "low"], "description": "Task priority. Default normal."},
+            "due_at": {"type": "string", "description": "Optional due date in ISO 8601 format"},
         },
         "required": ["title"],
     },
@@ -147,48 +107,112 @@ PROPOSE_TASK_TOOL = {
     "input_schema": {
         "type": "object",
         "properties": {
-            "title": {
-                "type": "string",
-                "description": "Short task title (10 words max)",
-            },
-            "description": {
-                "type": "string",
-                "description": "Optional context or details",
-            },
-            "priority": {
-                "type": "string",
-                "enum": ["urgent", "high", "normal", "low"],
-                "description": "Task priority. Default normal.",
-            },
-            "due_at": {
-                "type": "string",
-                "description": "Optional due date in ISO 8601 format",
-            },
+            "title": {"type": "string", "description": "Short task title (10 words max)"},
+            "description": {"type": "string", "description": "Optional context or details"},
+            "priority": {"type": "string", "enum": ["urgent", "high", "normal", "low"], "description": "Task priority. Default normal."},
+            "due_at": {"type": "string", "description": "Optional due date in ISO 8601 format"},
         },
         "required": ["title"],
     },
 }
 
+SAVE_MEMORY_TOOL = {
+    "name": "save_memory",
+    "description": (
+        "Save a fact, note, or piece of information to Mike's episodic memory. "
+        "Use immediately whenever Mike says 'remember this', 'note that', 'keep in mind', "
+        "or shares a personal fact, preference, or decision worth preserving. "
+        "Also use proactively when you detect important context (e.g. a new client, "
+        "a key preference, a health update). Memories are semantically searched and "
+        "injected into every future conversation."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "The fact or note to remember. Write in third person, be specific: 'Mike prefers...' / 'Mike decided...'",
+            },
+            "domain": {
+                "type": "string",
+                "enum": ["work", "personal", "health", "cycling", "client"],
+                "description": "Domain/category. Default: work.",
+            },
+            "importance": {
+                "type": "integer",
+                "description": "1-5. Default 3. Use 5 for critical facts (e.g. client preferences, health conditions).",
+            },
+        },
+        "required": ["content"],
+    },
+}
+
+SAVE_TO_SECOND_BRAIN_TOOL = {
+    "name": "save_to_second_brain",
+    "description": (
+        "Save a note, research finding, or piece of reusable knowledge to Mike's "
+        "Second Brain knowledge base. Use when Mike says 'save this', 'add this to my "
+        "second brain', 'note this for later', or when you produce analysis/research "
+        "worth preserving for future retrieval. "
+        "Second Brain = reusable reference knowledge. Memory = personal facts and events."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "The note or knowledge to save. Markdown OK.",
+            },
+            "title": {
+                "type": "string",
+                "description": "Short descriptive title (used for search).",
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Tags for organization, e.g. ['client', 'growth-rocket', 'seo']",
+            },
+            "domain": {
+                "type": "string",
+                "description": "Domain category (work, personal, health, cycling, client). Default: work.",
+            },
+        },
+        "required": ["content", "title"],
+    },
+}
+
+# ─── Tier routing tables ─────────────────────────────────────────────────────
 
 TIER_MODELS = {
-    ModelTier.TIER1: "llama3.2:3b",
+    ModelTier.TIER1: "qwen3-8b",
     ModelTier.TIER2: "qwen3-32b",
     ModelTier.TIER3: "claude-sonnet-4-6",
 }
 
 TIER_ENDPOINTS = {
+    ModelTier.TIER1: settings.runpod_endpoint_8b,
     ModelTier.TIER2: settings.runpod_endpoint_32b,
 }
 
+TIER_MODEL_NAMES = {
+    ModelTier.TIER1: settings.router_model,       # Qwen/Qwen3-8B
+    ModelTier.TIER2: settings.workhorse_model,    # Qwen/Qwen3-32B-AWQ
+}
+
 _TIER_COOLDOWN = {
+    ModelTier.TIER1: 120.0,
     ModelTier.TIER2: 120.0,
 }
+
+# Tier 1 Ollama fallback: cap at 600 tokens so CPU inference stays under ~60s
+_TIER1_OLLAMA_MAX_TOKENS = 600
 
 
 class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
         self._failed_at: dict[ModelTier, Optional[float]] = {
+            ModelTier.TIER1: None,
             ModelTier.TIER2: None,
         }
 
@@ -222,27 +246,36 @@ class ModelClient:
         tools: Optional[List[Dict]] = None,
         tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        # Tier 3: Claude — the only tier that receives tools.
-        # The classifier is responsible for routing action/tool requests here.
+        # ── Tier 3: Claude — frontier, tools, streaming ──────────────────────
         if tier == ModelTier.TIER3:
-            async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools, tool_executor=tool_executor):
+            async for event in self._stream_anthropic(
+                messages, system, max_tokens, tools=tools, tool_executor=tool_executor
+            ):
                 yield event
             return
 
-        # Tier 1: local Ollama — lean, fast, tool-free
+        # ── Tier 1: RunPod Qwen3 8B → Ollama (capped) → Claude ───────────────
         if tier == ModelTier.TIER1:
-            if settings.ollama_url:
-                async for event in self._stream_ollama(messages, system, max_tokens):
+            endpoint_1b = TIER_ENDPOINTS.get(ModelTier.TIER1)
+            ollama_max = min(max_tokens, _TIER1_OLLAMA_MAX_TOKENS)
+            if endpoint_1b and self._is_warm(ModelTier.TIER1):
+                async for event in self._stream_runpod(
+                    messages, system, max_tokens, tier=ModelTier.TIER1
+                ):
+                    yield event
+            elif settings.ollama_url:
+                logger.info("Tier1 RunPod cold/absent — using local Ollama (max %d tokens)", ollama_max)
+                async for event in self._stream_ollama(messages, system, ollama_max):
                     yield event
             else:
                 async for event in self._stream_anthropic(messages, system, max_tokens):
                     yield event
             return
 
-        # Tier 2: RunPod 32B when warm, else local Ollama, else Claude
-        endpoint = TIER_ENDPOINTS.get(ModelTier.TIER2)
-        if endpoint and self._is_warm(ModelTier.TIER2):
-            async for event in self._stream_runpod(messages, system, max_tokens):
+        # ── Tier 2: RunPod Qwen3 32B → Ollama → Claude ───────────────────────
+        endpoint_2 = TIER_ENDPOINTS.get(ModelTier.TIER2)
+        if endpoint_2 and self._is_warm(ModelTier.TIER2):
+            async for event in self._stream_runpod(messages, system, max_tokens, tier=ModelTier.TIER2):
                 yield event
         elif settings.ollama_url:
             logger.info("RunPod Tier2 cold — using local Ollama")
@@ -325,7 +358,7 @@ class ModelClient:
                 final = await stream.get_final_message()
                 tool_uses = [b for b in final.content if b.type == "tool_use"]
 
-                # Emit suggestion events for proposal tools (shown as chips)
+                # Emit suggestion events for proposal tools (shown as chips in UI)
                 for b in tool_uses:
                     if b.name == "propose_calendar_event":
                         yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
@@ -343,7 +376,6 @@ class ModelClient:
                                 "name": b.name, "input": b.input,
                             })
 
-                    # Build tool results — execute action tools, stub proposal tools
                     tool_results = []
                     for b in tool_uses:
                         if b.name in _SUGGESTION_TOOLS:
@@ -393,10 +425,13 @@ class ModelClient:
         messages: List[Dict[str, str]],
         system: str,
         max_tokens: int,
+        *,
+        tier: ModelTier,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        endpoint = TIER_ENDPOINTS[ModelTier.TIER2]
-        model_name = settings.workhorse_model
-        model_label = TIER_MODELS[ModelTier.TIER2]
+        """Call a RunPod serverless Ollama endpoint (works for both Tier 1 and Tier 2)."""
+        endpoint = TIER_ENDPOINTS[tier]
+        model_name = TIER_MODEL_NAMES[tier]
+        model_label = TIER_MODELS[tier]
 
         all_messages = []
         if system:
@@ -415,7 +450,7 @@ class ModelClient:
             }
         }
 
-        logger.info("RunPod Tier2 request: model=%s", model_name)
+        logger.info("RunPod %s request: model=%s", tier, model_name)
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
@@ -435,12 +470,13 @@ class ModelClient:
             choices = output.get("choices", []) if isinstance(output, dict) else []
 
             if not choices:
-                self._mark_failed(ModelTier.TIER2)
-                async for event in self._stream_ollama(messages, system, max_tokens):
+                self._mark_failed(tier)
+                ollama_max = min(max_tokens, _TIER1_OLLAMA_MAX_TOKENS) if tier == ModelTier.TIER1 else max_tokens
+                async for event in self._stream_ollama(messages, system, ollama_max):
                     yield event
                 return
 
-            self._mark_warm(ModelTier.TIER2)
+            self._mark_warm(tier)
             full_text: str = choices[0].get("message", {}).get("content", "")
             usage = output.get("usage", {})
             total_tokens = usage.get("total_tokens", 0)
@@ -453,9 +489,10 @@ class ModelClient:
             yield {"type": "done", "model": model_label, "tokens": total_tokens}
 
         except Exception as e:
-            logger.warning("RunPod Tier2 failed (%s: %s)", type(e).__name__, e)
-            self._mark_failed(ModelTier.TIER2)
-            async for event in self._stream_ollama(messages, system, max_tokens):
+            logger.warning("RunPod %s failed (%s: %s)", tier, type(e).__name__, e)
+            self._mark_failed(tier)
+            ollama_max = min(max_tokens, _TIER1_OLLAMA_MAX_TOKENS) if tier == ModelTier.TIER1 else max_tokens
+            async for event in self._stream_ollama(messages, system, ollama_max):
                 yield event
 
 

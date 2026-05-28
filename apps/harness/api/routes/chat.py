@@ -14,7 +14,12 @@ log = logging.getLogger(__name__)
 
 from core.auth import require_auth
 from core.router import classify
-from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL, CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL
+from core.model_client import (
+    get_model_client, ModelClient, ModelTier,
+    PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
+    CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
+    SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
+)
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from db.session import get_db, AsyncSessionLocal
@@ -398,7 +403,14 @@ async def send_message(
     client = get_model_client()
     # Tools only for TIER3 (Claude) — Ollama and RunPod don't support Anthropic tool_use.
     # The classifier is responsible for routing action requests to TIER3.
-    tools = [CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL] if tier == ModelTier.TIER3 else None
+    tools = [
+        CREATE_TASK_TOOL,
+        CREATE_CALENDAR_EVENT_TOOL,
+        PROPOSE_CALENDAR_EVENT_TOOL,
+        PROPOSE_TASK_TOOL,
+        SAVE_MEMORY_TOOL,
+        SAVE_TO_SECOND_BRAIN_TOOL,
+    ] if tier == ModelTier.TIER3 else None
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:
@@ -469,6 +481,38 @@ async def send_message(
                         except Exception as exc:
                             log.warning("create_calendar_event failed: %s", exc)
                             return f"Failed to create calendar event: {exc}"
+
+                    if name == "save_memory":
+                        try:
+                            from memory import mnemon as _mnemon
+                            await _mnemon.write(
+                                bg_db,
+                                user_id,
+                                tool_input["content"],
+                                domain=tool_input.get("domain", "work"),
+                                source="chat",
+                                importance=tool_input.get("importance", 3),
+                            )
+                            return f"Saved to memory: '{tool_input['content'][:80]}...'" if len(tool_input["content"]) > 80 else f"Saved to memory: '{tool_input['content']}'"
+                        except Exception as exc:
+                            log.warning("save_memory tool failed: %s", exc)
+                            return f"Failed to save memory: {exc}"
+
+                    if name == "save_to_second_brain":
+                        try:
+                            from memory import second_brain as _sb
+                            await _sb.ingest_text(
+                                bg_db,
+                                user_id,
+                                content=tool_input["content"],
+                                title=tool_input["title"],
+                                tags=tool_input.get("tags", []),
+                                domain=tool_input.get("domain", "work"),
+                            )
+                            return f"Saved to Second Brain: '{tool_input['title']}'"
+                        except Exception as exc:
+                            log.warning("save_to_second_brain tool failed: %s", exc)
+                            return f"Failed to save to Second Brain: {exc}"
 
                     return "Action completed."
 
