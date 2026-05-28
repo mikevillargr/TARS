@@ -1,16 +1,22 @@
 """
 Unified model client — routes to RunPod (Qwen) or Anthropic (Claude) based on tier.
 
-Tier 1: Qwen3 8B  via RunPod runsync  (~500ms)
-Tier 2: Qwen3 32B via RunPod runsync  (~2-4s)
+Tier 1: Qwen3 8B  via RunPod runsync  (~500ms warm, ~60s cold start)
+Tier 2: Qwen3 32B via RunPod runsync  (~2-4s warm, ~120s cold start)
 Tier 3: Claude Sonnet via Anthropic   (~3-8s, real streaming)
 
 RunPod tiers return full response then we chunk it to fake a stream.
 Anthropic returns real SSE chunks.
+
+Cold-start handling: on RunPod failure the tier is marked cold for a cooldown
+period. During cooldown, requests route directly to Claude without waiting.
+After cooldown the next request probes RunPod again — if it responds, the
+tier is marked warm and tiering resumes normally.
 """
 
-import json
 import asyncio
+import logging
+import time
 from enum import Enum
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
@@ -18,6 +24,8 @@ import httpx
 import anthropic
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ModelTier(str, Enum):
@@ -37,11 +45,23 @@ TIER_ENDPOINTS = {
     ModelTier.TIER2: settings.runpod_endpoint_32b,
 }
 
+# How long to stay on Claude after a RunPod failure before probing again.
+# 8B cold start ~60s, 32B cold start ~120s.
+_TIER_COOLDOWN = {
+    ModelTier.TIER1: 60.0,
+    ModelTier.TIER2: 120.0,
+}
+
 
 class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
         self._http: Optional[httpx.AsyncClient] = None
+        # tier -> monotonic timestamp of last failure (None = healthy)
+        self._failed_at: dict[ModelTier, Optional[float]] = {
+            ModelTier.TIER1: None,
+            ModelTier.TIER2: None,
+        }
 
     @property
     def anthropic(self) -> anthropic.AsyncAnthropic:
@@ -52,8 +72,24 @@ class ModelClient:
     @property
     def http(self) -> httpx.AsyncClient:
         if not self._http:
-            self._http = httpx.AsyncClient(timeout=25.0)
+            self._http = httpx.AsyncClient(timeout=30.0)
         return self._http
+
+    def _is_warm(self, tier: ModelTier) -> bool:
+        failed_at = self._failed_at.get(tier)
+        if failed_at is None:
+            return True
+        return (time.monotonic() - failed_at) >= _TIER_COOLDOWN.get(tier, 60.0)
+
+    def _mark_failed(self, tier: ModelTier) -> None:
+        self._failed_at[tier] = time.monotonic()
+        cooldown = _TIER_COOLDOWN.get(tier, 60.0)
+        logger.warning("RunPod %s marked cold — routing to Claude for %.0fs", tier, cooldown)
+
+    def _mark_warm(self, tier: ModelTier) -> None:
+        if self._failed_at.get(tier) is not None:
+            logger.info("RunPod %s recovered — resuming tier routing", tier)
+        self._failed_at[tier] = None
 
     async def stream(
         self,
@@ -63,7 +99,10 @@ class ModelClient:
         max_tokens: int = 4096,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Yields SSE-style dicts: {"type": "chunk"|"done", "text"?: str, "model"?: str, "tokens"?: int}"""
-        if tier == ModelTier.TIER3 or not settings.runpod_endpoint_32b:
+        endpoint = TIER_ENDPOINTS.get(tier)
+        if tier == ModelTier.TIER3 or not endpoint or not self._is_warm(tier):
+            if endpoint and not self._is_warm(tier):
+                logger.info("RunPod %s in cooldown — using Claude", tier)
             async for event in self._stream_anthropic(messages, system, max_tokens):
                 yield event
         else:
@@ -119,6 +158,7 @@ class ModelClient:
             }
         }
 
+        logger.info("RunPod request: tier=%s model=%s", tier, model_name)
         try:
             resp = await self.http.post(
                 endpoint,
@@ -131,19 +171,19 @@ class ModelClient:
             resp.raise_for_status()
             data = resp.json()
 
-            # RunPod wraps the OpenAI response in output.choices
+            # Ollama worker returns output as a list; vLLM returned a dict
             output = data.get("output", {})
-            if isinstance(output, dict):
-                choices = output.get("choices", [])
-            else:
-                choices = []
+            if isinstance(output, list) and output:
+                output = output[0]
+            choices = output.get("choices", []) if isinstance(output, dict) else []
 
             if not choices:
-                # Fallback to Anthropic if RunPod returned nothing useful
+                self._mark_failed(tier)
                 async for event in self._stream_anthropic(messages, system, max_tokens):
                     yield event
                 return
 
+            self._mark_warm(tier)
             full_text: str = choices[0].get("message", {}).get("content", "")
             usage = output.get("usage", {})
             total_tokens = usage.get("total_tokens", 0)
@@ -156,8 +196,9 @@ class ModelClient:
 
             yield {"type": "done", "model": model_label, "tokens": total_tokens}
 
-        except Exception:
-            # RunPod failed — fall back to Anthropic
+        except Exception as e:
+            logger.warning("RunPod %s failed (%s: %s)", tier, type(e).__name__, e)
+            self._mark_failed(tier)
             async for event in self._stream_anthropic(messages, system, max_tokens):
                 yield event
 

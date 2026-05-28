@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import require_auth
 from core.router import classify
-from core.model_client import get_model_client, ModelTier
+from core.model_client import get_model_client, ModelClient, ModelTier
 from core.context_assembler import assemble
-from core.streaming import stream_to_sse
+from core.streaming import sse_event, sse_done
 from db.session import get_db
 from db.models import Conversation, Message, User
 
@@ -66,6 +66,24 @@ async def _get_or_create_user(user_id: str, db: AsyncSession) -> User:
         db.add(user)
         await db.flush()
     return user
+
+
+async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
+    """Ask Haiku for a 3-5 word conversation title based on recent exchanges."""
+    recent = messages[-8:]
+    context = "\n".join(
+        f"{m['role'].upper()}: {m['content'][:300]}" for m in recent
+    )
+    try:
+        resp = await client.anthropic.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=15,
+            system="Write a 3-5 word title for this conversation. No quotes, no punctuation, no explanation. Just the title.",
+            messages=[{"role": "user", "content": context}],
+        )
+        return resp.content[0].text.strip()[:80]
+    except Exception:
+        return None
 
 
 async def _get_conversation(conv_id: str, user_id: str, db: AsyncSession) -> Conversation:
@@ -173,10 +191,6 @@ async def send_message(
 
     system_prompt = await assemble(user_id, body.content, db=db)
 
-    if not conv.title:
-        conv.title = body.content[:60]
-        await db.commit()
-
     client = get_model_client()
     full_response: list[str] = []
     model_used: str = ""
@@ -184,20 +198,17 @@ async def send_message(
 
     async def generate():
         nonlocal model_used, tokens_used
-        async for chunk in stream_to_sse(
-            client.stream(messages, tier, system=system_prompt)
-        ):
-            if chunk.startswith("data: {"):
-                try:
-                    payload = _json.loads(chunk[6:])
-                    if payload.get("type") == "chunk":
-                        full_response.append(payload.get("text", ""))
-                    elif payload.get("type") == "done":
-                        model_used = payload.get("model", "")
-                        tokens_used = payload.get("tokens", 0)
-                except Exception:
-                    pass
-            yield chunk
+
+        # Stream chunks to client immediately; intercept done to post-process
+        async for event in client.stream(messages, tier, system=system_prompt):
+            if event["type"] == "chunk":
+                full_response.append(event.get("text", ""))
+                yield sse_event(event)
+            elif event["type"] == "done":
+                model_used = event.get("model", "")
+                tokens_used = event.get("tokens", 0)
+            elif event["type"] == "error":
+                yield sse_event(event)
 
         assistant_content = "".join(full_response)
         assistant_msg = Message(
@@ -209,6 +220,16 @@ async def send_message(
         )
         db.add(assistant_msg)
         await db.commit()
+
+        # Generate a fresh title from the full exchange (including this response)
+        title_messages = messages + [{"role": "assistant", "content": assistant_content}]
+        new_title = await _generate_title(title_messages, client)
+        if new_title:
+            conv.title = new_title
+            await db.commit()
+
+        yield sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "title": new_title})
+        yield sse_done()
 
         # Auto-save exchange to Mnemon (low importance, conversational source)
         try:
