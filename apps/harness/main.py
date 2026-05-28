@@ -25,8 +25,12 @@ async def _ollama_keepalive() -> None:
     """
     Keep llama3.2:3b warm and auto-clear the classifier backoff when Ollama recovers.
     Runs as a background task for the lifetime of the harness process.
+
+    Two distinct timeout modes:
+    - Healthy path: 10s timeout (model already loaded, response in <1s)
+    - Recovery path: 60s timeout (model may need ~40s to cold-load from disk)
     """
-    from core.router import _ollama_mark_failed, _ollama_mark_recovered
+    from core.router import _ollama_mark_failed, _ollama_mark_recovered, _ollama_available
 
     if not settings.ollama_url:
         return
@@ -34,8 +38,13 @@ async def _ollama_keepalive() -> None:
     await asyncio.sleep(5)   # let Ollama finish initialising after harness starts
 
     while True:
+        # Use a longer timeout when we know Ollama was recently down —
+        # the model needs ~40s to load from disk on a cold start.
+        recovering = not _ollama_available()
+        timeout = 60.0 if recovering else 10.0
+
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(
                     f"{settings.ollama_url}/api/chat",
                     json={
