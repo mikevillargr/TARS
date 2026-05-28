@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import {
-  Send, Paperclip, Camera, Mic, Plus, Bot, User,
+  Send, Paperclip, Camera, Mic, Plus, User,
   Code, Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2,
@@ -216,15 +216,15 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
   return (
     <div className={`flex gap-3 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
       <div
-        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+        className="w-8 h-8 rounded-full shrink-0 overflow-hidden"
         style={isUser
-          ? { backgroundColor: "#efeadf", border: "1px solid #d8d2c4" }
-          : { backgroundColor: "#2d5a4f" }
+          ? { backgroundColor: "#efeadf", border: "1px solid #d8d2c4", display: "flex", alignItems: "center", justifyContent: "center" }
+          : { border: "2px solid #2d5a4f" }
         }
       >
         {isUser
           ? <User size={15} style={{ color: "#6b6357" }} />
-          : <Bot size={15} style={{ color: "#fbfaf6" }} />
+          : <img src="/tars-avatar.svg" alt="TARS" style={{ width: "100%", height: "100%", display: "block" }} />
         }
       </div>
 
