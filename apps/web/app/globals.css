@@ -211,6 +211,12 @@
   }
 }
 
+/* Safe-area-aware bottom padding for content area on iOS PWA.
+   Tab bar is 56px tall + env(safe-area-inset-bottom) for the home indicator. */
+.pb-safe-tab {
+  padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

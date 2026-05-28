@@ -77,10 +77,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <SidebarProvider>
       <AppSidebar />
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-        {/* Topbar */}
+        {/* Topbar — min-height so it expands to cover the status bar safe area on iOS */}
         <header
-          className="h-14 border-b flex items-center justify-between px-4 shrink-0 backdrop-blur-sm z-10"
-          style={{ borderColor: "#d8d2c4", backgroundColor: "rgba(251,250,246,0.8)" }}
+          className="border-b flex items-center justify-between px-4 shrink-0 backdrop-blur-sm z-10"
+          style={{
+            borderColor: "#d8d2c4",
+            backgroundColor: "rgba(251,250,246,0.8)",
+            paddingTop: "env(safe-area-inset-top, 0px)",
+            minHeight: "calc(3.5rem + env(safe-area-inset-top, 0px))",
+          }}
         >
           <div className="flex items-center gap-2 flex-1">
             <SidebarTrigger className="size-7 text-[#6b6357] hover:text-[#1a1714]" />
@@ -132,8 +137,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Page content — pb-16 on mobile so content clears the bottom tab bar */}
-        <div className="flex-1 overflow-hidden flex flex-col pb-16 lg:pb-0">{children}</div>
+        {/* Page content — safe-area-aware bottom padding so content clears the tab bar + home indicator */}
+        <div className="flex-1 overflow-hidden flex flex-col pb-safe-tab lg:pb-0">{children}</div>
       </main>
 
       {/* Bottom tab bar — sits outside <main> so it overlays correctly */}

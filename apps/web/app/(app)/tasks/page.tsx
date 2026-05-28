@@ -211,65 +211,89 @@ export default function TasksPage() {
       </div>
 
       {selected && (
-        <div className="w-[300px] border-l flex flex-col shrink-0 overflow-y-auto" style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}>
-          <div className="px-4 py-3 border-b flex items-center justify-between shrink-0" style={{ borderColor: "#d8d2c4" }}>
-            <span className="text-sm font-semibold text-[#1a1714]">Task Detail</span>
-            <button onClick={() => setSelected(null)} className="p-1 rounded-md transition-colors" style={{ color: "#6b6357" }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")} onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
-              <X size={15} />
-            </button>
-          </div>
+        <>
+          {/* Mobile backdrop — tapping it closes the sheet */}
+          <div
+            className="lg:hidden fixed inset-0 z-40"
+            style={{ backgroundColor: "rgba(0,0,0,0.35)" }}
+            onClick={() => setSelected(null)}
+          />
 
-          <div className="p-4 flex flex-col gap-4">
-            <h2 className="text-sm font-semibold text-[#1a1714] leading-snug">{selected.title}</h2>
-
-            {selected.description && (
-              <p className="text-xs leading-relaxed" style={{ color: "#6b6357" }}>{selected.description}</p>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: "Status",   value: selected.status.replace("-", " ") },
-                { label: "Priority", value: selected.priority },
-                { label: "Assignee", value: selected.assigned_to ?? "—" },
-                { label: "Source",   value: selected.source ?? "manual" },
-                { label: "Due",      value: selected.due_at ? (formatDate(selected.due_at) ?? "—") : "—" },
-              ].map(item => (
-                <div key={item.label}>
-                  <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-0.5">{item.label}</div>
-                  <div className="text-xs text-[#1a1714] capitalize">{item.value}</div>
-                </div>
-              ))}
+          {/* Detail panel:
+              Mobile  → fixed bottom sheet with rounded top corners
+              Desktop → regular side panel */}
+          <div
+            className="fixed inset-x-0 bottom-0 z-50 max-h-[70vh] rounded-t-2xl overflow-y-auto flex flex-col lg:relative lg:inset-auto lg:z-auto lg:max-h-none lg:w-[300px] lg:border-l lg:rounded-none lg:shrink-0"
+            style={{
+              borderColor: "#d8d2c4",
+              backgroundColor: "#fbfaf6",
+              paddingBottom: "env(safe-area-inset-bottom, 0px)",
+            }}
+          >
+            {/* Drag handle — visible on mobile only */}
+            <div className="lg:hidden flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 rounded-full" style={{ backgroundColor: "#d8d2c4" }} />
             </div>
 
-            <div>
-              <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-1.5">Move to</div>
-              <div className="flex flex-wrap gap-1">
-                {COLUMNS.filter(c => c.key !== selected.status).map(col => (
-                  <button
-                    key={col.key}
-                    onClick={() => moveTask(selected, col.key)}
-                    className="text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors"
-                    style={{ backgroundColor: "#efeadf", color: "#6b6357" }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#1a1714"; e.currentTarget.style.color = "#fbfaf6" }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#efeadf"; e.currentTarget.style.color = "#6b6357" }}
-                  >
-                    {col.label}
-                  </button>
+            <div className="px-4 py-3 border-b flex items-center justify-between shrink-0" style={{ borderColor: "#d8d2c4" }}>
+              <span className="text-sm font-semibold text-[#1a1714]">Task Detail</span>
+              <button onClick={() => setSelected(null)} className="p-1 rounded-md transition-colors" style={{ color: "#6b6357" }} onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")} onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="p-4 flex flex-col gap-4">
+              <h2 className="text-sm font-semibold text-[#1a1714] leading-snug">{selected.title}</h2>
+
+              {selected.description && (
+                <p className="text-xs leading-relaxed" style={{ color: "#6b6357" }}>{selected.description}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Status",   value: selected.status.replace("-", " ") },
+                  { label: "Priority", value: selected.priority },
+                  { label: "Assignee", value: selected.assigned_to ?? "—" },
+                  { label: "Source",   value: selected.source ?? "manual" },
+                  { label: "Due",      value: selected.due_at ? (formatDate(selected.due_at) ?? "—") : "—" },
+                ].map(item => (
+                  <div key={item.label}>
+                    <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-0.5">{item.label}</div>
+                    <div className="text-xs text-[#1a1714] capitalize">{item.value}</div>
+                  </div>
                 ))}
               </div>
-            </div>
 
-            <button
-              onClick={() => deleteTask(selected)}
-              className="text-xs font-medium transition-colors self-start"
-              style={{ color: "#a04848" }}
-              onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
-              onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
-            >
-              Delete task
-            </button>
+              <div>
+                <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-1.5">Move to</div>
+                <div className="flex flex-wrap gap-1">
+                  {COLUMNS.filter(c => c.key !== selected.status).map(col => (
+                    <button
+                      key={col.key}
+                      onClick={() => moveTask(selected, col.key)}
+                      className="text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors"
+                      style={{ backgroundColor: "#efeadf", color: "#6b6357" }}
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#1a1714"; e.currentTarget.style.color = "#fbfaf6" }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#efeadf"; e.currentTarget.style.color = "#6b6357" }}
+                    >
+                      {col.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => deleteTask(selected)}
+                className="text-xs font-medium transition-colors self-start"
+                style={{ color: "#a04848" }}
+                onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+                onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+              >
+                Delete task
+              </button>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
