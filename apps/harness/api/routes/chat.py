@@ -170,7 +170,7 @@ async def send_message(
     """Stream an assistant reply via SSE. Saves both messages to DB after completion."""
     conv = await _get_conversation(conversation_id, user_id, db)
 
-    tier = ModelTier(body.tier_override) if body.tier_override else classify(body.content)
+    tier = ModelTier(body.tier_override) if body.tier_override else await classify(body.content)
 
     user_msg = Message(
         conversation_id=conversation_id,

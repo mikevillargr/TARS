@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     router_model: str = "Qwen/Qwen3-8B"
     workhorse_model: str = "Qwen/Qwen3-32B-AWQ"
 
+    ollama_url: str = ""                              # e.g. http://localhost:11434
+    classifier_model: str = "llama3.2:3b"            # local model used for tier routing
+
     claude_code_path: str = "/usr/local/bin/claude"
     repos_base_path: str = "/home/tars/repos"
 
