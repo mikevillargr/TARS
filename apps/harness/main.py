@@ -57,7 +57,17 @@ async def _ollama_keepalive() -> None:
                 resp.raise_for_status()
             _ollama_mark_recovered()
             await asyncio.sleep(_KEEPALIVE_HEALTHY_INTERVAL)
+
+        except httpx.HTTPStatusError as exc:
+            # Ollama is reachable but returned 5xx — transient error (race condition
+            # during model unload/reload). Don't mark the classifier unavailable;
+            # retry quickly so the model warms back up.
+            log.warning("Ollama returned %s — retrying in %ds (not marking unavailable)",
+                        exc.response.status_code, _KEEPALIVE_RECOVERY_INTERVAL)
+            await asyncio.sleep(_KEEPALIVE_RECOVERY_INTERVAL)
+
         except Exception as exc:
+            # Connection error or timeout — Ollama is genuinely down.
             _ollama_mark_failed()
             log.warning("Ollama keepalive failed (%s) — retrying in %ds",
                         exc, _KEEPALIVE_RECOVERY_INTERVAL)
