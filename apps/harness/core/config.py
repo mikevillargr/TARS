@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     ollama_url: str = ""                              # e.g. http://localhost:11434
     classifier_model: str = "llama3.2:3b"            # local model used for tier routing
 
+    # Connectors
+    fireflies_api_key: str = ""
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gcal_client_id: str = ""
+    gcal_client_secret: str = ""
+
     claude_code_path: str = "/usr/local/bin/claude"
     repos_base_path: str = "/home/tars/repos"
 
