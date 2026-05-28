@@ -55,6 +55,38 @@ class GmailClient:
     def list_since(self, after_epoch: int, max_results: int = 50) -> List[dict]:
         return self.list_threads(query=f"after:{after_epoch}", max_results=max_results)
 
+    def get_inbox_summary(self, max_threads: int = 12) -> List[dict]:
+        """Compact inbox summary for context injection — metadata only, no bodies."""
+        threads = self.list_threads(query="in:inbox", max_results=max_threads)
+        summaries = []
+        for t in threads:
+            try:
+                data = (
+                    self._service.users()
+                    .threads()
+                    .get(userId="me", id=t["id"], format="metadata",
+                         metadataHeaders=["Subject", "From", "Date"])
+                    .execute()
+                )
+                msgs = data.get("messages", [])
+                if not msgs:
+                    continue
+                latest = msgs[-1]
+                headers = {h["name"]: h["value"] for h in latest.get("payload", {}).get("headers", [])}
+                from_raw = headers.get("From", "")
+                from_name = from_raw.split("<")[0].strip().strip('"') or from_raw
+                summaries.append({
+                    "subject":   headers.get("Subject", "(no subject)"),
+                    "from_name": from_name,
+                    "date":      headers.get("Date", ""),
+                    "snippet":   data.get("snippet", ""),
+                    "unread":    "UNREAD" in latest.get("labelIds", []),
+                    "thread_id": t["id"],
+                })
+            except Exception as exc:
+                log.debug("Thread metadata fetch failed %s: %s", t["id"], exc)
+        return summaries
+
 
 def extract_thread_text(thread: dict) -> str:
     """Pull plain-text body from all messages in a thread."""
