@@ -4,8 +4,8 @@
   "description": "Mike's personal AI operating system",
   "start_url": "/chat",
   "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "background_color": "#f6f3ec",
+  "theme_color": "#f6f3ec",
   "orientation": "portrait",
   "icons": [
     {

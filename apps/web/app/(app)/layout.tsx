@@ -1,9 +1,74 @@
 "use client"
 
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Bell, Plus, Search } from "lucide-react"
+import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal } from "lucide-react"
 import { useState } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+
+// Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
+function BottomTabBar() {
+  const pathname = usePathname()
+  const { setOpenMobile } = useSidebar()
+
+  const tabs = [
+    { label: "Chat",        href: "/chat",         Icon: MessageSquare },
+    { label: "Tasks",       href: "/tasks",        Icon: CheckSquare },
+    { label: "Calendar",    href: "/calendar",     Icon: CalendarDays },
+    { label: "Brain",       href: "/second-brain", Icon: Brain },
+  ]
+
+  return (
+    <nav
+      className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t flex items-stretch"
+      style={{
+        backgroundColor: "rgba(251,250,246,0.97)",
+        backdropFilter: "blur(12px)",
+        borderColor: "#d8d2c4",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}
+    >
+      {tabs.map(({ label, href, Icon }) => {
+        const active = pathname.startsWith(href)
+        return (
+          <Link
+            key={href}
+            href={href}
+            className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors"
+            style={{ color: active ? "#2d5a4f" : "#948a7b", minHeight: "56px" }}
+          >
+            <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+            <span
+              className="text-[10px] font-medium leading-none"
+              style={{ color: active ? "#2d5a4f" : "#948a7b" }}
+            >
+              {label}
+            </span>
+            {active && (
+              <span
+                className="absolute bottom-0 w-10 h-0.5 rounded-full"
+                style={{ backgroundColor: "#2d5a4f" }}
+              />
+            )}
+          </Link>
+        )
+      })}
+
+      {/* More → opens sidebar drawer */}
+      <button
+        onClick={() => setOpenMobile(true)}
+        className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors relative"
+        style={{ color: "#948a7b", minHeight: "56px" }}
+      >
+        <MoreHorizontal size={22} strokeWidth={1.8} />
+        <span className="text-[10px] font-medium leading-none" style={{ color: "#948a7b" }}>
+          More
+        </span>
+      </button>
+    </nav>
+  )
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [agentActive] = useState(true)
@@ -67,8 +132,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <div className="flex-1 overflow-hidden flex flex-col">{children}</div>
+        {/* Page content — pb-16 on mobile so content clears the bottom tab bar */}
+        <div className="flex-1 overflow-hidden flex flex-col pb-16 lg:pb-0">{children}</div>
       </main>
+
+      {/* Bottom tab bar — sits outside <main> so it overlays correctly */}
+      <BottomTabBar />
     </SidebarProvider>
   )
 }

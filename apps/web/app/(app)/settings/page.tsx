@@ -1,8 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Eye, EyeOff, RotateCw, Trash2, Smartphone, MapPin, Check } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Eye, EyeOff, RotateCw, Trash2, Smartphone, MapPin, Check, Share } from "lucide-react"
 import { apiGet, apiPatch } from "@/lib/api-client"
+
+// Browsers that support beforeinstallprompt (Chrome, Edge, Android)
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
+}
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
   return (
@@ -40,15 +46,15 @@ const MODEL_OPTIONS = ["Qwen3 8B", "Qwen3 32B", "Claude Sonnet", "Claude Opus"]
 const INITIAL_NOTIFICATIONS = [
   { id: "chat",   label: "Chat responses",   push: true,  email: false, inApp: true },
   { id: "tasks",  label: "Task updates",      push: true,  email: true,  inApp: true },
-  { id: "meet",   label: "Meeting summaries", push: false, email: true,  inApp: true },
-  { id: "agent",  label: "Agent job updates", push: true,  email: false, inApp: true },
+  { id: "meet",   label: "Meetings",          push: false, email: true,  inApp: true },
+  { id: "agent",  label: "Agent jobs",        push: true,  email: false, inApp: true },
   { id: "digest", label: "Email digest",      push: false, email: false, inApp: true },
   { id: "cron",   label: "Cron failures",     push: true,  email: true,  inApp: true },
 ]
 
 const INITIAL_KEYS = [
-  { id: "anthropic", provider: "Anthropic",       key: "sk-ant-•••••••••••••••••••••••Xk2a" },
-  { id: "runpod",    provider: "RunPod",           key: "rpa_•••••••••••••••••••••••••• 7f2" },
+  { id: "anthropic", provider: "Anthropic", key: "sk-ant-•••••••••••••••••••••••Xk2a" },
+  { id: "runpod",    provider: "RunPod",    key: "rpa_•••••••••••••••••••••••••• 7f2" },
 ]
 
 // Common timezones sorted by offset
@@ -84,6 +90,14 @@ export default function SettingsPage() {
   const [keys, setKeys]         = useState(INITIAL_KEYS)
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
 
+  // PWA install state
+  const installPromptRef = useRef<BeforeInstallPromptEvent | null>(null)
+  const [installable, setInstallable]       = useState(false)   // Chrome/Android install prompt available
+  const [isInstalled, setIsInstalled]       = useState(false)   // running as standalone PWA
+  const [isIOS, setIsIOS]                   = useState(false)   // iOS — needs manual share-sheet
+  const [showIOSInstructions, setShowIOSInstructions] = useState(false)
+  const [installDone, setInstallDone]       = useState(false)
+
   // Load settings from API
   useEffect(() => {
     apiGet<{ name: string; timezone: string }>("/settings")
@@ -93,6 +107,42 @@ export default function SettingsPage() {
       })
       .catch(console.error)
   }, [])
+
+  // PWA detection
+  useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true
+    setIsInstalled(standalone)
+
+    const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream
+    setIsIOS(ios)
+
+    const handler = (e: Event) => {
+      e.preventDefault()
+      installPromptRef.current = e as BeforeInstallPromptEvent
+      setInstallable(true)
+    }
+    window.addEventListener("beforeinstallprompt", handler)
+    return () => window.removeEventListener("beforeinstallprompt", handler)
+  }, [])
+
+  async function handleInstall() {
+    if (isIOS) {
+      setShowIOSInstructions(prev => !prev)
+      return
+    }
+    const prompt = installPromptRef.current
+    if (!prompt) return
+    await prompt.prompt()
+    const { outcome } = await prompt.userChoice
+    if (outcome === "accepted") {
+      setIsInstalled(true)
+      setInstallable(false)
+      installPromptRef.current = null
+      setInstallDone(true)
+    }
+  }
 
   const toggleNotif = (id: string, field: "push" | "email" | "inApp") => {
     setNotifs(prev => prev.map(n => n.id === id ? { ...n, [field]: !n[field] } : n))
@@ -130,7 +180,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: "#f6f3ec" }}>
-      <div className="max-w-2xl mx-auto px-6 py-6 flex flex-col gap-6">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
         {/* Page heading */}
         <h1 className="text-xl font-semibold text-[#1a1714]" style={{ fontFamily: "var(--font-heading), serif" }}>
           Settings
@@ -197,7 +247,6 @@ export default function SettingsPage() {
                 {COMMON_TIMEZONES.map(tz => (
                   <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
                 ))}
-                {/* Show current value if not in the list */}
                 {!COMMON_TIMEZONES.includes(timezone) && (
                   <option value={timezone}>{timezone.replace(/_/g, " ")}</option>
                 )}
@@ -209,7 +258,7 @@ export default function SettingsPage() {
               style={{ padding: "0.375rem 0.75rem" }}
               title="Detect from browser"
             >
-              <MapPin size={13} /> Auto-detect
+              <MapPin size={13} /> <span className="hidden sm:inline">Auto-detect</span><span className="sm:hidden">Auto</span>
             </button>
           </div>
           <p className="text-[11px]" style={{ color: "#948a7b" }}>
@@ -232,7 +281,7 @@ export default function SettingsPage() {
             ].map((tier, i) => (
               <div
                 key={tier.key}
-                className="flex items-center justify-between px-4 py-3"
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 gap-2"
                 style={{
                   borderTop: i > 0 ? "1px solid #e8e2d4" : "none",
                   backgroundColor: "#fbfaf6",
@@ -243,7 +292,7 @@ export default function SettingsPage() {
                   <div className="text-xs text-[#948a7b] mt-0.5">{tier.desc}</div>
                 </div>
                 <select
-                  className="input-field w-40 text-xs"
+                  className="input-field w-full sm:w-40 text-xs shrink-0"
                   style={{ padding: "0.3rem 0.6rem" }}
                   value={models[tier.key]}
                   onChange={e => setModels(prev => ({ ...prev, [tier.key]: e.target.value }))}
@@ -263,11 +312,16 @@ export default function SettingsPage() {
             Notifications
           </h2>
           <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #e8e2d4" }}>
+            {/* Header row */}
             <div
               className="grid px-4 py-2"
-              style={{ gridTemplateColumns: "1fr 60px 60px 60px", backgroundColor: "#efeadf", borderBottom: "1px solid #e8e2d4" }}
+              style={{
+                gridTemplateColumns: "1fr 44px 44px 44px",
+                backgroundColor: "#efeadf",
+                borderBottom: "1px solid #e8e2d4",
+              }}
             >
-              {["", "Push", "Email", "In-App"].map(h => (
+              {["", "Push", "Email", "App"].map(h => (
                 <span key={h} className="text-[0.6rem] font-semibold uppercase tracking-wider text-center" style={{ color: "#948a7b" }}>
                   {h}
                 </span>
@@ -278,12 +332,12 @@ export default function SettingsPage() {
                 key={notif.id}
                 className="grid items-center px-4 py-2.5"
                 style={{
-                  gridTemplateColumns: "1fr 60px 60px 60px",
+                  gridTemplateColumns: "1fr 44px 44px 44px",
                   borderTop: i > 0 ? "1px solid #e8e2d4" : "none",
                   backgroundColor: "#fbfaf6",
                 }}
               >
-                <span className="text-sm text-[#1a1714]">{notif.label}</span>
+                <span className="text-sm text-[#1a1714] pr-2">{notif.label}</span>
                 <span className="flex justify-center"><Toggle enabled={notif.push}  onChange={() => toggleNotif(notif.id, "push")} /></span>
                 <span className="flex justify-center"><Toggle enabled={notif.email} onChange={() => toggleNotif(notif.id, "email")} /></span>
                 <span className="flex justify-center"><Toggle enabled={notif.inApp} onChange={() => toggleNotif(notif.id, "inApp")} /></span>
@@ -350,23 +404,75 @@ export default function SettingsPage() {
           <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
             App Installation
           </h2>
-          <div
-            className="rounded-xl p-4 flex items-center gap-4"
-            style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.15)" }}
-          >
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#2d5a4f" }}>
-              <Smartphone size={22} style={{ color: "#fbfaf6" }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-[#1a1714]">Install TARS as a PWA</div>
-              <div className="text-xs text-[#6b6357] mt-0.5">
-                Add to your home screen for offline access and push notifications.
+
+          {isInstalled || installDone ? (
+            /* Already installed */
+            <div
+              className="rounded-xl p-4 flex items-center gap-4"
+              style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.15)" }}
+            >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#2d5a4f" }}>
+                <Check size={20} style={{ color: "#fbfaf6" }} />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-[#1a1714]">TARS is installed</div>
+                <div className="text-xs text-[#6b6357] mt-0.5">Running as a native app on this device.</div>
               </div>
             </div>
-            <button className="btn-primary shrink-0" style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}>
-              Install
-            </button>
-          </div>
+          ) : (
+            <>
+              <div
+                className="rounded-xl p-4 flex items-center gap-4"
+                style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.15)" }}
+              >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#2d5a4f" }}>
+                  <Smartphone size={20} style={{ color: "#fbfaf6" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-[#1a1714]">Install TARS on this device</div>
+                  <div className="text-xs text-[#6b6357] mt-0.5">
+                    {isIOS
+                      ? "Add to Home Screen for a full-screen native experience."
+                      : "Add to home screen for offline access and push notifications."}
+                  </div>
+                </div>
+                {/* Install button — shows on Android/Chrome or iOS */}
+                {(installable || isIOS) && (
+                  <button
+                    onClick={handleInstall}
+                    className="btn-primary shrink-0 flex items-center gap-1.5"
+                    style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+                  >
+                    {isIOS ? <><Share size={13} /> Share</> : "Install"}
+                  </button>
+                )}
+                {/* On desktop Chrome before the prompt fires, show a hint */}
+                {!installable && !isIOS && (
+                  <span className="text-xs shrink-0" style={{ color: "#948a7b" }}>
+                    Open in Chrome or Safari
+                  </span>
+                )}
+              </div>
+
+              {/* iOS step-by-step instructions */}
+              {isIOS && showIOSInstructions && (
+                <div
+                  className="rounded-xl px-4 py-3 flex flex-col gap-2 text-sm"
+                  style={{ backgroundColor: "#fbfaf6", border: "1px solid #e8e2d4" }}
+                >
+                  <p className="font-medium text-[#1a1714]">Add to Home Screen on iOS:</p>
+                  <ol className="flex flex-col gap-1.5 text-xs text-[#6b6357] list-decimal list-inside">
+                    <li>Tap the <strong>Share</strong> button <span style={{ color: "#2d5a4f" }}>⎋</span> in Safari's toolbar</li>
+                    <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
+                    <li>Tap <strong>Add</strong> in the top-right corner</li>
+                  </ol>
+                  <p className="text-[11px]" style={{ color: "#948a7b" }}>
+                    TARS will appear on your Home Screen like a native app.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </section>
       </div>
     </div>
