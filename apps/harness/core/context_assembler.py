@@ -56,6 +56,11 @@ MEMORY SYSTEM (two stores — both are semantically searched and injected into e
   Trigger words: "save this", "add to second brain", "note this for later", "save this research".
   Also use when you produce analysis, comparisons, or findings the user might want to retrieve later.
 
+EMAIL:
+• read_email — fetch the full body of an email. Use when Mike asks to read, open, or see the content of a specific email.
+  Pass the 8-char thread_id shown in brackets in the Gmail context, e.g. [a1b2c3d4].
+  Also accepts a search_query like "from:john@example.com subject:invoice" if you don't have the thread_id.
+
 TASK & CALENDAR:
 • create_task — create a task immediately. Use when Mike explicitly asks to add/track/remember a task, to-do, or action item.
 • propose_task — suggest a task (shows confirmation chip). Use when you detect an implied action but Mike didn't ask.
@@ -114,11 +119,13 @@ async def _fetch_gmail_context(db: AsyncSession, user_id: str) -> str:
         if unread:
             lines.append(f"Unread ({len(unread)}):")
             for s in unread:
-                lines.append(f"  • {s['from_name']}: {s['subject']} — {s['snippet'][:120]}")
+                tid = s.get("thread_id", "")[:8]
+                lines.append(f"  • [{tid}] {s['from_name']}: {s['subject']} — {s['snippet'][:120]}")
         if read:
             lines.append(f"Recent read ({len(read)}):")
             for s in read[:5]:
-                lines.append(f"  · {s['from_name']}: {s['subject']} — {s['snippet'][:80]}")
+                tid = s.get("thread_id", "")[:8]
+                lines.append(f"  · [{tid}] {s['from_name']}: {s['subject']} — {s['snippet'][:80]}")
         lines.append("")
         return "\n".join(lines)
 
@@ -252,17 +259,21 @@ async def assemble(
                 pass
 
         if is_lightweight:
-            # Tier 1: tasks + calendar only (no email, no vector search)
+            # Tier 1: tasks + calendar + Gmail (email queries are common even for quick replies)
+            # Memory is limited to top 3 (set in _fetch_memory). Second Brain skipped.
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
                 _fetch_gcal_context(db, user_id, user_tz),
+                _fetch_gmail_context(db, user_id),
                 return_exceptions=True,
             )
             if len(results) > 1 and isinstance(results[1], str):
                 tasks_section = results[1]
             if len(results) > 2 and isinstance(results[2], str):
                 gcal_section = results[2]
+            if len(results) > 3 and isinstance(results[3], str):
+                gmail_section = results[3]
         else:
             # Tier 2/3: full context — tasks, email, calendar, memory
             results = await asyncio.gather(

@@ -146,6 +146,29 @@ SAVE_MEMORY_TOOL = {
     },
 }
 
+READ_EMAIL_TOOL = {
+    "name": "read_email",
+    "description": (
+        "Read the full body of an email thread. Use this when the user asks to "
+        "read, open, or see the full content of a specific email. "
+        "Pass the 8-char thread_id shown in brackets in the Gmail context (e.g. [a1b2c3d4]), "
+        "or provide a search_query to find the email by subject/sender."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "thread_id": {
+                "type": "string",
+                "description": "Thread ID from Gmail context (the value in brackets, e.g. 'a1b2c3d4').",
+            },
+            "search_query": {
+                "type": "string",
+                "description": "Gmail search query if thread_id is unknown (e.g. 'from:john@example.com subject:invoice').",
+            },
+        },
+    },
+}
+
 SAVE_TO_SECOND_BRAIN_TOOL = {
     "name": "save_to_second_brain",
     "description": (

@@ -19,6 +19,7 @@ from core.model_client import (
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
+    READ_EMAIL_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -185,31 +186,59 @@ async def _extract_and_save_facts(
     assistant_content: str,
     client: ModelClient,
 ) -> None:
-    """Extract personal/professional facts from the exchange and save as memories."""
-    if len(user_content) < 20 and len(assistant_content) < 80:
+    """
+    Extract personal facts from what the USER said and save as memories.
+    Only uses user_content as the fact source — assistant responses are NOT facts about Mike.
+    Each fact is domain-tagged and saved individually for clean retrieval.
+    """
+    if len(user_content) < 20:
         return
 
-    exchange = f"User: {user_content[:400]}\nAssistant: {assistant_content[:600]}"
     try:
         resp = await client.anthropic.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=200,
+            max_tokens=300,
             system=(
-                "Extract any personal facts, preferences, decisions, professional information, "
-                "or life details about the user (Mike) from this exchange. "
-                "Output a concise list of facts, one per line. "
-                "If this is small talk, a test, or contains no personal information, output: SKIP"
+                "Extract personal facts about Mike from his message. Only use what HE said — "
+                "ignore the assistant context completely.\n"
+                "Output each fact on its own line in this exact format:\n"
+                "  DOMAIN|fact in third person\n"
+                "Valid domains: work, personal, health, cycling, client\n"
+                "Examples:\n"
+                "  cycling|Mike's BMC Roadmachine has Ultegra Di2 and weighs 7.2 kg\n"
+                "  health|Mike has Maxicare insurance, premium due June 1\n"
+                "  work|Mike decided to delay the OpenRice campaign until Q3\n"
+                "  client|Mike's NCH Inc. contact is Jaime Santos\n"
+                "Output SKIP if no personal facts about Mike are present."
             ),
-            messages=[{"role": "user", "content": exchange}],
+            messages=[{"role": "user", "content": f"Mike's message: {user_content[:500]}"}],
         )
-        facts = resp.content[0].text.strip()
-        if not facts or facts.upper().startswith("SKIP"):
+        raw = resp.content[0].text.strip()
+        if not raw or raw.upper() == "SKIP":
             return
+
         from memory import mnemon as _mnemon
-        await _mnemon.write(
-            db, user_id, facts,
-            domain="work", source="conversation", importance=4,
-        )
+        valid_domains = {"work", "personal", "health", "cycling", "client"}
+
+        for line in raw.splitlines():
+            line = line.strip().lstrip("•-* ")
+            if not line or line.upper() == "SKIP":
+                continue
+            if "|" in line:
+                domain, _, fact = line.partition("|")
+                domain = domain.strip().lower()
+                fact = fact.strip()
+                if domain not in valid_domains:
+                    domain = "work"
+            else:
+                fact = line
+                domain = "work"
+
+            if fact and len(fact) > 10:
+                await _mnemon.write(
+                    db, user_id, fact,
+                    domain=domain, source="conversation", importance=4,
+                )
     except Exception as exc:
         log.warning("Memory fact extraction failed: %s", exc)
 
@@ -410,6 +439,7 @@ async def send_message(
         PROPOSE_TASK_TOOL,
         SAVE_MEMORY_TOOL,
         SAVE_TO_SECOND_BRAIN_TOOL,
+        READ_EMAIL_TOOL,
     ] if tier == ModelTier.TIER3 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -514,6 +544,63 @@ async def send_message(
                             log.warning("save_to_second_brain tool failed: %s", exc)
                             return f"Failed to save to Second Brain: {exc}"
 
+                    if name == "read_email":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Connector
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Gmail",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Gmail not connected."
+
+                            from connectors.gmail import GmailClient, extract_thread_text
+                            import asyncio as _asyncio
+
+                            gclient = GmailClient(conn.auth)
+                            loop = _asyncio.get_event_loop()
+
+                            thread_id = tool_input.get("thread_id", "").strip()
+                            if not thread_id and tool_input.get("search_query"):
+                                threads = await loop.run_in_executor(
+                                    None,
+                                    lambda: gclient.list_threads(
+                                        query=tool_input["search_query"], max_results=1
+                                    ),
+                                )
+                                if not threads:
+                                    return "No email found matching that search."
+                                thread_id = threads[0]["id"]
+
+                            if not thread_id:
+                                return "Provide a thread_id or search_query."
+
+                            # thread_id from context is first 8 chars — find full id
+                            if len(thread_id) == 8:
+                                candidates = await loop.run_in_executor(
+                                    None,
+                                    lambda: gclient.list_threads(query="in:inbox", max_results=20),
+                                )
+                                match = next((t["id"] for t in candidates if t["id"].startswith(thread_id)), None)
+                                if match:
+                                    thread_id = match
+
+                            thread = await loop.run_in_executor(None, lambda: gclient.get_thread(thread_id))
+                            body = extract_thread_text(thread)
+                            if not body:
+                                return "Email body is empty or could not be extracted."
+                            # Cap at 4000 chars to stay within token budget
+                            if len(body) > 4000:
+                                body = body[:4000] + "\n\n[... email truncated ...]"
+                            return body
+                        except Exception as exc:
+                            log.warning("read_email tool failed: %s", exc)
+                            return f"Failed to read email: {exc}"
+
                     return "Action completed."
 
                 async for event in client.stream(messages, tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
@@ -559,17 +646,6 @@ async def send_message(
                     await bg_db.commit()
 
                 user_input = content or "[attachment]"
-                if len(user_input) >= 15 or len(assistant_content) >= 80:
-                    try:
-                        from memory import mnemon as _mnemon
-                        summary = f"User: {user_input[:200]}\nTARS: {assistant_content[:300]}"
-                        await _mnemon.write(
-                            bg_db, user_id, summary,
-                            domain="work", source="conversation", importance=2,
-                        )
-                    except Exception:
-                        pass
-
                 await _extract_and_save_facts(bg_db, user_id, user_input, assistant_content, client)
 
         except Exception as exc:
