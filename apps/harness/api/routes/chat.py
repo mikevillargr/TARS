@@ -58,9 +58,48 @@ class ConversationDetailOut(BaseModel):
 _IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
 
 
+def _xlsx_to_text(data: bytes) -> str:
+    from io import BytesIO
+    import openpyxl
+    wb = openpyxl.load_workbook(BytesIO(data), read_only=True, data_only=True)
+    parts = []
+    for sheet in wb.worksheets:
+        rows = list(sheet.iter_rows(values_only=True))
+        if not rows:
+            continue
+        parts.append(f"Sheet: {sheet.title}")
+        for row in rows:
+            parts.append("\t".join("" if v is None else str(v) for v in row))
+    return "\n".join(parts)
+
+
+def _xls_to_text(data: bytes) -> str:
+    import xlrd
+    wb = xlrd.open_workbook(file_contents=data)
+    parts = []
+    for sheet in wb.sheets():
+        parts.append(f"Sheet: {sheet.name}")
+        for r in range(sheet.nrows):
+            parts.append("\t".join(str(sheet.cell_value(r, c)) for c in range(sheet.ncols)))
+    return "\n".join(parts)
+
+
+def _pptx_to_text(data: bytes) -> str:
+    from io import BytesIO
+    from pptx import Presentation
+    prs = Presentation(BytesIO(data))
+    parts = []
+    for i, slide in enumerate(prs.slides, 1):
+        texts = [s.text for s in slide.shapes if s.has_text_frame and s.text.strip()]
+        if texts:
+            parts.append(f"Slide {i}: " + " | ".join(texts))
+    return "\n".join(parts)
+
+
 async def _process_attachment(upload: UploadFile) -> dict:
     data = await upload.read()
     ct = (upload.content_type or "").lower()
+    fname = upload.filename or "file"
 
     if ct.startswith("image/"):
         media_type = ct if ct in _IMAGE_TYPES else "image/jpeg"
@@ -76,29 +115,46 @@ async def _process_attachment(upload: UploadFile) -> dict:
             },
         }
 
-    # Documents — extract text
     text = ""
-    if ct == "application/pdf":
-        try:
-            import fitz  # pymupdf
+    try:
+        if ct == "application/pdf" or fname.endswith(".pdf"):
+            import fitz
             doc = fitz.open(stream=data, filetype="pdf")
             text = "\n".join(page.get_text() for page in doc)
-        except Exception as exc:
-            log.warning("PDF extraction failed: %s", exc)
-            text = "[Could not extract PDF text]"
-    elif "wordprocessingml" in ct:
-        try:
+
+        elif "wordprocessingml" in ct or fname.endswith(".docx"):
             from io import BytesIO
             import docx as _docx
             document = _docx.Document(BytesIO(data))
             text = "\n".join(p.text for p in document.paragraphs if p.text.strip())
-        except Exception as exc:
-            log.warning("DOCX extraction failed: %s", exc)
-            text = "[Could not extract DOCX text]"
-    else:
-        text = data.decode("utf-8", errors="replace")
 
-    return {"kind": "text", "filename": upload.filename or "file", "text": text}
+        elif "spreadsheetml" in ct or fname.endswith(".xlsx"):
+            text = _xlsx_to_text(data)
+
+        elif ct == "application/vnd.ms-excel" or fname.endswith(".xls"):
+            text = _xls_to_text(data)
+
+        elif "presentationml" in ct or fname.endswith(".pptx"):
+            text = _pptx_to_text(data)
+
+        elif ct in ("text/csv", "application/csv") or fname.endswith(".csv"):
+            text = data.decode("utf-8", errors="replace")
+
+        elif ct.startswith("text/") or fname.endswith((".txt", ".md", ".json", ".yaml", ".yml", ".xml")):
+            text = data.decode("utf-8", errors="replace")
+
+        else:
+            decoded = data.decode("utf-8", errors="replace")
+            replacement_ratio = decoded.count("�") / max(len(decoded), 1)
+            if replacement_ratio > 0.1:
+                return {"kind": "unsupported", "filename": fname, "mime": ct}
+            text = decoded
+
+    except Exception as exc:
+        log.warning("Attachment extraction failed (%s): %s", fname, exc)
+        text = f"[Extraction failed: {exc}]"
+
+    return {"kind": "text", "filename": fname, "text": text}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -239,16 +295,21 @@ async def send_message(
         result = await _process_attachment(upload)
         if result["kind"] == "image":
             image_blocks.append(result["block"])
+        elif result["kind"] == "unsupported":
+            doc_snippets.append(
+                f"[Attached: {result['filename']} — file type '{result['mime']}' could not be extracted as text. "
+                f"Let the user know what types are supported (PDF, DOCX, XLSX, XLS, PPTX, CSV, TXT, images).]"
+            )
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
 
-    # Images require Claude vision; force Tier 3
-    if image_blocks:
+    # Any file attachment → force Tier 3 (Claude handles documents best)
+    if files:
         tier = ModelTier.TIER3
     elif tier_override:
         tier = ModelTier(tier_override)
     else:
-        tier = await classify(content or " ".join(doc_snippets[:1]))
+        tier = await classify(content)
 
     # Build the text that goes to the model (doc text prepended)
     full_text = ("\n\n".join(doc_snippets) + "\n\n" + content).strip() if doc_snippets else content
