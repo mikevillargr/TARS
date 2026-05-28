@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,22 +40,140 @@ class WebhookEventOut(BaseModel):
         from_attributes = True
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Connector status ──────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[ConnectorOut])
-async def get_connectors(_: str = Depends(require_auth)):
-    return [
-        ConnectorOut(
+async def get_connectors(
+    _: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    static = list_connectors()
+
+    # Enrich Gmail / GCal with last_synced_at from DB if tokens stored
+    db_result = await db.execute(select(Connector))
+    db_connectors = {c.name.lower(): c for c in db_result.scalars().all()}
+
+    out = []
+    for c in static:
+        db_conn = db_connectors.get(c.id)
+        last_synced = (
+            db_conn.last_synced_at.isoformat() if db_conn and db_conn.last_synced_at else None
+        )
+        # If tokens are in DB, mark as connected regardless of env vars
+        if db_conn and db_conn.auth.get("refresh_token"):
+            c.status = "connected"
+        out.append(ConnectorOut(
             id=c.id,
             name=c.name,
             status=c.status,
             capabilities=c.capabilities,
-            last_synced_at=c.last_synced_at,
+            last_synced_at=last_synced,
             metadata=c.metadata,
-        )
-        for c in list_connectors()
-    ]
+        ))
+    return out
 
+
+# ── Google OAuth flow ─────────────────────────────────────────────────────────
+
+@router.get("/oauth/authorize/{connector}")
+async def oauth_authorize(
+    connector: str,
+    request: Request,
+    _: str = Depends(require_auth),
+):
+    """Redirect user to Google's OAuth consent page."""
+    if connector not in ("gmail", "gcal"):
+        raise HTTPException(status_code=400, detail="Unknown connector")
+
+    from connectors.google_oauth import get_auth_url
+    via_prod = "localhost" not in str(request.base_url)
+    url = get_auth_url(connector, via_production=via_prod)
+    return RedirectResponse(url)
+
+
+@router.get("/oauth/callback/{connector}")
+async def oauth_callback(
+    connector: str,
+    code: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Google redirects here after user grants access. No JWT needed — browser-driven."""
+    if connector not in ("gmail", "gcal"):
+        raise HTTPException(status_code=400, detail="Unknown connector")
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing code")
+
+    from connectors.google_oauth import exchange_code
+
+    via_prod = "localhost" not in str(request.base_url)
+    try:
+        auth = exchange_code(connector, code, via_production=via_prod)
+    except Exception as exc:
+        log.exception("OAuth exchange failed for %s: %s", connector, exc)
+        raise HTTPException(status_code=400, detail=f"OAuth exchange failed: {exc}")
+
+    # Single-user: get or create the one user
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=500, detail="No user in database")
+
+    name_map = {"gmail": "Gmail", "gcal": "Google Calendar"}
+    caps_map = {"gmail": ["read", "webhook"], "gcal": ["read", "write"]}
+
+    conn_result = await db.execute(
+        select(Connector).where(
+            Connector.user_id == user.id,
+            Connector.name == name_map[connector],
+        )
+    )
+    conn = conn_result.scalar_one_or_none()
+    if conn:
+        conn.auth = auth
+        conn.status = "connected"
+    else:
+        conn = Connector(
+            user_id=user.id,
+            name=name_map[connector],
+            status="connected",
+            auth=auth,
+            capabilities=caps_map[connector],
+        )
+        db.add(conn)
+
+    await db.commit()
+    log.info("%s connected for user %s", name_map[connector], user.id)
+
+    # Redirect back to connectors page
+    base = "https://tarsmv.duckdns.org" if via_prod else "http://localhost:3000"
+    return RedirectResponse(f"{base}/connectors?connected={connector}")
+
+
+@router.delete("/oauth/{connector}", status_code=204)
+async def oauth_disconnect(
+    connector: str,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    name_map = {"gmail": "Gmail", "gcal": "Google Calendar"}
+    if connector not in name_map:
+        raise HTTPException(status_code=400, detail="Unknown connector")
+
+    result = await db.execute(
+        select(Connector).where(
+            Connector.user_id == user_id,
+            Connector.name == name_map[connector],
+        )
+    )
+    conn = result.scalar_one_or_none()
+    if conn:
+        conn.auth = {}
+        conn.status = "disconnected"
+        await db.commit()
+
+
+# ── Webhook log ───────────────────────────────────────────────────────────────
 
 @router.get("/webhooks", response_model=List[WebhookEventOut])
 async def list_webhook_events(
@@ -77,10 +196,6 @@ async def fireflies_webhook(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Fireflies calls this when a transcription is complete.
-    Payload: {"meetingId": "...", "eventType": "Transcription completed"}
-    """
     payload = await request.json()
     transcript_id = payload.get("meetingId")
     event_type = payload.get("eventType", "unknown")
@@ -88,17 +203,13 @@ async def fireflies_webhook(
     log.info("Fireflies webhook: %s / transcript %s", event_type, transcript_id)
 
     if not transcript_id:
-        log.warning("Fireflies webhook missing meetingId")
         return {"ok": False, "error": "missing meetingId"}
 
-    # Look up the single user (TARS is single-user)
     user_result = await db.execute(select(User).limit(1))
     user = user_result.scalar_one_or_none()
     if not user:
-        log.error("No user found for webhook processing")
         return {"ok": False, "error": "no user"}
 
-    # Log the webhook event (using a pseudo connector_id for Fireflies)
     connector_result = await db.execute(
         select(Connector).where(Connector.name == "Fireflies").limit(1)
     )
@@ -122,17 +233,14 @@ async def fireflies_webhook(
     await db.commit()
     await db.refresh(event)
 
-    # Process in background so we return immediately to Fireflies
     async def _process():
         from jobs.meeting_processor import ingest_from_webhook, process_meeting
         meeting_id = await ingest_from_webhook(db, user.id, transcript_id)
         if meeting_id:
             await process_meeting(db, meeting_id, user.id)
-            # Mark webhook event processed
             event.processed = True
             event.processed_at = datetime.now(timezone.utc)
             await db.commit()
 
     background_tasks.add_task(_process)
-
     return {"ok": True, "queued": transcript_id}
