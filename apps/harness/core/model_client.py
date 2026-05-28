@@ -207,6 +207,14 @@ _TIER_COOLDOWN = {
 # Tier 1 Ollama fallback: cap at 600 tokens so CPU inference stays under ~60s
 _TIER1_OLLAMA_MAX_TOKENS = 600
 
+# Per-tier RunPod request timeouts.
+# Warm 8B responds in 1-3s → 12s bails fast on cold starts without waiting the full 30s.
+# Warm 32B responds in 2-10s → 40s covers heavier generation without hanging indefinitely.
+_RUNPOD_TIMEOUT = {
+    ModelTier.TIER1: 12.0,
+    ModelTier.TIER2: 40.0,
+}
+
 
 class ModelClient:
     def __init__(self):
@@ -254,34 +262,27 @@ class ModelClient:
                 yield event
             return
 
-        # ── Tier 1: RunPod Qwen3 8B → Ollama (capped) → Claude ───────────────
+        # ── Tier 1: RunPod Qwen3 8B → Claude ─────────────────────────────────
         if tier == ModelTier.TIER1:
             endpoint_1b = TIER_ENDPOINTS.get(ModelTier.TIER1)
-            ollama_max = min(max_tokens, _TIER1_OLLAMA_MAX_TOKENS)
             if endpoint_1b and self._is_warm(ModelTier.TIER1):
                 async for event in self._stream_runpod(
                     messages, system, max_tokens, tier=ModelTier.TIER1
                 ):
                     yield event
-            elif settings.ollama_url:
-                logger.info("Tier1 RunPod cold/absent — using local Ollama (max %d tokens)", ollama_max)
-                async for event in self._stream_ollama(messages, system, ollama_max):
-                    yield event
             else:
+                logger.info("Tier1 RunPod cold/absent — falling back to Claude")
                 async for event in self._stream_anthropic(messages, system, max_tokens):
                     yield event
             return
 
-        # ── Tier 2: RunPod Qwen3 32B → Ollama → Claude ───────────────────────
+        # ── Tier 2: RunPod Qwen3 32B → Claude ────────────────────────────────
         endpoint_2 = TIER_ENDPOINTS.get(ModelTier.TIER2)
         if endpoint_2 and self._is_warm(ModelTier.TIER2):
             async for event in self._stream_runpod(messages, system, max_tokens, tier=ModelTier.TIER2):
                 yield event
-        elif settings.ollama_url:
-            logger.info("RunPod Tier2 cold — using local Ollama")
-            async for event in self._stream_ollama(messages, system, max_tokens):
-                yield event
         else:
+            logger.info("Tier2 RunPod cold/absent — falling back to Claude")
             async for event in self._stream_anthropic(messages, system, max_tokens):
                 yield event
 
@@ -450,9 +451,10 @@ class ModelClient:
             }
         }
 
-        logger.info("RunPod %s request: model=%s", tier, model_name)
+        timeout = _RUNPOD_TIMEOUT.get(tier, 30.0)
+        logger.info("RunPod %s request: model=%s timeout=%.0fs", tier, model_name, timeout)
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(
                     endpoint,
                     json=payload,
@@ -471,8 +473,8 @@ class ModelClient:
 
             if not choices:
                 self._mark_failed(tier)
-                ollama_max = min(max_tokens, _TIER1_OLLAMA_MAX_TOKENS) if tier == ModelTier.TIER1 else max_tokens
-                async for event in self._stream_ollama(messages, system, ollama_max):
+                logger.warning("RunPod %s returned empty choices — falling back to Claude", tier)
+                async for event in self._stream_anthropic(messages, system, max_tokens):
                     yield event
                 return
 
@@ -489,10 +491,9 @@ class ModelClient:
             yield {"type": "done", "model": model_label, "tokens": total_tokens}
 
         except Exception as e:
-            logger.warning("RunPod %s failed (%s: %s)", tier, type(e).__name__, e)
+            logger.warning("RunPod %s failed (%s: %s) — falling back to Claude", tier, type(e).__name__, e)
             self._mark_failed(tier)
-            ollama_max = min(max_tokens, _TIER1_OLLAMA_MAX_TOKENS) if tier == ModelTier.TIER1 else max_tokens
-            async for event in self._stream_ollama(messages, system, ollama_max):
+            async for event in self._stream_anthropic(messages, system, max_tokens):
                 yield event
 
 
