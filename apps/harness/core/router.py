@@ -22,11 +22,12 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_CLASSIFY_TIMEOUT = 2.0
+_CLASSIFY_TIMEOUT = 3.0   # slightly above Ollama's ~2.5s warm response time
 
-# After a classifier Ollama failure, skip network calls for this many seconds.
-# Avoids paying the timeout cost on every request when Ollama is down.
-_OLLAMA_BACKOFF = 60.0
+# After a classifier failure, skip network calls until the keepalive recovers it.
+# The keepalive task (started in main.py lifespan) probes every 30s when down
+# and clears this flag as soon as Ollama responds again.
+_OLLAMA_BACKOFF = 120.0
 _ollama_failed_at: Optional[float] = None
 
 
@@ -42,7 +43,16 @@ def _ollama_available() -> bool:
 
 def _ollama_mark_failed() -> None:
     global _ollama_failed_at
+    if _ollama_failed_at is None:
+        logger.warning("Ollama classifier marked unavailable — keepalive will restore")
     _ollama_failed_at = time.monotonic()
+
+
+def _ollama_mark_recovered() -> None:
+    global _ollama_failed_at
+    if _ollama_failed_at is not None:
+        logger.info("Ollama classifier recovered")
+    _ollama_failed_at = None
 
 
 _CLASSIFY_SYSTEM = (

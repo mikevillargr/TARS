@@ -1,6 +1,8 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,6 +14,46 @@ from core.config import settings
 
 log = logging.getLogger(__name__)
 
+# How often to ping Ollama when healthy — keeps llama3.2:3b warm in memory.
+# OLLAMA_KEEP_ALIVE=-1 is set in the systemd unit so the model is never evicted,
+# but we still ping to detect outages early and to warm the model after harness restart.
+_KEEPALIVE_HEALTHY_INTERVAL = 240   # 4 min (before Ollama's default 5-min eviction)
+_KEEPALIVE_RECOVERY_INTERVAL = 30   # retry every 30s when Ollama is down
+
+
+async def _ollama_keepalive() -> None:
+    """
+    Keep llama3.2:3b warm and auto-clear the classifier backoff when Ollama recovers.
+    Runs as a background task for the lifetime of the harness process.
+    """
+    from core.router import _ollama_mark_failed, _ollama_mark_recovered
+
+    if not settings.ollama_url:
+        return
+
+    await asyncio.sleep(5)   # let Ollama finish initialising after harness starts
+
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{settings.ollama_url}/api/chat",
+                    json={
+                        "model": settings.classifier_model,
+                        "messages": [{"role": "user", "content": "ping"}],
+                        "stream": False,
+                        "options": {"num_predict": 1, "temperature": 0},
+                    },
+                )
+                resp.raise_for_status()
+            _ollama_mark_recovered()
+            await asyncio.sleep(_KEEPALIVE_HEALTHY_INTERVAL)
+        except Exception as exc:
+            _ollama_mark_failed()
+            log.warning("Ollama keepalive failed (%s) — retrying in %ds",
+                        exc, _KEEPALIVE_RECOVERY_INTERVAL)
+            await asyncio.sleep(_KEEPALIVE_RECOVERY_INTERVAL)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -22,7 +64,17 @@ async def lifespan(app: FastAPI):
         log.info("Embedding model loaded")
     except Exception as e:
         log.warning("Embedding model preload failed: %s", e)
+
+    # Start Ollama keepalive — warms model on startup, recovers backoff after restarts
+    keepalive_task = asyncio.create_task(_ollama_keepalive())
+
     yield
+
+    keepalive_task.cancel()
+    try:
+        await keepalive_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
