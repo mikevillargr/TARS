@@ -303,13 +303,13 @@ async def send_message(
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
 
-    # Any file attachment → force Tier 3 (Claude handles documents best)
-    if files:
+    # Images require vision → always Claude. Documents → classify on content.
+    if image_blocks:
         tier = ModelTier.TIER3
     elif tier_override:
         tier = ModelTier(tier_override)
     else:
-        tier = await classify(content)
+        tier = await classify(content or " ".join(doc_snippets[:1])[:500])
 
     # Build the text that goes to the model (doc text prepended)
     full_text = ("\n\n".join(doc_snippets) + "\n\n" + content).strip() if doc_snippets else content
