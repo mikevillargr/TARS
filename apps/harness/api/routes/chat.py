@@ -1,11 +1,14 @@
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 import json as _json
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc
+from sqlalchemy import select, desc, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
+
+log = logging.getLogger(__name__)
 
 from core.auth import require_auth
 from core.router import classify
@@ -69,20 +72,21 @@ async def _get_or_create_user(user_id: str, db: AsyncSession) -> User:
 
 
 async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
-    """Ask Haiku for a 3-5 word conversation title based on recent exchanges."""
+    """Generate a 3-5 word conversation title from recent exchanges."""
     recent = messages[-8:]
     context = "\n".join(
         f"{m['role'].upper()}: {m['content'][:300]}" for m in recent
     )
     try:
         resp = await client.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-6",
             max_tokens=15,
             system="Write a 3-5 word title for this conversation. No quotes, no punctuation, no explanation. Just the title.",
             messages=[{"role": "user", "content": context}],
         )
         return resp.content[0].text.strip()[:80]
-    except Exception:
+    except Exception as exc:
+        log.warning("Title generation failed: %s", exc)
         return None
 
 
@@ -141,9 +145,23 @@ async def get_conversation(
         .order_by(Message.created_at)
     )
     messages = result.scalars().all()
+
+    title = conv.title
+    if not title and messages:
+        msg_dicts = [{"role": m.role, "content": m.content} for m in messages]
+        client = get_model_client()
+        title = await _generate_title(msg_dicts, client)
+        if title:
+            await db.execute(
+                sa_update(Conversation)
+                .where(Conversation.id == conversation_id)
+                .values(title=title)
+            )
+            await db.commit()
+
     return ConversationDetailOut(
         id=conv.id,
-        title=conv.title,
+        title=title,
         created_at=conv.created_at,
         messages=messages,
     )
@@ -225,7 +243,11 @@ async def send_message(
         title_messages = messages + [{"role": "assistant", "content": assistant_content}]
         new_title = await _generate_title(title_messages, client)
         if new_title:
-            conv.title = new_title
+            await db.execute(
+                sa_update(Conversation)
+                .where(Conversation.id == conversation_id)
+                .values(title=new_title)
+            )
             await db.commit()
 
         yield sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "title": new_title})

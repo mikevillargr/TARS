@@ -127,15 +127,6 @@ export default function ChatPage() {
   const [inputValue, setInputValue]                 = useState("")
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
 
-  // Stable ref so the mount effect never re-fires when setSidebarOpen
-  // changes reference (which happens whenever sidebar open state changes).
-  const setSidebarOpenRef = useRef(setSidebarOpen)
-  setSidebarOpenRef.current = setSidebarOpen
-
-  useEffect(() => {
-    setSidebarOpenRef.current(false)
-    return () => { setSidebarOpenRef.current(true) }
-  }, [])
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -150,10 +141,18 @@ export default function ChatPage() {
   }, [])
 
   // Load messages when active conversation changes
+  // Also syncs the title back into the list — the backend backfills null titles on load
   useEffect(() => {
     if (!activeChatId) { setMessages([]); return }
     apiGet<{ id: string; title: string | null; messages: Message[] }>(`/chat/conversations/${activeChatId}`)
-      .then((d) => setMessages(d.messages))
+      .then((d) => {
+        setMessages(d.messages)
+        if (d.title) {
+          setConversations((prev) => prev.map((c) =>
+            c.id === activeChatId ? { ...c, title: d.title } : c
+          ))
+        }
+      })
       .catch(console.error)
   }, [activeChatId])
 
