@@ -19,7 +19,7 @@ from core.model_client import (
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
-    READ_EMAIL_TOOL,
+    READ_EMAIL_TOOL, SYNC_MEETINGS_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -442,6 +442,7 @@ async def send_message(
         SAVE_MEMORY_TOOL,
         SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL,
+        SYNC_MEETINGS_TOOL,
     ] if tier == ModelTier.TIER3 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -602,6 +603,35 @@ async def send_message(
                         except Exception as exc:
                             log.warning("read_email tool failed: %s", exc)
                             return f"Failed to read email: {exc}"
+
+                    if name == "sync_meetings":
+                        try:
+                            from core.config import settings as _settings
+                            if not _settings.fireflies_api_key:
+                                return "Fireflies API key not configured."
+                            from connectors.fireflies import FirefliesClient
+                            from jobs.meeting_processor import ingest_from_webhook, process_meeting as _proc_meeting
+                            ff_client = FirefliesClient(_settings.fireflies_api_key)
+                            transcripts = await ff_client.list_recent(limit=20)
+                            synced = 0
+                            skipped = 0
+                            for t in transcripts:
+                                tid = t.get("id")
+                                if not tid:
+                                    continue
+                                new_id = await ingest_from_webhook(bg_db, user_id, tid)
+                                if new_id:
+                                    await _proc_meeting(bg_db, new_id, user_id)
+                                    synced += 1
+                                else:
+                                    skipped += 1
+                            if synced:
+                                return f"Synced {synced} new meeting{'s' if synced != 1 else ''} from Fireflies ({skipped} already up to date)."
+                            else:
+                                return f"All {skipped} recent Fireflies meetings are already up to date."
+                        except Exception as exc:
+                            log.warning("sync_meetings tool failed: %s", exc)
+                            return f"Failed to sync meetings: {exc}"
 
                     return "Action completed."
 

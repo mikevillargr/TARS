@@ -169,6 +169,21 @@ READ_EMAIL_TOOL = {
     },
 }
 
+SYNC_MEETINGS_TOOL = {
+    "name": "sync_meetings",
+    "description": (
+        "Pull the latest meeting transcripts from Fireflies and process them into TARS. "
+        "Use when Mike asks to sync meetings, check recent meetings, or wants to see what "
+        "meetings have been recorded. This fetches the last 20 Fireflies transcripts, "
+        "ingests any new ones, runs AI processing (summary + action items), and saves "
+        "everything to memory. Returns the count of meetings synced."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+    },
+}
+
 SAVE_TO_SECOND_BRAIN_TOOL = {
     "name": "save_to_second_brain",
     "description": (
