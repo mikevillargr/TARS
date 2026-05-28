@@ -292,6 +292,7 @@ export default function ChatPage() {
   const abortControllerRef                          = useRef<AbortController | null>(null)
   const pollTimerRef                                = useRef<ReturnType<typeof setInterval> | null>(null)
   const accumulatedRef                              = useRef<string>("")  // live text during streaming
+  const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? [])
@@ -429,8 +430,23 @@ export default function ChatPage() {
   }
 
   function handleStop() {
+    stopInitiatedRef.current = true
     abortControllerRef.current?.abort()
-    // State cleanup is handled by the AbortError catch block in handleSend
+    // Immediately freeze the UI — don't wait for async catch/finally
+    const partial = accumulatedRef.current
+    if (partial) {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `msg-${Date.now()}`,
+          role: "assistant",
+          content: partial,
+          created_at: new Date().toISOString(),
+        } as Message,
+      ])
+    }
+    setStreaming(null)
+    setBusy(false)
   }
 
   async function handleDeleteConversation(convId: string, e: React.MouseEvent) {
@@ -470,6 +486,7 @@ export default function ChatPage() {
       }
     }
 
+    stopInitiatedRef.current = false
     setBusy(true)
     setInputValue("")
     setCalendarSuggestions([])
@@ -522,6 +539,8 @@ export default function ChatPage() {
           if (raw === "[DONE]") break
           try {
             const evt = JSON.parse(raw)
+            if (stopInitiatedRef.current) break  // user clicked Stop — discard remaining events
+
             if (evt.type === "chunk") {
               accumulated += evt.text
               accumulatedRef.current = accumulated
@@ -562,18 +581,9 @@ export default function ChatPage() {
       if (chatId === activeChatIdRef.current) setStreaming(null)
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "AbortError") {
-        // User hit Stop — commit whatever text arrived so far as a truncated reply
-        const partial = accumulatedRef.current
-        if (chatId === activeChatIdRef.current) {
-          if (partial) {
-            const stoppedMsg: Message = {
-              id: `stopped-${Date.now()}`,
-              role: "assistant",
-              content: partial,
-              created_at: new Date().toISOString(),
-            }
-            setMessages(prev => [...prev.filter(m => !m.id.startsWith("temp-")), tempUser, stoppedMsg])
-          }
+        // handleStop already committed the partial response and cleared UI — just ensure cleanup
+        if (!stopInitiatedRef.current && chatId === activeChatIdRef.current) {
+          // abort fired without Stop button (e.g. conversation switch) — clear state silently
           setStreaming(null)
         }
         return
@@ -581,7 +591,8 @@ export default function ChatPage() {
       console.error(err)
       if (chatId === activeChatIdRef.current) setStreaming(null)
     } finally {
-      setBusy(false)
+      if (!stopInitiatedRef.current) setBusy(false)
+      // If stop was initiated, handleStop already called setBusy(false)
     }
   }, [activeChatId, attachments, busy, inputValue])
 
