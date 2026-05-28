@@ -76,12 +76,8 @@ async def get_connectors(
 # ── Google OAuth flow ─────────────────────────────────────────────────────────
 
 @router.get("/oauth/authorize/{connector}")
-async def oauth_authorize(
-    connector: str,
-    request: Request,
-    _: str = Depends(require_auth),
-):
-    """Redirect user to Google's OAuth consent page."""
+async def oauth_authorize(connector: str, request: Request):
+    """Redirect user to Google's OAuth consent page. No auth needed — just a redirect."""
     if connector not in ("gmail", "gcal"):
         raise HTTPException(status_code=400, detail="Unknown connector")
 
