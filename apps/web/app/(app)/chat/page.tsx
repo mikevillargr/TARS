@@ -320,10 +320,15 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, streaming?.content])
 
-  // Load conversation list
+  // Load conversation list and auto-select the most recent one
   useEffect(() => {
     apiGet<Conversation[]>("/chat/conversations")
-      .then(setConversations)
+      .then((convs) => {
+        setConversations(convs)
+        if (convs.length > 0 && !activeChatIdRef.current) {
+          setActiveChatId(convs[0].id)
+        }
+      })
       .catch(console.error)
   }, [])
 
