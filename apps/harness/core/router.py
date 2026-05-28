@@ -49,13 +49,11 @@ _TIER1_RE = re.compile(
 _TIER3_RE = re.compile(
     r"\b("
     r"write (a |an |the |me )?(full|complete|detailed|comprehensive|long)"
-    r"|analyze (this |the )?(document|file|pdf|deck|report|data)"
-    r"|create (a |an )?(strategy|proposal|presentation|deck|report|plan)"
-    r"|(summarize|summary of) (this |the )?(document|article|pdf|deck|transcript|report|contract|agreement)"
-    r"|review (this |the )?(document|contract|agreement|proposal)"
-    r"|draft (a |an )?(email|proposal|contract|report|plan|strategy)"
-    r"|compare (these|the|this)"
+    r"|create (a |an )?(strategy|proposal)"
+    r"|draft (a |an )?(proposal|contract|strategy)"
     r"|deep (dive|analysis|review)"
+    r"|comprehensive (analysis|report|strategy|review)"
+    r"|client (deliverable|presentation|proposal|report)"
     r")\b",
     re.IGNORECASE,
 )
