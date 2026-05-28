@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
-import { Eye, EyeOff, RotateCw, Trash2, Smartphone } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Eye, EyeOff, RotateCw, Trash2, Smartphone, MapPin, Check } from "lucide-react"
+import { apiGet, apiPatch } from "@/lib/api-client"
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
   return (
@@ -50,13 +51,48 @@ const INITIAL_KEYS = [
   { id: "runpod",    provider: "RunPod",           key: "rpa_•••••••••••••••••••••••••• 7f2" },
 ]
 
+// Common timezones sorted by offset
+const COMMON_TIMEZONES = [
+  "Pacific/Honolulu",
+  "America/Anchorage",
+  "America/Los_Angeles",
+  "America/Denver",
+  "America/Chicago",
+  "America/New_York",
+  "America/Sao_Paulo",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Helsinki",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Dhaka",
+  "Asia/Bangkok",
+  "Asia/Hong_Kong",
+  "Asia/Manila",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+]
+
 export default function SettingsPage() {
-  const [name, setName]   = useState("Mike Villar")
-  const [email]           = useState("mike@growth-rocket.com")
-  const [models, setModels] = useState({ tier1: "Qwen3 8B", tier2: "Qwen3 32B", tier3: "Claude Sonnet" })
-  const [notifs, setNotifs] = useState(INITIAL_NOTIFICATIONS)
-  const [keys, setKeys]     = useState(INITIAL_KEYS)
+  const [name, setName]         = useState("Mike Villar")
+  const [timezone, setTimezone] = useState("Asia/Manila")
+  const [tzSaved, setTzSaved]   = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+  const [models, setModels]     = useState({ tier1: "Qwen3 8B", tier2: "Qwen3 32B", tier3: "Claude Sonnet" })
+  const [notifs, setNotifs]     = useState(INITIAL_NOTIFICATIONS)
+  const [keys, setKeys]         = useState(INITIAL_KEYS)
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
+
+  // Load settings from API
+  useEffect(() => {
+    apiGet<{ name: string; timezone: string }>("/settings")
+      .then(d => {
+        setName(d.name)
+        setTimezone(d.timezone)
+      })
+      .catch(console.error)
+  }, [])
 
   const toggleNotif = (id: string, field: "push" | "email" | "inApp") => {
     setNotifs(prev => prev.map(n => n.id === id ? { ...n, [field]: !n[field] } : n))
@@ -64,6 +100,32 @@ export default function SettingsPage() {
 
   const toggleKeyVisibility = (id: string) => {
     setVisibleKeys(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  async function saveProfile() {
+    try {
+      await apiPatch("/settings", { name, timezone })
+      setProfileSaved(true)
+      setTimeout(() => setProfileSaved(false), 2000)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  async function saveTimezone(tz: string) {
+    try {
+      await apiPatch("/settings", { timezone: tz })
+      setTimezone(tz)
+      setTzSaved(true)
+      setTimeout(() => setTzSaved(false), 2000)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  function autoDetect() {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (detected) saveTimezone(detected)
   }
 
   return (
@@ -76,10 +138,7 @@ export default function SettingsPage() {
 
         {/* ── Profile ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2
-            className="text-[0.65rem] font-semibold uppercase tracking-wider"
-            style={{ color: "#948a7b" }}
-          >
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
             Profile
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -95,32 +154,81 @@ export default function SettingsPage() {
               <label className="block text-xs font-medium text-[#6b6357] mb-1">Primary Email</label>
               <input
                 className="input-field w-full"
-                value={email}
+                value="mike@growth-rocket.com"
                 readOnly
                 style={{ color: "#948a7b", cursor: "default" }}
               />
             </div>
           </div>
           <div className="flex justify-end">
-            <button className="btn-primary" style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}>
-              Save Profile
+            <button
+              onClick={saveProfile}
+              className="btn-primary flex items-center gap-1.5"
+              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+            >
+              {profileSaved ? <><Check size={13} /> Saved</> : "Save Profile"}
             </button>
           </div>
         </section>
 
+        {/* ── Timezone ── */}
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
+              Timezone
+            </h2>
+            {tzSaved && (
+              <span className="text-xs flex items-center gap-1" style={{ color: "#2d5a4f" }}>
+                <Check size={12} /> Saved
+              </span>
+            )}
+          </div>
+          <p className="text-xs" style={{ color: "#6b6357" }}>
+            Used for all date and time responses, calendar formatting, and scheduling suggestions.
+          </p>
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#948a7b" }} />
+              <select
+                className="input-field w-full pl-8"
+                value={timezone}
+                onChange={e => saveTimezone(e.target.value)}
+              >
+                {COMMON_TIMEZONES.map(tz => (
+                  <option key={tz} value={tz}>{tz.replace(/_/g, " ")}</option>
+                ))}
+                {/* Show current value if not in the list */}
+                {!COMMON_TIMEZONES.includes(timezone) && (
+                  <option value={timezone}>{timezone.replace(/_/g, " ")}</option>
+                )}
+              </select>
+            </div>
+            <button
+              onClick={autoDetect}
+              className="btn-secondary text-xs shrink-0 flex items-center gap-1.5"
+              style={{ padding: "0.375rem 0.75rem" }}
+              title="Detect from browser"
+            >
+              <MapPin size={13} /> Auto-detect
+            </button>
+          </div>
+          <p className="text-[11px]" style={{ color: "#948a7b" }}>
+            Current: <span className="font-mono">{timezone}</span>
+            {" · "}
+            {new Date().toLocaleTimeString(undefined, { timeZone: timezone, hour: "2-digit", minute: "2-digit", timeZoneName: "short" })}
+          </p>
+        </section>
+
         {/* ── Model Routing ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2
-            className="text-[0.65rem] font-semibold uppercase tracking-wider"
-            style={{ color: "#948a7b" }}
-          >
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
             Model Routing
           </h2>
           <div className="flex flex-col gap-0 rounded-lg overflow-hidden" style={{ border: "1px solid #e8e2d4" }}>
             {[
-              { label: "Tier 1 — Fast",    key: "tier1" as const, desc: "Simple queries, quick tasks" },
+              { label: "Tier 1 — Fast",      key: "tier1" as const, desc: "Simple queries, quick tasks" },
               { label: "Tier 2 — Workhorse", key: "tier2" as const, desc: "Most day-to-day tasks" },
-              { label: "Tier 3 — Frontier", key: "tier3" as const, desc: "Complex reasoning, deliverables" },
+              { label: "Tier 3 — Frontier",  key: "tier3" as const, desc: "Complex reasoning, deliverables" },
             ].map((tier, i) => (
               <div
                 key={tier.key}
@@ -151,24 +259,13 @@ export default function SettingsPage() {
 
         {/* ── Notifications ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2
-            className="text-[0.65rem] font-semibold uppercase tracking-wider"
-            style={{ color: "#948a7b" }}
-          >
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
             Notifications
           </h2>
-          <div
-            className="rounded-lg overflow-hidden"
-            style={{ border: "1px solid #e8e2d4" }}
-          >
-            {/* Header */}
+          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #e8e2d4" }}>
             <div
               className="grid px-4 py-2"
-              style={{
-                gridTemplateColumns: "1fr 60px 60px 60px",
-                backgroundColor: "#efeadf",
-                borderBottom: "1px solid #e8e2d4",
-              }}
+              style={{ gridTemplateColumns: "1fr 60px 60px 60px", backgroundColor: "#efeadf", borderBottom: "1px solid #e8e2d4" }}
             >
               {["", "Push", "Email", "In-App"].map(h => (
                 <span key={h} className="text-[0.6rem] font-semibold uppercase tracking-wider text-center" style={{ color: "#948a7b" }}>
@@ -176,7 +273,6 @@ export default function SettingsPage() {
                 </span>
               ))}
             </div>
-
             {notifs.map((notif, i) => (
               <div
                 key={notif.id}
@@ -188,15 +284,9 @@ export default function SettingsPage() {
                 }}
               >
                 <span className="text-sm text-[#1a1714]">{notif.label}</span>
-                <span className="flex justify-center">
-                  <Toggle enabled={notif.push}  onChange={() => toggleNotif(notif.id, "push")} />
-                </span>
-                <span className="flex justify-center">
-                  <Toggle enabled={notif.email} onChange={() => toggleNotif(notif.id, "email")} />
-                </span>
-                <span className="flex justify-center">
-                  <Toggle enabled={notif.inApp} onChange={() => toggleNotif(notif.id, "inApp")} />
-                </span>
+                <span className="flex justify-center"><Toggle enabled={notif.push}  onChange={() => toggleNotif(notif.id, "push")} /></span>
+                <span className="flex justify-center"><Toggle enabled={notif.email} onChange={() => toggleNotif(notif.id, "email")} /></span>
+                <span className="flex justify-center"><Toggle enabled={notif.inApp} onChange={() => toggleNotif(notif.id, "inApp")} /></span>
               </div>
             ))}
           </div>
@@ -204,10 +294,7 @@ export default function SettingsPage() {
 
         {/* ── API Keys ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2
-            className="text-[0.65rem] font-semibold uppercase tracking-wider"
-            style={{ color: "#948a7b" }}
-          >
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
             API Keys
           </h2>
           <div className="flex flex-col gap-2">
@@ -260,20 +347,14 @@ export default function SettingsPage() {
 
         {/* ── App Installation ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2
-            className="text-[0.65rem] font-semibold uppercase tracking-wider"
-            style={{ color: "#948a7b" }}
-          >
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
             App Installation
           </h2>
           <div
             className="rounded-xl p-4 flex items-center gap-4"
             style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.15)" }}
           >
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-              style={{ backgroundColor: "#2d5a4f" }}
-            >
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#2d5a4f" }}>
               <Smartphone size={22} style={{ color: "#fbfaf6" }} />
             </div>
             <div className="flex-1 min-w-0">
@@ -282,10 +363,7 @@ export default function SettingsPage() {
                 Add to your home screen for offline access and push notifications.
               </div>
             </div>
-            <button
-              className="btn-primary shrink-0"
-              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
-            >
+            <button className="btn-primary shrink-0" style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}>
               Install
             </button>
           </div>

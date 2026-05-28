@@ -65,6 +65,39 @@ PROPOSE_CALENDAR_EVENT_TOOL = {
 }
 
 
+PROPOSE_TASK_TOOL = {
+    "name": "propose_task",
+    "description": (
+        "Suggest adding a task to the user's task list. Use this when the conversation "
+        "establishes a clear action item — a follow-up, deliverable, or something the "
+        "user says they need to do. Do NOT use for vague intentions or completed items."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Short task title (10 words max)",
+            },
+            "description": {
+                "type": "string",
+                "description": "Optional context or details",
+            },
+            "priority": {
+                "type": "string",
+                "enum": ["urgent", "high", "normal", "low"],
+                "description": "Task priority. Default normal.",
+            },
+            "due_at": {
+                "type": "string",
+                "description": "Optional due date in ISO 8601 format",
+            },
+        },
+        "required": ["title"],
+    },
+}
+
+
 TIER_MODELS = {
     ModelTier.TIER1: "llama3.2:3b",
     ModelTier.TIER2: "qwen3-32b",
@@ -214,10 +247,12 @@ class ModelClient:
                 final = await stream.get_final_message()
                 tool_uses = [b for b in final.content if b.type == "tool_use"]
 
-                # Emit calendar suggestions before done event
+                # Emit suggestions before done event
                 for b in tool_uses:
                     if b.name == "propose_calendar_event":
                         yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
+                    elif b.name == "propose_task":
+                        yield {"type": "task_suggest", "tool_use_id": b.id, **b.input}
 
                 if final.stop_reason == "tool_use" and tool_uses:
                     # Send tool results back and stream the continuation

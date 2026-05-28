@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Send, Paperclip, Camera, Mic, Plus, Bot, User,
   Code, Terminal, ChevronLeft, PanelLeft, Maximize2,
-  Minimize2, X, Calendar, Loader2,
+  Minimize2, X, Calendar, CheckSquare, Loader2,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost } from "@/lib/api-client"
@@ -29,6 +29,14 @@ interface StreamingMsg {
   role: "assistant"
   content: string
   streaming: true
+}
+
+interface TaskSuggestion {
+  tool_use_id: string
+  title: string
+  description?: string
+  priority?: "urgent" | "high" | "normal" | "low"
+  due_at?: string
 }
 
 interface CalendarSuggestion {
@@ -96,6 +104,78 @@ function CalendarSuggestChip({ suggestion, onDismiss }: { suggestion: CalendarSu
       >
         {adding ? <Loader2 size={10} className="animate-spin" /> : null}
         Add to Calendar
+      </button>
+      <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+    </div>
+  )
+}
+
+const PRIORITY_COLORS: Record<string, string> = {
+  urgent: "#a04848",
+  high:   "#b07030",
+  normal: "#2d5a4f",
+  low:    "#948a7b",
+}
+
+function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion; onDismiss: () => void }) {
+  const [adding, setAdding] = useState(false)
+  const [added, setAdded]   = useState(false)
+
+  async function addTask() {
+    setAdding(true)
+    try {
+      await apiPost("/tasks", {
+        title:       suggestion.title,
+        description: suggestion.description,
+        priority:    suggestion.priority ?? "normal",
+        due_at:      suggestion.due_at ?? null,
+      })
+      setAdded(true)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const priorityColor = PRIORITY_COLORS[suggestion.priority ?? "normal"]
+
+  if (added) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.2)" }}>
+        <CheckSquare size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "#2d5a4f" }}>Added to tasks</span>
+        <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4" }}>
+      <CheckSquare size={12} style={{ color: priorityColor, flexShrink: 0 }} />
+      <div className="flex-1 min-w-0">
+        <span className="font-medium" style={{ color: "#1a1714" }}>{suggestion.title}</span>
+        {suggestion.priority && suggestion.priority !== "normal" && (
+          <span className="ml-1.5 uppercase text-[9px] font-semibold tracking-wider" style={{ color: priorityColor }}>
+            {suggestion.priority}
+          </span>
+        )}
+        {suggestion.due_at && (
+          <span className="ml-1.5" style={{ color: "#948a7b" }}>
+            due {new Date(suggestion.due_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+          </span>
+        )}
+      </div>
+      <button
+        onClick={addTask}
+        disabled={adding}
+        className="shrink-0 font-medium disabled:opacity-50 flex items-center gap-1"
+        style={{ color: "#2d5a4f" }}
+        onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+        onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+      >
+        {adding ? <Loader2 size={10} className="animate-spin" /> : null}
+        Add Task
       </button>
       <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
     </div>
@@ -198,6 +278,7 @@ export default function ChatPage() {
   const [streaming, setStreaming]                   = useState<StreamingMsg | null>(null)
   const [busy, setBusy]                             = useState(false)
   const [calendarSuggestions, setCalendarSuggestions] = useState<CalendarSuggestion[]>([])
+  const [taskSuggestions, setTaskSuggestions]         = useState<TaskSuggestion[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [isContextDismissed, setContextDismissed]   = useState(false)
   const [inputValue, setInputValue]                 = useState("")
@@ -214,11 +295,13 @@ export default function ChatPage() {
   }
 
 
-  // Keep ref in sync; clear streaming when switching conversations
+  // Keep ref in sync; clear transient state when switching conversations
   useEffect(() => {
     activeChatIdRef.current = activeChatId
     setStreaming(null)
     setBusy(false)
+    setCalendarSuggestions([])
+    setTaskSuggestions([])
   }, [activeChatId])
 
   // Scroll to bottom on new messages
@@ -294,6 +377,7 @@ export default function ChatPage() {
     setBusy(true)
     setInputValue("")
     setCalendarSuggestions([])
+    setTaskSuggestions([])
     const pendingAttachments = attachments
     setAttachments([])
 
@@ -346,6 +430,10 @@ export default function ChatPage() {
             } else if (evt.type === "calendar_suggest") {
               if (chatId === activeChatIdRef.current) {
                 setCalendarSuggestions(prev => [...prev, evt as CalendarSuggestion])
+              }
+            } else if (evt.type === "task_suggest") {
+              if (chatId === activeChatIdRef.current) {
+                setTaskSuggestions(prev => [...prev, evt as TaskSuggestion])
               }
             } else if (evt.type === "done") {
               const finalMsg: Message = {
@@ -514,13 +602,20 @@ export default function ChatPage() {
           ) : allMessages.map((msg, i) => (
             <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
           ))}
-          {calendarSuggestions.length > 0 && (
+          {(calendarSuggestions.length > 0 || taskSuggestions.length > 0) && (
             <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
               {calendarSuggestions.map((s) => (
                 <CalendarSuggestChip
                   key={s.tool_use_id}
                   suggestion={s}
                   onDismiss={() => setCalendarSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+                />
+              ))}
+              {taskSuggestions.map((s) => (
+                <TaskSuggestChip
+                  key={s.tool_use_id}
+                  suggestion={s}
+                  onDismiss={() => setTaskSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
                 />
               ))}
             </div>

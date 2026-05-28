@@ -67,9 +67,12 @@ and Entire Travel Group. He is a randonneur and cyclist. He manages his health a
 {second_brain_context}
 {gmail_section}{gcal_section}
 [ACTIVE CONTEXT]
+Timezone: {user_timezone}
 {active_tasks_count} open tasks
 {todays_meetings} today
 Last interaction: {last_seen}
+
+Always express dates and times in the user's timezone ({user_timezone}) unless explicitly asked otherwise.
 
 Respond as TARS. Honest, capable, no unnecessary padding. Humor setting: 75%."""
 
@@ -164,6 +167,7 @@ async def assemble(
     active_tasks_count: int = 0,
     todays_meetings: str = "No meetings",
     last_seen: str = "First interaction",
+    user_timezone: str = "Asia/Manila",
 ) -> str:
     """Query Mnemon + Second Brain (+ live Gmail if email-related) and return assembled system prompt."""
     mnemon_context = "No relevant memories."
@@ -176,7 +180,7 @@ async def assemble(
         is_calendar_query = bool(_CALENDAR_RE.search(query))
 
         # Resolve user timezone once
-        user_tz = "Asia/Manila"
+        user_tz = user_timezone
         try:
             from sqlalchemy import select
             from db.models import User
@@ -220,6 +224,7 @@ async def assemble(
         second_brain_context=second_brain_context,
         gmail_section=gmail_section,
         gcal_section=gcal_section,
+        user_timezone=user_tz,
         active_tasks_count=active_tasks_count,
         todays_meetings=todays_meetings,
         last_seen=last_seen,

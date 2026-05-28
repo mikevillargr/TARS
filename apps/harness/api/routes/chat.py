@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 from core.auth import require_auth
 from core.router import classify
-from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL
+from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from db.session import get_db
@@ -393,7 +393,8 @@ async def send_message(
     system_prompt = await assemble(user_id, content or "attachment", db=db)
 
     client = get_model_client()
-    tools = [PROPOSE_CALENDAR_EVENT_TOOL] if tier == ModelTier.TIER3 else None
+    # Suggestion tools available on Tier 2+ (ignored by Ollama/RunPod, used by Claude)
+    tools = [PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL] if tier in (ModelTier.TIER2, ModelTier.TIER3) else None
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:
@@ -407,7 +408,7 @@ async def send_message(
                 if event["type"] == "chunk":
                     full_response.append(event.get("text", ""))
                     await queue.put(sse_event(event))
-                elif event["type"] == "calendar_suggest":
+                elif event["type"] in ("calendar_suggest", "task_suggest"):
                     await queue.put(sse_event(event))
                 elif event["type"] == "done":
                     model_used = event.get("model", "")
