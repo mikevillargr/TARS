@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 from core.auth import require_auth
 from core.router import classify
-from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL, CREATE_TASK_TOOL
+from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL, CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from db.session import get_db, AsyncSessionLocal
@@ -393,8 +393,8 @@ async def send_message(
     system_prompt = await assemble(user_id, content or "attachment", db=db)
 
     client = get_model_client()
-    # All tools: create_task (executes immediately) + proposal tools (chips)
-    tools = [CREATE_TASK_TOOL, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL] if tier in (ModelTier.TIER2, ModelTier.TIER3) else None
+    # All tools available on all tiers (action + proposal)
+    tools = [CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL]
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:
@@ -420,6 +420,52 @@ async def send_message(
                         await bg_db.commit()
                         priority = tool_input.get("priority", "normal")
                         return f"Task created: '{tool_input['title']}' added to inbox (priority: {priority})."
+
+                    if name == "create_calendar_event":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Connector
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Google Calendar",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Google Calendar not connected. Event not created."
+
+                            from connectors.google_calendar import GoogleCalendarClient
+                            from datetime import datetime, timedelta, timezone as tz
+                            import asyncio as _asyncio
+
+                            gcal = GoogleCalendarClient(conn.auth)
+                            start_dt = datetime.fromisoformat(tool_input["datetime_iso"])
+                            duration = tool_input.get("duration_min", 60)
+                            end_dt = start_dt + timedelta(minutes=duration)
+
+                            event_body = {
+                                "summary": tool_input["title"],
+                                "start": {"dateTime": start_dt.isoformat(), "timeZone": str(start_dt.tzinfo or "UTC")},
+                                "end": {"dateTime": end_dt.isoformat(), "timeZone": str(start_dt.tzinfo or "UTC")},
+                            }
+                            if tool_input.get("description"):
+                                event_body["description"] = tool_input["description"]
+                            if tool_input.get("location"):
+                                event_body["location"] = tool_input["location"]
+                            if tool_input.get("attendees"):
+                                event_body["attendees"] = [{"email": e} for e in tool_input["attendees"]]
+
+                            loop = _asyncio.get_event_loop()
+                            result = await loop.run_in_executor(
+                                None, lambda: gcal.create_event(**event_body)
+                            )
+                            link = result.get("htmlLink", "")
+                            return f"Calendar event created: '{tool_input['title']}' on {start_dt.strftime('%b %-d at %-I:%M %p')}." + (f" View: {link}" if link else "")
+                        except Exception as exc:
+                            log.warning("create_calendar_event failed: %s", exc)
+                            return f"Failed to create calendar event: {exc}"
+
                     return "Action completed."
 
                 async for event in client.stream(messages, tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):

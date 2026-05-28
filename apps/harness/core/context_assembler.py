@@ -6,26 +6,10 @@ when the query warrants it.
 
 import asyncio
 import logging
-import re
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
-
-_EMAIL_RE = re.compile(
-    r"\b(email|emails|gmail|inbox|unread|messages?|threads?|"
-    r"mail|wrote to me|sent me|received|newsletter|reply|replied|"
-    r"forwarded|attachment|subject line)\b",
-    re.IGNORECASE,
-)
-
-_CALENDAR_RE = re.compile(
-    r"\b(calendar|meeting|meetings|schedule|scheduled|event|events|"
-    r"appointment|appointments|today|tomorrow|this week|next week|"
-    r"what.s on|what do i have|busy|free|available|availability|"
-    r"call|calls|standup|stand.?up)\b",
-    re.IGNORECASE,
-)
 
 def _format_event_time(start: str, all_day: bool, tz_name: str = "UTC") -> str:
     if not start:
@@ -202,9 +186,6 @@ async def assemble(
     user_tz = user_timezone
 
     if db is not None:
-        is_email_query = bool(_EMAIL_RE.search(query))
-        is_calendar_query = bool(_CALENDAR_RE.search(query))
-
         # Resolve user timezone once
         try:
             from sqlalchemy import select
@@ -227,31 +208,23 @@ async def assemble(
             except Exception:
                 pass
 
-        coroutines: list = [
+        # Always fetch all context — tasks, email, and calendar on every turn
+        results = await asyncio.gather(
             _fetch_memory(),
             _fetch_tasks_context(db, user_id),
-        ]
-        if is_email_query:
-            coroutines.append(_fetch_gmail_context(db, user_id))
-        if is_calendar_query:
-            coroutines.append(_fetch_gcal_context(db, user_id, user_tz))
-
-        results = await asyncio.gather(*coroutines, return_exceptions=True)
+            _fetch_gmail_context(db, user_id),
+            _fetch_gcal_context(db, user_id, user_tz),
+            return_exceptions=True,
+        )
 
         # results[0] = _fetch_memory (nonlocal, no return value)
-        # results[1] = tasks
-        # results[2+] = gmail, gcal if requested
+        # results[1] = tasks, results[2] = gmail, results[3] = gcal
         if len(results) > 1 and isinstance(results[1], str):
             tasks_section = results[1]
-
-        idx = 2
-        if is_email_query:
-            if len(results) > idx and isinstance(results[idx], str):
-                gmail_section = results[idx]
-            idx += 1
-        if is_calendar_query:
-            if len(results) > idx and isinstance(results[idx], str):
-                gcal_section = results[idx]
+        if len(results) > 2 and isinstance(results[2], str):
+            gmail_section = results[2]
+        if len(results) > 3 and isinstance(results[3], str):
+            gcal_section = results[3]
 
     return SYSTEM_TEMPLATE.format(
         mnemon_context=mnemon_context,

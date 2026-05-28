@@ -65,6 +65,46 @@ PROPOSE_CALENDAR_EVENT_TOOL = {
 }
 
 
+CREATE_CALENDAR_EVENT_TOOL = {
+    "name": "create_calendar_event",
+    "description": (
+        "Create a Google Calendar event immediately. Use when the user explicitly asks "
+        "you to book, schedule, or add a meeting, call, or appointment. "
+        "Execute without asking for confirmation."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Short event title",
+            },
+            "datetime_iso": {
+                "type": "string",
+                "description": "Start datetime in ISO 8601 with timezone offset (e.g. 2026-05-30T14:00:00+08:00)",
+            },
+            "duration_min": {
+                "type": "integer",
+                "description": "Duration in minutes. Default 60.",
+            },
+            "description": {
+                "type": "string",
+                "description": "Optional notes or agenda",
+            },
+            "location": {
+                "type": "string",
+                "description": "Optional location or video link",
+            },
+            "attendees": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Attendee email addresses",
+            },
+        },
+        "required": ["title", "datetime_iso"],
+    },
+}
+
 CREATE_TASK_TOOL = {
     "name": "create_task",
     "description": (
@@ -194,7 +234,7 @@ class ModelClient:
                 async for event in self._stream_ollama(messages, system, max_tokens):
                     yield event
             else:
-                async for event in self._stream_anthropic(messages, system, max_tokens, tool_executor=tool_executor):
+                async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools, tool_executor=tool_executor):
                     yield event
             return
 
