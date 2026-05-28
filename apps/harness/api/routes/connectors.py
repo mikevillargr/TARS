@@ -104,7 +104,7 @@ async def oauth_callback(
 
     via_prod = "localhost" not in str(request.base_url)
     try:
-        auth = exchange_code(connector, code, via_production=via_prod)
+        auth = await exchange_code(connector, code, via_production=via_prod)
     except Exception as exc:
         log.exception("OAuth exchange failed for %s: %s", connector, exc)
         raise HTTPException(status_code=400, detail=f"OAuth exchange failed: {exc}")
