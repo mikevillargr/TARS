@@ -27,7 +27,7 @@ _CALENDAR_RE = re.compile(
     re.IGNORECASE,
 )
 
-def _format_event_time(start: str, all_day: bool) -> str:
+def _format_event_time(start: str, all_day: bool, tz_name: str = "UTC") -> str:
     if not start:
         return ""
     if all_day:
@@ -38,9 +38,10 @@ def _format_event_time(start: str, all_day: bool) -> str:
         except Exception:
             return start
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
         dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
-        local = dt.astimezone()
+        local = dt.astimezone(ZoneInfo(tz_name))
         return local.strftime("%a %b %-d, %-I:%M %p")
     except Exception:
         return start
@@ -115,7 +116,7 @@ async def _fetch_gmail_context(db: AsyncSession, user_id: str) -> str:
         return ""
 
 
-async def _fetch_gcal_context(db: AsyncSession, user_id: str) -> str:
+async def _fetch_gcal_context(db: AsyncSession, user_id: str, tz_name: str = "Asia/Manila") -> str:
     try:
         from sqlalchemy import select
         from db.models import Connector
@@ -137,9 +138,9 @@ async def _fetch_gcal_context(db: AsyncSession, user_id: str) -> str:
         if not events:
             return "\n[CALENDAR — UPCOMING]\nNo events in the next 7 days.\n"
 
-        lines = ["\n[CALENDAR — UPCOMING EVENTS]"]
+        lines = [f"\n[CALENDAR — UPCOMING EVENTS ({tz_name})]"]
         for e in events:
-            time_str = _format_event_time(e["start"], e["all_day"])
+            time_str = _format_event_time(e["start"], e["all_day"], tz_name)
             line = f"  • {time_str} — {e['title']}"
             if e.get("location"):
                 line += f" @ {e['location']}"
@@ -174,6 +175,18 @@ async def assemble(
         is_email_query = bool(_EMAIL_RE.search(query))
         is_calendar_query = bool(_CALENDAR_RE.search(query))
 
+        # Resolve user timezone once
+        user_tz = "Asia/Manila"
+        try:
+            from sqlalchemy import select
+            from db.models import User
+            r = await db.execute(select(User.timezone).where(User.id == user_id))
+            tz_val = r.scalar_one_or_none()
+            if tz_val:
+                user_tz = tz_val
+        except Exception:
+            pass
+
         async def _fetch_memory():
             nonlocal mnemon_context, second_brain_context
             try:
@@ -189,7 +202,7 @@ async def assemble(
         if is_email_query:
             coroutines.append(_fetch_gmail_context(db, user_id))
         if is_calendar_query:
-            coroutines.append(_fetch_gcal_context(db, user_id))
+            coroutines.append(_fetch_gcal_context(db, user_id, user_tz))
 
         results = await asyncio.gather(*coroutines, return_exceptions=True)
 
