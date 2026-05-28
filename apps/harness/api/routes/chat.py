@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import logging
 from datetime import datetime, timezone
@@ -356,61 +357,79 @@ async def send_message(
     system_prompt = await assemble(user_id, content or "attachment", db=db)
 
     client = get_model_client()
-    full_response: list[str] = []
-    model_used: str = ""
-    tokens_used: int = 0
     tools = [PROPOSE_CALENDAR_EVENT_TOOL] if tier == ModelTier.TIER3 else None
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def background_generate() -> None:
+        full_response: list[str] = []
+        model_used: str = ""
+        tokens_used: int = 0
+        new_title: Optional[str] = None
+
+        try:
+            async for event in client.stream(messages, tier, system=system_prompt, tools=tools):
+                if event["type"] == "chunk":
+                    full_response.append(event.get("text", ""))
+                    await queue.put(sse_event(event))
+                elif event["type"] == "calendar_suggest":
+                    await queue.put(sse_event(event))
+                elif event["type"] == "done":
+                    model_used = event.get("model", "")
+                    tokens_used = event.get("tokens", 0)
+                elif event["type"] == "error":
+                    await queue.put(sse_event(event))
+
+            assistant_content = "".join(full_response)
+
+            from db.session import AsyncSessionLocal as _SessionLocal
+            async with _SessionLocal() as bg_db:
+                assistant_msg = Message(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content=assistant_content,
+                    model_used=model_used or tier.value,
+                    tokens_used=tokens_used,
+                )
+                bg_db.add(assistant_msg)
+                await bg_db.commit()
+
+                title_msgs = messages + [{"role": "assistant", "content": assistant_content}]
+                new_title = await _generate_title(title_msgs, client)
+                if new_title:
+                    await bg_db.execute(
+                        sa_update(Conversation)
+                        .where(Conversation.id == conversation_id)
+                        .values(title=new_title)
+                    )
+                    await bg_db.commit()
+
+                try:
+                    from memory import mnemon as _mnemon
+                    summary = f"User: {(content or '[attachment]')[:200]}\nTARS: {assistant_content[:300]}"
+                    await _mnemon.write(
+                        bg_db, user_id, summary,
+                        domain="work", source="conversation", importance=2,
+                    )
+                except Exception:
+                    pass
+
+            await queue.put(sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "title": new_title}))
+            await queue.put(sse_done())
+
+        except Exception as exc:
+            log.error("background_generate failed: %s", exc)
+            await queue.put(sse_event({"type": "error", "error": str(exc)}))
+        finally:
+            await queue.put(None)
+
+    asyncio.create_task(background_generate())
 
     async def generate():
-        nonlocal model_used, tokens_used
-
-        async for event in client.stream(messages, tier, system=system_prompt, tools=tools):
-            if event["type"] == "chunk":
-                full_response.append(event.get("text", ""))
-                yield sse_event(event)
-            elif event["type"] == "calendar_suggest":
-                yield sse_event(event)
-            elif event["type"] == "done":
-                model_used = event.get("model", "")
-                tokens_used = event.get("tokens", 0)
-            elif event["type"] == "error":
-                yield sse_event(event)
-
-        assistant_content = "".join(full_response)
-        assistant_msg = Message(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=assistant_content,
-            model_used=model_used or tier.value,
-            tokens_used=tokens_used,
-        )
-        db.add(assistant_msg)
-        await db.commit()
-
-        # Generate a fresh title from the full exchange (including this response)
-        title_messages = messages + [{"role": "assistant", "content": assistant_content}]
-        new_title = await _generate_title(title_messages, client)
-        if new_title:
-            await db.execute(
-                sa_update(Conversation)
-                .where(Conversation.id == conversation_id)
-                .values(title=new_title)
-            )
-            await db.commit()
-
-        yield sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "title": new_title})
-        yield sse_done()
-
-        # Auto-save exchange to Mnemon (low importance, conversational source)
-        try:
-            from memory import mnemon as _mnemon
-            summary = f"User: {(content or '[attachment]')[:200]}\nTARS: {assistant_content[:300]}"
-            await _mnemon.write(
-                db, user_id, summary,
-                domain="work", source="conversation", importance=2,
-            )
-        except Exception:
-            pass
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            yield item
 
     return StreamingResponse(
         generate(),

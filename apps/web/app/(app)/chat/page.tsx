@@ -177,7 +177,11 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
         >
           <MessageContent content={msg.content} />
           {"streaming" in msg && (
-            <span className="inline-block w-1.5 h-3.5 ml-0.5 animate-pulse rounded-sm" style={{ backgroundColor: "rgba(45,90,79,0.4)" }} />
+            <span className="inline-flex items-center gap-0.5 ml-1 align-middle">
+              <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: "rgba(45,90,79,0.55)", animationDelay: "0ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: "rgba(45,90,79,0.55)", animationDelay: "160ms" }} />
+              <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: "rgba(45,90,79,0.55)", animationDelay: "320ms" }} />
+            </span>
           )}
         </div>
       </div>
