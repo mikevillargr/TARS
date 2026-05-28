@@ -125,7 +125,16 @@ export default function ChatPage() {
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [isContextDismissed, setContextDismissed]   = useState(false)
   const [inputValue, setInputValue]                 = useState("")
+  const [attachments, setAttachments]               = useState<File[]>([])
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
+  const fileInputRef                                = useRef<HTMLInputElement>(null)
+  const cameraInputRef                              = useRef<HTMLInputElement>(null)
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? [])
+    setAttachments(prev => [...prev, ...picked])
+    e.target.value = ""
+  }
 
 
   // Scroll to bottom on new messages
@@ -182,7 +191,7 @@ export default function ChatPage() {
 
   const handleSend = useCallback(async () => {
     const content = inputValue.trim()
-    if (busy || !content) return
+    if (busy || (!content && attachments.length === 0)) return
 
     // If no active conversation, create one first
     let chatId = activeChatId
@@ -200,6 +209,8 @@ export default function ChatPage() {
 
     setBusy(true)
     setInputValue("")
+    const pendingAttachments = attachments
+    setAttachments([])
 
     const tempUser: Message = {
       id: `temp-${Date.now()}`,
@@ -211,10 +222,13 @@ export default function ChatPage() {
     setStreaming({ role: "assistant", content: "", streaming: true })
 
     try {
+      const fd = new FormData()
+      fd.append("content", content)
+      for (const f of pendingAttachments) fd.append("files", f)
+
       const res = await fetch(`/api/proxy/chat/conversations/${chatId}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
+        body: fd,
       })
 
       if (!res.ok || !res.body) throw new Error("Stream failed")
@@ -269,7 +283,7 @@ export default function ChatPage() {
     } finally {
       setBusy(false)
     }
-  }, [activeChatId, busy, inputValue])
+  }, [activeChatId, attachments, busy, inputValue])
 
   const allMessages = streaming ? [...messages, streaming] : messages
 
@@ -411,6 +425,33 @@ export default function ChatPage() {
         {/* Input area */}
         <div className="p-4 shrink-0" style={{ backgroundColor: "#f6f3ec", borderTop: "1px solid #d8d2c4" }}>
           <div className="max-w-3xl mx-auto">
+            {/* Attachment chips */}
+            {attachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {attachments.map((file, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs"
+                    style={{ backgroundColor: "#efeadf", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                  >
+                    {file.type.startsWith("image/") ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={URL.createObjectURL(file)} alt={file.name} className="size-6 rounded object-cover shrink-0" />
+                    ) : (
+                      <Paperclip size={11} style={{ color: "#6b6357", flexShrink: 0 }} />
+                    )}
+                    <span className="max-w-[120px] truncate">{file.name}</span>
+                    <button
+                      onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                      style={{ color: "#948a7b" }}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div
               className="rounded-xl shadow-sm transition-all p-2"
               style={{ backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4" }}
@@ -433,25 +474,38 @@ export default function ChatPage() {
               />
               <div className="flex justify-between items-center mt-1 px-1">
                 <div className="flex gap-1" style={{ color: "#6b6357" }}>
-                  {[
-                    { icon: Paperclip, title: "Attach file" },
-                    { icon: Camera,    title: "Take photo" },
-                    { icon: Mic,       title: "Voice memo" },
-                  ].map(({ icon: Icon, title }) => (
-                    <button
-                      key={title}
-                      title={title}
-                      className="p-1.5 rounded-md transition-colors"
-                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
-                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                    >
-                      <Icon size={17} />
-                    </button>
-                  ))}
+                  <label
+                    htmlFor="chat-attach-file"
+                    title="Attach file"
+                    className="p-1.5 rounded-md transition-colors cursor-pointer"
+                    style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <Paperclip size={17} />
+                  </label>
+                  <label
+                    htmlFor="chat-attach-camera"
+                    title="Take photo"
+                    className="p-1.5 rounded-md transition-colors cursor-pointer"
+                    style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <Camera size={17} />
+                  </label>
+                  <button
+                    title="Voice memo"
+                    className="p-1.5 rounded-md transition-colors"
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <Mic size={17} />
+                  </button>
                 </div>
                 <button
                   onClick={handleSend}
-                  disabled={busy || !inputValue.trim()}
+                  disabled={busy || (!inputValue.trim() && attachments.length === 0)}
                   className="p-2 rounded-lg transition-colors disabled:opacity-40"
                   style={{ backgroundColor: "#2d5a4f", color: "#fbfaf6" }}
                   onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
@@ -461,6 +515,27 @@ export default function ChatPage() {
                 </button>
               </div>
             </div>
+
+            {/* Hidden file inputs */}
+            <input
+              ref={fileInputRef}
+              id="chat-attach-file"
+              type="file"
+              multiple
+              accept=".pdf,.docx,.txt,.md,image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <input
+              ref={cameraInputRef}
+              id="chat-attach-camera"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
             <p className="text-center mt-2 text-[10px]" style={{ color: "#948a7b" }}>
               TARS can make mistakes. Verify important information.
             </p>
