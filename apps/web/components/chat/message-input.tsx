@@ -89,29 +89,29 @@ export function MessageInput({ onSend, disabled }: Props) {
             "focus-within:border-ring focus-within:bg-background"
           )}
         >
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-            onClick={() => fileRef.current?.click()}
-            disabled={disabled}
-            type="button"
+          <label
+            htmlFor="chat-file-input"
+            className={cn(
+              "inline-flex items-center justify-center size-8 shrink-0 rounded-xl",
+              "text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer",
+              disabled && "pointer-events-none opacity-50"
+            )}
             title="Attach file"
           >
             <Paperclip className="size-4" />
-          </Button>
+          </label>
 
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-            onClick={() => cameraRef.current?.click()}
-            disabled={disabled}
-            type="button"
+          <label
+            htmlFor="chat-camera-input"
+            className={cn(
+              "inline-flex items-center justify-center size-8 shrink-0 rounded-xl",
+              "text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer",
+              disabled && "pointer-events-none opacity-50"
+            )}
             title="Take photo"
           >
             <Camera className="size-4" />
-          </Button>
+          </label>
 
           <textarea
             ref={textareaRef}
@@ -140,6 +140,7 @@ export function MessageInput({ onSend, disabled }: Props) {
         {/* Hidden inputs */}
         <input
           ref={fileRef}
+          id="chat-file-input"
           type="file"
           multiple
           accept=".pdf,.docx,.txt,.md,image/*"
@@ -148,6 +149,7 @@ export function MessageInput({ onSend, disabled }: Props) {
         />
         <input
           ref={cameraRef}
+          id="chat-camera-input"
           type="file"
           accept="image/*"
           capture="environment"
