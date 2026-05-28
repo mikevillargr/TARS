@@ -7,7 +7,7 @@ import json as _json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc, update as sa_update
+from sqlalchemy import select, desc, update as sa_update, delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
@@ -346,6 +346,8 @@ async def delete_conversation(
     db: AsyncSession = Depends(get_db),
 ):
     conv = await _get_conversation(conversation_id, user_id, db)
+    # Delete messages first — no DB-level cascade on this FK
+    await db.execute(sa_delete(Message).where(Message.conversation_id == conversation_id))
     await db.delete(conv)
     await db.commit()
 
