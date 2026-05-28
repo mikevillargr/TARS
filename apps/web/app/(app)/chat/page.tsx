@@ -5,9 +5,10 @@ import {
   Send, Paperclip, Camera, Mic, Plus, Bot, User,
   Code, Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
+  Square, Trash2,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
-import { apiGet, apiPost } from "@/lib/api-client"
+import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -290,6 +291,7 @@ export default function ChatPage() {
   const activeChatIdRef                             = useRef<string | null>(activeChatId)
   const abortControllerRef                          = useRef<AbortController | null>(null)
   const pollTimerRef                                = useRef<ReturnType<typeof setInterval> | null>(null)
+  const accumulatedRef                              = useRef<string>("")  // live text during streaming
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? [])
@@ -426,6 +428,30 @@ export default function ChatPage() {
     }
   }
 
+  function handleStop() {
+    abortControllerRef.current?.abort()
+    // State cleanup is handled by the AbortError catch block in handleSend
+  }
+
+  async function handleDeleteConversation(convId: string, e: React.MouseEvent) {
+    e.stopPropagation()  // don't select the conversation when clicking delete
+    try {
+      await apiDelete(`/chat/conversations/${convId}`)
+      setConversations(prev => {
+        const remaining = prev.filter(c => c.id !== convId)
+        // If we deleted the active conversation, switch to the next one
+        if (convId === activeChatIdRef.current) {
+          const next = remaining[0] ?? null
+          setActiveChatId(next?.id ?? null)
+          if (!next) setMessages([])
+        }
+        return remaining
+      })
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const handleSend = useCallback(async () => {
     const content = inputValue.trim()
     if (busy || (!content && attachments.length === 0)) return
@@ -480,6 +506,7 @@ export default function ChatPage() {
       const decoder = new TextDecoder()
       let buffer = ""
       let accumulated = ""
+      accumulatedRef.current = ""
 
       while (true) {
         const { done, value } = await reader.read()
@@ -497,6 +524,7 @@ export default function ChatPage() {
             const evt = JSON.parse(raw)
             if (evt.type === "chunk") {
               accumulated += evt.text
+              accumulatedRef.current = accumulated
               // Only update UI if still on this conversation
               if (chatId === activeChatIdRef.current) {
                 setStreaming({ role: "assistant", content: accumulated, streaming: true })
@@ -533,8 +561,23 @@ export default function ChatPage() {
       // Safety net: if stream ended without a done event, clear any stuck loading state
       if (chatId === activeChatIdRef.current) setStreaming(null)
     } catch (err: unknown) {
-      // AbortError = user navigated away; background task on server continues
-      if (err instanceof Error && err.name === "AbortError") return
+      if (err instanceof Error && err.name === "AbortError") {
+        // User hit Stop — commit whatever text arrived so far as a truncated reply
+        const partial = accumulatedRef.current
+        if (chatId === activeChatIdRef.current) {
+          if (partial) {
+            const stoppedMsg: Message = {
+              id: `stopped-${Date.now()}`,
+              role: "assistant",
+              content: partial,
+              created_at: new Date().toISOString(),
+            }
+            setMessages(prev => [...prev.filter(m => !m.id.startsWith("temp-")), tempUser, stoppedMsg])
+          }
+          setStreaming(null)
+        }
+        return
+      }
       console.error(err)
       if (chatId === activeChatIdRef.current) setStreaming(null)
     } finally {
@@ -581,19 +624,31 @@ export default function ChatPage() {
               {conversations.length === 0 ? (
                 <p className="px-3 py-4 text-xs" style={{ color: "#948a7b" }}>No conversations yet.</p>
               ) : conversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  onClick={() => { setActiveChatId(conv.id); setMobileConvOpen(false) }}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors ${
-                    activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted"
-                  }`}
-                  style={activeChatId === conv.id
-                    ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
-                    : {}
-                  }
-                >
-                  {conv.title ?? "New conversation"}
-                </button>
+                <div key={conv.id} className="group relative flex items-center">
+                  <button
+                    onClick={() => { setActiveChatId(conv.id); setMobileConvOpen(false) }}
+                    className={`flex-1 text-left px-3 py-2.5 rounded-md text-sm truncate transition-colors pr-9 ${
+                      activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted"
+                    }`}
+                    style={activeChatId === conv.id
+                      ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
+                      : {}
+                    }
+                  >
+                    {conv.title ?? "New conversation"}
+                  </button>
+                  {/* Always visible on mobile (no hover state on touch) */}
+                  <button
+                    onClick={(e) => { handleDeleteConversation(conv.id, e); setMobileConvOpen(false) }}
+                    className="absolute right-1 p-1.5 rounded transition-colors"
+                    style={{ color: "#c4b8a8" }}
+                    title="Delete"
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#a04848"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc" }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#c4b8a8"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -632,19 +687,33 @@ export default function ChatPage() {
           {conversations.length === 0 ? (
             <p className="px-3 py-4 text-xs" style={{ color: "#948a7b" }}>No conversations yet.</p>
           ) : conversations.map((conv) => (
-            <button
+            <div
               key={conv.id}
-              onClick={() => setActiveChatId(conv.id)}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors ${
-                activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted hover:bg-surface-2"
-              }`}
-              style={activeChatId === conv.id
-                ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
-                : {}
-              }
+              className="group relative flex items-center"
             >
-              {conv.title ?? "New conversation"}
-            </button>
+              <button
+                onClick={() => setActiveChatId(conv.id)}
+                className={`flex-1 text-left px-3 py-2 rounded-md text-sm truncate transition-colors pr-8 ${
+                  activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted hover:bg-surface-2"
+                }`}
+                style={activeChatId === conv.id
+                  ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
+                  : {}
+                }
+              >
+                {conv.title ?? "New conversation"}
+              </button>
+              <button
+                onClick={(e) => handleDeleteConversation(conv.id, e)}
+                className="absolute right-1 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ color: "#948a7b" }}
+                title="Delete conversation"
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#a04848"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
           ))}
         </div>
       </div>
@@ -840,16 +909,29 @@ export default function ChatPage() {
                     <Mic size={17} />
                   </button>
                 </div>
-                <button
-                  onClick={handleSend}
-                  disabled={busy || (!inputValue.trim() && attachments.length === 0)}
-                  className="p-2 rounded-lg transition-colors disabled:opacity-40"
-                  style={{ backgroundColor: "#2d5a4f", color: "#fbfaf6" }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-                >
-                  <Send size={15} />
-                </button>
+                {busy ? (
+                  <button
+                    onClick={handleStop}
+                    className="p-2 rounded-lg transition-colors"
+                    style={{ backgroundColor: "#a04848", color: "#fbfaf6" }}
+                    title="Stop generating"
+                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                  >
+                    <Square size={14} strokeWidth={0} fill="currentColor" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSend}
+                    disabled={!inputValue.trim() && attachments.length === 0}
+                    className="p-2 rounded-lg transition-colors disabled:opacity-40"
+                    style={{ backgroundColor: "#2d5a4f", color: "#fbfaf6" }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                  >
+                    <Send size={15} />
+                  </button>
+                )}
               </div>
             </div>
 
