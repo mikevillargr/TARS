@@ -65,12 +65,44 @@ PROPOSE_CALENDAR_EVENT_TOOL = {
 }
 
 
+CREATE_TASK_TOOL = {
+    "name": "create_task",
+    "description": (
+        "Create a task in the user's task inbox. Use this when the user explicitly asks "
+        "you to add, create, track, or remember a task, to-do, action item, follow-up, "
+        "or reminder. Execute immediately — do not ask for confirmation."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Short task title (10 words max)",
+            },
+            "description": {
+                "type": "string",
+                "description": "Optional context or details",
+            },
+            "priority": {
+                "type": "string",
+                "enum": ["urgent", "high", "normal", "low"],
+                "description": "Task priority. Default normal.",
+            },
+            "due_at": {
+                "type": "string",
+                "description": "Optional due date in ISO 8601 format",
+            },
+        },
+        "required": ["title"],
+    },
+}
+
 PROPOSE_TASK_TOOL = {
     "name": "propose_task",
     "description": (
-        "Suggest adding a task to the user's task list. Use this when the conversation "
-        "establishes a clear action item — a follow-up, deliverable, or something the "
-        "user says they need to do. Do NOT use for vague intentions or completed items."
+        "Suggest a task when you proactively detect an implied action item from context "
+        "that the user has NOT explicitly asked you to track. Shows a confirmation chip. "
+        "Do NOT use when the user explicitly asks you to add a task — use create_task instead."
     ),
     "input_schema": {
         "type": "object",
@@ -148,10 +180,11 @@ class ModelClient:
         system: str = "",
         max_tokens: int = 4096,
         tools: Optional[List[Dict]] = None,
+        tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         # Tier 3: always Claude
         if tier == ModelTier.TIER3:
-            async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools):
+            async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools, tool_executor=tool_executor):
                 yield event
             return
 
@@ -161,7 +194,7 @@ class ModelClient:
                 async for event in self._stream_ollama(messages, system, max_tokens):
                     yield event
             else:
-                async for event in self._stream_anthropic(messages, system, max_tokens):
+                async for event in self._stream_anthropic(messages, system, max_tokens, tool_executor=tool_executor):
                     yield event
             return
 
@@ -175,7 +208,7 @@ class ModelClient:
             async for event in self._stream_ollama(messages, system, max_tokens):
                 yield event
         else:
-            async for event in self._stream_anthropic(messages, system, max_tokens):
+            async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools, tool_executor=tool_executor):
                 yield event
 
     async def _stream_ollama(
@@ -228,7 +261,11 @@ class ModelClient:
         system: str,
         max_tokens: int,
         tools: Optional[List[Dict]] = None,
+        tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
+        # Tools that emit a suggestion chip — user confirms before action
+        _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
+
         model = "claude-sonnet-4-6"
         try:
             kwargs: Dict[str, Any] = dict(
@@ -247,7 +284,7 @@ class ModelClient:
                 final = await stream.get_final_message()
                 tool_uses = [b for b in final.content if b.type == "tool_use"]
 
-                # Emit suggestions before done event
+                # Emit suggestion events for proposal tools (shown as chips)
                 for b in tool_uses:
                     if b.name == "propose_calendar_event":
                         yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
@@ -255,7 +292,6 @@ class ModelClient:
                         yield {"type": "task_suggest", "tool_use_id": b.id, **b.input}
 
                 if final.stop_reason == "tool_use" and tool_uses:
-                    # Send tool results back and stream the continuation
                     asst_content = []
                     for b in final.content:
                         if b.type == "text":
@@ -266,14 +302,23 @@ class ModelClient:
                                 "name": b.name, "input": b.input,
                             })
 
-                    tool_results = [
-                        {
+                    # Build tool results — execute action tools, stub proposal tools
+                    tool_results = []
+                    for b in tool_uses:
+                        if b.name in _SUGGESTION_TOOLS:
+                            result = "Suggestion shown to user."
+                        elif tool_executor is not None:
+                            try:
+                                result = await tool_executor(b.name, b.input)
+                            except Exception as exc:
+                                result = f"Error: {exc}"
+                        else:
+                            result = "Action completed."
+                        tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": b.id,
-                            "content": "Calendar suggestion shown to user.",
-                        }
-                        for b in tool_uses
-                    ]
+                            "content": result,
+                        })
 
                     cont_messages = messages + [
                         {"role": "assistant", "content": asst_content},

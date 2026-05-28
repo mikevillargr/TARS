@@ -14,11 +14,11 @@ log = logging.getLogger(__name__)
 
 from core.auth import require_auth
 from core.router import classify
-from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL
+from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL, CREATE_TASK_TOOL
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
-from db.session import get_db
-from db.models import Conversation, Message, User
+from db.session import get_db, AsyncSessionLocal
+from db.models import Conversation, Message, User, Task
 
 router = APIRouter()
 
@@ -393,8 +393,8 @@ async def send_message(
     system_prompt = await assemble(user_id, content or "attachment", db=db)
 
     client = get_model_client()
-    # Suggestion tools available on Tier 2+ (ignored by Ollama/RunPod, used by Claude)
-    tools = [PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL] if tier in (ModelTier.TIER2, ModelTier.TIER3) else None
+    # All tools: create_task (executes immediately) + proposal tools (chips)
+    tools = [CREATE_TASK_TOOL, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL] if tier in (ModelTier.TIER2, ModelTier.TIER3) else None
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:
@@ -404,22 +404,38 @@ async def send_message(
         new_title: Optional[str] = None
 
         try:
-            async for event in client.stream(messages, tier, system=system_prompt, tools=tools):
-                if event["type"] == "chunk":
-                    full_response.append(event.get("text", ""))
-                    await queue.put(sse_event(event))
-                elif event["type"] in ("calendar_suggest", "task_suggest"):
-                    await queue.put(sse_event(event))
-                elif event["type"] == "done":
-                    model_used = event.get("model", "")
-                    tokens_used = event.get("tokens", 0)
-                elif event["type"] == "error":
-                    await queue.put(sse_event(event))
+            async with AsyncSessionLocal() as bg_db:
 
-            assistant_content = "".join(full_response)
+                async def _tool_executor(name: str, tool_input: dict) -> str:
+                    if name == "create_task":
+                        task = Task(
+                            user_id=user_id,
+                            title=tool_input["title"],
+                            description=tool_input.get("description"),
+                            priority=tool_input.get("priority", "normal"),
+                            status="inbox",
+                            source="chat",
+                        )
+                        bg_db.add(task)
+                        await bg_db.commit()
+                        priority = tool_input.get("priority", "normal")
+                        return f"Task created: '{tool_input['title']}' added to inbox (priority: {priority})."
+                    return "Action completed."
 
-            from db.session import AsyncSessionLocal as _SessionLocal
-            async with _SessionLocal() as bg_db:
+                async for event in client.stream(messages, tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
+                    if event["type"] == "chunk":
+                        full_response.append(event.get("text", ""))
+                        await queue.put(sse_event(event))
+                    elif event["type"] in ("calendar_suggest", "task_suggest"):
+                        await queue.put(sse_event(event))
+                    elif event["type"] == "done":
+                        model_used = event.get("model", "")
+                        tokens_used = event.get("tokens", 0)
+                    elif event["type"] == "error":
+                        await queue.put(sse_event(event))
+
+                assistant_content = "".join(full_response)
+
                 assistant_msg = Message(
                     conversation_id=conversation_id,
                     role="assistant",
@@ -440,7 +456,6 @@ async def send_message(
                     )
                     await bg_db.commit()
 
-                # Only save raw transcript for substantive exchanges
                 user_input = content or "[attachment]"
                 if len(user_input) >= 15 or len(assistant_content) >= 80:
                     try:
@@ -453,7 +468,6 @@ async def send_message(
                     except Exception:
                         pass
 
-                # Extract personal/professional facts as high-importance memories
                 await _extract_and_save_facts(bg_db, user_id, user_input, assistant_content, client)
 
             await queue.put(sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "title": new_title}))

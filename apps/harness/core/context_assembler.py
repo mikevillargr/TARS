@@ -65,7 +65,7 @@ and Entire Travel Group. He is a randonneur and cyclist. He manages his health a
 
 [RELEVANT KNOWLEDGE]
 {second_brain_context}
-{gmail_section}{gcal_section}
+{gmail_section}{gcal_section}{tasks_section}
 [ACTIVE CONTEXT]
 Timezone: {user_timezone}
 {active_tasks_count} open tasks
@@ -116,6 +116,30 @@ async def _fetch_gmail_context(db: AsyncSession, user_id: str) -> str:
 
     except Exception as exc:
         log.warning("Gmail context fetch failed: %s", exc)
+        return ""
+
+
+async def _fetch_tasks_context(db: AsyncSession, user_id: str) -> str:
+    try:
+        from sqlalchemy import select
+        from db.models import Task
+        result = await db.execute(
+            select(Task)
+            .where(Task.user_id == user_id, Task.status.in_(["inbox", "todo", "in_progress"]))
+            .order_by(Task.created_at.desc())
+            .limit(15)
+        )
+        tasks = result.scalars().all()
+        if not tasks:
+            return "\n[OPEN TASKS]\nNo open tasks.\n"
+        lines = ["\n[OPEN TASKS]"]
+        for t in tasks:
+            due = f" (due {t.due_at.strftime('%b %-d')})" if t.due_at else ""
+            lines.append(f"  [{t.status}] [{t.priority}] {t.title}{due}")
+        lines.append("")
+        return "\n".join(lines)
+    except Exception as exc:
+        log.warning("Tasks context fetch failed: %s", exc)
         return ""
 
 
@@ -174,13 +198,14 @@ async def assemble(
     second_brain_context = "No relevant knowledge."
     gmail_section = ""
     gcal_section = ""
+    tasks_section = ""
+    user_tz = user_timezone
 
     if db is not None:
         is_email_query = bool(_EMAIL_RE.search(query))
         is_calendar_query = bool(_CALENDAR_RE.search(query))
 
         # Resolve user timezone once
-        user_tz = user_timezone
         try:
             from sqlalchemy import select
             from db.models import User
@@ -202,7 +227,10 @@ async def assemble(
             except Exception:
                 pass
 
-        coroutines = [_fetch_memory()]
+        coroutines: list = [
+            _fetch_memory(),
+            _fetch_tasks_context(db, user_id),
+        ]
         if is_email_query:
             coroutines.append(_fetch_gmail_context(db, user_id))
         if is_calendar_query:
@@ -210,7 +238,13 @@ async def assemble(
 
         results = await asyncio.gather(*coroutines, return_exceptions=True)
 
-        idx = 1
+        # results[0] = _fetch_memory (nonlocal, no return value)
+        # results[1] = tasks
+        # results[2+] = gmail, gcal if requested
+        if len(results) > 1 and isinstance(results[1], str):
+            tasks_section = results[1]
+
+        idx = 2
         if is_email_query:
             if len(results) > idx and isinstance(results[idx], str):
                 gmail_section = results[idx]
@@ -224,6 +258,7 @@ async def assemble(
         second_brain_context=second_brain_context,
         gmail_section=gmail_section,
         gcal_section=gcal_section,
+        tasks_section=tasks_section,
         user_timezone=user_tz,
         active_tasks_count=active_tasks_count,
         todays_meetings=todays_meetings,
