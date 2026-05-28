@@ -17,4 +17,5 @@ anthropic==0.43.0
 python-dotenv==1.0.1
 fastembed==0.4.2
 trafilatura==2.0.0
+lxml_html_clean
 numpy>=2.0
