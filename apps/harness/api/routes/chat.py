@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 log = logging.getLogger(__name__)
 
 from core.auth import require_auth
+from core.router import classify
 from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL, CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -342,12 +343,18 @@ async def send_message(
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
 
-    # Tools are always active — model_client routes tool requests directly to Claude
-    # regardless of tier, so classify() adds latency with no benefit. Skip it.
-    if tier_override:
-        tier = ModelTier(tier_override)
-    else:
+    # Classify the request to pick the right model tier.
+    # Images always need vision (Claude). Override wins if provided.
+    if image_blocks:
         tier = ModelTier.TIER3
+    elif tier_override:
+        tier = ModelTier(tier_override)
+    elif content:
+        tier = await classify(content)
+    elif doc_snippets:
+        tier = ModelTier.TIER2
+    else:
+        tier = ModelTier.TIER2
 
     # Build the text that goes to the model (doc text prepended)
     full_text = ("\n\n".join(doc_snippets) + "\n\n" + content).strip() if doc_snippets else content
@@ -386,11 +393,12 @@ async def send_message(
         elif full_text != content:
             messages[-1]["content"] = full_text
 
-    system_prompt = await assemble(user_id, content or "attachment", db=db)
+    system_prompt = await assemble(user_id, content or "attachment", db=db, tier=tier)
 
     client = get_model_client()
-    # All tools available on all tiers (action + proposal)
-    tools = [CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL]
+    # Tools only for TIER3 (Claude) — Ollama and RunPod don't support Anthropic tool_use.
+    # The classifier is responsible for routing action requests to TIER3.
+    tools = [CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL] if tier == ModelTier.TIER3 else None
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:

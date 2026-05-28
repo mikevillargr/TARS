@@ -172,12 +172,24 @@ async def assemble(
     query: str,
     *,
     db: Optional[AsyncSession] = None,
+    tier=None,                          # ModelTier — controls context depth
     active_tasks_count: int = 0,
     todays_meetings: str = "No meetings",
     last_seen: str = "First interaction",
     user_timezone: str = "Asia/Manila",
 ) -> str:
-    """Query Mnemon + Second Brain (+ live Gmail if email-related) and return assembled system prompt."""
+    """
+    Build the system prompt for a conversation turn.
+
+    Tier 1 (fast/cheap model): lightweight context — tasks only, no email body,
+    brief calendar. Keeps the prompt small so Ollama's first token is faster.
+
+    Tier 2/3: full context — memory, knowledge, email, calendar, tasks.
+    """
+    from core.model_client import ModelTier
+
+    is_lightweight = (tier == ModelTier.TIER1)
+
     mnemon_context = "No relevant memories."
     second_brain_context = "No relevant knowledge."
     gmail_section = ""
@@ -199,6 +211,8 @@ async def assemble(
 
         async def _fetch_memory():
             nonlocal mnemon_context, second_brain_context
+            if is_lightweight:
+                return  # skip vector search for simple lookups
             try:
                 from memory import mnemon, second_brain
                 memories = await mnemon.search(db, user_id, query, limit=6)
@@ -208,23 +222,33 @@ async def assemble(
             except Exception:
                 pass
 
-        # Always fetch all context — tasks, email, and calendar on every turn
-        results = await asyncio.gather(
-            _fetch_memory(),
-            _fetch_tasks_context(db, user_id),
-            _fetch_gmail_context(db, user_id),
-            _fetch_gcal_context(db, user_id, user_tz),
-            return_exceptions=True,
-        )
-
-        # results[0] = _fetch_memory (nonlocal, no return value)
-        # results[1] = tasks, results[2] = gmail, results[3] = gcal
-        if len(results) > 1 and isinstance(results[1], str):
-            tasks_section = results[1]
-        if len(results) > 2 and isinstance(results[2], str):
-            gmail_section = results[2]
-        if len(results) > 3 and isinstance(results[3], str):
-            gcal_section = results[3]
+        if is_lightweight:
+            # Tier 1: tasks + calendar only (no email, no vector search)
+            results = await asyncio.gather(
+                _fetch_memory(),
+                _fetch_tasks_context(db, user_id),
+                _fetch_gcal_context(db, user_id, user_tz),
+                return_exceptions=True,
+            )
+            if len(results) > 1 and isinstance(results[1], str):
+                tasks_section = results[1]
+            if len(results) > 2 and isinstance(results[2], str):
+                gcal_section = results[2]
+        else:
+            # Tier 2/3: full context — tasks, email, calendar, memory
+            results = await asyncio.gather(
+                _fetch_memory(),
+                _fetch_tasks_context(db, user_id),
+                _fetch_gmail_context(db, user_id),
+                _fetch_gcal_context(db, user_id, user_tz),
+                return_exceptions=True,
+            )
+            if len(results) > 1 and isinstance(results[1], str):
+                tasks_section = results[1]
+            if len(results) > 2 and isinstance(results[2], str):
+                gmail_section = results[2]
+            if len(results) > 3 and isinstance(results[3], str):
+                gcal_section = results[3]
 
     return SYSTEM_TEMPLATE.format(
         mnemon_context=mnemon_context,
