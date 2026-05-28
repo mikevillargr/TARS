@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 log = logging.getLogger(__name__)
 
 from core.auth import require_auth
-from core.router import classify
 from core.model_client import get_model_client, ModelClient, ModelTier, PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL, CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -343,18 +342,12 @@ async def send_message(
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
 
-    # Images require vision → always Claude.
-    # Documents → classify on user's question only; bare file drop defaults to Tier 2.
-    if image_blocks:
-        tier = ModelTier.TIER3
-    elif tier_override:
+    # Tools are always active — model_client routes tool requests directly to Claude
+    # regardless of tier, so classify() adds latency with no benefit. Skip it.
+    if tier_override:
         tier = ModelTier(tier_override)
-    elif content:
-        tier = await classify(content)
-    elif doc_snippets:
-        tier = ModelTier.TIER2
     else:
-        tier = await classify(content)
+        tier = ModelTier.TIER3
 
     # Build the text that goes to the model (doc text prepended)
     full_text = ("\n\n".join(doc_snippets) + "\n\n" + content).strip() if doc_snippets else content
@@ -404,9 +397,9 @@ async def send_message(
         full_response: list[str] = []
         model_used: str = ""
         tokens_used: int = 0
-        new_title: Optional[str] = None
 
         try:
+            # ── Phase 1: stream the model response ──────────────────────────
             async with AsyncSessionLocal() as bg_db:
 
                 async def _tool_executor(name: str, tool_input: dict) -> str:
@@ -439,7 +432,7 @@ async def send_message(
                                 return "Google Calendar not connected. Event not created."
 
                             from connectors.google_calendar import GoogleCalendarClient
-                            from datetime import datetime, timedelta, timezone as tz
+                            from datetime import datetime, timedelta
                             import asyncio as _asyncio
 
                             gcal = GoogleCalendarClient(conn.auth)
@@ -483,8 +476,16 @@ async def send_message(
                     elif event["type"] == "error":
                         await queue.put(sse_event(event))
 
-                assistant_content = "".join(full_response)
+            assistant_content = "".join(full_response)
 
+            # ── Phase 2: signal completion to client immediately ─────────────
+            # Do NOT wait for DB saves / title gen / memory — client gets the
+            # response right away, then we persist in the background.
+            await queue.put(sse_event({"type": "done", "model": model_used, "tokens": tokens_used}))
+            await queue.put(sse_done())
+
+            # ── Phase 3: persist (client already showing the response) ───────
+            async with AsyncSessionLocal() as bg_db:
                 assistant_msg = Message(
                     conversation_id=conversation_id,
                     role="assistant",
@@ -518,9 +519,6 @@ async def send_message(
                         pass
 
                 await _extract_and_save_facts(bg_db, user_id, user_input, assistant_content, client)
-
-            await queue.put(sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "title": new_title}))
-            await queue.put(sse_done())
 
         except Exception as exc:
             log.error("background_generate failed: %s", exc)

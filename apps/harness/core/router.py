@@ -19,29 +19,46 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_CLASSIFY_TIMEOUT = 5.0
+_CLASSIFY_TIMEOUT = 2.0
 
 _CLASSIFY_SYSTEM = (
     "You are a routing classifier. Reply with ONLY one word — no explanation.\n\n"
-    "tier1 — simple and fast: quick questions with short answers, calendar/task lookups, "
-    "state changes (mark done, add reminder), single facts\n"
-    "tier2 — standard: writing, coding, analysis, summarization, research, "
+    "tier1 — lookup only: questions answered from context (what's on my calendar, "
+    "show my tasks, how many meetings today)\n"
+    "tier2 — standard work: writing, coding, analysis, summarization, research, "
     "multi-step tasks, most conversations\n"
-    "tier3 — frontier: strategy, comprehensive documents, client deliverables, "
-    "deep analysis, complex multi-part reasoning\n\n"
+    "tier3 — actions OR frontier: ANY request to create/add/book/schedule/remind/"
+    "mark/cancel/update something, plus strategy, documents, client deliverables, "
+    "deep analysis. When in doubt between tier1 and tier3, choose tier3.\n\n"
     "Reply with exactly: tier1, tier2, or tier3"
 )
 
-# Fast-path patterns — skip LLM for obvious cases
+# Pure lookup patterns — no tool execution needed
 _TIER1_RE = re.compile(
     r"\b("
     r"what('s| is) (on |my )?(my |the )?(calendar|schedule|tasks?|todo)"
-    r"|mark (that |it |task )?(as )?(done|complete|finished)"
-    r"|remind me|what time"
-    r"|set (a |the )?(timer|alarm|reminder)"
-    r"|add (a |to )?(task|reminder|note)"
     r"|show me (my )?(tasks?|calendar|schedule)"
     r"|how many (tasks?|meetings?)"
+    r"|what time"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Action patterns — require tool execution, always use Claude
+_ACTION_RE = re.compile(
+    r"\b("
+    r"add (a |to )?(task|reminder|note|event|meeting|appointment)"
+    r"|create (a |an )?(task|reminder|event|meeting|appointment)"
+    r"|book (a |the )?(meeting|call|appointment|time|slot)"
+    r"|schedule (a |the )?(meeting|call|appointment|event)"
+    r"|set (a |the )?(reminder|alarm)"
+    r"|remind me (to |about )?"
+    r"|put (it |this |that |on )?(my )?(calendar|tasks?|inbox)"
+    r"|add (it|this|that) to (my )?(tasks?|calendar|inbox)"
+    r"|mark (that |it |this |the |task )?(as )?(done|complete|finished|in.?progress|todo)"
+    r"|block (time|off|out)"
+    r"|cancel (the |this |that )?(meeting|event|appointment|call)"
+    r"|include .{0,40} in (the |this )?(meeting|event|call|invite)"
     r")\b",
     re.IGNORECASE,
 )
@@ -80,6 +97,8 @@ _LONG = 500
 def _heuristic(prompt: str) -> ModelTier:
     s = prompt.strip()
     n = len(s)
+    if _ACTION_RE.search(s):
+        return ModelTier.TIER3
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
     if _PERSONAL_RE.search(s):
@@ -103,6 +122,8 @@ async def classify(prompt: str) -> ModelTier:
     n = len(s)
 
     # Fast-path for unambiguous cases — no LLM call needed
+    if _ACTION_RE.search(s):
+        return ModelTier.TIER3  # always Claude for tool execution
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
     if _PERSONAL_RE.search(s):

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Send, Paperclip, Camera, Mic, Plus, Bot, User,
   Code, Terminal, ChevronLeft, PanelLeft, Maximize2,
-  Minimize2, X, Calendar, CheckSquare, Loader2,
+  Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost } from "@/lib/api-client"
@@ -280,6 +280,7 @@ export default function ChatPage() {
   const [calendarSuggestions, setCalendarSuggestions] = useState<CalendarSuggestion[]>([])
   const [taskSuggestions, setTaskSuggestions]         = useState<TaskSuggestion[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
+  const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   const [isContextDismissed, setContextDismissed]   = useState(false)
   const [inputValue, setInputValue]                 = useState("")
   const [attachments, setAttachments]               = useState<File[]>([])
@@ -516,28 +517,26 @@ export default function ChatPage() {
                 model_used: evt.model,
                 created_at: new Date().toISOString(),
               }
-              // Only inject into message list if still on this conversation
               if (chatId === activeChatIdRef.current) {
                 setMessages((prev) => [...prev.filter((m) => m.id !== tempUser.id), tempUser, finalMsg])
                 setStreaming(null)
               }
-              // Always update the conversation title in the list
-              if (evt.title && chatId) {
-                setConversations((prev) => prev.map((c) =>
-                  c.id === chatId ? { ...c, title: evt.title } : c
-                ))
-              } else {
-                apiGet<Conversation[]>("/chat/conversations").then(setConversations).catch(console.error)
-              }
+              // Refresh conversation list to pick up the title (generated async after done)
+              apiGet<Conversation[]>("/chat/conversations").then(setConversations).catch(console.error)
+            } else if (evt.type === "error") {
+              console.error("TARS stream error:", evt.error)
+              if (chatId === activeChatIdRef.current) setStreaming(null)
             }
           } catch { /* ignore malformed SSE */ }
         }
       }
+      // Safety net: if stream ended without a done event, clear any stuck loading state
+      if (chatId === activeChatIdRef.current) setStreaming(null)
     } catch (err: unknown) {
       // AbortError = user navigated away; background task on server continues
       if (err instanceof Error && err.name === "AbortError") return
       console.error(err)
-      setStreaming(null)
+      if (chatId === activeChatIdRef.current) setStreaming(null)
     } finally {
       setBusy(false)
     }
@@ -547,7 +546,61 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* ── Conversation list (collapsible) ───────────────────── */}
+
+      {/* ── Mobile conversation drawer ────────────────────────── */}
+      {mobileConvOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMobileConvOpen(false)}
+          />
+          <div
+            className="relative flex flex-col h-full w-72 max-w-[80vw] shadow-xl z-10"
+            style={{ backgroundColor: "#fbfaf6" }}
+          >
+            <div
+              className="px-3 py-3 border-b flex items-center gap-2 shrink-0"
+              style={{ borderColor: "#d8d2c4" }}
+            >
+              <button
+                onClick={async () => { await handleNewChat(); setMobileConvOpen(false) }}
+                className="flex-1 flex items-center justify-center gap-2 btn-secondary text-sm"
+                style={{ backgroundColor: "#f6f3ec" }}
+              >
+                <Plus size={15} /> New Chat
+              </button>
+              <button
+                onClick={() => setMobileConvOpen(false)}
+                className="p-1.5 rounded-md"
+                style={{ color: "#948a7b" }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+              {conversations.length === 0 ? (
+                <p className="px-3 py-4 text-xs" style={{ color: "#948a7b" }}>No conversations yet.</p>
+              ) : conversations.map((conv) => (
+                <button
+                  key={conv.id}
+                  onClick={() => { setActiveChatId(conv.id); setMobileConvOpen(false) }}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm truncate transition-colors ${
+                    activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted"
+                  }`}
+                  style={activeChatId === conv.id
+                    ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
+                    : {}
+                  }
+                >
+                  {conv.title ?? "New conversation"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Conversation list (collapsible, desktop only) ─────── */}
       <div
         className={`border-r bg-canvas hidden lg:flex flex-col transition-all duration-300 ease-out overflow-hidden shrink-0 ${isConvListCollapsed ? "w-0 border-r-0" : "w-64"}`}
         style={{ borderColor: "#d8d2c4" }}
@@ -604,6 +657,14 @@ export default function ChatPage() {
           style={{ borderColor: "#d8d2c4", backgroundColor: "rgba(251,250,246,0.95)", backdropFilter: "blur(4px)" }}
         >
           <div className="flex items-center gap-1 min-w-0">
+            {/* Mobile: open conversation drawer */}
+            <button
+              onClick={() => setMobileConvOpen(true)}
+              className="lg:hidden p-1.5 rounded-md shrink-0"
+              style={{ color: "#948a7b" }}
+            >
+              <Menu size={18} />
+            </button>
             {isConvListCollapsed && (
               <button
                 onClick={() => setConvListCollapsed(false)}

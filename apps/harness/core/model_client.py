@@ -222,9 +222,16 @@ class ModelClient:
         tools: Optional[List[Dict]] = None,
         tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        # Tier 3: always Claude
-        if tier == ModelTier.TIER3:
+        # Tools require Anthropic's tool_use API — Ollama and RunPod don't support it.
+        # Any request with tools goes directly to Claude, bypassing tier routing entirely.
+        if tools:
             async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools, tool_executor=tool_executor):
+                yield event
+            return
+
+        # Tool-free requests: respect tier routing
+        if tier == ModelTier.TIER3:
+            async for event in self._stream_anthropic(messages, system, max_tokens):
                 yield event
             return
 
@@ -234,7 +241,7 @@ class ModelClient:
                 async for event in self._stream_ollama(messages, system, max_tokens):
                     yield event
             else:
-                async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools, tool_executor=tool_executor):
+                async for event in self._stream_anthropic(messages, system, max_tokens):
                     yield event
             return
 
@@ -248,7 +255,7 @@ class ModelClient:
             async for event in self._stream_ollama(messages, system, max_tokens):
                 yield event
         else:
-            async for event in self._stream_anthropic(messages, system, max_tokens, tools=tools, tool_executor=tool_executor):
+            async for event in self._stream_anthropic(messages, system, max_tokens):
                 yield event
 
     async def _stream_ollama(
