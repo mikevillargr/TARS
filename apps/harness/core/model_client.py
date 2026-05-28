@@ -1,21 +1,20 @@
 """
 Unified model client.
 
-Tier 1: Qwen3 8B    via RunPod Serverless (GPU, ~1-3s)
-         → falls back to local Ollama llama3.2:3b (CPU, capped at 600 tokens)
-         → falls back to Claude
-Tier 2: Qwen3 32B   via RunPod Serverless (~2-4s warm, ~120s cold start)
-         → falls back to local Ollama
-         → falls back to Claude
-Tier 3: Claude Sonnet via Anthropic (frontier, streaming, tools)
+Tier 1: Claude Haiku  — always available, ~200-500ms, cheap (~$0.001/req)
+Tier 2: RunPod 32B    — warm: ~2-10s GPU inference
+         cold fallback: Haiku  if message ≤ 500 chars (standard tasks)
+                        Sonnet if message > 500 chars or contains complexity signals
+Tier 3: Claude Sonnet — frontier, tools, streaming, always Claude
 
-NOTE: llama3.2:3b is the CLASSIFIER only. It routes requests but never generates
-      Tier 1 responses — that's Qwen3 8B (or Ollama as a fallback).
+NOTE: llama3.2:3b / Ollama is fully retired from the response path.
+      The classifier is now a Haiku API call (router.py).
 """
 
 import asyncio
 import json
 import logging
+import re
 import time
 from enum import Enum
 from typing import AsyncGenerator, List, Dict, Any, Optional
@@ -184,43 +183,55 @@ SAVE_TO_SECOND_BRAIN_TOOL = {
 # ─── Tier routing tables ─────────────────────────────────────────────────────
 
 TIER_MODELS = {
-    ModelTier.TIER1: "qwen3-8b",
+    ModelTier.TIER1: "haiku",
     ModelTier.TIER2: "qwen3-32b",
     ModelTier.TIER3: "claude-sonnet-4-6",
 }
 
+# Only Tier 2 uses RunPod now; Tier 1 = Haiku, Tier 3 = Sonnet
 TIER_ENDPOINTS = {
-    ModelTier.TIER1: settings.runpod_endpoint_8b,
     ModelTier.TIER2: settings.runpod_endpoint_32b,
 }
 
 TIER_MODEL_NAMES = {
-    ModelTier.TIER1: settings.router_model,       # Qwen/Qwen3-8B
     ModelTier.TIER2: settings.workhorse_model,    # Qwen/Qwen3-32B-AWQ
 }
 
 _TIER_COOLDOWN = {
-    ModelTier.TIER1: 120.0,
     ModelTier.TIER2: 120.0,
 }
 
-# Tier 1 Ollama fallback: cap at 600 tokens so CPU inference stays under ~60s
-_TIER1_OLLAMA_MAX_TOKENS = 600
-
-# Per-tier RunPod request timeouts.
-# Warm 8B responds in 1-3s → 12s bails fast on cold starts without waiting the full 30s.
-# Warm 32B responds in 2-10s → 40s covers heavier generation without hanging indefinitely.
+# RunPod Tier 2 timeout: 32B warm = 2-10s; 40s covers heavy generation
 _RUNPOD_TIMEOUT = {
-    ModelTier.TIER1: 12.0,
     ModelTier.TIER2: 40.0,
 }
+
+# Tier 2 cold fallback: complexity signals → Sonnet; otherwise → Haiku
+_COMPLEX_T2_RE = re.compile(
+    r"\b(comprehensive|in.?depth|detailed analysis|full analysis|thorough|"
+    r"strategy|proposal|formal report|deep dive)\b",
+    re.IGNORECASE,
+)
+
+
+def _tier2_cold_model(messages: list) -> Optional[str]:
+    """
+    Decide which model to use when RunPod 32B is cold.
+    Returns settings.tier1_model (Haiku) for short/standard requests,
+    None (→ Sonnet default) for long/complex ones.
+    """
+    last = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
+    if not isinstance(last, str):
+        return None  # image/rich content → Sonnet
+    if len(last) > 500 or _COMPLEX_T2_RE.search(last):
+        return None  # complex → Sonnet
+    return settings.tier1_model  # standard → Haiku
 
 
 class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
         self._failed_at: dict[ModelTier, Optional[float]] = {
-            ModelTier.TIER1: None,
             ModelTier.TIER2: None,
         }
 
@@ -254,7 +265,7 @@ class ModelClient:
         tools: Optional[List[Dict]] = None,
         tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        # ── Tier 3: Claude — frontier, tools, streaming ──────────────────────
+        # ── Tier 3: Claude Sonnet — frontier, tools, streaming ───────────────
         if tier == ModelTier.TIER3:
             async for event in self._stream_anthropic(
                 messages, system, max_tokens, tools=tools, tool_executor=tool_executor
@@ -262,72 +273,26 @@ class ModelClient:
                 yield event
             return
 
-        # ── Tier 1: RunPod Qwen3 8B → Claude ─────────────────────────────────
+        # ── Tier 1: Claude Haiku — always available, no cold start ───────────
         if tier == ModelTier.TIER1:
-            endpoint_1b = TIER_ENDPOINTS.get(ModelTier.TIER1)
-            if endpoint_1b and self._is_warm(ModelTier.TIER1):
-                async for event in self._stream_runpod(
-                    messages, system, max_tokens, tier=ModelTier.TIER1
-                ):
-                    yield event
-            else:
-                logger.info("Tier1 RunPod cold/absent — falling back to Claude")
-                async for event in self._stream_anthropic(messages, system, max_tokens):
-                    yield event
+            async for event in self._stream_anthropic(
+                messages, system, min(max_tokens, 1024), model=settings.tier1_model
+            ):
+                yield event
             return
 
-        # ── Tier 2: RunPod Qwen3 32B → Claude ────────────────────────────────
+        # ── Tier 2: RunPod 32B → Haiku or Sonnet when cold ───────────────────
         endpoint_2 = TIER_ENDPOINTS.get(ModelTier.TIER2)
         if endpoint_2 and self._is_warm(ModelTier.TIER2):
             async for event in self._stream_runpod(messages, system, max_tokens, tier=ModelTier.TIER2):
                 yield event
         else:
-            logger.info("Tier2 RunPod cold/absent — falling back to Claude")
-            async for event in self._stream_anthropic(messages, system, max_tokens):
-                yield event
-
-    async def _stream_ollama(
-        self,
-        messages: List[Dict[str, str]],
-        system: str,
-        max_tokens: int,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        model = settings.classifier_model  # llama3.2:3b
-        all_messages = []
-        if system:
-            all_messages.append({"role": "system", "content": system})
-        all_messages.extend(messages)
-
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                async with client.stream(
-                    "POST",
-                    f"{settings.ollama_url}/api/chat",
-                    json={
-                        "model": model,
-                        "messages": all_messages,
-                        "stream": True,
-                        "options": {"num_predict": max_tokens},
-                    },
-                ) as resp:
-                    resp.raise_for_status()
-                    token_count = 0
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            chunk = json.loads(line)
-                            text = chunk.get("message", {}).get("content", "")
-                            if text:
-                                token_count += 1
-                                yield {"type": "chunk", "text": text}
-                            if chunk.get("done"):
-                                yield {"type": "done", "model": model, "tokens": token_count}
-                        except json.JSONDecodeError:
-                            pass
-        except Exception as e:
-            logger.warning("Ollama stream failed (%s: %s) — falling back to Claude", type(e).__name__, e)
-            async for event in self._stream_anthropic(messages, system, max_tokens):
+            cold_model = _tier2_cold_model(messages)
+            logger.info(
+                "Tier2 RunPod cold — falling back to %s",
+                "haiku" if cold_model else "sonnet",
+            )
+            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
                 yield event
 
     async def _stream_anthropic(
@@ -335,13 +300,15 @@ class ModelClient:
         messages: List[Dict[str, str]],
         system: str,
         max_tokens: int,
+        *,
+        model: Optional[str] = None,
         tools: Optional[List[Dict]] = None,
         tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         # Tools that emit a suggestion chip — user confirms before action
         _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
 
-        model = "claude-sonnet-4-6"
+        model = model or "claude-sonnet-4-6"
         try:
             kwargs: Dict[str, Any] = dict(
                 model=model,
@@ -429,7 +396,7 @@ class ModelClient:
         *,
         tier: ModelTier,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Call a RunPod serverless Ollama endpoint (works for both Tier 1 and Tier 2)."""
+        """Call a RunPod serverless Ollama endpoint (Tier 2 only)."""
         endpoint = TIER_ENDPOINTS[tier]
         model_name = TIER_MODEL_NAMES[tier]
         model_label = TIER_MODELS[tier]
@@ -451,7 +418,7 @@ class ModelClient:
             }
         }
 
-        timeout = _RUNPOD_TIMEOUT.get(tier, 30.0)
+        timeout = _RUNPOD_TIMEOUT.get(tier, 40.0)
         logger.info("RunPod %s request: model=%s timeout=%.0fs", tier, model_name, timeout)
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
@@ -474,7 +441,8 @@ class ModelClient:
             if not choices:
                 self._mark_failed(tier)
                 logger.warning("RunPod %s returned empty choices — falling back to Claude", tier)
-                async for event in self._stream_anthropic(messages, system, max_tokens):
+                cold_model = _tier2_cold_model(messages)
+                async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
                     yield event
                 return
 
@@ -491,9 +459,10 @@ class ModelClient:
             yield {"type": "done", "model": model_label, "tokens": total_tokens}
 
         except Exception as e:
-            logger.warning("RunPod %s failed (%s: %s) — falling back to Claude", tier, type(e).__name__, e)
+            logger.warning("RunPod %s failed (%s: %s) — falling back", tier, type(e).__name__, e)
             self._mark_failed(tier)
-            async for event in self._stream_anthropic(messages, system, max_tokens):
+            cold_model = _tier2_cold_model(messages)
+            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
                 yield event
 
 

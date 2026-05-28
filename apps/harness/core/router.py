@@ -1,20 +1,17 @@
 """
 Tier classifier — routes each request to the right model tier.
 
-Primary path: Llama 3.2 3B via local Ollama on the KVM4 (~1-3s CPU inference).
-Fallback: regex + length heuristics (instant, used when Ollama is unavailable).
+Primary path: regex fast-paths (instant) → Haiku API for ambiguous cases (~200ms).
+Fallback: heuristics (instant, used when Anthropic API is unreachable).
 
 Tiers:
-  tier1 — simple, fast   → Qwen3 8B   (quick Q&A, state changes, lookups)
-  tier2 — standard       → Qwen3 32B  (writing, coding, analysis, most tasks)
-  tier3 — frontier       → Claude     (strategy, long docs, client deliverables,
-                                        ANY tool/action execution)
+  tier1 — simple, fast   → Claude Haiku   (quick Q&A, lookups, short replies)
+  tier2 — standard       → RunPod 32B     (writing, coding, analysis, most tasks)
+  tier3 — frontier       → Claude Sonnet  (strategy, long docs, client work, ALL tools)
 """
 
 import re
-import time
 import logging
-import httpx
 from typing import Optional
 
 from core.model_client import ModelTier
@@ -22,38 +19,17 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_CLASSIFY_TIMEOUT = 3.0   # slightly above Ollama's ~2.5s warm response time
 
-# After a classifier failure, skip network calls until the keepalive recovers it.
-# The keepalive task (started in main.py lifespan) probes every 30s when down
-# and clears this flag as soon as Ollama responds again.
-_OLLAMA_BACKOFF = 120.0
-_ollama_failed_at: Optional[float] = None
+# ── No-op stubs ───────────────────────────────────────────────────────────────
+# main.py imports these for the Ollama keepalive. Ollama is no longer used for
+# classification; these stubs preserve the import contract without breaking startup.
 
-
-def _ollama_available() -> bool:
-    global _ollama_failed_at
-    if _ollama_failed_at is None:
-        return True
-    if (time.monotonic() - _ollama_failed_at) >= _OLLAMA_BACKOFF:
-        _ollama_failed_at = None
-        return True
-    return False
+def _ollama_available() -> bool: return True
+def _ollama_mark_failed() -> None: pass
+def _ollama_mark_recovered() -> None: pass
 
 
-def _ollama_mark_failed() -> None:
-    global _ollama_failed_at
-    if _ollama_failed_at is None:
-        logger.warning("Ollama classifier marked unavailable — keepalive will restore")
-    _ollama_failed_at = time.monotonic()
-
-
-def _ollama_mark_recovered() -> None:
-    global _ollama_failed_at
-    if _ollama_failed_at is not None:
-        logger.info("Ollama classifier recovered")
-    _ollama_failed_at = None
-
+# ── Classification prompt ─────────────────────────────────────────────────────
 
 _CLASSIFY_SYSTEM = (
     "You are a routing classifier. Reply with ONLY one word — no explanation.\n\n"
@@ -69,6 +45,9 @@ _CLASSIFY_SYSTEM = (
     "Default to tier3 whenever there is any doubt.\n\n"
     "Reply with exactly one word: tier1, tier2, or tier3"
 )
+
+
+# ── Regex fast-paths ──────────────────────────────────────────────────────────
 
 # Pure read-only lookup patterns — no tools needed
 _TIER1_RE = re.compile(
@@ -175,18 +154,16 @@ async def classify(prompt: str) -> ModelTier:
     """
     Classify a prompt into a ModelTier.
 
-    Fast-path: obvious Tier 1 / Tier 3 signals are caught by regex before
-    any network call. Ambiguous messages go to the local Llama 3.2 3B
-    classifier. Falls back to heuristics if Ollama is unreachable.
-    When Ollama has recently failed, skips the network call entirely to
-    avoid paying the timeout cost on every request.
+    Fast-path: obvious Tier 1 / Tier 3 signals are caught by regex (instant).
+    Ambiguous messages go to Claude Haiku (~200ms, near-zero cost).
+    Falls back to heuristics if Anthropic API is unreachable.
     """
     s = prompt.strip()
     n = len(s)
 
-    # Fast-path for unambiguous cases — no LLM call needed
+    # Fast-path for unambiguous cases — no API call needed
     if _ACTION_RE.search(s):
-        return ModelTier.TIER3  # always Claude for tool execution
+        return ModelTier.TIER3
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
     if _PERSONAL_RE.search(s):
@@ -194,32 +171,26 @@ async def classify(prompt: str) -> ModelTier:
     if _TIER3_RE.search(s) or n > _LONG:
         return ModelTier.TIER3
 
-    # Ollama not configured or known-down — use heuristics (instant)
-    if not settings.ollama_url or not _ollama_available():
+    # Anthropic not configured — use heuristics (instant)
+    if not settings.anthropic_api_key:
         return _heuristic(prompt)
 
+    # Ambiguous — ask Haiku (~200ms, max_tokens=5)
     try:
-        async with httpx.AsyncClient(timeout=_CLASSIFY_TIMEOUT) as client:
-            resp = await client.post(
-                f"{settings.ollama_url}/api/chat",
-                json={
-                    "model": settings.classifier_model,
-                    "messages": [
-                        {"role": "system", "content": _CLASSIFY_SYSTEM},
-                        {"role": "user", "content": s},
-                    ],
-                    "stream": False,
-                    "options": {"num_predict": 5, "temperature": 0},
-                },
-            )
-            resp.raise_for_status()
-            raw = resp.json().get("message", {}).get("content", "").strip().lower()
-            if "tier1" in raw:
-                return ModelTier.TIER1
-            if "tier3" in raw:
-                return ModelTier.TIER3
-            return ModelTier.TIER2
+        import anthropic as _anthropic
+        _aclient = _anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        resp = await _aclient.messages.create(
+            model=settings.tier1_model,
+            max_tokens=5,
+            system=_CLASSIFY_SYSTEM,
+            messages=[{"role": "user", "content": s}],
+        )
+        raw = resp.content[0].text.strip().lower()
+        if "tier1" in raw:
+            return ModelTier.TIER1
+        if "tier3" in raw:
+            return ModelTier.TIER3
+        return ModelTier.TIER2
     except Exception as e:
-        _ollama_mark_failed()
-        logger.warning("Classifier unavailable (%s) — using heuristic for %.0fs", e, _OLLAMA_BACKOFF)
+        logger.warning("Haiku classifier failed (%s) — using heuristic", e)
         return _heuristic(prompt)

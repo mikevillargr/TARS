@@ -29,12 +29,14 @@ class Settings(BaseSettings):
 
     runpod_api_key: str = ""
     runpod_endpoint_32b: str = ""
-    runpod_endpoint_8b: str = ""
-    router_model: str = "Qwen/Qwen3-8B"
     workhorse_model: str = "Qwen/Qwen3-32B-AWQ"
 
-    ollama_url: str = ""                              # e.g. http://localhost:11434
-    classifier_model: str = "llama3.2:3b"            # local model used for tier routing
+    # Tier 1 + classifier model — fast, cheap, always available
+    tier1_model: str = "claude-haiku-4-5-20251001"
+
+    # Legacy — unused; kept so old .env files don't break on startup
+    ollama_url: str = ""
+    classifier_model: str = "llama3.2:3b"
 
     # Connectors
     fireflies_api_key: str = ""
