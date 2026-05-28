@@ -50,6 +50,36 @@ class GoogleCalendarClient:
         result = self._service.events().list(**kwargs).execute()
         return result.get("items", [])
 
+    def get_upcoming_summary(self, days: int = 7, max_results: int = 15) -> List[dict]:
+        """Upcoming events summary for context injection."""
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        time_max = now + timedelta(days=days)
+        events = self.list_events(
+            calendar_id="primary",
+            time_min=now,
+            time_max=time_max,
+            max_results=max_results,
+        )
+        summaries = []
+        for e in events:
+            start = e.get("start", {})
+            end = e.get("end", {})
+            start_str = start.get("dateTime") or start.get("date", "")
+            end_str = end.get("dateTime") or end.get("date", "")
+            all_day = "date" in start and "dateTime" not in start
+            attendees = [a.get("displayName") or a.get("email", "") for a in e.get("attendees", [])]
+            summaries.append({
+                "title": e.get("summary", "Untitled"),
+                "start": start_str,
+                "end": end_str,
+                "all_day": all_day,
+                "location": e.get("location"),
+                "attendees": attendees,
+                "description": (e.get("description") or "")[:200],
+            })
+        return summaries
+
     def create_event(self, calendar_id: str = "primary", **event_body) -> dict:
         return self._service.events().insert(
             calendarId=calendar_id, body=event_body
