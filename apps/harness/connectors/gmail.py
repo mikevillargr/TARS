@@ -1,10 +1,11 @@
 """
-Gmail connector — read threads, fetch full messages.
+Gmail connector — read threads, fetch full messages, send emails.
 """
 
 import base64
 import logging
 from email import message_from_bytes
+from email.mime.text import MIMEText
 from typing import List, Optional
 
 from googleapiclient.discovery import build
@@ -86,6 +87,58 @@ class GmailClient:
             except Exception as exc:
                 log.debug("Thread metadata fetch failed %s: %s", t["id"], exc)
         return summaries
+
+
+    def send_email(
+        self,
+        to: str,
+        subject: str,
+        body: str,
+        cc: Optional[str] = None,
+        thread_id: Optional[str] = None,
+    ) -> str:
+        """Send an email (or reply to a thread). Returns a confirmation string."""
+        msg = MIMEText(body, "plain", "utf-8")
+        msg["to"] = to
+        msg["subject"] = subject
+        if cc:
+            msg["cc"] = cc
+
+        # For replies: fetch In-Reply-To / References from the last message in the thread
+        if thread_id:
+            try:
+                thread_data = (
+                    self._service.users()
+                    .threads()
+                    .get(userId="me", id=thread_id, format="metadata",
+                         metadataHeaders=["Message-ID", "Subject"])
+                    .execute()
+                )
+                messages = thread_data.get("messages", [])
+                if messages:
+                    last_headers = {
+                        h["name"]: h["value"]
+                        for h in messages[-1].get("payload", {}).get("headers", [])
+                    }
+                    mid = last_headers.get("Message-ID", "")
+                    if mid:
+                        msg["In-Reply-To"] = mid
+                        msg["References"] = mid
+            except Exception as exc:
+                log.debug("Could not fetch thread headers for reply: %s", exc)
+
+        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
+        send_body: dict = {"raw": raw}
+        if thread_id:
+            send_body["threadId"] = thread_id
+
+        result = (
+            self._service.users()
+            .messages()
+            .send(userId="me", body=send_body)
+            .execute()
+        )
+        return f"Email sent to {to} (id: {result.get('id', '?')})."
 
 
 def extract_thread_text(thread: dict) -> str:

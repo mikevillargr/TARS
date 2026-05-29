@@ -186,6 +186,47 @@ READ_EMAIL_TOOL = {
     },
 }
 
+SEND_EMAIL_TOOL = {
+    "name": "send_email",
+    "description": (
+        "Send an email via Mike's Gmail account. Use when he explicitly asks you to send, "
+        "reply to, forward, or draft-and-send an email. "
+        "Always include the key details (to, subject, body preview) in your chat message "
+        "so Mike sees what you're about to send before or immediately after it goes out. "
+        "For replies to an existing thread, supply the thread_id shown as [thread_id] in "
+        "the Gmail context."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "to": {
+                "type": "string",
+                "description": "Recipient email address(es), comma-separated if multiple.",
+            },
+            "subject": {
+                "type": "string",
+                "description": "Email subject line.",
+            },
+            "body": {
+                "type": "string",
+                "description": "Plain-text email body. Write clearly and concisely.",
+            },
+            "cc": {
+                "type": "string",
+                "description": "CC address(es), comma-separated. Omit if not needed.",
+            },
+            "thread_id": {
+                "type": "string",
+                "description": (
+                    "Thread ID from Gmail context to send as a reply. "
+                    "Include when replying to an existing email thread."
+                ),
+            },
+        },
+        "required": ["to", "subject", "body"],
+    },
+}
+
 READ_MEETING_TOOL = {
     "name": "read_meeting",
     "description": (

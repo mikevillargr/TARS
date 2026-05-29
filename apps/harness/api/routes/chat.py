@@ -19,7 +19,7 @@ from core.model_client import (
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
-    READ_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
+    READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
 )
 from core.context_assembler import assemble
@@ -621,6 +621,7 @@ async def send_message(
         SAVE_MEMORY_TOOL,
         SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL,
+        SEND_EMAIL_TOOL,
         READ_MEETING_TOOL,
         SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL,
@@ -787,6 +788,40 @@ async def send_message(
                         except Exception as exc:
                             log.warning("read_email tool failed: %s", exc)
                             return f"Failed to read email: {exc}"
+
+                    if name == "send_email":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Connector
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Gmail",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Gmail not connected — cannot send email."
+
+                            from connectors.gmail import GmailClient
+                            import asyncio as _asyncio
+
+                            gclient = GmailClient(conn.auth)
+                            loop = _asyncio.get_event_loop()
+                            result = await loop.run_in_executor(
+                                None,
+                                lambda: gclient.send_email(
+                                    to=tool_input["to"],
+                                    subject=tool_input["subject"],
+                                    body=tool_input["body"],
+                                    cc=tool_input.get("cc"),
+                                    thread_id=tool_input.get("thread_id"),
+                                ),
+                            )
+                            return result
+                        except Exception as exc:
+                            log.warning("send_email tool failed: %s", exc)
+                            return f"Failed to send email: {exc}"
 
                     if name == "sync_meetings":
                         try:

@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm"
 import {
   X, Pencil, Check, Copy, ExternalLink, Trash2,
   MessageSquare, Loader2, Tag, Layers, ChevronDown, ChevronUp,
-  Link as LinkIcon, FileText, Mic, File, BookOpen,
+  Link as LinkIcon, FileText, Mic, File, BookOpen, ListTodo,
 } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { apiGet, apiPatch, apiDelete } from "@/lib/api-client"
@@ -76,6 +76,8 @@ export function ItemDetailModal({
   const [saving, setSaving]           = useState(false)
   const [saveStatus, setSaveStatus]   = useState<"idle" | "saving" | "saved">("idle")
   const [copied, setCopied]           = useState(false)
+  const [addingTask, setAddingTask]   = useState(false)
+  const [taskAdded, setTaskAdded]     = useState(false)
   const lastSavedContent              = useRef("")
   const lastSavedTitle                = useRef("")
   const [showFull, setShowFull]       = useState(false)
@@ -91,6 +93,7 @@ export function ItemDetailModal({
     setShowFull(false)
     setConfirmDelete(false)
     setDocMarkdown("")
+    setTaskAdded(false)
     apiGet<KnowledgeItemDetail>(`/second-brain/items/${itemId}`)
       .then((d) => {
         setItem(d)
@@ -168,6 +171,30 @@ export function ItemDetailModal({
     await navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function handleAddToTask() {
+    if (!item) return
+    setAddingTask(true)
+    try {
+      const title = item.source_title ?? item.url ?? "Second Brain item"
+      await fetch("/api/proxy/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `Review: ${title.slice(0, 80)}`,
+          description: `From Second Brain — ${typeLabel(item.type).toLowerCase()} saved on ${new Date(item.saved_at).toLocaleDateString()}.\n\n${item.summary ? item.summary.slice(0, 300) + (item.summary.length > 300 ? "…" : "") : ""}`.trim(),
+          status: "inbox",
+          priority: "normal",
+        }),
+      })
+      setTaskAdded(true)
+      setTimeout(() => setTaskAdded(false), 2500)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAddingTask(false)
+    }
   }
 
   async function deleteItem() {
@@ -439,6 +466,23 @@ export function ItemDetailModal({
           >
             {copied ? <Check size={11} style={{ color: "var(--c-moss)" }} /> : <Copy size={11} />}
             {copied ? "Copied" : "Copy"}
+          </button>
+          <button
+            onClick={handleAddToTask}
+            disabled={addingTask}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg transition-colors"
+            style={{
+              backgroundColor: taskAdded ? "var(--c-moss-soft)" : "var(--c-canvas)",
+              color: taskAdded ? "var(--c-moss)" : "var(--c-ink-muted)",
+              border: `1px solid ${taskAdded ? "color-mix(in srgb, var(--c-moss) 30%, transparent)" : "var(--c-border)"}`,
+            }}
+            title="Add to Tasks"
+          >
+            {addingTask
+              ? <Loader2 size={11} className="animate-spin" />
+              : taskAdded ? <Check size={11} /> : <ListTodo size={11} />
+            }
+            {taskAdded ? "Added!" : "Task"}
           </button>
           {item?.url && !item.url.startsWith("fireflies://") && (
             <a
