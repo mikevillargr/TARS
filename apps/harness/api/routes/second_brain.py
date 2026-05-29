@@ -76,6 +76,12 @@ class EnhanceRequest(BaseModel):
     document_context: Optional[str] = None
 
 
+class GenerateRequest(BaseModel):
+    prompt: str
+    document_context: Optional[str] = None   # existing doc text (style/topic context)
+    cursor_context: Optional[str] = None      # text just before the cursor
+
+
 class SearchRequest(BaseModel):
     query: str
     limit: int = 5
@@ -298,6 +304,71 @@ async def ai_enhance(
             async with client.messages.stream(
                 model=settings.tier1_model,
                 max_tokens=1024,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield sse_event({"type": "chunk", "text": text})
+        except Exception as exc:
+            yield sse_event({"type": "error", "message": str(exc)})
+        finally:
+            yield sse_done()
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/ai/generate")
+async def ai_generate(
+    body: GenerateRequest,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Freestyle generation with full TARS context.
+    Uses Sonnet + context assembler (memories, calendar, tasks, meetings, second brain).
+    Streams SSE chunks.
+    """
+    from fastapi.responses import StreamingResponse
+    import anthropic as _anthropic
+    from core.config import settings
+    from core.streaming import sse_event, sse_done
+    from core import context_assembler
+    from core.model_client import ModelTier
+
+    # Build full TARS system prompt (same quality as the chat window)
+    system_prompt = await context_assembler.assemble(
+        user_id=user_id,
+        query=body.prompt,
+        db=db,
+        tier=ModelTier.TIER3,
+    )
+    system_prompt += (
+        "\n\n[DOCUMENT WRITING MODE]\n"
+        "You are writing content directly into a document. "
+        "Return ONLY the generated text — no preamble, no meta-commentary, no surrounding quotes. "
+        "Use markdown formatting naturally (headers, bold, lists, etc.) where it fits. "
+        "Match the style and tone of any existing document content provided."
+    )
+
+    # Build the user message
+    parts: list[str] = []
+    if body.document_context:
+        parts.append(f"Existing document content (for style/context — do not repeat it):\n{body.document_context[:2000]}")
+    if body.cursor_context:
+        parts.append(f"Text immediately before the cursor:\n{body.cursor_context[-600:]}")
+    parts.append(f"Write: {body.prompt}")
+    user_message = "\n\n".join(parts)
+
+    async def generate():
+        try:
+            client = _anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            async with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=2048,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
             ) as stream:

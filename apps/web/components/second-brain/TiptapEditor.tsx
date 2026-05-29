@@ -168,16 +168,24 @@ function AiBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) {
 
 // ─── Slash command FloatingMenu ───────────────────────────────────────────────
 
-const SLASH_COMMANDS = [
-  { label: "Paragraph",      icon: Pilcrow,       action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().setParagraph().run() },
-  { label: "Heading 1",      icon: Heading1,      action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().toggleHeading({ level: 1 }).run() },
-  { label: "Heading 2",      icon: Heading2,      action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().toggleHeading({ level: 2 }).run() },
-  { label: "Heading 3",      icon: Heading3,      action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().toggleHeading({ level: 3 }).run() },
-  { label: "Bullet list",    icon: List,          action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().toggleBulletList().run() },
-  { label: "Ordered list",   icon: ListOrdered,   action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().toggleOrderedList().run() },
-  { label: "Blockquote",     icon: Quote,         action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().toggleBlockquote().run() },
-  { label: "Code block",     icon: Code,          action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().toggleCodeBlock().run() },
-  { label: "Divider",        icon: Minus,         action: (e: ReturnType<typeof useEditor>) => e?.chain().focus().setHorizontalRule().run() },
+type SlashCmd = {
+  label: string
+  icon: React.ElementType
+  special?: string
+  action?: (e: ReturnType<typeof useEditor>) => void
+}
+
+const SLASH_COMMANDS: SlashCmd[] = [
+  { label: "Ask TARS…",      icon: Wand2,         special: "ask-tars" },
+  { label: "Paragraph",      icon: Pilcrow,       action: (e) => e?.chain().focus().setParagraph().run() },
+  { label: "Heading 1",      icon: Heading1,      action: (e) => e?.chain().focus().toggleHeading({ level: 1 }).run() },
+  { label: "Heading 2",      icon: Heading2,      action: (e) => e?.chain().focus().toggleHeading({ level: 2 }).run() },
+  { label: "Heading 3",      icon: Heading3,      action: (e) => e?.chain().focus().toggleHeading({ level: 3 }).run() },
+  { label: "Bullet list",    icon: List,          action: (e) => e?.chain().focus().toggleBulletList().run() },
+  { label: "Ordered list",   icon: ListOrdered,   action: (e) => e?.chain().focus().toggleOrderedList().run() },
+  { label: "Blockquote",     icon: Quote,         action: (e) => e?.chain().focus().toggleBlockquote().run() },
+  { label: "Code block",     icon: Code,          action: (e) => e?.chain().focus().toggleCodeBlock().run() },
+  { label: "Divider",        icon: Minus,         action: (e) => e?.chain().focus().setHorizontalRule().run() },
 ]
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────
@@ -262,9 +270,17 @@ export function TiptapEditor({
   autoFocus = false,
   resetKey,
 }: TiptapEditorProps) {
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const contentSet = useRef(false)
-  const prevResetKey = useRef(resetKey)
+  const imageInputRef       = useRef<HTMLInputElement>(null)
+  const contentSet          = useRef(false)
+  const prevResetKey        = useRef(resetKey)
+  const editorContainerRef  = useRef<HTMLDivElement>(null)
+
+  // ── AI generation state (freestyle "Ask TARS") ───────────────────────────
+  const [genVisible, setGenVisible]   = useState(false)
+  const [genPrompt, setGenPrompt]     = useState("")
+  const [genLoading, setGenLoading]   = useState(false)
+  const [genCoords, setGenCoords]     = useState({ top: 0, left: 0 })
+  const genInsertPos                  = useRef<number | null>(null)
 
   const editor = useEditor({
     extensions: [
@@ -301,6 +317,77 @@ export function TiptapEditor({
       contentSet.current = true
     }
   }, [editor, content, resetKey])
+
+  // ── Show the inline "Ask TARS" prompt at the current cursor position ────────
+  const showGenPrompt = useCallback(() => {
+    if (!editor || !editorContainerRef.current) return
+    const { from } = editor.state.selection
+    genInsertPos.current = from
+    // Compute cursor coords relative to the scrollable container
+    const pos = editor.view.coordsAtPos(from)
+    const rect = editorContainerRef.current.getBoundingClientRect()
+    setGenCoords({
+      top:  pos.bottom - rect.top  + editorContainerRef.current.scrollTop  + 6,
+      left: pos.left   - rect.left,
+    })
+    setGenVisible(true)
+    setGenPrompt("")
+  }, [editor])
+
+  // ── Stream generation from TARS and insert at saved cursor position ───────
+  const handleGenerate = useCallback(async () => {
+    if (!editor || !genPrompt.trim() || genLoading) return
+    setGenVisible(false)
+    setGenLoading(true)
+
+    const insertAt    = genInsertPos.current ?? editor.state.selection.from
+    const docContext  = editor.getText().slice(0, 2000)
+    const cursorCtx   = editor.state.doc.textBetween(0, insertAt, "\n").slice(-600)
+
+    let result = ""
+    try {
+      const resp = await fetch("/api/proxy/second-brain/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: genPrompt,
+          document_context: docContext,
+          cursor_context: cursorCtx,
+        }),
+      })
+      if (!resp.ok || !resp.body) throw new Error("Generate failed")
+
+      const reader  = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer    = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() ?? ""
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          const raw = line.slice(6).trim()
+          if (raw === "[DONE]") break
+          try {
+            const evt = JSON.parse(raw)
+            if (evt.type === "chunk") result += evt.text
+          } catch { /* ignore */ }
+        }
+      }
+
+      if (result) {
+        editor.chain().focus().insertContentAt(insertAt, result).run()
+      }
+    } catch (err) {
+      console.error("TARS generate failed:", err)
+    } finally {
+      setGenLoading(false)
+      setGenPrompt("")
+    }
+  }, [editor, genPrompt, genLoading])
 
   // Handle image upload → base64
   function handleImageFile(file: File) {
@@ -347,7 +434,7 @@ export function TiptapEditor({
                   Insert block
                 </span>
               </div>
-              {SLASH_COMMANDS.map(({ label, icon: Icon, action }) => (
+              {SLASH_COMMANDS.map(({ label, icon: Icon, action, special }) => (
                 <button
                   key={label}
                   onMouseDown={e => {
@@ -357,16 +444,43 @@ export function TiptapEditor({
                       from: editor.state.selection.$from.pos - 1,
                       to: editor.state.selection.$from.pos,
                     }).run()
-                    action(editor)
+                    if (special === "ask-tars") {
+                      showGenPrompt()
+                    } else {
+                      action?.(editor)
+                    }
                   }}
                   className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left transition-colors hover:bg-surface-2"
-                  style={{ color: "#1a1714" }}
+                  style={{ color: special === "ask-tars" ? "#2d5a4f" : "#1a1714" }}
                 >
-                  <Icon size={14} style={{ color: "#948a7b" }} />
+                  <Icon size={14} style={{ color: special === "ask-tars" ? "#2d5a4f" : "#948a7b" }} />
                   {label}
                 </button>
               ))}
             </div>
+          </FloatingMenu>
+
+          {/* Sparkle hint on empty paragraphs — click to open Ask TARS */}
+          <FloatingMenu
+            editor={editor}
+            tippyOptions={{ duration: 80, placement: "left", offset: [0, 12] }}
+            shouldShow={({ state }) => {
+              if (genVisible || genLoading) return false
+              const { $from } = state.selection
+              return $from.node().type.name === "paragraph" && $from.node().textContent === ""
+            }}
+          >
+            <button
+              onMouseDown={e => { e.preventDefault(); showGenPrompt() }}
+              title="Ask TARS to write something here"
+              className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-all"
+              style={{ color: "#2d5a4f", opacity: 0.5 }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
+            >
+              <Wand2 size={12} />
+              <span>Ask TARS…</span>
+            </button>
           </FloatingMenu>
 
           <AiBubbleMenu editor={editor} />
@@ -385,10 +499,66 @@ export function TiptapEditor({
       />
 
       <div
-        className="flex-1 overflow-y-auto cursor-text"
+        ref={editorContainerRef}
+        className="flex-1 overflow-y-auto cursor-text relative"
         onClick={() => editor.commands.focus()}
       >
         <EditorContent editor={editor} className="h-full" />
+
+        {/* Inline "Ask TARS" prompt — appears at cursor position */}
+        {genVisible && (
+          <div
+            className="absolute z-50 flex items-center gap-2 rounded-xl shadow-xl border px-3 py-2"
+            style={{
+              top: genCoords.top,
+              left: Math.max(8, genCoords.left),
+              background: "#1a1714",
+              borderColor: "#3a3530",
+              minWidth: "320px",
+              maxWidth: "480px",
+            }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <Wand2 size={13} style={{ color: "#2d5a4f", flexShrink: 0 }} />
+            <input
+              autoFocus
+              value={genPrompt}
+              onChange={e => setGenPrompt(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && genPrompt.trim()) handleGenerate()
+                if (e.key === "Escape") { setGenVisible(false); setGenPrompt("") }
+              }}
+              placeholder="Ask TARS to write anything…"
+              className="flex-1 bg-transparent border-none outline-none text-sm"
+              style={{ color: "#e5e0d8" }}
+            />
+            {genPrompt.trim() && (
+              <button
+                onMouseDown={e => { e.preventDefault(); handleGenerate() }}
+                className="shrink-0 p-1 rounded-md hover:bg-white/10 transition-colors"
+                style={{ color: "#2d5a4f" }}
+              >
+                <ChevronRight size={14} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Writing indicator while TARS generates */}
+        {genLoading && (
+          <div
+            className="absolute z-50 flex items-center gap-2 rounded-xl shadow-xl border px-3 py-2 pointer-events-none"
+            style={{
+              top: genCoords.top,
+              left: Math.max(8, genCoords.left),
+              background: "#1a1714",
+              borderColor: "#3a3530",
+            }}
+          >
+            <Loader2 size={12} className="animate-spin" style={{ color: "#2d5a4f" }} />
+            <span className="text-xs" style={{ color: "#948a7b" }}>TARS is writing…</span>
+          </div>
+        )}
       </div>
     </div>
   )
