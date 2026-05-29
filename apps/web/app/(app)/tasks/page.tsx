@@ -105,7 +105,7 @@ function TaskCard({
       </div>
 
       <div className="flex items-start justify-between gap-2 pr-4">
-        <span className="text-sm font-medium leading-snug" style={{ color: "var(--c-ink)" }}>{task.title}</span>
+        <span className="text-sm font-medium leading-snug min-w-0" style={{ color: "var(--c-ink)" }}>{task.title}</span>
         <PriorityBadge priority={task.priority} />
       </div>
 
