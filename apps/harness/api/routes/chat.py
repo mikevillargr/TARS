@@ -253,79 +253,6 @@ async def _extract_and_save_facts(
         log.warning("Memory fact extraction failed: %s", exc)
 
 
-_EXT_MAP = {
-    "python": ".py", "typescript": ".ts", "tsx": ".tsx", "javascript": ".js",
-    "jsx": ".jsx", "go": ".go", "rust": ".rs", "java": ".java", "ruby": ".rb",
-    "bash": ".sh", "sh": ".sh", "diff": ".diff", "patch": ".patch",
-    "sql": ".sql", "yaml": ".yaml", "yml": ".yml", "json": ".json",
-    "css": ".css", "html": ".html", "markdown": ".md", "md": ".md",
-    "csv": ".csv", "text": ".txt",
-}
-
-def _detect_artifacts(text: str) -> list[dict]:
-    """
-    Scan assistant response for artifact-worthy content.
-    Returns a list of dicts: {filename, type, content}.
-
-    Rules:
-    - Code block with language tag AND ≥ 200 chars → Code artifact
-    - Response ≥ 600 chars that starts with or contains a # heading → Document artifact
-    """
-    import re
-    results = []
-
-    # ── Code blocks with language hints ──────────────────────────────────────
-    code_pattern = re.compile(r"```(\w+)\n(.*?)```", re.DOTALL)
-    for m in code_pattern.finditer(text):
-        lang = m.group(1).lower()
-        body = m.group(2).strip()
-        if len(body) < 200:
-            continue
-        ext = _EXT_MAP.get(lang, ".txt")
-        artifact_type = "spreadsheet" if ext == ".csv" else "code"
-        # Try to infer a filename from a comment on the first line
-        first_line = body.splitlines()[0] if body else ""
-        name_match = re.search(r"(?:#|//|--)\s*([\w.\-/]+\.\w+)", first_line)
-        filename = name_match.group(1) if name_match else f"output{ext}"
-        results.append({"filename": filename, "type": artifact_type, "content": body})
-
-    # ── Document: long markdown response with a heading ───────────────────────
-    if not results and len(text) >= 600:
-        heading_match = re.search(r"^#{1,3} (.+)$", text, re.MULTILINE)
-        if heading_match:
-            title = heading_match.group(1).strip()
-            # Sanitise title → filename
-            safe = re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
-            results.append({"filename": f"{safe}.md", "type": "document", "content": text})
-
-    return results
-
-
-async def _auto_save_artifacts(
-    db,
-    user_id: str,
-    conversation_id: str,
-    message_id: str,
-    assistant_content: str,
-) -> None:
-    """Detect and save any artifact-worthy content from an assistant response."""
-    detected = _detect_artifacts(assistant_content)
-    for art in detected:
-        artifact = Artifact(
-            user_id=user_id,
-            filename=art["filename"],
-            type=art["type"],
-            source="chat",
-            source_id=message_id,
-            content=art["content"],
-            version=1,
-            size_bytes=len(art["content"].encode("utf-8")),
-            tags=[],
-        )
-        db.add(artifact)
-    if detected:
-        await db.commit()
-
 
 def _strip_tool_artifacts(text: str) -> str:
     """Remove raw tool-call tags and internal tool syntax from message text."""
@@ -1137,7 +1064,6 @@ async def send_message(
 
                 user_input = content or "[attachment]"
                 await _extract_and_save_facts(bg_db, user_id, user_input, assistant_content, client)
-                await _auto_save_artifacts(bg_db, user_id, conversation_id, assistant_msg.id, assistant_content)
 
         except Exception as exc:
             log.error("background_generate failed: %s", exc)

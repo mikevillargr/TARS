@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useEffect, useRef } from "react"
+import React, { useState, useCallback, useEffect, useRef, useId } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
@@ -21,7 +21,8 @@ function extractUrls(text: string): string[] {
 // Falls back to a styled code block if the diagram fails to render.
 function MermaidRenderer({ code }: { code: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const idRef        = useRef(`mermaid-${Math.random().toString(36).slice(2)}`)
+  const reactId      = useId()
+  const idRef        = useRef(`mermaid-${reactId.replace(/:/g, "")}`)
   const [error, setError] = useState<string | null>(null)
   const [rendered, setRendered] = useState(false)
 
