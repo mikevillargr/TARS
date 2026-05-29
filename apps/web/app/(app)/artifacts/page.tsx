@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm"
 import {
   Archive, Search, Grid2x2, List, Download, MessageSquare, X,
   FileText, Code2, FileSpreadsheet, FileAudio, BarChart2,
-  ChevronDown, Loader2, Trash2, CheckSquare, Eye,
+  ChevronDown, Loader2, Trash2, CheckSquare, Eye, Brain, ListTodo, Check,
 } from "lucide-react"
 import { apiGet, apiDelete } from "@/lib/api-client"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
@@ -196,6 +196,64 @@ function ArtifactModal({
   const [previewLoading, setPreviewLoading] = useState(false)
   const prevIdRef = useRef<string | null>(null)
 
+  // ── Save to Second Brain ──────────────────────────────────────────
+  const [savingBrain, setSavingBrain] = useState(false)
+  const [brainSaved, setBrainSaved]   = useState(false)
+
+  async function handleSaveToBrain() {
+    if (!detail) return
+    setSavingBrain(true)
+    try {
+      let content = detail.content ?? ""
+      // Binary artifacts: extract text via /preview; PDF: use filename/title as stub
+      if (content.startsWith("base64:")) {
+        if (isDocx(detail) || isPptx(detail)) {
+          const p = await fetch(`/api/proxy/artifacts/${detail.id}/preview`).then(r => r.json()) as PreviewResult
+          content = p.text ?? `${detail.filename}\n(No text extracted)`
+        } else {
+          content = `${detail.filename}\nType: ${detail.type}\nSource: ${sourceLabel(detail.source)}`
+        }
+      }
+      await fetch("/api/proxy/second-brain/ingest/document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content,
+          title: detail.filename.replace(/\.[^/.]+$/, ""),
+          tags: ["artifact", detail.type],
+          domain: "work",
+        }),
+      })
+      setBrainSaved(true)
+      setTimeout(() => setBrainSaved(false), 2500)
+    } catch (err) { console.error(err) }
+    finally { setSavingBrain(false) }
+  }
+
+  // ── Add to Tasks ──────────────────────────────────────────────────
+  const [addingTask, setAddingTask]   = useState(false)
+  const [taskAdded, setTaskAdded]     = useState(false)
+
+  async function handleAddToTask() {
+    if (!detail) return
+    setAddingTask(true)
+    try {
+      await fetch("/api/proxy/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `Review: ${detail.filename}`,
+          description: `Artifact generated on ${formatDate(detail.created_at)} via ${sourceLabel(detail.source)}.\n\n[Open in Artifacts](/artifacts?open=${detail.id})`,
+          status: "inbox",
+          priority: "normal",
+        }),
+      })
+      setTaskAdded(true)
+      setTimeout(() => setTaskAdded(false), 2500)
+    } catch (err) { console.error(err) }
+    finally { setAddingTask(false) }
+  }
+
   useEffect(() => {
     if (!artifactId || artifactId === prevIdRef.current) return
     prevIdRef.current = artifactId
@@ -225,12 +283,14 @@ function ArtifactModal({
       .catch(err => { console.error(err); setLoading(false) })
   }, [artifactId])
 
-  // Reset state when modal closes so it's fresh on next open
+  // Reset state when modal closes or switches artifact
   useEffect(() => {
     if (!artifactId) {
       prevIdRef.current = null
       setDetail(null)
       setPreview(null)
+      setBrainSaved(false)
+      setTaskAdded(false)
     }
   }, [artifactId])
 
@@ -299,6 +359,38 @@ function ArtifactModal({
 
           {/* Action buttons */}
           <div className="flex items-center gap-1 shrink-0">
+            {/* Save to Second Brain */}
+            <button
+              onClick={handleSaveToBrain}
+              disabled={savingBrain || !detail}
+              className="p-2 rounded-lg transition-colors"
+              style={{
+                color: brainSaved ? "var(--c-moss)" : "var(--c-ink-faint)",
+                backgroundColor: brainSaved ? "var(--c-moss-soft)" : "transparent",
+              }}
+              title="Save to Second Brain"
+              onMouseEnter={e => { if (!brainSaved) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+              onMouseLeave={e => { if (!brainSaved) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+            >
+              {savingBrain ? <Loader2 size={15} className="animate-spin" /> : brainSaved ? <Check size={15} /> : <Brain size={15} />}
+            </button>
+
+            {/* Add to Tasks */}
+            <button
+              onClick={handleAddToTask}
+              disabled={addingTask || !detail}
+              className="p-2 rounded-lg transition-colors"
+              style={{
+                color: taskAdded ? "var(--c-moss)" : "var(--c-ink-faint)",
+                backgroundColor: taskAdded ? "var(--c-moss-soft)" : "transparent",
+              }}
+              title="Add to Tasks"
+              onMouseEnter={e => { if (!taskAdded) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+              onMouseLeave={e => { if (!taskAdded) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+            >
+              {addingTask ? <Loader2 size={15} className="animate-spin" /> : taskAdded ? <Check size={15} /> : <ListTodo size={15} />}
+            </button>
+
             <a
               href={detail ? `/api/proxy/artifacts/${detail.id}/download` : "#"}
               download={detail?.filename}
@@ -477,21 +569,30 @@ function ArtifactModal({
                   <MessageSquare size={13} /> Open in Chat
                 </button>
                 <button
-                  onClick={async () => {
-                    try {
-                      await fetch("/api/proxy/tasks", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ title: `Review: ${detail.filename}`, status: "inbox" }),
-                      })
-                      onClose()
-                      router.push("/tasks")
-                    } catch (err) { console.error(err) }
+                  onClick={handleSaveToBrain}
+                  disabled={savingBrain}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: brainSaved ? "var(--c-moss-soft)" : "var(--c-surface-2)",
+                    color: brainSaved ? "var(--c-moss)" : "var(--c-ink)",
+                    border: `1px solid ${brainSaved ? "color-mix(in srgb, var(--c-moss) 25%, transparent)" : "var(--c-border)"}`,
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", border: "1px solid var(--c-border)" }}
                 >
-                  <CheckSquare size={13} /> Create Task
+                  {savingBrain ? <Loader2 size={13} className="animate-spin" /> : brainSaved ? <Check size={13} /> : <Brain size={13} />}
+                  {brainSaved ? "Saved!" : "Save to Brain"}
+                </button>
+                <button
+                  onClick={handleAddToTask}
+                  disabled={addingTask}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: taskAdded ? "var(--c-moss-soft)" : "var(--c-surface-2)",
+                    color: taskAdded ? "var(--c-moss)" : "var(--c-ink)",
+                    border: `1px solid ${taskAdded ? "color-mix(in srgb, var(--c-moss) 25%, transparent)" : "var(--c-border)"}`,
+                  }}
+                >
+                  {addingTask ? <Loader2 size={13} className="animate-spin" /> : taskAdded ? <Check size={13} /> : <ListTodo size={13} />}
+                  {taskAdded ? "Added!" : "Add to Tasks"}
                 </button>
               </div>
 
