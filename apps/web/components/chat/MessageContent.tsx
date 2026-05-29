@@ -178,6 +178,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
             lineHeight: "1.5",
             padding: "1rem",
             background: "#1a1a1a",
+            overflowX: "auto",
           }}
         >
           {code}
@@ -208,6 +209,10 @@ export function MessageContent({ content }: { content: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // Strip the outer <pre> ReactMarkdown wraps around code blocks —
+          // our CodeBlock component already handles its own container.
+          pre: ({ children }) => <>{children}</>,
+
           // Code blocks
           code({ node, className, children, ...props }) {
             const inline = !className
