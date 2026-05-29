@@ -29,7 +29,7 @@ export interface CaptureModalProps {
 
 const DOMAINS = ["work", "personal", "cycling", "client", "health"]
 
-export function CaptureModal({ open, onClose, onSaved, defaultTab = "url" }: CaptureModalProps) {
+export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }: CaptureModalProps) {
   const [tab, setTab] = useState<"url" | "document">(defaultTab)
   // URL tab
   const [captureUrl, setCaptureUrl] = useState("")
