@@ -758,7 +758,7 @@ export default function ChatPage() {
           style={{ borderColor: "#d8d2c4", backgroundColor: "rgba(251,250,246,0.95)", backdropFilter: "blur(4px)" }}
         >
           {/* min-w-0 + overflow-hidden are both required for truncate to work in flex */}
-          <div className="flex items-center gap-1 min-w-0 overflow-hidden">
+          <div className="flex-1 flex items-center gap-1 min-w-0 overflow-hidden">
             {/* Mobile: open conversation drawer */}
             <button
               onClick={() => setMobileConvOpen(true)}
