@@ -294,6 +294,16 @@ export function TiptapEditor({
   const [genLoading, setGenLoading]   = useState(false)
   const [genCoords, setGenCoords]     = useState({ top: 0, left: 0 })
   const genInsertPos                  = useRef<number | null>(null)
+  const genInputRef                   = useRef<HTMLInputElement>(null)
+
+  // Focus the input reliably when the overlay opens
+  useEffect(() => {
+    if (genVisible) {
+      // Small delay so the DOM has rendered before we try to focus
+      const t = setTimeout(() => genInputRef.current?.focus(), 30)
+      return () => clearTimeout(t)
+    }
+  }, [genVisible])
 
   const editor = useEditor({
     extensions: [
@@ -514,7 +524,7 @@ export function TiptapEditor({
       <div
         ref={editorContainerRef}
         className="flex-1 overflow-y-auto cursor-text relative"
-        onClick={() => editor.commands.focus()}
+        onMouseDown={e => { if (e.target === e.currentTarget) editor.commands.focus() }}
       >
         <EditorContent editor={editor} className="h-full" />
 
@@ -530,24 +540,28 @@ export function TiptapEditor({
               minWidth: "320px",
               maxWidth: "480px",
             }}
-            onMouseDown={e => e.stopPropagation()}
+            onMouseDown={e => { e.stopPropagation(); e.preventDefault() }}
+            onClick={e => e.stopPropagation()}
           >
             <Wand2 size={13} style={{ color: "#2d5a4f", flexShrink: 0 }} />
             <input
-              autoFocus
+              ref={genInputRef}
               value={genPrompt}
               onChange={e => setGenPrompt(e.target.value)}
               onKeyDown={e => {
                 if (e.key === "Enter" && genPrompt.trim()) handleGenerate()
                 if (e.key === "Escape") { setGenVisible(false); setGenPrompt("") }
               }}
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
               placeholder="Ask TARS to write anything…"
               className="flex-1 bg-transparent border-none outline-none text-sm"
               style={{ color: "#e5e0d8" }}
             />
             {genPrompt.trim() && (
               <button
-                onMouseDown={e => { e.preventDefault(); handleGenerate() }}
+                onMouseDown={e => { e.stopPropagation(); e.preventDefault(); handleGenerate() }}
+                onClick={e => e.stopPropagation()}
                 className="shrink-0 p-1 rounded-md hover:bg-white/10 transition-colors"
                 style={{ color: "#2d5a4f" }}
               >
@@ -567,6 +581,8 @@ export function TiptapEditor({
               background: "#1a1714",
               borderColor: "#3a3530",
             }}
+            onMouseDown={e => { e.stopPropagation(); e.preventDefault() }}
+            onClick={e => e.stopPropagation()}
           >
             <Loader2 size={12} className="animate-spin" style={{ color: "#2d5a4f" }} />
             <span className="text-xs" style={{ color: "#948a7b" }}>TARS is writing…</span>
