@@ -9,6 +9,8 @@ import {
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
+import { MessageContent } from "@/components/chat/MessageContent"
+import { MessageActions } from "@/components/chat/MessageActions"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -183,30 +185,7 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
   )
 }
 
-// ─── Message renderer ────────────────────────────────────────────
-function MessageContent({ content }: { content: string }) {
-  return (
-    <div className="space-y-2">
-      {content.split("\n").map((line, i) => {
-        if (line.startsWith("```")) {
-          return (
-            <pre key={i} className="my-2 p-3 rounded-md overflow-x-auto text-xs font-mono" style={{ backgroundColor: "#efeadf", border: "1px solid #d8d2c4" }}>
-              <code>{line.replace(/```\w*/, "")}</code>
-            </pre>
-          )
-        }
-        if (/^\d+\./.test(line)) {
-          return <li key={i} className="ml-4 text-sm leading-relaxed">{line.replace(/^\d+\.\s\*\*(.*?)\*\*/, "$1").replace(/^\d+\.\s/, "")}</li>
-        }
-        if (line.startsWith("**") && line.endsWith("**")) {
-          return <p key={i} className="text-sm font-semibold leading-snug mt-3 first:mt-0">{line.replace(/\*\*/g, "")}</p>
-        }
-        if (!line.trim()) return null
-        return <p key={i} className="text-sm leading-relaxed">{line.replace(/\*\*(.*?)\*\*/g, "$1")}</p>
-      })}
-    </div>
-  )
-}
+// MessageContent is now in components/chat/MessageContent.tsx
 
 // ─── Model name formatter ─────────────────────────────────────────
 function formatModelName(model?: string): string | null {
@@ -226,9 +205,10 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
   const isUser = msg.role === "user"
   const toolCalls = !isUser && "tool_calls" in msg ? msg.tool_calls : undefined
   const modelLabel = !isUser && "model_used" in msg ? formatModelName(msg.model_used) : null
+  const isStreaming = "streaming" in msg
 
   return (
-    <div className={`flex gap-3 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`group flex gap-3 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
       <div
         className="w-8 h-8 rounded-full shrink-0 overflow-hidden"
         style={isUser
@@ -286,6 +266,11 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
           <span className="text-[10px] ml-1 mt-1" style={{ color: "#c4bdb2" }}>
             · {modelLabel}
           </span>
+        )}
+
+        {/* Action bar — Save to Second Brain / Create Task. Hidden until hover. */}
+        {!isUser && !isStreaming && (
+          <MessageActions content={msg.content} />
         )}
       </div>
     </div>
