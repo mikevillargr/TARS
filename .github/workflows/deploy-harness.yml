@@ -7,6 +7,10 @@ on:
     paths:
       - "apps/harness/**"
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy FastAPI harness to production
@@ -24,4 +28,4 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /opt/tars
-            CHANGED_SERVICES=harness bash infrastructure/scripts/deploy.sh
+            bash infrastructure/scripts/deploy.sh harness main

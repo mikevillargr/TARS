@@ -8,6 +8,10 @@ on:
       - "apps/web/**"
       - "packages/**"
 
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy Next.js to production
@@ -25,4 +29,4 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /opt/tars
-            CHANGED_SERVICES=web bash infrastructure/scripts/deploy.sh
+            bash infrastructure/scripts/deploy.sh web main
