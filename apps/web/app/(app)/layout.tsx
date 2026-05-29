@@ -132,7 +132,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             <button
               onClick={() => setCaptureOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer hover:opacity-80"
               style={{ backgroundColor: "#1a1714", color: "#fbfaf6" }}
             >
               <Plus size={16} />

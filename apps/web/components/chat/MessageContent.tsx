@@ -133,7 +133,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   }, [code, language])
 
   return (
-    <div className="my-3 rounded-xl overflow-hidden max-w-full" style={{ border: "1px solid #2a2a2a" }}>
+    <div className="my-3 rounded-xl overflow-x-auto max-w-full" style={{ border: "1px solid #2a2a2a" }}>
       {/* Header bar */}
       <div
         className="flex items-center justify-between px-3 py-1.5"

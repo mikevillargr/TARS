@@ -223,7 +223,8 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
         }
       </div>
 
-      <div className={`flex flex-col min-w-0 max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
+      {/* Column: no items-start/end so children stretch to column width (needed for code scroll) */}
+      <div className={`flex flex-col min-w-0 max-w-[80%] ${isUser ? "items-end" : ""}`}>
         {/* Always show "TARS" as the sender name for assistant messages */}
         {!isUser && (
           <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "#2d5a4f" }}>
@@ -246,7 +247,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
         )}
 
         <div
-          className="p-4 rounded-2xl"
+          className={`p-4 rounded-2xl ${isUser ? "" : "w-full"}`}
           style={isUser
             ? { backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }
             : { color: "#1a1714" }
@@ -296,13 +297,18 @@ function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
 }
 
 // ─── Artifact loader — handles ?artifact=<id> from file upload ────
-// Calls onAutoSend with the built message; the page will clear active chat
-// and auto-send into a brand-new conversation.
+// Watches searchParams so it fires even when navigating to /chat?artifact=X
+// while already on the chat page (no remount). A ref guards against double-fire.
 function ArtifactLoader({ onAutoSend }: { onAutoSend: (msg: string) => void }) {
   const searchParams = useSearchParams()
+  const handledIdRef = useRef<string | null>(null)
+
   useEffect(() => {
     const artifactId = searchParams.get("artifact")
     if (!artifactId) return
+    if (handledIdRef.current === artifactId) return  // already handled
+    handledIdRef.current = artifactId
+
     apiGet<{ filename: string; content: string | null; type: string }>(`/artifacts/${artifactId}`)
       .then((artifact) => {
         const name = artifact.filename ?? "uploaded file"
@@ -318,7 +324,7 @@ function ArtifactLoader({ onAutoSend }: { onAutoSend: (msg: string) => void }) {
       })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchParams])
   return null
 }
 
