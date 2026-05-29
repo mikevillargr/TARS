@@ -299,7 +299,8 @@ function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
 // ─── Artifact loader — handles ?artifact=<id> from file upload ────
 // Watches searchParams so it fires even when navigating to /chat?artifact=X
 // while already on the chat page (no remount). A ref guards against double-fire.
-function ArtifactLoader({ onAutoSend }: { onAutoSend: (msg: string) => void }) {
+// Only fetches the filename — content is injected server-side as invisible context.
+function ArtifactLoader({ onArtifactLoad }: { onArtifactLoad: (artifactId: string, filename: string) => void }) {
   const searchParams = useSearchParams()
   const handledIdRef = useRef<string | null>(null)
 
@@ -309,18 +310,10 @@ function ArtifactLoader({ onAutoSend }: { onAutoSend: (msg: string) => void }) {
     if (handledIdRef.current === artifactId) return  // already handled
     handledIdRef.current = artifactId
 
-    apiGet<{ filename: string; content: string | null; type: string }>(`/artifacts/${artifactId}`)
+    apiGet<{ filename: string; type: string }>(`/artifacts/${artifactId}`)
       .then((artifact) => {
         const name = artifact.filename ?? "uploaded file"
-        const content = artifact.content ?? ""
-        const MAX_CHARS = 12000
-        const truncated = content.length > MAX_CHARS
-          ? content.slice(0, MAX_CHARS) + `\n\n[… content truncated — ${content.length.toLocaleString()} total chars]`
-          : content
-        const msg = truncated
-          ? `I just uploaded "${name}". Here's the extracted content:\n\n---\n${truncated}\n---\n\nPlease summarize this and tell me the key points.`
-          : `I just uploaded "${name}" but no text content could be extracted. What can you tell me about it?`
-        onAutoSend(msg)
+        onArtifactLoad(artifactId, name)
       })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -365,6 +358,7 @@ export default function ChatPage() {
   const accumulatedRef                              = useRef<string>("")  // live text during streaming
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
   const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
+  const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
 
   // Pre-fill input when navigating from Second Brain "Open in Chat" — handled via SecondBrainLoader below
 
@@ -581,6 +575,10 @@ export default function ChatPage() {
     try {
       const fd = new FormData()
       fd.append("content", content)
+      if (pendingArtifactIdRef.current) {
+        fd.append("artifact_id", pendingArtifactIdRef.current)
+        pendingArtifactIdRef.current = null
+      }
       for (const f of pendingAttachments) fd.append("files", f)
 
       const controller = new AbortController()
@@ -686,12 +684,12 @@ export default function ChatPage() {
     <div className="flex h-full overflow-hidden">
       <Suspense fallback={null}>
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
-        <ArtifactLoader onAutoSend={(msg) => {
-          // Drop into a clean slate — handleSend creates a new conversation
-          // automatically when activeChatId is null
+        <ArtifactLoader onArtifactLoad={(artifactId, filename) => {
+          // Clean slate — new conversation; file content injected server-side
           setActiveChatId(null)
           setMessages([])
-          setInputValue(msg)
+          setInputValue(`📎 **${filename}** — [View in Artifacts](/artifacts)`)
+          pendingArtifactIdRef.current = artifactId
           autoSendPendingRef.current = true
         }} />
       </Suspense>

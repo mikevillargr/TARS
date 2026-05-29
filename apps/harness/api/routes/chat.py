@@ -445,6 +445,7 @@ async def send_message(
     conversation_id: str,
     content: str = Form(default=""),
     files: List[UploadFile] = File(default=[]),
+    artifact_id: Optional[str] = Form(default=None),
     tier_override: Optional[str] = Form(default=None),
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
@@ -467,10 +468,28 @@ async def send_message(
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
 
+    # If artifact_id provided, inject artifact content as invisible model context
+    if artifact_id:
+        art_result = await db.execute(
+            select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
+        )
+        art_obj = art_result.scalar_one_or_none()
+        if art_obj and art_obj.content:
+            MAX_ART = 12000
+            art_text = art_obj.content
+            if len(art_text) > MAX_ART:
+                art_text = art_text[:MAX_ART] + f"\n\n[… truncated, {len(art_obj.content):,} total chars]"
+            doc_snippets.append(
+                f"[UPLOADED FILE: {art_obj.filename}]\n{art_text}\n\n"
+                f"Analyze this file and provide a clear summary of the key insights."
+            )
+
     # Classify the request to pick the right model tier.
     # Images always need vision (Claude). Override wins if provided.
     if image_blocks:
         tier = ModelTier.TIER3
+    elif artifact_id:
+        tier = ModelTier.TIER3  # artifact analysis always uses the frontier model
     elif tier_override:
         tier = ModelTier(tier_override)
     elif content:
