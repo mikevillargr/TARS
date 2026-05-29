@@ -237,7 +237,7 @@ export default function MeetingsPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto" data-selectable>
               {isProcessing ? (
                 <div className="h-full flex flex-col items-center justify-center text-center px-6">
                   <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 animate-pulse" style={{ backgroundColor: "#efeadf" }}>

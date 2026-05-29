@@ -12,7 +12,6 @@ import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
-import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -627,7 +626,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      <SelectionToolbar />
       <Suspense fallback={null}>
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
       </Suspense>

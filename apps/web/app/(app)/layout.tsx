@@ -6,6 +6,7 @@ import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, Mo
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 
 // Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
 function BottomTabBar() {
@@ -143,6 +144,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Bottom tab bar — sits outside <main> so it overlays correctly */}
       <BottomTabBar />
+
+      {/* Global selection toolbar — fires on [data-selectable] regions across all pages */}
+      <SelectionToolbar />
     </SidebarProvider>
   )
 }

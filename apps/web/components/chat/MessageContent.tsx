@@ -202,7 +202,7 @@ export function MessageContent({ content }: { content: string }) {
   const urls = extractUrls(content)
 
   return (
-    <div className="message-content space-y-0.5" data-message-content>
+    <div className="message-content space-y-0.5" data-selectable>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

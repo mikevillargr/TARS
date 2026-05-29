@@ -242,7 +242,7 @@ export default function TasksPage() {
               </button>
             </div>
 
-            <div className="p-4 flex flex-col gap-4">
+            <div className="p-4 flex flex-col gap-4" data-selectable>
               <h2 className="text-sm font-semibold text-[#1a1714] leading-snug">{selected.title}</h2>
 
               {selected.description && (

@@ -1,25 +1,27 @@
 "use client"
 
 /**
- * SelectionToolbar — floating action bar on text selection inside chat messages.
+ * SelectionToolbar — floating action bar on text selection anywhere in the app.
+ *
+ * Mount once in the app layout. Scope is controlled via [data-selectable] on
+ * any content area that should trigger it (meetings, tasks, second brain, chat).
  *
  * Detection engine analyses the selected text and surfaces contextual actions:
  *
  *   Always:
- *     Copy · Task · Second Brain
+ *     Copy · Task · Second Brain / Save snippet
  *
  *   Contextual (detected from selection):
  *     URL found      → Open URL
  *     Email found    → Compose (mailto)
  *     Date/time      → Add to Calendar (inline form, pre-filled)
- *     Code-like text → Save as snippet
  */
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { createPortal } from "react-dom"
 import {
   Copy, Check, CheckSquare, BookOpen, Calendar,
-  Loader2, ExternalLink, Mail, Code2, ChevronDown,
+  Loader2, ExternalLink, Mail, ChevronDown,
 } from "lucide-react"
 import { apiPost } from "@/lib/api-client"
 
@@ -390,10 +392,15 @@ function Toolbar({
 
   const createTask = useCallback(async () => {
     const title = text.replace(/\s+/g," ").trim()
+    const path = typeof window !== "undefined" ? window.location.pathname : ""
+    const source = path.startsWith("/meetings") ? "meeting"
+      : path.startsWith("/second-brain") ? "second-brain"
+      : path.startsWith("/tasks") ? "manual"
+      : "chat"
     await apiPost("/tasks", {
       title: title.length > 120 ? title.slice(0,117)+"…" : title,
       priority: "normal",
-      source: "chat",
+      source,
     })
     setTimeout(onDismiss, 800)
   }, [text, onDismiss])
@@ -412,16 +419,6 @@ function Toolbar({
     )
     setTimeout(onDismiss, 800)
   }, [text, ctx, onDismiss])
-
-  const saveSnippet = useCallback(async () => {
-    await apiPost("/second-brain/ingest/text", {
-      content: text,
-      title: "Code snippet",
-      tags: ["code", "snippet", "chat"],
-      domain: "work",
-    })
-    setTimeout(onDismiss, 800)
-  }, [text, onDismiss])
 
   return createPortal(
     <>
@@ -503,10 +500,7 @@ function Toolbar({
             />
           )}
 
-          {/* Code → Snippet (only if not already showing Save snippet above) */}
-          {ctx.isCode && !ctx.url && (
-            <Action icon={Code2} label="Snippet" accent onClick={saveSnippet} />
-          )}
+          {/* Code snippets handled by the BookOpen "Save snippet" button above */}
         </div>
 
         {/* Caret */}
@@ -556,7 +550,7 @@ export function SelectionToolbar() {
         const range = sel.getRangeAt(0)
         const node  = range.commonAncestorContainer
         const el    = node.nodeType === 1 ? (node as Element) : node.parentElement
-        if (!el?.closest("[data-message-content]")) return
+        if (!el?.closest("[data-selectable]")) return
 
         setSelection({ text, pos: getSelectionPos(range) })
       }, 10)
