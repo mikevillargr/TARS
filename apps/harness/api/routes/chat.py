@@ -534,6 +534,39 @@ async def send_message(
         {"role": m.role, "content": m.content} for m in history if m.role != "system"
     ]
 
+    # ── Normalise for Anthropic API ──────────────────────────────────────────
+    # Race condition: background tasks save the assistant reply asynchronously.
+    # A new user message can arrive *before* the previous assistant reply is
+    # committed, so the DB row for the assistant ends up with a later
+    # created_at than the new user row.  That produces a history like:
+    #   [user_old, user_new, assistant_old]
+    # …which the API rejects as "assistant prefill" (last msg = assistant).
+    # The same ordering bug can also leave two consecutive user messages.
+    # Fix: strip trailing assistant messages, then merge any consecutive
+    # same-role pairs so the final list strictly alternates and ends with user.
+    def _sanitize(msgs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        # 1. Drop trailing assistant messages.
+        trimmed = list(msgs)
+        while trimmed and trimmed[-1]["role"] != "user":
+            trimmed.pop()
+        if not trimmed:
+            return trimmed
+        # 2. Collapse consecutive same-role messages (merge text; keep newer on rich).
+        result: List[Dict[str, Any]] = [dict(trimmed[0])]
+        for m in trimmed[1:]:
+            prev = result[-1]
+            if prev["role"] == m["role"]:
+                p, c = prev["content"], m["content"]
+                if isinstance(p, str) and isinstance(c, str):
+                    result[-1] = {"role": prev["role"], "content": p + "\n\n" + c}
+                else:
+                    result[-1] = dict(m)   # rich content: keep the newer block
+            else:
+                result.append(dict(m))
+        return result
+
+    messages = _sanitize(messages)
+
     # Replace last user message with rich content if needed
     if messages and messages[-1]["role"] == "user":
         if image_blocks:
