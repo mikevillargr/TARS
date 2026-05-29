@@ -193,9 +193,11 @@ const SLASH_COMMANDS: SlashCmd[] = [
 function EditorToolbar({
   editor,
   onImageUpload,
+  onAskTars,
 }: {
   editor: ReturnType<typeof useEditor>
   onImageUpload: () => void
+  onAskTars: () => void
 }) {
   if (!editor) return null
 
@@ -255,6 +257,17 @@ function EditorToolbar({
       </button>
       {sep()}
       {btn(false, () => editor.chain().focus().clearNodes().unsetAllMarks().run(), Eraser, "Clear formatting")}
+      {sep()}
+      <button
+        type="button"
+        onMouseDown={e => { e.preventDefault(); onAskTars() }}
+        title="Ask TARS to generate content at cursor"
+        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
+        style={{ color: "#2d5a4f", backgroundColor: "#e3ede9" }}
+      >
+        <Wand2 size={12} />
+        Ask TARS
+      </button>
     </div>
   )
 }
@@ -413,7 +426,7 @@ export function TiptapEditor({
     <div className="flex flex-col h-full">
       {!readOnly && (
         <>
-          <EditorToolbar editor={editor} onImageUpload={() => imageInputRef.current?.click()} />
+          <EditorToolbar editor={editor} onImageUpload={() => imageInputRef.current?.click()} onAskTars={showGenPrompt} />
 
           {/* Floating slash command menu */}
           <FloatingMenu
@@ -463,7 +476,7 @@ export function TiptapEditor({
           {/* Sparkle hint on empty paragraphs — click to open Ask TARS */}
           <FloatingMenu
             editor={editor}
-            tippyOptions={{ duration: 80, placement: "left", offset: [0, 12] }}
+            tippyOptions={{ duration: 80, placement: "right", offset: [0, 16] }}
             shouldShow={({ state }) => {
               if (genVisible || genLoading) return false
               const { $from } = state.selection
