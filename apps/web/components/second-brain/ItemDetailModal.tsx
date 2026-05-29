@@ -184,7 +184,7 @@ export function ItemDetailModal({
   return (
     <Dialog open={itemId !== null} onOpenChange={(isOpen) => { if (!isOpen) onClose() }}>
       <DialogContent
-        className="max-w-[95vw] w-full h-[95vh] p-0 gap-0 overflow-hidden flex flex-col"
+        className="w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
         showCloseButton={false}
       >
         {/* Header */}
