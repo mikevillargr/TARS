@@ -2,6 +2,10 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+# Ensure job/scheduler logs are visible in pm2 output
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: [%(name)s] %(message)s")
+logging.getLogger("jobs").setLevel(logging.INFO)
+
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
