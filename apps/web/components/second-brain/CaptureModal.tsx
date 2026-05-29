@@ -92,7 +92,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "url" }: Cap
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose() }}>
       <DialogContent
-        className="w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
+        className="w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
         showCloseButton={false}
       >
         {/* Header */}

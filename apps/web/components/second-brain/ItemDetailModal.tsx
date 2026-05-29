@@ -81,7 +81,7 @@ export function ItemDetailModal({
   const [showFull, setShowFull]       = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const isDocument = item?.type === "document"
+  const isDocument = item?.type === "document" || item?.type === "note"
 
   useEffect(() => {
     if (!itemId) return
@@ -184,7 +184,7 @@ export function ItemDetailModal({
   return (
     <Dialog open={itemId !== null} onOpenChange={(isOpen) => { if (!isOpen) onClose() }}>
       <DialogContent
-        className="w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
+        className="w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
         showCloseButton={false}
       >
         {/* Header */}
