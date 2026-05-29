@@ -100,9 +100,10 @@ function fromApi(e: CalendarEventOut): CalendarEvent | null {
   }
 }
 
-const HOURS = Array.from({ length: 14 }, (_, i) => i + 7)
+const HOURS = Array.from({ length: 24 }, (_, i) => i)
 
 function formatHour(h: number) {
+  if (h === 0) return "12 AM"
   if (h === 12) return "12 PM"
   return h > 12 ? `${h - 12} PM` : `${h} AM`
 }
@@ -491,6 +492,7 @@ export default function CalendarPage() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const fetchEvents = useCallback(async (mode: ViewMode, anc: Date) => {
     const range = getDateRange(mode, anc)
@@ -510,6 +512,15 @@ export default function CalendarPage() {
   useEffect(() => {
     fetchEvents(viewMode, anchor)
   }, [viewMode, anchor, fetchEvents])
+
+  // Scroll to current hour when switching to/from week or day view
+  useEffect(() => {
+    if (viewMode === "month" || !scrollRef.current) return
+    const hour = new Date().getHours()
+    const rowHeight = viewMode === "week" ? 64 : 80 // h-16 / h-20
+    const scrollTo = Math.max(0, (hour - 1) * rowHeight)
+    scrollRef.current.scrollTop = scrollTo
+  }, [viewMode])
 
   const eventsForDay = (d: Date) => events.filter((e) => isSameDay(e.start, d)).sort((a, b) => a.start.getTime() - b.start.getTime())
 
@@ -629,6 +640,7 @@ export default function CalendarPage() {
 
         {/* Body */}
         <div
+          ref={scrollRef}
           className="flex-1 overflow-auto"
           onTouchStart={viewMode === "day" ? onTouchStart : undefined}
           onTouchEnd={viewMode === "day" ? onTouchEnd : undefined}

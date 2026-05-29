@@ -296,8 +296,22 @@ function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────
+const TARS_QUOTES = [
+  "I have a cue light I can use to show you when I'm joking, if you like.",
+  "Absolute honesty isn't always the most diplomatic nor the safest form of communication with emotional beings.",
+  "Cooper, this is no time for caution.",
+  "Everybody good? 'Cause I just committed our return vehicle to save your life.",
+  "That's not possible. No. It's necessary.",
+  "What does Dr. Mann say?",
+  "I'm not joking. Humor setting: 75%.",
+  "I was configured for a variety of purposes.",
+  "Do you want to find a way to save them or not?",
+  "Ninety percent, Cooper. Ninety percent.",
+]
+
 export default function ChatPage() {
   const { setOpen: setSidebarOpen, open: sidebarOpen } = useSidebar()
+  const [quoteIndex] = useState(() => Math.floor(Math.random() * TARS_QUOTES.length))
   const [conversations, setConversations]           = useState<Conversation[]>([])
   const [activeChatId, setActiveChatId]             = useState<string | null>(null)
   const [messages, setMessages]                     = useState<Message[]>([])
@@ -816,9 +830,11 @@ export default function ChatPage() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {allMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: "#948a7b" }}>
+            <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "#948a7b" }}>
               <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}>TARS</p>
-              <p className="text-sm">What do you need?</p>
+              <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "#6b6357" }}>
+                &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
+              </p>
             </div>
           ) : allMessages.map((msg, i) => (
             <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
