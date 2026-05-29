@@ -826,7 +826,7 @@ export default function ChatPage() {
       <div className="flex-1 flex flex-col relative" style={{ backgroundColor: "#fbfaf6" }}>
         {/* Chat toolbar */}
         <div
-          className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0"
+          className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0 overflow-hidden"
           style={{ borderColor: "#d8d2c4", backgroundColor: "rgba(251,250,246,0.95)", backdropFilter: "blur(4px)" }}
         >
           {/* min-w-0 + overflow-hidden are both required for truncate to work in flex */}
@@ -854,7 +854,7 @@ export default function ChatPage() {
             )}
 
             <h1
-              className="text-sm font-medium truncate ml-1 min-w-0"
+              className="text-sm font-medium truncate min-w-0 flex-1"
               style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}
             >
               {activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")}
