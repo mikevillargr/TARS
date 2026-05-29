@@ -161,6 +161,7 @@
     background-color: var(--c-canvas);
     color: var(--c-ink);
     overflow-x: hidden; /* prevent body-level horizontal scroll */
+    overflow-wrap: anywhere; /* break pathologically long words/URLs */
   }
   html {
     @apply font-sans;

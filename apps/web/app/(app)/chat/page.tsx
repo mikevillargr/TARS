@@ -1037,7 +1037,7 @@ export default function ChatPage() {
               className="text-sm font-medium truncate min-w-0 flex-1"
               style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}
             >
-              {activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")}
+              {(activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")).slice(0, 60)}
             </h1>
           </div>
 

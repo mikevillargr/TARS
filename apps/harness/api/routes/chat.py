@@ -43,6 +43,11 @@ class ConversationOut(BaseModel):
     class Config:
         from_attributes = True
 
+    def model_post_init(self, __context) -> None:
+        # Cap title at 60 chars regardless of what's stored in DB
+        if self.title and len(self.title) > 60:
+            object.__setattr__(self, "title", self.title[:60])
+
 
 class MessageOut(BaseModel):
     id: str
@@ -64,6 +69,10 @@ class ConversationDetailOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    def model_post_init(self, __context) -> None:
+        if self.title and len(self.title) > 60:
+            object.__setattr__(self, "title", self.title[:60])
 
 
 _IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
@@ -345,7 +354,7 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
             system="Write a 3-5 word title for this conversation. No quotes, no punctuation, no explanation. Just the title.",
             messages=[{"role": "user", "content": context}],
         )
-        return resp.content[0].text.strip()[:80]
+        return resp.content[0].text.strip()[:60]
     except Exception as exc:
         log.warning("Title generation failed: %s", exc)
         return None
@@ -416,6 +425,17 @@ async def get_conversation(
     messages = result.scalars().all()
 
     title = conv.title
+
+    # Lazily truncate titles that predate the 60-char cap
+    if title and len(title) > 60:
+        title = title[:60]
+        await db.execute(
+            sa_update(Conversation)
+            .where(Conversation.id == conversation_id)
+            .values(title=title)
+        )
+        await db.commit()
+
     if not title and messages:
         msg_dicts = [{"role": m.role, "content": m.content} for m in messages]
         client = get_model_client()
