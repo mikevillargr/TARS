@@ -736,7 +736,8 @@ export default function ChatPage() {
           className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0"
           style={{ borderColor: "#d8d2c4", backgroundColor: "rgba(251,250,246,0.95)", backdropFilter: "blur(4px)" }}
         >
-          <div className="flex items-center gap-1 min-w-0">
+          {/* min-w-0 + overflow-hidden are both required for truncate to work in flex */}
+          <div className="flex items-center gap-1 min-w-0 overflow-hidden">
             {/* Mobile: open conversation drawer */}
             <button
               onClick={() => setMobileConvOpen(true)}
@@ -760,7 +761,7 @@ export default function ChatPage() {
             )}
 
             <h1
-              className="text-sm font-medium truncate ml-1"
+              className="text-sm font-medium truncate ml-1 min-w-0"
               style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}
             >
               {activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")}
@@ -786,7 +787,7 @@ export default function ChatPage() {
         {/* Context bar */}
         {!isContextDismissed && (
           <div
-            className="border-b px-4 py-2 flex items-center gap-2 text-xs shrink-0"
+            className="border-b px-4 py-2 flex items-center gap-2 text-xs shrink-0 overflow-x-auto"
             style={{ borderColor: "#e8e2d4", backgroundColor: "rgba(246,243,236,0.9)", backdropFilter: "blur(4px)" }}
           >
             <span className="font-medium" style={{ color: "#6b6357" }}>Context:</span>

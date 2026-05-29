@@ -243,11 +243,25 @@ async def _extract_and_save_facts(
         log.warning("Memory fact extraction failed: %s", exc)
 
 
+def _strip_tool_artifacts(text: str) -> str:
+    """Remove raw tool-call tags and internal tool syntax from message text."""
+    import re
+    # Strip XML-style tool call blocks: <tool_name>...</tool_name> or <save_memory>...</save_memory>
+    text = re.sub(r"<[a-z_]+>.*?</[a-z_]+>", "", text, flags=re.DOTALL)
+    # Strip standalone opening/closing tags: <save_memory>, </save_memory>
+    text = re.sub(r"</?[a-z_]+>", "", text)
+    # Strip function-call style: save_memory(content='...') or tool_name(...)
+    text = re.sub(r"\b[a-z_]+\([^)]{0,200}\)", "", text)
+    return text.strip()
+
+
 async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
     """Generate a 3-5 word conversation title from recent exchanges."""
     recent = messages[-8:]
     context = "\n".join(
-        f"{m['role'].upper()}: {m['content'][:300]}" for m in recent
+        f"{m['role'].upper()}: {_strip_tool_artifacts(str(m.get('content', '')))[:300]}"
+        for m in recent
+        if m.get("content") and not str(m.get("content", "")).startswith("<tool")
     )
     try:
         resp = await client.anthropic.messages.create(
