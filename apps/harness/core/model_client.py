@@ -22,6 +22,24 @@ from typing import AsyncGenerator, List, Dict, Any, Optional
 import httpx
 import anthropic
 
+# ── XML tool-call strip ────────────────────────────────────────────────────────
+# Qwen3 and other non-Claude models sometimes emit XML tool-call markup
+# (e.g. <function_calls>…</function_calls>) when they see a capabilities section.
+# We now gate capabilities on Tier 3 only, but keep this filter as a safety net.
+_TOOL_XML_RE = re.compile(
+    r"<function_calls>.*?</function_calls>|"
+    r"<invoke\b[^>]*>.*?</invoke>|"
+    r"<parameter\b[^>]*>.*?</parameter>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+def _strip_tool_xml(text: str) -> str:
+    """Remove any stray XML tool-call markup from model output."""
+    cleaned = _TOOL_XML_RE.sub("", text)
+    # Collapse runs of blank lines left behind
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -539,6 +557,7 @@ class ModelClient:
 
             self._mark_warm(tier)
             full_text: str = choices[0].get("message", {}).get("content", "")
+            full_text = _strip_tool_xml(full_text)   # remove any stray XML tool-call markup
             usage = output.get("usage", {})
             total_tokens = usage.get("total_tokens", 0)
 
