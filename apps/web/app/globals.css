@@ -156,7 +156,10 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    /* Use CSS vars directly — bg-background relies on Tailwind resolving --background,
+       but CSS vars work even before Tailwind's hydration pass. */
+    background-color: var(--c-canvas);
+    color: var(--c-ink);
   }
   html {
     @apply font-sans;
@@ -331,6 +334,30 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d8d2c4; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #948a7b; }
+
+/* ── Code block overflow: definitive fix ───────────────────────────────────
+   SyntaxHighlighter renders <pre> with white-space:pre. Without explicit
+   containment the pre expands to code-line width and blows out the page.
+   overflow-x:hidden on .message-content clips at the bubble boundary;
+   the CodeBlock component wraps its <pre> in overflow-x:auto so it scrolls. */
+.message-content {
+  overflow-x: hidden;
+  max-width: 100%;
+  min-width: 0;
+}
+.message-content pre {
+  max-width: 100% !important;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ── Dark mode: force backgrounds that use inline hex to stay correct ──────
+   Pages not yet tokenised (hardcoded hex inline styles) get overridden here.
+   We can't beat specificity of inline styles with class selectors, so we
+   instead ensure the CSS-var values are correct and apply them on [style]
+   elements via the cascade where possible. The DEFINITIVE fix is to replace
+   the hex values with var(--c-*) in the source — done for chat/page.tsx. */
+.dark body { background-color: var(--c-canvas); color: var(--c-ink); }
 
 /* ── Tiptap / ProseMirror editor styles ────────────────────────────────────── */
 .ProseMirror {

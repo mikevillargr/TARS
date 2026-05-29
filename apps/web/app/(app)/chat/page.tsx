@@ -86,17 +86,17 @@ function CalendarSuggestChip({ suggestion, onDismiss }: { suggestion: CalendarSu
       <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.2)" }}>
         <Calendar size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
         <span className="flex-1 font-medium" style={{ color: "#2d5a4f" }}>Added to calendar</span>
-        <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
       </div>
     )
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4" }}>
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}>
       <Calendar size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
       <div className="flex-1 min-w-0">
-        <span className="font-medium" style={{ color: "#1a1714" }}>{suggestion.title}</span>
-        <span className="ml-1.5" style={{ color: "#948a7b" }}>{formatSuggestTime(suggestion.datetime_iso)}</span>
+        <span className="font-medium" style={{ color: "var(--c-ink)" }}>{suggestion.title}</span>
+        <span className="ml-1.5" style={{ color: "var(--c-ink-faint)" }}>{formatSuggestTime(suggestion.datetime_iso)}</span>
       </div>
       <button
         onClick={addToCalendar}
@@ -109,16 +109,16 @@ function CalendarSuggestChip({ suggestion, onDismiss }: { suggestion: CalendarSu
         {adding ? <Loader2 size={10} className="animate-spin" /> : null}
         Add to Calendar
       </button>
-      <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+      <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
     </div>
   )
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  urgent: "#a04848",
-  high:   "#b07030",
-  normal: "#2d5a4f",
-  low:    "#948a7b",
+  urgent: "var(--c-rose)",
+  high:   "var(--c-amber)",
+  normal: "var(--c-moss)",
+  low:    "var(--c-ink-faint)",
 }
 
 function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion; onDismiss: () => void }) {
@@ -149,23 +149,23 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
       <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.2)" }}>
         <CheckSquare size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
         <span className="flex-1 font-medium" style={{ color: "#2d5a4f" }}>Added to tasks</span>
-        <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
       </div>
     )
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4" }}>
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}>
       <CheckSquare size={12} style={{ color: priorityColor, flexShrink: 0 }} />
       <div className="flex-1 min-w-0">
-        <span className="font-medium" style={{ color: "#1a1714" }}>{suggestion.title}</span>
+        <span className="font-medium" style={{ color: "var(--c-ink)" }}>{suggestion.title}</span>
         {suggestion.priority && suggestion.priority !== "normal" && (
           <span className="ml-1.5 uppercase text-[9px] font-semibold tracking-wider" style={{ color: priorityColor }}>
             {suggestion.priority}
           </span>
         )}
         {suggestion.due_at && (
-          <span className="ml-1.5" style={{ color: "#948a7b" }}>
+          <span className="ml-1.5" style={{ color: "var(--c-ink-faint)" }}>
             due {new Date(suggestion.due_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </span>
         )}
@@ -181,7 +181,7 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
         {adding ? <Loader2 size={10} className="animate-spin" /> : null}
         Add Task
       </button>
-      <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+      <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
     </div>
   )
 }
@@ -213,12 +213,12 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
       <div
         className="w-8 h-8 rounded-full shrink-0 overflow-hidden"
         style={isUser
-          ? { backgroundColor: "#efeadf", border: "1px solid #d8d2c4", display: "flex", alignItems: "center", justifyContent: "center" }
+          ? { backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", display: "flex", alignItems: "center", justifyContent: "center" }
           : { border: "2px solid #2d5a4f" }
         }
       >
         {isUser
-          ? <User size={15} style={{ color: "#6b6357" }} />
+          ? <User size={15} style={{ color: "var(--c-ink-muted)" }} />
           : <img src="/tars-avatar.svg" alt="TARS" style={{ width: "100%", height: "100%", display: "block" }} />
         }
       </div>
@@ -238,7 +238,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
               <span
                 key={idx}
                 className="badge badge-neutral text-[10px] flex items-center gap-1"
-                style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4" }}
+                style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}
               >
                 <Terminal size={10} style={{ color: "#2d5a4f" }} /> {tool}
               </span>
@@ -249,8 +249,8 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
         <div
           className={`p-4 rounded-2xl ${isUser ? "" : "w-full"}`}
           style={isUser
-            ? { backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }
-            : { color: "#1a1714" }
+            ? { backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
+            : { color: "var(--c-ink)" }
           }
         >
           <MessageContent content={msg.content} />
@@ -265,7 +265,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
 
         {/* Subtle model badge below the bubble — only when known */}
         {modelLabel && (
-          <span className="text-[10px] ml-1 mt-1" style={{ color: "#c4bdb2" }}>
+          <span className="text-[10px] ml-1 mt-1" style={{ color: "var(--c-ink-faint)" }}>
             · {modelLabel}
           </span>
         )}
@@ -725,30 +725,30 @@ export default function ChatPage() {
           />
           <div
             className="relative flex flex-col h-full w-72 max-w-[80vw] shadow-xl z-10"
-            style={{ backgroundColor: "#fbfaf6" }}
+            style={{ backgroundColor: "var(--c-surface)" }}
           >
             <div
               className="px-3 py-3 border-b flex items-center gap-2 shrink-0"
-              style={{ borderColor: "#d8d2c4" }}
+              style={{ borderColor: "var(--c-border)" }}
             >
               <button
                 onClick={async () => { await handleNewChat(); setMobileConvOpen(false) }}
                 className="flex-1 flex items-center justify-center gap-2 btn-secondary text-sm"
-                style={{ backgroundColor: "#f6f3ec" }}
+                style={{ backgroundColor: "var(--c-canvas)" }}
               >
                 <Plus size={15} /> New Chat
               </button>
               <button
                 onClick={() => setMobileConvOpen(false)}
                 className="p-1.5 rounded-md"
-                style={{ color: "#948a7b" }}
+                style={{ color: "var(--c-ink-faint)" }}
               >
                 <X size={16} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
               {conversations.length === 0 ? (
-                <p className="px-3 py-4 text-xs" style={{ color: "#948a7b" }}>No conversations yet.</p>
+                <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
               ) : conversations.map((conv) => (
                 <div key={conv.id} className="group relative flex items-center">
                   <button
@@ -757,7 +757,7 @@ export default function ChatPage() {
                       activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted"
                     }`}
                     style={activeChatId === conv.id
-                      ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
+                      ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
                       : {}
                     }
                   >
@@ -769,7 +769,7 @@ export default function ChatPage() {
                     className="absolute right-1 p-1.5 rounded transition-colors"
                     style={{ color: "#c4b8a8" }}
                     title="Delete"
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#a04848"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-rose)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)" }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#c4b8a8"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
                   >
                     <Trash2 size={14} />
@@ -783,27 +783,27 @@ export default function ChatPage() {
 
       {/* ── Conversation list (collapsible, desktop only) ─────── */}
       <div
-        className={`border-r bg-canvas hidden lg:flex flex-col transition-all duration-300 ease-out overflow-hidden shrink-0 ${isConvListCollapsed ? "w-0 border-r-0" : "w-64"}`}
-        style={{ borderColor: "#d8d2c4" }}
+        className={`border-r hidden lg:flex flex-col transition-all duration-300 ease-out overflow-hidden shrink-0 ${isConvListCollapsed ? "w-0 border-r-0" : "w-64"}`}
+        style={{ backgroundColor: "var(--c-canvas)", borderColor: "var(--c-border)" }}
       >
         <div
           className="px-3 py-3 border-b flex items-center gap-2 shrink-0 min-w-[256px]"
-          style={{ borderColor: "#d8d2c4" }}
+          style={{ borderColor: "var(--c-border)" }}
         >
           <button
             onClick={handleNewChat}
             className="flex-1 flex items-center justify-center gap-2 btn-secondary text-sm"
-            style={{ backgroundColor: "#fbfaf6" }}
+            style={{ backgroundColor: "var(--c-surface)" }}
           >
             <Plus size={15} /> New Chat
           </button>
           <button
             onClick={() => setConvListCollapsed(true)}
             className="p-1.5 rounded-md transition-colors shrink-0"
-            style={{ color: "#948a7b" }}
+            style={{ color: "var(--c-ink-faint)" }}
             title="Collapse conversations"
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#1a1714"; (e.currentTarget as HTMLElement).style.backgroundColor = "#efeadf" }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
           >
             <ChevronLeft size={16} />
           </button>
@@ -811,7 +811,7 @@ export default function ChatPage() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5 min-w-[256px]">
           {conversations.length === 0 ? (
-            <p className="px-3 py-4 text-xs" style={{ color: "#948a7b" }}>No conversations yet.</p>
+            <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
           ) : conversations.map((conv) => (
             <div
               key={conv.id}
@@ -823,7 +823,7 @@ export default function ChatPage() {
                   activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted hover:bg-surface-2"
                 }`}
                 style={activeChatId === conv.id
-                  ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
+                  ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
                   : {}
                 }
               >
@@ -832,10 +832,10 @@ export default function ChatPage() {
               <button
                 onClick={(e) => handleDeleteConversation(conv.id, e)}
                 className="absolute right-1 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ color: "#948a7b" }}
+                style={{ color: "var(--c-ink-faint)" }}
                 title="Delete conversation"
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#a04848"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-rose)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
               >
                 <Trash2 size={13} />
               </button>
@@ -845,11 +845,11 @@ export default function ChatPage() {
       </div>
 
       {/* ── Chat area ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col relative" style={{ backgroundColor: "#fbfaf6" }}>
+      <div className="flex-1 flex flex-col relative" style={{ backgroundColor: "var(--c-surface)" }}>
         {/* Chat toolbar */}
         <div
           className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0 overflow-hidden"
-          style={{ borderColor: "#d8d2c4", backgroundColor: "rgba(251,250,246,0.95)", backdropFilter: "blur(4px)" }}
+          style={{ borderColor: "var(--c-border)", backgroundColor: "color-mix(in srgb, var(--c-surface) 95%, transparent)", backdropFilter: "blur(4px)" }}
         >
           {/* min-w-0 + overflow-hidden are both required for truncate to work in flex */}
           <div className="flex-1 flex items-center gap-1 min-w-0 overflow-hidden">
@@ -857,7 +857,7 @@ export default function ChatPage() {
             <button
               onClick={() => setMobileConvOpen(true)}
               className="lg:hidden p-1.5 rounded-md shrink-0"
-              style={{ color: "#948a7b" }}
+              style={{ color: "var(--c-ink-faint)" }}
             >
               <Menu size={18} />
             </button>
@@ -865,10 +865,10 @@ export default function ChatPage() {
               <button
                 onClick={() => setConvListCollapsed(false)}
                 className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors text-xs font-medium shrink-0"
-                style={{ color: "#948a7b" }}
+                style={{ color: "var(--c-ink-faint)" }}
                 title="Show conversations"
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#1a1714"; (e.currentTarget as HTMLElement).style.backgroundColor = "#efeadf" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
               >
                 <PanelLeft size={15} />
                 <span>Chats</span>
@@ -877,7 +877,7 @@ export default function ChatPage() {
 
             <h1
               className="text-sm font-medium truncate min-w-0 flex-1"
-              style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}
+              style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}
             >
               {activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")}
             </h1>
@@ -888,11 +888,11 @@ export default function ChatPage() {
             className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0"
             style={isFocusMode
               ? { backgroundColor: "#e3ede9", color: "#2d5a4f" }
-              : { color: "#948a7b" }
+              : { color: "var(--c-ink-faint)" }
             }
             title={isFocusMode ? "Exit focus mode" : "Enter focus mode"}
-            onMouseEnter={e => { if (!isFocusMode) { (e.currentTarget as HTMLElement).style.color = "#1a1714"; (e.currentTarget as HTMLElement).style.backgroundColor = "#efeadf" } }}
-            onMouseLeave={e => { if (!isFocusMode) { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" } }}
+            onMouseEnter={e => { if (!isFocusMode) { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" } }}
+            onMouseLeave={e => { if (!isFocusMode) { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" } }}
           >
             {isFocusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             {isFocusMode ? "Exit focus" : "Focus"}
@@ -902,9 +902,9 @@ export default function ChatPage() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
           {allMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "#948a7b" }}>
-              <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}>TARS</p>
-              <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "#6b6357" }}>
+            <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
+              <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>TARS</p>
+              <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
                 &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
               </p>
             </div>
@@ -936,7 +936,7 @@ export default function ChatPage() {
         {/* Gradient fade creates a soft visual lift from the message stream */}
         <div
           className="shrink-0 px-3 pb-3 pt-0"
-          style={{ background: "linear-gradient(to bottom, rgba(251,250,246,0) 0%, #fbfaf6 28px)" }}
+          style={{ background: "linear-gradient(to bottom, transparent 0%, var(--c-surface) 28px)" }}
         >
           <div className="max-w-3xl mx-auto">
 
@@ -947,16 +947,16 @@ export default function ChatPage() {
                   <div
                     key={i}
                     className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs"
-                    style={{ backgroundColor: "#efeadf", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                    style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
                   >
                     {file.type.startsWith("image/") ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={URL.createObjectURL(file)} alt={file.name} className="size-6 rounded object-cover shrink-0" />
                     ) : (
-                      <Paperclip size={11} style={{ color: "#6b6357", flexShrink: 0 }} />
+                      <Paperclip size={11} style={{ color: "var(--c-ink-muted)", flexShrink: 0 }} />
                     )}
                     <span className="max-w-[120px] truncate">{file.name}</span>
-                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} style={{ color: "#948a7b" }}>
+                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} style={{ color: "var(--c-ink-faint)" }}>
                       <X size={11} />
                     </button>
                   </div>
@@ -968,8 +968,8 @@ export default function ChatPage() {
             <div
               className="rounded-2xl transition-shadow"
               style={{
-                backgroundColor: "#fbfaf6",
-                border: "1px solid #d8d2c4",
+                backgroundColor: "var(--c-surface)",
+                border: "1px solid var(--c-border)",
                 boxShadow: "0 4px 16px rgba(26,23,20,0.08), 0 1px 3px rgba(26,23,20,0.06)",
               }}
             >
@@ -986,20 +986,20 @@ export default function ChatPage() {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
                 }}
                 className="w-full bg-transparent border-none focus:ring-0 resize-none text-sm focus:outline-none px-4 pt-3 pb-1"
-                style={{ minHeight: 44, maxHeight: 180, color: "#1a1714", lineHeight: "1.5" }}
+                style={{ minHeight: 44, maxHeight: 180, color: "var(--c-ink)", lineHeight: "1.5" }}
                 placeholder="Ask anything or command an agent…"
                 rows={1}
                 disabled={busy}
               />
 
               <div className="flex items-center justify-between px-2 pb-2">
-                <div className="flex gap-0.5" style={{ color: "#948a7b" }}>
+                <div className="flex gap-0.5" style={{ color: "var(--c-ink-faint)" }}>
                   <label
                     htmlFor="chat-attach-file"
                     title="Attach file"
                     className="p-1.5 rounded-lg transition-colors cursor-pointer"
                     style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <Paperclip size={16} />
@@ -1009,7 +1009,7 @@ export default function ChatPage() {
                     title="Take photo"
                     className="p-1.5 rounded-lg transition-colors cursor-pointer"
                     style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <Camera size={16} />
@@ -1017,7 +1017,7 @@ export default function ChatPage() {
                   <button
                     title="Voice memo"
                     className="p-1.5 rounded-lg transition-colors"
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <Mic size={16} />
@@ -1028,7 +1028,7 @@ export default function ChatPage() {
                   <button
                     onClick={handleStop}
                     className="p-2 rounded-xl transition-opacity"
-                    style={{ backgroundColor: "#1a1714", color: "#fbfaf6" }}
+                    style={{ backgroundColor: "var(--c-ink)", color: "var(--c-canvas)" }}
                     title="Stop generating"
                     onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
                     onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
@@ -1040,7 +1040,7 @@ export default function ChatPage() {
                     onClick={handleSend}
                     disabled={!inputValue.trim() && attachments.length === 0}
                     className="p-2 rounded-xl transition-opacity disabled:opacity-30"
-                    style={{ backgroundColor: "#2d5a4f", color: "#fbfaf6" }}
+                    style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
                     onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
                     onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                   >
@@ -1054,7 +1054,7 @@ export default function ChatPage() {
             <input ref={fileInputRef} id="chat-attach-file" type="file" multiple accept=".pdf,.docx,.txt,.md,image/*" className="hidden" onChange={handleFileChange} />
             <input ref={cameraInputRef} id="chat-attach-camera" type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
-            <p className="text-center mt-2 text-[10px]" style={{ color: "#c4bdb2" }}>
+            <p className="text-center mt-2 text-[10px]" style={{ color: "var(--c-ink-faint)" }}>
               TARS can make mistakes. Verify important information.
             </p>
           </div>

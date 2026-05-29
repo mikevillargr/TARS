@@ -133,7 +133,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   }, [code, language])
 
   return (
-    <div className="my-3 rounded-xl overflow-x-auto max-w-full" style={{ border: "1px solid #2a2a2a" }}>
+    <div className="my-3 rounded-xl overflow-hidden max-w-full w-full" style={{ border: "1px solid #2a2a2a" }}>
       {/* Header bar */}
       <div
         className="flex items-center justify-between px-3 py-1.5"
@@ -166,21 +166,23 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
         </div>
       </div>
 
-      <SyntaxHighlighter
-        language={language || "text"}
-        style={oneDark}
-        customStyle={{
-          margin: 0,
-          borderRadius: 0,
-          fontSize: "0.75rem",
-          lineHeight: "1.5",
-          padding: "1rem",
-          background: "#1a1a1a",
-          overflowX: "auto",
-        }}
-      >
-        {code}
-      </SyntaxHighlighter>
+      {/* Scroll wrapper: the pre inside SyntaxHighlighter scrolls, not the page */}
+      <div style={{ overflowX: "auto" }}>
+        <SyntaxHighlighter
+          language={language || "text"}
+          style={oneDark}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: "0.75rem",
+            lineHeight: "1.5",
+            padding: "1rem",
+            background: "#1a1a1a",
+          }}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
     </div>
   )
 }
@@ -190,7 +192,7 @@ function InlineCode({ children }: { children: React.ReactNode }) {
   return (
     <code
       className="px-1.5 py-0.5 rounded text-[0.8em] font-mono"
-      style={{ backgroundColor: "#efeadf", color: "#b45309", border: "1px solid #d8d2c4" }}
+      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)", border: "1px solid var(--c-border)" }}
     >
       {children}
     </code>
@@ -223,13 +225,13 @@ export function MessageContent({ content }: { content: string }) {
 
           // Headings
           h1: ({ children }) => (
-            <h1 className="text-lg font-semibold mt-4 mb-2 first:mt-0" style={{ color: "#1a1714" }}>{children}</h1>
+            <h1 className="text-lg font-semibold mt-4 mb-2 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-base font-semibold mt-3 mb-1.5 first:mt-0" style={{ color: "#1a1714" }}>{children}</h2>
+            <h2 className="text-base font-semibold mt-3 mb-1.5 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-sm font-semibold mt-2 mb-1 first:mt-0" style={{ color: "#1a1714" }}>{children}</h3>
+            <h3 className="text-sm font-semibold mt-2 mb-1 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h3>
           ),
 
           // Paragraphs
@@ -258,12 +260,12 @@ export function MessageContent({ content }: { content: string }) {
 
           // Tables
           table: ({ children }) => (
-            <div className="my-3 overflow-x-auto rounded-lg" style={{ border: "1px solid #d8d2c4" }}>
+            <div className="my-3 overflow-x-auto rounded-lg" style={{ border: "1px solid var(--c-border)" }}>
               <table className="text-sm w-full">{children}</table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead style={{ backgroundColor: "#efeadf" }}>{children}</thead>
+            <thead style={{ backgroundColor: "var(--c-surface-2)" }}>{children}</thead>
           ),
           th: ({ children }) => (
             <th className="px-3 py-2 text-left text-xs font-semibold" style={{ color: "#6b6357", borderBottom: "1px solid #d8d2c4" }}>
@@ -278,7 +280,7 @@ export function MessageContent({ content }: { content: string }) {
           blockquote: ({ children }) => (
             <blockquote
               className="my-2 pl-3 py-1 text-sm italic"
-              style={{ borderLeft: "3px solid #2d5a4f", color: "#6b6357" }}
+              style={{ borderLeft: "3px solid var(--c-moss)", color: "var(--c-ink-muted)" }}
             >
               {children}
             </blockquote>
@@ -286,15 +288,15 @@ export function MessageContent({ content }: { content: string }) {
 
           // Bold / italic
           strong: ({ children }) => (
-            <strong className="font-semibold" style={{ color: "#1a1714" }}>{children}</strong>
+            <strong className="font-semibold" style={{ color: "var(--c-ink)" }}>{children}</strong>
           ),
           em: ({ children }) => (
-            <em className="italic" style={{ color: "#4a4540" }}>{children}</em>
+            <em className="italic" style={{ color: "var(--c-ink-muted)" }}>{children}</em>
           ),
 
           // Horizontal rule
           hr: () => (
-            <hr className="my-3" style={{ borderColor: "#d8d2c4" }} />
+            <hr className="my-3" style={{ borderColor: "var(--c-border)" }} />
           ),
 
           // Links — open in new tab
@@ -304,7 +306,7 @@ export function MessageContent({ content }: { content: string }) {
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-2 hover:opacity-80 transition-opacity"
-              style={{ color: "#2d5a4f" }}
+              style={{ color: "var(--c-moss)" }}
             >
               {children}
             </a>
