@@ -131,6 +131,28 @@ async def ingest_text(
     )
 
 
+async def ingest_document(
+    db: AsyncSession,
+    user_id: str,
+    content: str,
+    title: str = "",
+    personal_note: str = "",
+    tags: List[str] = [],
+    domain: str = "work",
+) -> KnowledgeItem:
+    """Save a rich document created in the WYSIWYG editor (Markdown content)."""
+    return await _ingest_content(
+        db=db,
+        user_id=user_id,
+        item_type="document",
+        content=content,
+        title=title or content[:60],
+        personal_note=personal_note,
+        tags=tags,
+        domain=domain,
+    )
+
+
 async def _ingest_content(
     db: AsyncSession,
     user_id: str,

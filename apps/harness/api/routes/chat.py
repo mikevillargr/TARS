@@ -550,7 +550,7 @@ async def send_message(
                     if name == "save_to_second_brain":
                         try:
                             from memory import second_brain as _sb
-                            await _sb.ingest_text(
+                            await _sb.ingest_document(
                                 bg_db,
                                 user_id,
                                 content=tool_input["content"],
