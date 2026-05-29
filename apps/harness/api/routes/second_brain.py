@@ -58,6 +58,28 @@ class UpdateItemRequest(BaseModel):
     personal_note: Optional[str] = None
     tags: Optional[List[str]] = None
     domain: Optional[str] = None
+    clean_content: Optional[str] = None   # document content edit — triggers re-embed + re-chunk
+
+
+class IngestDocumentRequest(BaseModel):
+    content: str
+    title: str = ""
+    personal_note: str = ""
+    tags: List[str] = []
+    domain: str = "work"
+
+
+class EnhanceRequest(BaseModel):
+    selected_text: str
+    action: str  # "improve"|"shorten"|"expand"|"rephrase"|"continue"|"custom"
+    custom_prompt: Optional[str] = None
+    document_context: Optional[str] = None
+
+
+class GenerateRequest(BaseModel):
+    prompt: str
+    document_context: Optional[str] = None   # existing doc text (style/topic context)
+    cursor_context: Optional[str] = None      # text just before the cursor
 
 
 class SearchRequest(BaseModel):
@@ -138,6 +160,31 @@ async def update_item(
         item.tags = body.tags
     if body.domain is not None:
         item.domain = body.domain
+    if body.clean_content is not None:
+        from sqlalchemy import delete as _delete
+        from memory.embeddings import embed_one, embed
+        from memory.chunker import chunk_text
+        item.clean_content = body.clean_content
+        item.raw_content = body.clean_content
+        # Re-compute item-level embedding
+        summary_text = " ".join(body.clean_content.split()[:800])
+        item.embedding = embed_one(summary_text) if summary_text else None
+        item.summary = summary_text[:500] if summary_text else None
+        # Delete old chunks and re-chunk
+        await db.execute(
+            _delete(DocumentChunk).where(DocumentChunk.knowledge_item_id == item_id)
+        )
+        chunks = chunk_text(body.clean_content)
+        if chunks:
+            chunk_embeddings = embed(chunks)
+            for i, (chunk_str, emb) in enumerate(zip(chunks, chunk_embeddings)):
+                db.add(DocumentChunk(
+                    knowledge_item_id=item.id,
+                    chunk_index=i,
+                    content=chunk_str,
+                    embedding=emb,
+                    token_count=len(chunk_str.split()),
+                ))
 
     await db.commit()
     await db.refresh(item)
@@ -198,6 +245,145 @@ async def ingest_text(
         domain=body.domain,
     )
     return item
+
+
+@router.post("/ingest/document", response_model=KnowledgeItemOut, status_code=201)
+async def ingest_document(
+    body: IngestDocumentRequest,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    item = await second_brain.ingest_document(
+        db, user_id, body.content,
+        title=body.title,
+        personal_note=body.personal_note,
+        tags=body.tags,
+        domain=body.domain,
+    )
+    return item
+
+
+@router.post("/ai/enhance")
+async def ai_enhance(
+    body: EnhanceRequest,
+    user_id: str = Depends(require_auth),
+):
+    from fastapi.responses import StreamingResponse
+    import anthropic as _anthropic
+    from core.config import settings
+    from core.streaming import sse_event, sse_done
+
+    action_prompts = {
+        "improve": "Improve the clarity, flow, and impact of this text. Keep approximately the same length and preserve the core meaning.",
+        "shorten": "Shorten this text significantly while preserving the key points.",
+        "expand": "Expand this text with more detail, context, or examples. Keep the same style.",
+        "rephrase": "Rephrase this text in a different way while keeping the exact same meaning.",
+        "continue": "Continue writing from where this text ends. Match the style, tone, and context.",
+        "custom": body.custom_prompt or "Rewrite this text to be better.",
+    }
+
+    system_prompt = (
+        "You are a precise writing assistant. "
+        "Return ONLY the replacement text — no preamble, no explanation, no surrounding quotes. "
+        "Preserve markdown formatting (bold, headers, lists, etc.) where present."
+    )
+
+    context_block = (
+        f"\n\nDocument context (for reference only — do not reproduce it):\n{body.document_context[:1500]}"
+        if body.document_context else ""
+    )
+    user_message = (
+        f"{action_prompts[body.action]}\n\n"
+        f"Text:\n{body.selected_text}"
+        f"{context_block}"
+    )
+
+    async def generate():
+        try:
+            client = _anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            async with client.messages.stream(
+                model=settings.tier1_model,
+                max_tokens=1024,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield sse_event({"type": "chunk", "text": text})
+        except Exception as exc:
+            yield sse_event({"type": "error", "message": str(exc)})
+        finally:
+            yield sse_done()
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/ai/generate")
+async def ai_generate(
+    body: GenerateRequest,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Freestyle generation with full TARS context.
+    Uses Sonnet + context assembler (memories, calendar, tasks, meetings, second brain).
+    Streams SSE chunks.
+    """
+    from fastapi.responses import StreamingResponse
+    import anthropic as _anthropic
+    from core.config import settings
+    from core.streaming import sse_event, sse_done
+    from core import context_assembler
+    from core.model_client import ModelTier
+
+    # Build full TARS system prompt (same quality as the chat window)
+    system_prompt = await context_assembler.assemble(
+        user_id=user_id,
+        query=body.prompt,
+        db=db,
+        tier=ModelTier.TIER3,
+    )
+    system_prompt += (
+        "\n\n[DOCUMENT WRITING MODE]\n"
+        "You are writing content directly into a document. "
+        "Return ONLY the generated text — no preamble, no meta-commentary, no surrounding quotes. "
+        "Use markdown formatting naturally (headers, bold, lists, etc.) where it fits. "
+        "Match the style and tone of any existing document content provided."
+    )
+
+    # Build the user message
+    parts: list[str] = []
+    if body.document_context:
+        parts.append(f"Existing document content (for style/context — do not repeat it):\n{body.document_context[:2000]}")
+    if body.cursor_context:
+        parts.append(f"Text immediately before the cursor:\n{body.cursor_context[-600:]}")
+    parts.append(f"Write: {body.prompt}")
+    user_message = "\n\n".join(parts)
+
+    async def generate():
+        try:
+            client = _anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            async with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=2048,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_message}],
+            ) as stream:
+                async for text in stream.text_stream:
+                    yield sse_event({"type": "chunk", "text": text})
+        except Exception as exc:
+            yield sse_event({"type": "error", "message": str(exc)})
+        finally:
+            yield sse_done()
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.post("/search", response_model=List[SearchResultOut])

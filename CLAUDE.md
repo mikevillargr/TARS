@@ -59,8 +59,8 @@ Humor setting: 75%.
 | Database | Postgres + pgvector | Structured data + semantic search |
 | Queue | Redis + BullMQ | Cron jobs + async task queue |
 | Memory | Mnemon + pgvector | Episodic memory layer |
-| Local inference | Ollama on RunPod Serverless | GPU on demand, network volume for model persistence |
-| Frontier | Anthropic API direct | No OpenRouter, direct call |
+| Tier 2 inference | RunPod Serverless | GPU on demand, model set via WORKHORSE_MODEL |
+| Tier 1 + Tier 3 | Anthropic API direct | Haiku (fast) + Sonnet (frontier/tools) |
 | Agentic executor | Claude Code via subprocess | Non-interactive mode, stdout capture |
 | Monorepo | Turborepo | Cached builds, parallel deploys |
 | Containerization | Docker + Docker Compose | Dev and prod parity |
@@ -94,41 +94,39 @@ Humor setting: 75%.
 ```
 Every request
     |
-Llama 3.2 3B classifier (~100ms, CPU on KVM4)
+Claude Haiku classifier (~200ms, Anthropic API)
     |
-    +-- Tier 1 (simple/fast) -----> Qwen3 8B via Ollama/RunPod
+    +-- Tier 1 (simple/fast) -----> Claude Haiku via Anthropic API
     |   "What's on my calendar"     ~500ms
     |   "Mark that task done"
     |
-    +-- Tier 2 (most tasks) -------> Qwen3 32B via Ollama/RunPod
-    |   Email summarization          ~2-4s
+    +-- Tier 2 (most tasks) -------> RunPod Serverless GPU
+    |   Email summarization          ~2-4s (warm); cold falls back to Haiku/Sonnet
     |   Meeting extraction
     |   Coding questions
     |   Day-to-day assistant work
     |
-    +-- Tier 3 (frontier) ---------> Claude Sonnet/Opus via Anthropic API
+    +-- Tier 3 (frontier + tools) -> Claude Sonnet via Anthropic API
         Client deliverables          ~3-8s
-        Agentic job planning
+        All tool calls (tasks, calendar, memory, meetings, search)
         Long document analysis
         Complex reasoning
-        Low-confidence escalation from Tier 2
 ```
 
 ### Model Summary
 
-| Role | Model | VRAM | Notes |
-|---|---|---|---|
-| Router + Tier 1 | Qwen3 8B | ~6GB | Outperforms prev-gen 14B, fast |
-| Workhorse | Qwen3 32B | ~20GB | Matches Qwen2.5-72B quality, 128K ctx |
-| Future eval | Kimi K2.6 (32B active) | ~20GB | MoE 1T params, drop-in swap when stable |
-| Frontier | Claude Sonnet/Opus | - | Anthropic API direct |
-| Embeddings | nomic-embed-text | <2GB | Powers pgvector semantic search |
+| Role | Model | Notes |
+|---|---|---|
+| Classifier + Tier 1 | Claude Haiku | Fast, cheap, always available via Anthropic API |
+| Tier 2 workhorse | RunPod GPU | Model configured via `WORKHORSE_MODEL` env var |
+| Tier 3 frontier | Claude Sonnet | Tool use, long context, client-facing work |
+| Embeddings | nomic-embed-text | pgvector semantic search |
 
-### Escalation Logic
-```python
-response = await qwen32b.complete(prompt)
-if response.confidence < threshold or response.flagged:
-    response = await claude.complete(prompt, context=response.draft)
+### Cold-start fallback
+```
+RunPod Tier 2 unavailable →
+  message ≤ 500 chars → Haiku (instant)
+  message > 500 chars → Sonnet (full quality)
 ```
 
 ---

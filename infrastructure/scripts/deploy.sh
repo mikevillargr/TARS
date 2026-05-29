@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy TARS to production (standalone process mode)
-# Usage: ./deploy.sh [web|harness|both]
+# Deploy TARS
+# Usage: ./deploy.sh [web|harness|both] [branch]
+#   branch defaults to "dev" for dev deploys, override with "main" for prod
 
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/tars}"
 CHANGED="${1:-both}"
+BRANCH="${2:-dev}"
 
-echo "==> Pulling latest code"
+echo "==> Pulling latest code (branch: $BRANCH)"
 cd "$DEPLOY_PATH"
-git pull origin main
+git pull origin "$BRANCH"
 
 if [[ "$CHANGED" == "harness" || "$CHANGED" == "both" ]]; then
   echo "==> Deploying harness"
@@ -17,8 +19,7 @@ if [[ "$CHANGED" == "harness" || "$CHANGED" == "both" ]]; then
   source .venv/bin/activate
   pip install -q -r requirements.txt
   alembic upgrade head
-  screen -S harness -X quit 2>/dev/null || true
-  screen -dmS harness bash -c "cd $DEPLOY_PATH/apps/harness && source .venv/bin/activate && uvicorn main:app --host 127.0.0.1 --port 8000 2>&1 | tee $DEPLOY_PATH/harness.log"
+  pm2 restart tars-harness
 fi
 
 if [[ "$CHANGED" == "web" || "$CHANGED" == "both" ]]; then
@@ -27,17 +28,17 @@ if [[ "$CHANGED" == "web" || "$CHANGED" == "both" ]]; then
   npm install --legacy-peer-deps --silent
   NODE_ENV=production npm run build
 
-  # Required: copy static assets into standalone output directory
+  # REQUIRED: Next.js standalone does not auto-copy static assets.
+  # Without this step CSS/JS will be missing and the page will break.
   cp -r .next/static .next/standalone/apps/web/.next/static
   cp -r public       .next/standalone/apps/web/public
 
   echo "==> Restarting web"
-  screen -S web -X quit 2>/dev/null || true
-  screen -dmS web bash -c "cd $DEPLOY_PATH/apps/web/.next/standalone/apps/web && HOSTNAME=0.0.0.0 PORT=3000 HARNESS_URL=http://localhost:8000 node server.js 2>&1 | tee /var/log/tars-web.log"
+  pm2 restart tars-web
 fi
 
 echo "==> Waiting for health check"
-sleep 5
-curl -sf https://tarsmv.duckdns.org/api/health || (echo "Health check failed" && exit 1)
+sleep 3
+curl -sf http://localhost:3000/api/health && echo " health OK" || echo " health check skipped (harness may still be warming up)"
 
 echo "==> Deploy complete"

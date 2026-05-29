@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Lora, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -28,6 +29,9 @@ export const metadata: Metadata = {
     title: "TARS",
   },
   icons: {
+    icon: [
+      { url: "/tars-avatar.svg", type: "image/svg+xml" },
+    ],
     apple: "/apple-touch-icon.png",
   },
 };
@@ -48,11 +52,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${inter.variable} ${lora.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
+      {/* Blocking script: applies .dark class before any render to prevent flash */}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('tars-theme')||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();` }} />
+      </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ServiceWorkerRegister />
-        {children}
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

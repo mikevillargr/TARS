@@ -102,10 +102,10 @@ export default function MemoryPage() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-canvas">
       {/* Header */}
-      <div className="px-6 py-5 border-b bg-surface shrink-0" style={{ borderColor: "#d8d2c4" }}>
+      <div className="px-6 py-5 border-b bg-surface shrink-0" style={{ borderColor: "var(--c-border)" }}>
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="font-semibold text-2xl flex items-center gap-2 text-[#1a1714]" style={{ fontFamily: "var(--font-heading), serif" }}>
+            <h1 className="font-semibold text-2xl flex items-center gap-2" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>
               <Database size={22} className="text-moss" /> Memory Browser
             </h1>
             <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 text-sm">
@@ -161,13 +161,13 @@ export default function MemoryPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "#b8651a" }}>
-                    <Zap size={12} style={{ fill: "#b8651a" }} /> {mem.importance}/5
+                  <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "var(--c-amber)" }}>
+                    <Zap size={12} style={{ fill: "var(--c-amber)" }} /> {mem.importance}/5
                   </div>
                   <button
                     onClick={() => handleDelete(mem.id)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-ink-muted"
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc"; (e.currentTarget as HTMLElement).style.color = "#a04848" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)"; (e.currentTarget as HTMLElement).style.color = "var(--c-rose)" }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.color = "" }}
                   >
                     <Trash2 size={14} />
@@ -188,7 +188,7 @@ export default function MemoryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/30 backdrop-blur-sm">
           <div className="bg-surface rounded-xl shadow-xl w-full max-w-lg mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-lg text-[#1a1714]" style={{ fontFamily: "var(--font-heading), serif" }}>Add Memory</h2>
+              <h2 className="font-semibold text-lg" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>Add Memory</h2>
               <button onClick={() => setShowAdd(false)} className="p-1 text-ink-muted hover:text-ink"><X size={18} /></button>
             </div>
             <textarea

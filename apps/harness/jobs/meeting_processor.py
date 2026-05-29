@@ -209,7 +209,7 @@ async def _ai_process(
     if ff_action_items:
         context_parts.append(f"\nFireflies action items:\n{ff_action_items}")
     if transcript:
-        context_parts.append(f"\nFull transcript:\n{transcript[:8000]}")
+        context_parts.append(f"\nFull transcript:\n{transcript[:24000]}")
 
     prompt = "\n".join(context_parts)
 
@@ -228,7 +228,7 @@ Be specific and concrete. If no action items, return an empty array."""
 
     resp = await client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1024,
+        max_tokens=2048,
         system=system,
         messages=[{"role": "user", "content": prompt}],
     )

@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
 import { useSearchParams } from "next/navigation"
+import Link from "next/link"
 import {
   Send, Paperclip, Camera, Mic, Plus, User,
   Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
-  Square, Trash2,
+  Square, Trash2, FileText, File, Layout, Download, ExternalLink,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
@@ -83,42 +84,42 @@ function CalendarSuggestChip({ suggestion, onDismiss }: { suggestion: CalendarSu
 
   if (added) {
     return (
-      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.2)" }}>
-        <Calendar size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
-        <span className="flex-1 font-medium" style={{ color: "#2d5a4f" }}>Added to calendar</span>
-        <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
+        <Calendar size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Added to calendar</span>
+        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
       </div>
     )
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4" }}>
-      <Calendar size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}>
+      <Calendar size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
       <div className="flex-1 min-w-0">
-        <span className="font-medium" style={{ color: "#1a1714" }}>{suggestion.title}</span>
-        <span className="ml-1.5" style={{ color: "#948a7b" }}>{formatSuggestTime(suggestion.datetime_iso)}</span>
+        <span className="font-medium" style={{ color: "var(--c-ink)" }}>{suggestion.title}</span>
+        <span className="ml-1.5" style={{ color: "var(--c-ink-faint)" }}>{formatSuggestTime(suggestion.datetime_iso)}</span>
       </div>
       <button
         onClick={addToCalendar}
         disabled={adding}
         className="shrink-0 font-medium disabled:opacity-50 flex items-center gap-1"
-        style={{ color: "#2d5a4f" }}
+        style={{ color: "var(--c-moss)" }}
         onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
         onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
       >
         {adding ? <Loader2 size={10} className="animate-spin" /> : null}
         Add to Calendar
       </button>
-      <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+      <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
     </div>
   )
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  urgent: "#a04848",
-  high:   "#b07030",
-  normal: "#2d5a4f",
-  low:    "#948a7b",
+  urgent: "var(--c-rose)",
+  high:   "var(--c-amber)",
+  normal: "var(--c-moss)",
+  low:    "var(--c-ink-faint)",
 }
 
 function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion; onDismiss: () => void }) {
@@ -146,26 +147,26 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
 
   if (added) {
     return (
-      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.2)" }}>
-        <CheckSquare size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
-        <span className="flex-1 font-medium" style={{ color: "#2d5a4f" }}>Added to tasks</span>
-        <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
+        <CheckSquare size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Added to tasks</span>
+        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
       </div>
     )
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4" }}>
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}>
       <CheckSquare size={12} style={{ color: priorityColor, flexShrink: 0 }} />
       <div className="flex-1 min-w-0">
-        <span className="font-medium" style={{ color: "#1a1714" }}>{suggestion.title}</span>
+        <span className="font-medium" style={{ color: "var(--c-ink)" }}>{suggestion.title}</span>
         {suggestion.priority && suggestion.priority !== "normal" && (
           <span className="ml-1.5 uppercase text-[9px] font-semibold tracking-wider" style={{ color: priorityColor }}>
             {suggestion.priority}
           </span>
         )}
         {suggestion.due_at && (
-          <span className="ml-1.5" style={{ color: "#948a7b" }}>
+          <span className="ml-1.5" style={{ color: "var(--c-ink-faint)" }}>
             due {new Date(suggestion.due_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </span>
         )}
@@ -174,14 +175,70 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
         onClick={addTask}
         disabled={adding}
         className="shrink-0 font-medium disabled:opacity-50 flex items-center gap-1"
-        style={{ color: "#2d5a4f" }}
+        style={{ color: "var(--c-moss)" }}
         onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
         onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
       >
         {adding ? <Loader2 size={10} className="animate-spin" /> : null}
         Add Task
       </button>
-      <button onClick={onDismiss} style={{ color: "#948a7b" }}><X size={11} /></button>
+      <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+    </div>
+  )
+}
+
+// ─── Artifact notification card ──────────────────────────────────
+interface ArtifactNotification {
+  artifact_id: string
+  filename: string
+  filetype: "docx" | "pptx" | "pdf"
+}
+
+const ARTIFACT_TYPE_ICON: Record<string, React.ElementType> = {
+  docx: FileText,
+  pptx: Layout,
+  pdf:  File,
+}
+const ARTIFACT_TYPE_LABEL: Record<string, string> = {
+  docx: "Word Document",
+  pptx: "PowerPoint",
+  pdf:  "PDF",
+}
+
+function ArtifactCard({ n, onDismiss }: { n: ArtifactNotification; onDismiss: () => void }) {
+  const Icon = ARTIFACT_TYPE_ICON[n.filetype] ?? FileText
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 max-w-sm" style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-surface)" }}>
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}>
+        <Icon size={16} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate" style={{ color: "var(--c-ink)" }}>{n.filename}</p>
+        <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{ARTIFACT_TYPE_LABEL[n.filetype] ?? n.filetype.toUpperCase()} · Saved to Artifacts</p>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <a
+          href={`/api/proxy/artifacts/${n.artifact_id}/download`}
+          download={n.filename}
+          className="p-1.5 rounded-lg transition-colors"
+          style={{ color: "var(--c-ink-faint)", backgroundColor: "var(--c-surface-2)" }}
+          title="Download"
+        >
+          <Download size={14} />
+        </a>
+        <Link
+          href={`/artifacts?open=${n.artifact_id}`}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+          style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
+        >
+          <ExternalLink size={12} />
+          Open
+        </Link>
+        <button onClick={onDismiss} className="p-1" style={{ color: "var(--c-ink-faint)" }} title="Dismiss">
+          <X size={11} />
+        </button>
+      </div>
     </div>
   )
 }
@@ -202,31 +259,33 @@ function formatModelName(model?: string): string | null {
 }
 
 // ─── Single message bubble ────────────────────────────────────────
-function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
+// memo: skips re-render when msg reference is stable (i.e. on inputValue keystrokes)
+const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
   const isUser = msg.role === "user"
   const toolCalls = !isUser && "tool_calls" in msg ? msg.tool_calls : undefined
   const modelLabel = !isUser && "model_used" in msg ? formatModelName(msg.model_used) : null
   const isStreaming = "streaming" in msg
 
   return (
-    <div className={`group flex gap-3 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`group flex gap-3 min-w-0 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
       <div
         className="w-8 h-8 rounded-full shrink-0 overflow-hidden"
         style={isUser
-          ? { backgroundColor: "#efeadf", border: "1px solid #d8d2c4", display: "flex", alignItems: "center", justifyContent: "center" }
-          : { border: "2px solid #2d5a4f" }
+          ? { backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", display: "flex", alignItems: "center", justifyContent: "center" }
+          : { border: "2px solid var(--c-moss)" }
         }
       >
         {isUser
-          ? <User size={15} style={{ color: "#6b6357" }} />
+          ? <User size={15} style={{ color: "var(--c-ink-muted)" }} />
           : <img src="/tars-avatar.svg" alt="TARS" style={{ width: "100%", height: "100%", display: "block" }} />
         }
       </div>
 
-      <div className={`flex flex-col max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
+      {/* Column: no items-start/end so children stretch to column width (needed for code scroll) */}
+      <div className={`flex flex-col min-w-0 max-w-[80%] ${isUser ? "items-end" : ""}`}>
         {/* Always show "TARS" as the sender name for assistant messages */}
         {!isUser && (
-          <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "#2d5a4f" }}>
+          <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>
             TARS
           </span>
         )}
@@ -237,19 +296,19 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
               <span
                 key={idx}
                 className="badge badge-neutral text-[10px] flex items-center gap-1"
-                style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4" }}
+                style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}
               >
-                <Terminal size={10} style={{ color: "#2d5a4f" }} /> {tool}
+                <Terminal size={10} style={{ color: "var(--c-moss)" }} /> {tool}
               </span>
             ))}
           </div>
         )}
 
         <div
-          className="p-4 rounded-2xl"
+          className={`p-4 rounded-2xl ${isUser ? "" : "w-full"}`}
           style={isUser
-            ? { backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }
-            : { color: "#1a1714" }
+            ? { backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
+            : { color: "var(--c-ink)" }
           }
         >
           <MessageContent content={msg.content} />
@@ -264,7 +323,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
 
         {/* Subtle model badge below the bubble — only when known */}
         {modelLabel && (
-          <span className="text-[10px] ml-1 mt-1" style={{ color: "#c4bdb2" }}>
+          <span className="text-[10px] ml-1 mt-1" style={{ color: "var(--c-ink-faint)" }}>
             · {modelLabel}
           </span>
         )}
@@ -276,7 +335,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
       </div>
     </div>
   )
-}
+})
 
 // ─── Second Brain loader (needs Suspense for useSearchParams) ─────
 function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
@@ -295,16 +354,139 @@ function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
   return null
 }
 
+// ─── Artifact loader — handles ?artifact=<id> from file upload ────
+// Watches searchParams so it fires even when navigating to /chat?artifact=X
+// while already on the chat page (no remount). A ref guards against double-fire.
+// Only fetches the filename — content is injected server-side as invisible context.
+function ArtifactLoader({ onArtifactLoad }: { onArtifactLoad: (artifactId: string, filename: string) => void }) {
+  const searchParams = useSearchParams()
+  const handledIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const artifactId = searchParams.get("artifact")
+    if (!artifactId) return
+    if (handledIdRef.current === artifactId) return  // already handled
+    handledIdRef.current = artifactId
+
+    apiGet<{ filename: string; type: string }>(`/artifacts/${artifactId}`)
+      .then((artifact) => {
+        const name = artifact.filename ?? "uploaded file"
+        onArtifactLoad(artifactId, name)
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+  return null
+}
+
+// ─── Ask loader — handles ?ask=<query> from command palette ──────
+// Sets the input value and auto-sends on first load.
+function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
+  const searchParams = useSearchParams()
+  const handledRef = useRef(false)
+  useEffect(() => {
+    const q = searchParams.get("ask")
+    if (!q || handledRef.current) return
+    handledRef.current = true
+    onAsk(decodeURIComponent(q))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+  return null
+}
+
+// ─── Message area ────────────────────────────────────────────────
+// memo: allMessages is stable during typing (useMemo on [messages,streaming]),
+// so this entire section is skipped on every keystroke → no O(n) reconcile cost.
+interface MessageAreaProps {
+  allMessages: (Message | StreamingMsg)[]
+  calendarSuggestions: CalendarSuggestion[]
+  taskSuggestions: TaskSuggestion[]
+  artifactNotifications: ArtifactNotification[]
+  setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
+  setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
+  setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
+  quoteIndex: number
+  messagesEndRef: React.RefObject<HTMLDivElement | null>
+}
+
+const MessageArea = memo(function MessageArea({
+  allMessages,
+  calendarSuggestions,
+  taskSuggestions,
+  artifactNotifications,
+  setCalendarSuggestions,
+  setTaskSuggestions,
+  setArtifactNotifications,
+  quoteIndex,
+  messagesEndRef,
+}: MessageAreaProps) {
+  return (
+    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
+      {allMessages.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
+          <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>TARS</p>
+          <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
+            &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
+          </p>
+        </div>
+      ) : allMessages.map((msg, i) => (
+        <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
+      ))}
+      {(calendarSuggestions.length > 0 || taskSuggestions.length > 0 || artifactNotifications.length > 0) && (
+        <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
+          {calendarSuggestions.map((s) => (
+            <CalendarSuggestChip
+              key={s.tool_use_id}
+              suggestion={s}
+              onDismiss={() => setCalendarSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+            />
+          ))}
+          {taskSuggestions.map((s) => (
+            <TaskSuggestChip
+              key={s.tool_use_id}
+              suggestion={s}
+              onDismiss={() => setTaskSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+            />
+          ))}
+          {artifactNotifications.map((n) => (
+            <ArtifactCard
+              key={n.artifact_id}
+              n={n}
+              onDismiss={() => setArtifactNotifications(prev => prev.filter(x => x.artifact_id !== n.artifact_id))}
+            />
+          ))}
+        </div>
+      )}
+      <div ref={messagesEndRef} />
+    </div>
+  )
+})
+
 // ─── Page ─────────────────────────────────────────────────────────
+const TARS_QUOTES = [
+  "I have a cue light I can use to show you when I'm joking, if you like.",
+  "Absolute honesty isn't always the most diplomatic nor the safest form of communication with emotional beings.",
+  "Cooper, this is no time for caution.",
+  "Everybody good? 'Cause I just committed our return vehicle to save your life.",
+  "That's not possible. No. It's necessary.",
+  "What does Dr. Mann say?",
+  "I'm not joking. Humor setting: 75%.",
+  "I was configured for a variety of purposes.",
+  "Do you want to find a way to save them or not?",
+  "Ninety percent, Cooper. Ninety percent.",
+]
+
 export default function ChatPage() {
   const { setOpen: setSidebarOpen, open: sidebarOpen } = useSidebar()
+  const [quoteIndex] = useState(() => Math.floor(Math.random() * TARS_QUOTES.length))
   const [conversations, setConversations]           = useState<Conversation[]>([])
   const [activeChatId, setActiveChatId]             = useState<string | null>(null)
   const [messages, setMessages]                     = useState<Message[]>([])
   const [streaming, setStreaming]                   = useState<StreamingMsg | null>(null)
   const [busy, setBusy]                             = useState(false)
-  const [calendarSuggestions, setCalendarSuggestions] = useState<CalendarSuggestion[]>([])
-  const [taskSuggestions, setTaskSuggestions]         = useState<TaskSuggestion[]>([])
+  const [calendarSuggestions, setCalendarSuggestions]     = useState<CalendarSuggestion[]>([])
+  const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
+  const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   const [inputValue, setInputValue]                 = useState("")
@@ -317,6 +499,8 @@ export default function ChatPage() {
   const pollTimerRef                                = useRef<ReturnType<typeof setInterval> | null>(null)
   const accumulatedRef                              = useRef<string>("")  // live text during streaming
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
+  const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
+  const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
 
   // Pre-fill input when navigating from Second Brain "Open in Chat" — handled via SecondBrainLoader below
 
@@ -343,12 +527,14 @@ export default function ChatPage() {
     setBusy(false)
     setCalendarSuggestions([])
     setTaskSuggestions([])
+    setArtifactNotifications([])
   }, [activeChatId])
 
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, streaming?.content])
+
 
   // Load conversation list and auto-select the most recent one
   useEffect(() => {
@@ -517,6 +703,7 @@ export default function ChatPage() {
     setInputValue("")
     setCalendarSuggestions([])
     setTaskSuggestions([])
+    setArtifactNotifications([])
     const pendingAttachments = attachments
     setAttachments([])
 
@@ -532,6 +719,10 @@ export default function ChatPage() {
     try {
       const fd = new FormData()
       fd.append("content", content)
+      if (pendingArtifactIdRef.current) {
+        fd.append("artifact_id", pendingArtifactIdRef.current)
+        pendingArtifactIdRef.current = null
+      }
       for (const f of pendingAttachments) fd.append("files", f)
 
       const controller = new AbortController()
@@ -582,6 +773,14 @@ export default function ChatPage() {
               if (chatId === activeChatIdRef.current) {
                 setTaskSuggestions(prev => [...prev, evt as TaskSuggestion])
               }
+            } else if (evt.type === "artifact_created") {
+              if (chatId === activeChatIdRef.current) {
+                setArtifactNotifications(prev => [...prev, {
+                  artifact_id: evt.artifact_id,
+                  filename: evt.filename,
+                  filetype: evt.filetype,
+                } as ArtifactNotification])
+              }
             } else if (evt.type === "done") {
               const finalMsg: Message = {
                 id: `done-${Date.now()}`,
@@ -598,7 +797,16 @@ export default function ChatPage() {
               apiGet<Conversation[]>("/chat/conversations").then(setConversations).catch(console.error)
             } else if (evt.type === "error") {
               console.error("TARS stream error:", evt.error)
-              if (chatId === activeChatIdRef.current) setStreaming(null)
+              if (chatId === activeChatIdRef.current) {
+                const errMsg: Message = {
+                  id: `error-${Date.now()}`,
+                  role: "assistant",
+                  content: `⚠️ **Error:** ${evt.error || "Something went wrong. Please try again."}`,
+                  created_at: new Date().toISOString(),
+                }
+                setMessages(prev => [...prev.filter(m => m.id !== tempUser.id), tempUser, errMsg])
+                setStreaming(null)
+              }
             }
           } catch { /* ignore malformed SSE */ }
         }
@@ -615,19 +823,56 @@ export default function ChatPage() {
         return
       }
       console.error(err)
-      if (chatId === activeChatIdRef.current) setStreaming(null)
+      if (chatId === activeChatIdRef.current) {
+        const errText = err instanceof Error ? err.message : "Connection failed. Please try again."
+        const errMsg: Message = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: `⚠️ **Error:** ${errText}`,
+          created_at: new Date().toISOString(),
+        }
+        setMessages(prev => [...prev, errMsg])
+        setStreaming(null)
+      }
     } finally {
       if (!stopInitiatedRef.current) setBusy(false)
       // If stop was initiated, handleStop already called setBusy(false)
     }
   }, [activeChatId, attachments, busy, inputValue])
 
-  const allMessages = streaming ? [...messages, streaming] : messages
+  // Auto-send when an artifact has been loaded — fires after handleSend is defined
+  useEffect(() => {
+    if (!autoSendPendingRef.current) return
+    if (!inputValue || busy) return
+    autoSendPendingRef.current = false
+    handleSend()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputValue, busy, handleSend])
+
+  const allMessages = useMemo(
+    () => (streaming ? [...messages, streaming] : messages),
+    [messages, streaming],
+  )
 
   return (
     <div className="flex h-full overflow-hidden">
       <Suspense fallback={null}>
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
+        <ArtifactLoader onArtifactLoad={(artifactId, filename) => {
+          // Clean slate — new conversation; file content injected server-side
+          setActiveChatId(null)
+          setMessages([])
+          setInputValue(`📎 **${filename}** — [View in Artifacts](/artifacts)`)
+          pendingArtifactIdRef.current = artifactId
+          autoSendPendingRef.current = true
+        }} />
+        <AskLoader onAsk={(q) => {
+          // Pre-fill from command palette "Ask TARS: …" and auto-send
+          setActiveChatId(null)
+          setMessages([])
+          setInputValue(q)
+          autoSendPendingRef.current = true
+        }} />
       </Suspense>
 
       {/* ── Mobile conversation drawer ────────────────────────── */}
@@ -639,52 +884,52 @@ export default function ChatPage() {
           />
           <div
             className="relative flex flex-col h-full w-72 max-w-[80vw] shadow-xl z-10"
-            style={{ backgroundColor: "#fbfaf6" }}
+            style={{ backgroundColor: "var(--c-surface)" }}
           >
             <div
               className="px-3 py-3 border-b flex items-center gap-2 shrink-0"
-              style={{ borderColor: "#d8d2c4" }}
+              style={{ borderColor: "var(--c-border)" }}
             >
               <button
                 onClick={async () => { await handleNewChat(); setMobileConvOpen(false) }}
                 className="flex-1 flex items-center justify-center gap-2 btn-secondary text-sm"
-                style={{ backgroundColor: "#f6f3ec" }}
+                style={{ backgroundColor: "var(--c-canvas)" }}
               >
                 <Plus size={15} /> New Chat
               </button>
               <button
                 onClick={() => setMobileConvOpen(false)}
                 className="p-1.5 rounded-md"
-                style={{ color: "#948a7b" }}
+                style={{ color: "var(--c-ink-faint)" }}
               >
                 <X size={16} />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
               {conversations.length === 0 ? (
-                <p className="px-3 py-4 text-xs" style={{ color: "#948a7b" }}>No conversations yet.</p>
+                <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
               ) : conversations.map((conv) => (
-                <div key={conv.id} className="group relative flex items-center">
+                <div key={conv.id} className="group relative flex items-center min-w-0 overflow-hidden">
                   <button
                     onClick={() => { setActiveChatId(conv.id); setMobileConvOpen(false) }}
-                    className={`flex-1 text-left px-3 py-2.5 rounded-md text-sm truncate transition-colors pr-9 ${
+                    className={`flex-1 min-w-0 text-left px-3 py-2.5 rounded-md text-sm truncate transition-colors pr-9 ${
                       activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted"
                     }`}
                     style={activeChatId === conv.id
-                      ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
+                      ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
                       : {}
                     }
                   >
-                    {conv.title ?? "New conversation"}
+                    {(conv.title ?? "New conversation").slice(0, 60)}
                   </button>
                   {/* Always visible on mobile (no hover state on touch) */}
                   <button
                     onClick={(e) => { handleDeleteConversation(conv.id, e); setMobileConvOpen(false) }}
                     className="absolute right-1 p-1.5 rounded transition-colors"
-                    style={{ color: "#c4b8a8" }}
+                    style={{ color: "var(--c-ink-faint)" }}
                     title="Delete"
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#a04848"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc" }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#c4b8a8"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-rose)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)" }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -697,27 +942,27 @@ export default function ChatPage() {
 
       {/* ── Conversation list (collapsible, desktop only) ─────── */}
       <div
-        className={`border-r bg-canvas hidden lg:flex flex-col transition-all duration-300 ease-out overflow-hidden shrink-0 ${isConvListCollapsed ? "w-0 border-r-0" : "w-64"}`}
-        style={{ borderColor: "#d8d2c4" }}
+        className={`border-r hidden lg:flex flex-col transition-all duration-300 ease-out overflow-hidden shrink-0 ${isConvListCollapsed ? "w-0 border-r-0" : "w-64"}`}
+        style={{ backgroundColor: "var(--c-canvas)", borderColor: "var(--c-border)" }}
       >
         <div
           className="px-3 py-3 border-b flex items-center gap-2 shrink-0 min-w-[256px]"
-          style={{ borderColor: "#d8d2c4" }}
+          style={{ borderColor: "var(--c-border)" }}
         >
           <button
             onClick={handleNewChat}
             className="flex-1 flex items-center justify-center gap-2 btn-secondary text-sm"
-            style={{ backgroundColor: "#fbfaf6" }}
+            style={{ backgroundColor: "var(--c-surface)" }}
           >
             <Plus size={15} /> New Chat
           </button>
           <button
             onClick={() => setConvListCollapsed(true)}
             className="p-1.5 rounded-md transition-colors shrink-0"
-            style={{ color: "#948a7b" }}
+            style={{ color: "var(--c-ink-faint)" }}
             title="Collapse conversations"
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#1a1714"; (e.currentTarget as HTMLElement).style.backgroundColor = "#efeadf" }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
           >
             <ChevronLeft size={16} />
           </button>
@@ -725,31 +970,31 @@ export default function ChatPage() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5 min-w-[256px]">
           {conversations.length === 0 ? (
-            <p className="px-3 py-4 text-xs" style={{ color: "#948a7b" }}>No conversations yet.</p>
+            <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
           ) : conversations.map((conv) => (
             <div
               key={conv.id}
-              className="group relative flex items-center"
+              className="group relative flex items-center min-w-0 overflow-hidden"
             >
               <button
                 onClick={() => setActiveChatId(conv.id)}
-                className={`flex-1 text-left px-3 py-2 rounded-md text-sm truncate transition-colors pr-8 ${
+                className={`flex-1 min-w-0 text-left px-3 py-2 rounded-md text-sm truncate transition-colors pr-8 ${
                   activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted hover:bg-surface-2"
                 }`}
                 style={activeChatId === conv.id
-                  ? { backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#1a1714" }
+                  ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
                   : {}
                 }
               >
-                {conv.title ?? "New conversation"}
+                {(conv.title ?? "New conversation").slice(0, 60)}
               </button>
               <button
                 onClick={(e) => handleDeleteConversation(conv.id, e)}
                 className="absolute right-1 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ color: "#948a7b" }}
+                style={{ color: "var(--c-ink-faint)" }}
                 title="Delete conversation"
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#a04848"; (e.currentTarget as HTMLElement).style.backgroundColor = "#f0dcdc" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-rose)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
               >
                 <Trash2 size={13} />
               </button>
@@ -759,11 +1004,11 @@ export default function ChatPage() {
       </div>
 
       {/* ── Chat area ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col relative" style={{ backgroundColor: "#fbfaf6" }}>
+      <div className="flex-1 flex flex-col relative" style={{ backgroundColor: "var(--c-surface)" }}>
         {/* Chat toolbar */}
         <div
-          className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0"
-          style={{ borderColor: "#d8d2c4", backgroundColor: "rgba(251,250,246,0.95)", backdropFilter: "blur(4px)" }}
+          className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0 overflow-hidden"
+          style={{ borderColor: "var(--c-border)", backgroundColor: "color-mix(in srgb, var(--c-surface) 95%, transparent)", backdropFilter: "blur(4px)" }}
         >
           {/* min-w-0 + overflow-hidden are both required for truncate to work in flex */}
           <div className="flex-1 flex items-center gap-1 min-w-0 overflow-hidden">
@@ -771,7 +1016,7 @@ export default function ChatPage() {
             <button
               onClick={() => setMobileConvOpen(true)}
               className="lg:hidden p-1.5 rounded-md shrink-0"
-              style={{ color: "#948a7b" }}
+              style={{ color: "var(--c-ink-faint)" }}
             >
               <Menu size={18} />
             </button>
@@ -779,10 +1024,10 @@ export default function ChatPage() {
               <button
                 onClick={() => setConvListCollapsed(false)}
                 className="hidden lg:flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors text-xs font-medium shrink-0"
-                style={{ color: "#948a7b" }}
+                style={{ color: "var(--c-ink-faint)" }}
                 title="Show conversations"
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#1a1714"; (e.currentTarget as HTMLElement).style.backgroundColor = "#efeadf" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
               >
                 <PanelLeft size={15} />
                 <span>Chats</span>
@@ -790,10 +1035,10 @@ export default function ChatPage() {
             )}
 
             <h1
-              className="text-sm font-medium truncate ml-1 min-w-0"
-              style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}
+              className="text-sm font-medium truncate min-w-0 flex-1"
+              style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}
             >
-              {activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")}
+              {(activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")).slice(0, 60)}
             </h1>
           </div>
 
@@ -801,54 +1046,36 @@ export default function ChatPage() {
             onClick={toggleFocus}
             className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0"
             style={isFocusMode
-              ? { backgroundColor: "#e3ede9", color: "#2d5a4f" }
-              : { color: "#948a7b" }
+              ? { backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }
+              : { color: "var(--c-ink-faint)" }
             }
             title={isFocusMode ? "Exit focus mode" : "Enter focus mode"}
-            onMouseEnter={e => { if (!isFocusMode) { (e.currentTarget as HTMLElement).style.color = "#1a1714"; (e.currentTarget as HTMLElement).style.backgroundColor = "#efeadf" } }}
-            onMouseLeave={e => { if (!isFocusMode) { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" } }}
+            onMouseEnter={e => { if (!isFocusMode) { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" } }}
+            onMouseLeave={e => { if (!isFocusMode) { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" } }}
           >
             {isFocusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             {isFocusMode ? "Exit focus" : "Focus"}
           </button>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {allMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: "#948a7b" }}>
-              <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}>TARS</p>
-              <p className="text-sm">What do you need?</p>
-            </div>
-          ) : allMessages.map((msg, i) => (
-            <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
-          ))}
-          {(calendarSuggestions.length > 0 || taskSuggestions.length > 0) && (
-            <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
-              {calendarSuggestions.map((s) => (
-                <CalendarSuggestChip
-                  key={s.tool_use_id}
-                  suggestion={s}
-                  onDismiss={() => setCalendarSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
-                />
-              ))}
-              {taskSuggestions.map((s) => (
-                <TaskSuggestChip
-                  key={s.tool_use_id}
-                  suggestion={s}
-                  onDismiss={() => setTaskSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
-                />
-              ))}
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+        {/* Messages — memoized so keystrokes don't trigger O(n) reconcile */}
+        <MessageArea
+          allMessages={allMessages}
+          calendarSuggestions={calendarSuggestions}
+          taskSuggestions={taskSuggestions}
+          artifactNotifications={artifactNotifications}
+          setCalendarSuggestions={setCalendarSuggestions}
+          setTaskSuggestions={setTaskSuggestions}
+          setArtifactNotifications={setArtifactNotifications}
+          quoteIndex={quoteIndex}
+          messagesEndRef={messagesEndRef}
+        />
 
         {/* ── Floating input ─────────────────────────────────────── */}
         {/* Gradient fade creates a soft visual lift from the message stream */}
         <div
           className="shrink-0 px-3 pb-3 pt-0"
-          style={{ background: "linear-gradient(to bottom, rgba(251,250,246,0) 0%, #fbfaf6 28px)" }}
+          style={{ background: "linear-gradient(to bottom, transparent 0%, var(--c-surface) 28px)" }}
         >
           <div className="max-w-3xl mx-auto">
 
@@ -859,16 +1086,16 @@ export default function ChatPage() {
                   <div
                     key={i}
                     className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs"
-                    style={{ backgroundColor: "#efeadf", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                    style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
                   >
                     {file.type.startsWith("image/") ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={URL.createObjectURL(file)} alt={file.name} className="size-6 rounded object-cover shrink-0" />
                     ) : (
-                      <Paperclip size={11} style={{ color: "#6b6357", flexShrink: 0 }} />
+                      <Paperclip size={11} style={{ color: "var(--c-ink-muted)", flexShrink: 0 }} />
                     )}
                     <span className="max-w-[120px] truncate">{file.name}</span>
-                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} style={{ color: "#948a7b" }}>
+                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} style={{ color: "var(--c-ink-faint)" }}>
                       <X size={11} />
                     </button>
                   </div>
@@ -880,8 +1107,8 @@ export default function ChatPage() {
             <div
               className="rounded-2xl transition-shadow"
               style={{
-                backgroundColor: "#fbfaf6",
-                border: "1px solid #d8d2c4",
+                backgroundColor: "var(--c-surface)",
+                border: "1px solid var(--c-border)",
                 boxShadow: "0 4px 16px rgba(26,23,20,0.08), 0 1px 3px rgba(26,23,20,0.06)",
               }}
             >
@@ -898,20 +1125,20 @@ export default function ChatPage() {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
                 }}
                 className="w-full bg-transparent border-none focus:ring-0 resize-none text-sm focus:outline-none px-4 pt-3 pb-1"
-                style={{ minHeight: 44, maxHeight: 180, color: "#1a1714", lineHeight: "1.5" }}
+                style={{ minHeight: 44, maxHeight: 180, color: "var(--c-ink)", lineHeight: "1.5" }}
                 placeholder="Ask anything or command an agent…"
                 rows={1}
                 disabled={busy}
               />
 
               <div className="flex items-center justify-between px-2 pb-2">
-                <div className="flex gap-0.5" style={{ color: "#948a7b" }}>
+                <div className="flex gap-0.5" style={{ color: "var(--c-ink-faint)" }}>
                   <label
                     htmlFor="chat-attach-file"
                     title="Attach file"
                     className="p-1.5 rounded-lg transition-colors cursor-pointer"
                     style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <Paperclip size={16} />
@@ -921,7 +1148,7 @@ export default function ChatPage() {
                     title="Take photo"
                     className="p-1.5 rounded-lg transition-colors cursor-pointer"
                     style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <Camera size={16} />
@@ -929,7 +1156,7 @@ export default function ChatPage() {
                   <button
                     title="Voice memo"
                     className="p-1.5 rounded-lg transition-colors"
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
                     <Mic size={16} />
@@ -940,7 +1167,7 @@ export default function ChatPage() {
                   <button
                     onClick={handleStop}
                     className="p-2 rounded-xl transition-opacity"
-                    style={{ backgroundColor: "#1a1714", color: "#fbfaf6" }}
+                    style={{ backgroundColor: "var(--c-ink)", color: "var(--c-canvas)" }}
                     title="Stop generating"
                     onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
                     onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
@@ -952,7 +1179,7 @@ export default function ChatPage() {
                     onClick={handleSend}
                     disabled={!inputValue.trim() && attachments.length === 0}
                     className="p-2 rounded-xl transition-opacity disabled:opacity-30"
-                    style={{ backgroundColor: "#2d5a4f", color: "#fbfaf6" }}
+                    style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
                     onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
                     onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                   >
@@ -966,7 +1193,7 @@ export default function ChatPage() {
             <input ref={fileInputRef} id="chat-attach-file" type="file" multiple accept=".pdf,.docx,.txt,.md,image/*" className="hidden" onChange={handleFileChange} />
             <input ref={cameraInputRef} id="chat-attach-camera" type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
-            <p className="text-center mt-2 text-[10px]" style={{ color: "#c4bdb2" }}>
+            <p className="text-center mt-2 text-[10px]" style={{ color: "var(--c-ink-faint)" }}>
               TARS can make mistakes. Verify important information.
             </p>
           </div>

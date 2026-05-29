@@ -37,10 +37,10 @@ function relativeTime(iso: string | null): string {
 
 function StatusChip({ status }: { status: CronJob["last_status"] }) {
   const cfg = {
-    ok:      { label: "OK",      color: "#2d5a4f", bg: "#e3ede9", icon: CheckCircle2 },
-    error:   { label: "Error",   color: "#a04848", bg: "#f9ecec", icon: XCircle },
-    running: { label: "Running", color: "#7c6a48", bg: "#f5eddc", icon: Loader2 },
-    pending: { label: "Pending", color: "#948a7b", bg: "#efeadf", icon: Circle },
+    ok:      { label: "OK",      color: "var(--c-moss)",      bg: "var(--c-moss-soft)",  icon: CheckCircle2 },
+    error:   { label: "Error",   color: "var(--c-rose)",      bg: "var(--c-rose-soft)",  icon: XCircle },
+    running: { label: "Running", color: "var(--c-amber)",     bg: "var(--c-amber-soft)", icon: Loader2 },
+    pending: { label: "Pending", color: "var(--c-ink-faint)", bg: "var(--c-surface-2)",  icon: Circle },
   }[status]
 
   const Icon = cfg.icon
@@ -104,35 +104,35 @@ export default function CronPage() {
   }
 
   return (
-    <div className="flex h-full" style={{ backgroundColor: "#f6f3ec" }}>
+    <div className="flex h-full" style={{ backgroundColor: "var(--c-canvas)" }}>
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Header */}
         <div
           className="px-6 py-4 border-b flex items-center justify-between shrink-0"
-          style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}
+          style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}
         >
           <div className="flex items-center gap-3">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ backgroundColor: "#efeadf" }}
+              style={{ backgroundColor: "var(--c-surface-2)" }}
             >
-              <Clock size={17} style={{ color: "#6b6357" }} />
+              <Clock size={17} style={{ color: "var(--c-ink-muted)" }} />
             </div>
             <div>
               <h1
-                className="text-lg font-semibold text-[#1a1714] leading-tight"
-                style={{ fontFamily: "var(--font-heading), serif" }}
+                className="text-lg font-semibold leading-tight"
+                style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}
               >
                 Cron Manager
               </h1>
-              <p className="text-xs text-[#948a7b]">Scheduled recurring tasks</p>
+              <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>Scheduled recurring tasks</p>
             </div>
           </div>
           <button
             onClick={load}
             className="p-2 rounded-lg transition-colors"
-            style={{ color: "#6b6357" }}
+            style={{ color: "var(--c-ink-muted)" }}
             title="Refresh"
           >
             <RefreshCw size={15} />
@@ -143,26 +143,26 @@ export default function CronPage() {
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center h-40">
-              <Loader2 size={20} className="animate-spin" style={{ color: "#948a7b" }} />
+              <Loader2 size={20} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
             </div>
           ) : jobs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-2">
-              <Clock size={28} style={{ color: "#c4bdb2" }} />
-              <p className="text-sm" style={{ color: "#948a7b" }}>No jobs scheduled</p>
+              <Clock size={28} style={{ color: "var(--c-ink-faint)" }} />
+              <p className="text-sm" style={{ color: "var(--c-ink-faint)" }}>No jobs scheduled</p>
             </div>
           ) : (
             <div
               className="rounded-xl overflow-hidden"
-              style={{ backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4" }}
+              style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)" }}
             >
               {/* Column headers */}
               <div
                 className="grid text-[0.65rem] font-semibold uppercase tracking-wider px-4 py-2.5"
                 style={{
                   gridTemplateColumns: "2fr 1.2fr 1.4fr 1.4fr 1fr",
-                  backgroundColor: "#efeadf",
-                  color: "#948a7b",
-                  borderBottom: "1px solid #d8d2c4",
+                  backgroundColor: "var(--c-surface-2)",
+                  color: "var(--c-ink-faint)",
+                  borderBottom: "1px solid var(--c-border)",
                 }}
               >
                 <span>Job</span>
@@ -181,19 +181,19 @@ export default function CronPage() {
                   style={{
                     gridTemplateColumns: "2fr 1.2fr 1.4fr 1.4fr 1fr",
                     alignItems: "center",
-                    borderTop: i > 0 ? "1px solid #e8e2d4" : "none",
-                    backgroundColor: selected?.name === job.name ? "#f0ece4" : "transparent",
+                    borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
+                    backgroundColor: selected?.name === job.name ? "var(--c-surface-2)" : "transparent",
                   }}
                 >
                   <div className="pr-3">
-                    <div className="text-sm font-medium text-[#1a1714] leading-snug">
+                    <div className="text-sm font-medium leading-snug" style={{ color: "var(--c-ink)" }}>
                       {job.name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                     </div>
-                    <div className="text-[11px] text-[#948a7b] mt-0.5 truncate">{job.description}</div>
+                    <div className="text-[11px] mt-0.5 truncate" style={{ color: "var(--c-ink-faint)" }}>{job.description}</div>
                   </div>
-                  <span className="text-xs text-[#6b6357]">{humanInterval(job.interval_sec)}</span>
-                  <span className="text-xs text-[#948a7b]">{relativeTime(job.last_run_at)}</span>
-                  <span className="text-xs text-[#948a7b]">{relativeTime(job.next_run_at)}</span>
+                  <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>{humanInterval(job.interval_sec)}</span>
+                  <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{relativeTime(job.last_run_at)}</span>
+                  <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{relativeTime(job.next_run_at)}</span>
                   <StatusChip status={job.last_status} />
                 </button>
               ))}
@@ -206,16 +206,16 @@ export default function CronPage() {
       {selected && (
         <div
           className="w-72 border-l flex flex-col shrink-0"
-          style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}
+          style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}
         >
           <div
             className="px-4 py-3 border-b flex items-center justify-between"
-            style={{ borderColor: "#d8d2c4" }}
+            style={{ borderColor: "var(--c-border)" }}
           >
-            <span className="text-sm font-semibold text-[#1a1714]">
+            <span className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>
               {selected.name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
             </span>
-            <button onClick={() => setSelected(null)} style={{ color: "#948a7b" }}>
+            <button onClick={() => setSelected(null)} style={{ color: "var(--c-ink-faint)" }}>
               ✕
             </button>
           </div>
@@ -229,22 +229,22 @@ export default function CronPage() {
                 { label: "Last run",  value: relativeTime(selected.last_run_at) },
                 { label: "Next run",  value: relativeTime(selected.next_run_at) },
               ].map(({ label, value }) => (
-                <div key={label} className="rounded-lg p-2.5" style={{ backgroundColor: "#efeadf" }}>
-                  <div className="text-[10px] text-[#948a7b] mb-0.5">{label}</div>
-                  <div className="text-xs font-medium text-[#1a1714]">{value}</div>
+                <div key={label} className="rounded-lg p-2.5" style={{ backgroundColor: "var(--c-surface-2)" }}>
+                  <div className="text-[10px] mb-0.5" style={{ color: "var(--c-ink-faint)" }}>{label}</div>
+                  <div className="text-xs font-medium" style={{ color: "var(--c-ink)" }}>{value}</div>
                 </div>
               ))}
             </div>
 
             {/* Status */}
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[#948a7b] mb-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>
                 Status
               </div>
               <div className="flex items-center gap-2">
                 <StatusChip status={selected.last_status} />
                 {selected.last_error && (
-                  <span className="text-[11px]" style={{ color: "#a04848" }}>
+                  <span className="text-[11px]" style={{ color: "var(--c-rose)" }}>
                     {selected.last_error}
                   </span>
                 )}
@@ -253,10 +253,10 @@ export default function CronPage() {
 
             {/* Description */}
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-[#948a7b] mb-1.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
                 Description
               </div>
-              <p className="text-xs leading-relaxed" style={{ color: "#6b6357" }}>
+              <p className="text-xs leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
                 {selected.description}
               </p>
             </div>
@@ -266,7 +266,7 @@ export default function CronPage() {
               onClick={() => runNow(selected)}
               disabled={running === selected.name || selected.last_status === "running"}
               className="w-full flex items-center justify-center gap-2 text-sm py-2 rounded-xl font-medium transition-opacity disabled:opacity-50"
-              style={{ backgroundColor: "#2d5a4f", color: "#fff" }}
+              style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
             >
               {running === selected.name || selected.last_status === "running" ? (
                 <><Loader2 size={14} className="animate-spin" /> Running…</>

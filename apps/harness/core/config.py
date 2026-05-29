@@ -29,14 +29,14 @@ class Settings(BaseSettings):
 
     runpod_api_key: str = ""
     runpod_endpoint_32b: str = ""
-    workhorse_model: str = "Qwen/Qwen3-32B-AWQ"
+    workhorse_model: str = ""   # RunPod model name — set in .env (e.g. meta/llama-3.1-70b-instruct)
 
     # Tier 1 + classifier model — fast, cheap, always available
     tier1_model: str = "claude-haiku-4-5-20251001"
 
-    # Legacy — unused; kept so old .env files don't break on startup
+    # Legacy — Ollama retired; kept so old .env files don't break on startup
     ollama_url: str = ""
-    classifier_model: str = "llama3.2:3b"
+    classifier_model: str = ""
 
     # Web search
     tavily_api_key: str = ""

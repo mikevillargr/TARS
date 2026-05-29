@@ -39,22 +39,22 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
 
-  /* Named semantic tokens */
-  --color-canvas: #f6f3ec;
-  --color-surface: #fbfaf6;
-  --color-surface-2: #efeadf;
-  --color-ink: #1a1714;
-  --color-ink-muted: #6b6357;
-  --color-ink-faint: #948a7b;
-  --color-border-faint: #e8e2d4;
-  --color-moss: #2d5a4f;
-  --color-moss-soft: #e3ede9;
-  --color-amber: #b8651a;
-  --color-amber-warm: #b8651a;
-  --color-amber-soft: #f5e8d5;
-  --color-rose: #a04848;
-  --color-rose-warm: #a04848;
-  --color-rose-soft: #f0dcdc;
+  /* Named semantic tokens — use var() so dark mode toggling changes these automatically */
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-ink: var(--c-ink);
+  --color-ink-muted: var(--c-ink-muted);
+  --color-ink-faint: var(--c-ink-faint);
+  --color-border-faint: var(--c-border-faint);
+  --color-moss: var(--c-moss);
+  --color-moss-soft: var(--c-moss-soft);
+  --color-amber: var(--c-amber);
+  --color-amber-warm: var(--c-amber);
+  --color-amber-soft: var(--c-amber-soft);
+  --color-rose: var(--c-rose);
+  --color-rose-warm: var(--c-rose);
+  --color-rose-soft: var(--c-rose-soft);
 }
 
 :root {
@@ -88,6 +88,67 @@
   --sidebar-accent-foreground: #2d5a4f;
   --sidebar-border: #d8d2c4;
   --sidebar-ring: #2d5a4f;
+
+  /* Semantic color tokens — use in inline styles via var() */
+  --c-canvas: #f6f3ec;
+  --c-surface: #fbfaf6;
+  --c-surface-2: #efeadf;
+  --c-ink: #1a1714;
+  --c-ink-muted: #6b6357;
+  --c-ink-faint: #948a7b;
+  --c-border: #d8d2c4;
+  --c-border-faint: #e8e2d4;
+  --c-moss: #2d5a4f;
+  --c-moss-soft: #e3ede9;
+  --c-amber: #b8651a;
+  --c-amber-soft: #f5e8d5;
+  --c-rose: #a04848;
+  --c-rose-soft: #f0dcdc;
+}
+
+.dark {
+  --background: #1c1a17;
+  --foreground: #f0ece4;
+  --card: #232018;
+  --card-foreground: #f0ece4;
+  --popover: #232018;
+  --popover-foreground: #f0ece4;
+  --primary: #4a9a87;
+  --primary-foreground: #0e1f1c;
+  --secondary: #2d2a24;
+  --secondary-foreground: #f0ece4;
+  --muted: #2d2a24;
+  --muted-foreground: #a09890;
+  --accent: #2d2a24;
+  --accent-foreground: #f0ece4;
+  --destructive: #c46060;
+  --border: #3d3830;
+  --input: #3d3830;
+  --ring: #4a9a87;
+
+  --sidebar: #1c1a17;
+  --sidebar-foreground: #f0ece4;
+  --sidebar-primary: #4a9a87;
+  --sidebar-primary-foreground: #0e1f1c;
+  --sidebar-accent: #1e3530;
+  --sidebar-accent-foreground: #4a9a87;
+  --sidebar-border: #3d3830;
+  --sidebar-ring: #4a9a87;
+
+  --c-canvas: #1c1a17;
+  --c-surface: #232018;
+  --c-surface-2: #2d2a24;
+  --c-ink: #f0ece4;
+  --c-ink-muted: #c4bdb2;
+  --c-ink-faint: #948a7b;
+  --c-border: #3d3830;
+  --c-border-faint: #2d2a24;
+  --c-moss: #4a9a87;
+  --c-moss-soft: #1e3530;
+  --c-amber: #d4882a;
+  --c-amber-soft: #3a2a14;
+  --c-rose: #c46060;
+  --c-rose-soft: #2e1818;
 }
 
 @layer base {
@@ -95,10 +156,16 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    /* Use CSS vars directly — bg-background relies on Tailwind resolving --background,
+       but CSS vars work even before Tailwind's hydration pass. */
+    background-color: var(--c-canvas);
+    color: var(--c-ink);
+    overflow-x: hidden; /* prevent body-level horizontal scroll */
+    overflow-wrap: anywhere; /* break pathologically long words/URLs */
   }
   html {
     @apply font-sans;
+    overflow-x: hidden; /* global backstop — no horizontal page scroll ever */
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading), var(--font-sans), serif;
@@ -118,6 +185,8 @@
   .badge {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
+    white-space: nowrap;
     padding: 0.125rem 0.5rem;
     border-radius: 9999px;
     font-size: 0.75rem;
@@ -211,7 +280,55 @@
   }
 }
 
-/* Safe-area-aware bottom padding for content area on iOS PWA.
+/* ── Dark mode overrides for component classes ── */
+.dark .card {
+  background-color: var(--c-surface);
+  border-color: var(--c-border);
+  color: var(--c-ink);
+}
+.dark .badge-neutral {
+  background-color: var(--c-surface-2);
+  color: var(--c-ink-muted);
+  border-color: var(--c-border);
+}
+.dark .badge-moss {
+  background-color: var(--c-moss-soft);
+  color: var(--c-moss);
+}
+.dark .badge-amber {
+  background-color: var(--c-amber-soft);
+  color: var(--c-amber);
+}
+.dark .badge-rose {
+  background-color: var(--c-rose-soft);
+  color: var(--c-rose);
+}
+.dark .btn-primary {
+  background-color: var(--c-moss);
+  color: #0e1f1c;
+}
+.dark .btn-secondary {
+  background-color: var(--c-surface-2);
+  color: var(--c-ink);
+  border-color: var(--c-border);
+}
+.dark .btn-secondary:hover { background-color: var(--c-border); }
+.dark .btn-ghost { color: var(--c-ink-muted); }
+.dark .btn-ghost:hover { color: var(--c-ink); background-color: var(--c-surface-2); }
+.dark .input-field {
+  background-color: var(--c-surface-2);
+  border-color: var(--c-border);
+  color: var(--c-ink);
+}
+.dark .input-field:focus {
+  border-color: var(--c-moss);
+  box-shadow: 0 0 0 2px rgba(74, 154, 135, 0.2);
+}
+.dark .input-field::placeholder { color: var(--c-ink-faint); }
+.dark ::-webkit-scrollbar-thumb { background: #3d3830; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #5a5448; }
+
+/* ── Safe-area-aware bottom padding for content area on iOS PWA.
    Tab bar is 56px tall + env(safe-area-inset-bottom) for the home indicator. */
 .pb-safe-tab {
   padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
@@ -220,5 +337,90 @@
 /* Custom scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d8d2c4; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #948a7b; }
+::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--c-ink-faint); }
+
+/* ── Code block overflow: definitive fix ───────────────────────────────────
+   SyntaxHighlighter renders <pre> with white-space:pre. Without explicit
+   containment the pre expands to code-line width and blows out the page.
+   overflow-x:hidden on .message-content clips at the bubble boundary;
+   the CodeBlock component wraps its <pre> in overflow-x:auto so it scrolls. */
+.message-content {
+  overflow-x: hidden;
+  max-width: 100%;
+  min-width: 0;
+}
+.message-content pre {
+  max-width: 100% !important;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ── Dark mode: force backgrounds that use inline hex to stay correct ──────
+   Pages not yet tokenised (hardcoded hex inline styles) get overridden here.
+   We can't beat specificity of inline styles with class selectors, so we
+   instead ensure the CSS-var values are correct and apply them on [style]
+   elements via the cascade where possible. The DEFINITIVE fix is to replace
+   the hex values with var(--c-*) in the source — done for chat/page.tsx. */
+.dark body { background-color: var(--c-canvas); color: var(--c-ink); }
+
+/* ── Tiptap / ProseMirror editor styles ────────────────────────────────────── */
+.ProseMirror {
+  outline: none;
+  min-height: 200px;
+  padding: 0.75rem;
+  color: var(--c-ink);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  flex: 1;
+}
+.ProseMirror > * + * { margin-top: 0.5rem; }
+.ProseMirror h1 { font-size: 1.3rem; font-weight: 700; margin: 1rem 0 0.3rem; font-family: var(--font-heading), serif; color: var(--c-ink); }
+.ProseMirror h2 { font-size: 1.1rem; font-weight: 600; margin: 0.85rem 0 0.25rem; font-family: var(--font-heading), serif; color: var(--c-ink); }
+.ProseMirror h3 { font-size: 1rem; font-weight: 600; margin: 0.7rem 0 0.2rem; color: var(--c-ink); }
+.ProseMirror ul, .ProseMirror ol { padding-left: 1.5rem; margin: 0.4rem 0; }
+.ProseMirror li { margin: 0.15rem 0; }
+.ProseMirror li p { margin: 0; }
+.ProseMirror blockquote {
+  border-left: 3px solid var(--c-border);
+  padding-left: 0.85rem;
+  color: var(--c-ink-muted);
+  margin: 0.6rem 0;
+  font-style: italic;
+}
+.ProseMirror pre {
+  background: #1a1714; /* intentionally dark — code blocks stay dark on dark bg */
+  color: #e5e0d8;
+  padding: 0.875rem 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+  font-family: var(--font-mono), monospace;
+  margin: 0.6rem 0;
+}
+.ProseMirror code {
+  background: var(--c-surface-2);
+  color: var(--c-amber);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-family: var(--font-mono), monospace;
+}
+.ProseMirror pre code { background: none; color: inherit; padding: 0; }
+.ProseMirror a { color: var(--c-moss); text-decoration: underline; text-underline-offset: 2px; }
+.ProseMirror a:hover { opacity: 0.8; }
+.ProseMirror hr { border: none; border-top: 1px solid var(--c-border); margin: 1rem 0; }
+.ProseMirror img { max-width: 100%; border-radius: 0.5rem; margin: 0.5rem 0; display: block; }
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--c-ink-faint);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+/* Tiptap selection */
+.ProseMirror .selection, .ProseMirror *::selection {
+  background-color: color-mix(in srgb, var(--c-moss) 20%, transparent);
+}
+/* Dark mode: editor background */
+.dark .ProseMirror { color: var(--c-ink); }

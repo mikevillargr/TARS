@@ -26,6 +26,8 @@ class TaskOut(BaseModel):
     source_id: Optional[str]
     assigned_to: Optional[str]
     connector_ref: Optional[str]
+    linked_artifacts: list = []
+    linked_knowledge: list = []
     created_at: datetime
     updated_at: datetime
 
@@ -39,6 +41,8 @@ class CreateTaskRequest(BaseModel):
     status: str = "inbox"
     priority: str = "normal"
     due_at: Optional[datetime] = None
+    linked_artifacts: List[str] = []
+    linked_knowledge: List[str] = []
 
 
 class UpdateTaskRequest(BaseModel):
@@ -47,6 +51,8 @@ class UpdateTaskRequest(BaseModel):
     status: Optional[str] = None
     priority: Optional[str] = None
     due_at: Optional[datetime] = None
+    linked_artifacts: Optional[List[str]] = None
+    linked_knowledge: Optional[List[str]] = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -78,6 +84,8 @@ async def create_task(
         status=body.status,
         priority=body.priority,
         due_at=body.due_at,
+        linked_artifacts=body.linked_artifacts,
+        linked_knowledge=body.linked_knowledge,
     )
     db.add(task)
     await db.commit()

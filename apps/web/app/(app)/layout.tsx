@@ -2,11 +2,14 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal } from "lucide-react"
-import { useState } from "react"
+import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Sun, Moon } from "lucide-react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
+import { CaptureModal } from "@/components/second-brain/CaptureModal"
+import { useTheme } from "@/components/ThemeProvider"
+import { CommandPalette } from "@/components/shell/CommandPalette"
 
 // Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
 function BottomTabBar() {
@@ -24,9 +27,9 @@ function BottomTabBar() {
     <nav
       className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t flex items-stretch"
       style={{
-        backgroundColor: "rgba(251,250,246,0.97)",
+        backgroundColor: "color-mix(in srgb, var(--c-surface) 97%, transparent)",
         backdropFilter: "blur(12px)",
-        borderColor: "#d8d2c4",
+        borderColor: "var(--c-border)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
@@ -37,19 +40,19 @@ function BottomTabBar() {
             key={href}
             href={href}
             className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors"
-            style={{ color: active ? "#2d5a4f" : "#948a7b", minHeight: "56px" }}
+            style={{ color: active ? "var(--c-moss)" : "var(--c-ink-faint)", minHeight: "56px" }}
           >
             <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
             <span
               className="text-[10px] font-medium leading-none"
-              style={{ color: active ? "#2d5a4f" : "#948a7b" }}
+              style={{ color: active ? "var(--c-moss)" : "var(--c-ink-faint)" }}
             >
               {label}
             </span>
             {active && (
               <span
                 className="absolute bottom-0 w-10 h-0.5 rounded-full"
-                style={{ backgroundColor: "#2d5a4f" }}
+                style={{ backgroundColor: "var(--c-moss)" }}
               />
             )}
           </Link>
@@ -60,10 +63,10 @@ function BottomTabBar() {
       <button
         onClick={() => setOpenMobile(true)}
         className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors relative"
-        style={{ color: "#948a7b", minHeight: "56px" }}
+        style={{ color: "var(--c-ink-faint)", minHeight: "56px" }}
       >
         <MoreHorizontal size={22} strokeWidth={1.8} />
-        <span className="text-[10px] font-medium leading-none" style={{ color: "#948a7b" }}>
+        <span className="text-[10px] font-medium leading-none" style={{ color: "var(--c-ink-faint)" }}>
           More
         </span>
       </button>
@@ -73,6 +76,21 @@ function BottomTabBar() {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [agentActive] = useState(true)
+  const [captureOpen, setCaptureOpen] = useState(false)
+  const [cmdOpen, setCmdOpen] = useState(false)
+  const { theme, toggle: toggleTheme } = useTheme()
+
+  // Global Cmd+K / Ctrl+K listener
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        setCmdOpen(prev => !prev)
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [])
 
   return (
     <SidebarProvider>
@@ -82,55 +100,81 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <header
           className="border-b flex items-center justify-between px-4 shrink-0 backdrop-blur-sm z-10"
           style={{
-            borderColor: "#d8d2c4",
-            backgroundColor: "rgba(251,250,246,0.8)",
+            borderColor: "var(--c-border)",
+            backgroundColor: "color-mix(in srgb, var(--c-surface) 80%, transparent)",
             paddingTop: "env(safe-area-inset-top, 0px)",
             minHeight: "calc(3.5rem + env(safe-area-inset-top, 0px))",
           }}
         >
           <div className="flex items-center gap-2 flex-1">
-            <SidebarTrigger className="size-7 text-[#6b6357] hover:text-[#1a1714]" />
-            <div className="relative max-w-md w-full hidden sm:block ml-2">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#948a7b]" />
-              <input
-                type="text"
-                placeholder="Ask TARS or search… (⌘K)"
-                className="w-full rounded-full pl-9 pr-4 py-1.5 text-sm focus:outline-none transition-all"
-                style={{
-                  backgroundColor: "#f6f3ec",
-                  border: "1px solid #d8d2c4",
-                  color: "#1a1714",
-                }}
-              />
-            </div>
+            <SidebarTrigger className="size-7 text-ink-muted hover:text-ink" />
+            <button
+              onClick={() => setCmdOpen(true)}
+              className="relative max-w-md w-full hidden sm:flex items-center gap-2 ml-2 rounded-full pl-3 pr-3 py-1.5 text-sm transition-all text-left"
+              style={{
+                backgroundColor: "var(--c-surface-2)",
+                border: "1px solid var(--c-border)",
+                color: "var(--c-ink-faint)",
+              }}
+            >
+              <Search size={14} className="shrink-0" />
+              <span className="flex-1">Ask TARS or search…</span>
+              <kbd
+                className="hidden lg:inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0"
+                style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink-faint)" }}
+              >
+                ⌘K
+              </kbd>
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Mobile search icon */}
+            <button
+              onClick={() => setCmdOpen(true)}
+              className="sm:hidden p-2 rounded-lg"
+              style={{ color: "var(--c-ink-muted)" }}
+              title="Search"
+            >
+              <Search size={18} />
+            </button>
+
             {agentActive && (
               <div
                 className="flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-medium hidden sm:flex"
                 style={{
-                  backgroundColor: "#e3ede9",
-                  borderColor: "rgba(45,90,79,0.2)",
-                  color: "#2d5a4f",
+                  backgroundColor: "var(--c-moss-soft)",
+                  borderColor: "color-mix(in srgb, var(--c-moss) 25%, transparent)",
+                  color: "var(--c-moss)",
                 }}
               >
-                <span className="w-2 h-2 rounded-full bg-[#2d5a4f] animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-moss animate-pulse" />
                 Agent Active
               </div>
             )}
 
-            <button className="p-2 relative" style={{ color: "#6b6357" }}>
+            {/* Dark mode toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: "var(--c-ink-muted)" }}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            <button className="p-2 relative" style={{ color: "var(--c-ink-muted)" }}>
               <Bell size={20} />
               <span
                 className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full border-2"
-                style={{ backgroundColor: "#b8651a", borderColor: "#fbfaf6" }}
+                style={{ backgroundColor: "var(--c-amber)", borderColor: "var(--c-surface)" }}
               />
             </button>
 
             <button
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
-              style={{ backgroundColor: "#1a1714", color: "#fbfaf6" }}
+              onClick={() => setCaptureOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer hover:opacity-80"
+              style={{ backgroundColor: "var(--c-ink)", color: "var(--c-canvas)" }}
             >
               <Plus size={16} />
               <span className="hidden sm:inline">Capture</span>
@@ -147,6 +191,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Global selection toolbar — fires on [data-selectable] regions across all pages */}
       <SelectionToolbar />
+
+      {/* Global Capture modal */}
+      <CaptureModal
+        open={captureOpen}
+        onClose={() => setCaptureOpen(false)}
+        defaultTab="file"
+      />
+
+      {/* Global Command Palette */}
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
     </SidebarProvider>
   )
 }

@@ -56,7 +56,7 @@ export function MessageThread({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
       <div className="max-w-3xl mx-auto space-y-6">
         {all.map((msg, i) => (
           <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
@@ -72,10 +72,10 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
   const isStreaming = "streaming" in msg
 
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex min-w-0", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[80%] rounded-2xl px-4 py-3 text-sm",
+          "min-w-0 max-w-[80%] rounded-2xl px-4 py-3 text-sm overflow-hidden",
           isUser
             ? "bg-primary text-primary-foreground rounded-br-sm"
             : "bg-muted text-foreground rounded-bl-sm"
@@ -103,7 +103,34 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
         )}
         {msg.content && (
           <div className={cn("prose prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
-            <ReactMarkdown>{msg.content}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                // Strip the outer <pre> wrapper ReactMarkdown adds — prevents overflow
+                pre: ({ children }) => <>{children}</>,
+                // Handle code blocks with overflow-x: auto
+                code({ className, children }) {
+                  if (className) {
+                    // Fenced code block (language-*)
+                    return (
+                      <pre
+                        className="overflow-x-auto rounded-md my-2 p-3 text-xs font-mono"
+                        style={{ maxWidth: "100%", whiteSpace: "pre-wrap", wordBreak: "break-all" }}
+                      >
+                        <code className={className}>{children}</code>
+                      </pre>
+                    )
+                  }
+                  // Inline code
+                  return (
+                    <code className="px-1 py-0.5 rounded text-xs font-mono" style={{ backgroundColor: "rgba(0,0,0,0.08)" }}>
+                      {children}
+                    </code>
+                  )
+                },
+              }}
+            >
+              {msg.content}
+            </ReactMarkdown>
           </div>
         )}
 

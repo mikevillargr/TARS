@@ -2,13 +2,12 @@
 Unified model client.
 
 Tier 1: Claude Haiku  — always available, ~200-500ms, cheap (~$0.001/req)
-Tier 2: RunPod 32B    — warm: ~2-10s GPU inference
+Tier 2: RunPod        — GPU inference via RunPod Serverless; model set by WORKHORSE_MODEL env var
          cold fallback: Haiku  if message ≤ 500 chars (standard tasks)
                         Sonnet if message > 500 chars or contains complexity signals
 Tier 3: Claude Sonnet — frontier, tools, streaming, always Claude
 
-NOTE: llama3.2:3b / Ollama is fully retired from the response path.
-      The classifier is now a Haiku API call (router.py).
+NOTE: Ollama is fully retired. The classifier is a Haiku API call (router.py).
 """
 
 import asyncio
@@ -21,6 +20,24 @@ from typing import AsyncGenerator, List, Dict, Any, Optional
 
 import httpx
 import anthropic
+
+# ── XML tool-call strip ────────────────────────────────────────────────────────
+# Non-Claude models (RunPod Tier 2) sometimes emit XML tool-call markup
+# (e.g. <function_calls>…</function_calls>) in response text.
+# Capabilities are gated to Tier 3 only, but this filter is a safety net.
+_TOOL_XML_RE = re.compile(
+    r"<function_calls>.*?</function_calls>|"
+    r"<invoke\b[^>]*>.*?</invoke>|"
+    r"<parameter\b[^>]*>.*?</parameter>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+def _strip_tool_xml(text: str) -> str:
+    """Remove any stray XML tool-call markup from model output."""
+    cleaned = _TOOL_XML_RE.sub("", text)
+    # Collapse runs of blank lines left behind
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 from core.config import settings
 
@@ -169,6 +186,74 @@ READ_EMAIL_TOOL = {
     },
 }
 
+SEND_EMAIL_TOOL = {
+    "name": "send_email",
+    "description": (
+        "Send an email via Mike's Gmail account. Use when he explicitly asks you to send, "
+        "reply to, forward, or draft-and-send an email. "
+        "Always include the key details (to, subject, body preview) in your chat message "
+        "so Mike sees what you're about to send before or immediately after it goes out. "
+        "For replies to an existing thread, supply the thread_id shown as [thread_id] in "
+        "the Gmail context."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "to": {
+                "type": "string",
+                "description": "Recipient email address(es), comma-separated if multiple.",
+            },
+            "subject": {
+                "type": "string",
+                "description": "Email subject line.",
+            },
+            "body": {
+                "type": "string",
+                "description": "Plain-text email body. Write clearly and concisely.",
+            },
+            "cc": {
+                "type": "string",
+                "description": "CC address(es), comma-separated. Omit if not needed.",
+            },
+            "thread_id": {
+                "type": "string",
+                "description": (
+                    "Thread ID from Gmail context to send as a reply. "
+                    "Include when replying to an existing email thread."
+                ),
+            },
+        },
+        "required": ["to", "subject", "body"],
+    },
+}
+
+READ_MEETING_TOOL = {
+    "name": "read_meeting",
+    "description": (
+        "Read the full details of a specific meeting — summary, action items, and optionally the "
+        "transcript. Use whenever Mike asks what was discussed in a meeting, what action items came "
+        "out of it, who attended, or any details about a past meeting. "
+        "The meeting ID is shown in the [RECENT MEETINGS] section of context as [id:...]."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "meeting_id": {
+                "type": "string",
+                "description": "The full meeting ID from the [RECENT MEETINGS] context (the value after 'id:').",
+            },
+            "include_transcript": {
+                "type": "boolean",
+                "description": (
+                    "Set true to include the full transcript text. Default false — "
+                    "summary and action items are usually sufficient."
+                ),
+            },
+        },
+        "required": ["meeting_id"],
+    },
+}
+
 SYNC_MEETINGS_TOOL = {
     "name": "sync_meetings",
     "description": (
@@ -244,21 +329,127 @@ SAVE_TO_SECOND_BRAIN_TOOL = {
     },
 }
 
+GENERATE_DOCUMENT_TOOL = {
+    "name": "generate_document",
+    "description": (
+        "Generate a Word document (DOCX) from structured content and save it to Artifacts. "
+        "Use when Mike asks to create, write, draft, or generate a document, report, proposal, "
+        "brief, memo, or any formal written piece. Supports headings, bullets, and numbered lists "
+        "via markdown syntax. Returns the artifact ID and filename so Mike can download it."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Document title — used as the main heading and filename.",
+            },
+            "content": {
+                "type": "string",
+                "description": (
+                    "Full document body. Use # H1, ## H2, ### H3 for headings; "
+                    "- or * for bullet points; 1. 2. for numbered lists; plain text for paragraphs. "
+                    "Write the complete, detailed content — don't abbreviate."
+                ),
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional base filename (no extension). Defaults to slugified title.",
+            },
+        },
+        "required": ["title", "content"],
+    },
+}
+
+GENERATE_PRESENTATION_TOOL = {
+    "name": "generate_presentation",
+    "description": (
+        "Generate a PowerPoint presentation (PPTX) from a slide structure and save it to Artifacts. "
+        "Use when Mike asks to create, build, or generate a presentation, slide deck, pitch deck, "
+        "or slides. Produces a PPTX file with a title slide plus content slides."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Presentation title — shown on the title slide.",
+            },
+            "subtitle": {
+                "type": "string",
+                "description": "Optional subtitle shown on the title slide.",
+            },
+            "slides": {
+                "type": "array",
+                "description": "Array of content slides after the title slide.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Slide heading."},
+                        "bullets": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Bullet points for this slide. Write complete sentences.",
+                        },
+                    },
+                    "required": ["title", "bullets"],
+                },
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional base filename (no extension).",
+            },
+        },
+        "required": ["title", "slides"],
+    },
+}
+
+GENERATE_PDF_TOOL = {
+    "name": "generate_pdf",
+    "description": (
+        "Generate a PDF document from structured content and save it to Artifacts. "
+        "Use when Mike explicitly asks for a PDF, or when generating a report/document that "
+        "should be in PDF format. Supports headings (# ## ###), bullet lists (- *), and paragraphs."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Document title.",
+            },
+            "content": {
+                "type": "string",
+                "description": "Content in markdown-like format. # H1, ## H2, ### H3, - bullets, plain paragraphs.",
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional base filename (no extension).",
+            },
+        },
+        "required": ["title", "content"],
+    },
+}
+
+
 # ─── Tier routing tables ─────────────────────────────────────────────────────
+
+# Tier 2 display label derived from the model name (strip org prefix for brevity)
+_tier2_label = settings.workhorse_model.split("/")[-1].lower() if settings.workhorse_model else "runpod"
 
 TIER_MODELS = {
     ModelTier.TIER1: "haiku",
-    ModelTier.TIER2: "qwen3-32b",
+    ModelTier.TIER2: _tier2_label,
     ModelTier.TIER3: "claude-sonnet-4-6",
 }
 
-# Only Tier 2 uses RunPod now; Tier 1 = Haiku, Tier 3 = Sonnet
+# Only Tier 2 uses RunPod; Tier 1 = Haiku, Tier 3 = Sonnet (both Anthropic API)
 TIER_ENDPOINTS = {
     ModelTier.TIER2: settings.runpod_endpoint_32b,
 }
 
 TIER_MODEL_NAMES = {
-    ModelTier.TIER2: settings.workhorse_model,    # Qwen/Qwen3-32B-AWQ
+    ModelTier.TIER2: settings.workhorse_model,
 }
 
 _TIER_COOLDOWN = {
@@ -348,15 +539,17 @@ class ModelClient:
         # ── Tier 2: RunPod 32B → Haiku or Sonnet when cold ───────────────────
         endpoint_2 = TIER_ENDPOINTS.get(ModelTier.TIER2)
         if endpoint_2 and self._is_warm(ModelTier.TIER2):
-            async for event in self._stream_runpod(messages, system, max_tokens, tier=ModelTier.TIER2):
+            # Pass tools so RunPod-level fallback can hand them to Sonnet if RunPod fails
+            async for event in self._stream_runpod(messages, system, max_tokens, tier=ModelTier.TIER2, tools=tools, tool_executor=tool_executor):
                 yield event
         else:
-            cold_model = _tier2_cold_model(messages)
+            # If tools were requested, always use Sonnet so they remain available
+            cold_model = None if tools else _tier2_cold_model(messages)
             logger.info(
                 "Tier2 RunPod cold — falling back to %s",
-                "haiku" if cold_model else "sonnet",
+                "sonnet (tools)" if tools else ("haiku" if cold_model else "sonnet"),
             )
-            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
+            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
                 yield event
 
     async def _stream_anthropic(
@@ -373,31 +566,44 @@ class ModelClient:
         _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
 
         model = model or "claude-sonnet-4-6"
+        current_messages = list(messages)
+        total_input = 0
+        total_output = 0
+
         try:
-            kwargs: Dict[str, Any] = dict(
-                model=model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=messages,
-            )
-            if tools:
-                kwargs["tools"] = tools
+            for _round in range(8):  # max 8 tool-call rounds before giving up
+                kwargs: Dict[str, Any] = dict(
+                    model=model,
+                    max_tokens=max_tokens,
+                    system=system,
+                    messages=current_messages,
+                )
+                if tools:
+                    kwargs["tools"] = tools
 
-            async with self.anthropic.messages.stream(**kwargs) as stream:
-                async for text in stream.text_stream:
-                    yield {"type": "chunk", "text": text}
+                async with self.anthropic.messages.stream(**kwargs) as stream:
+                    async for text in stream.text_stream:
+                        yield {"type": "chunk", "text": text}
 
-                final = await stream.get_final_message()
-                tool_uses = [b for b in final.content if b.type == "tool_use"]
+                    final = await stream.get_final_message()
+                    total_input += final.usage.input_tokens
+                    total_output += final.usage.output_tokens
 
-                # Emit suggestion events for proposal tools (shown as chips in UI)
-                for b in tool_uses:
-                    if b.name == "propose_calendar_event":
-                        yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
-                    elif b.name == "propose_task":
-                        yield {"type": "task_suggest", "tool_use_id": b.id, **b.input}
+                    tool_uses = [b for b in final.content if b.type == "tool_use"]
 
-                if final.stop_reason == "tool_use" and tool_uses:
+                    # Emit suggestion events for proposal tools (shown as chips in UI)
+                    for b in tool_uses:
+                        if b.name == "propose_calendar_event":
+                            yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
+                        elif b.name == "propose_task":
+                            yield {"type": "task_suggest", "tool_use_id": b.id, **b.input}
+
+                    if final.stop_reason != "tool_use" or not tool_uses:
+                        # Natural completion — no more tool calls needed
+                        yield {"type": "done", "model": model, "tokens": total_input + total_output}
+                        return
+
+                    # Build assistant turn + execute tools → continue loop
                     asst_content = []
                     for b in final.content:
                         if b.type == "text":
@@ -416,7 +622,7 @@ class ModelClient:
                             try:
                                 result = await tool_executor(b.name, b.input)
                             except Exception as exc:
-                                result = f"Error: {exc}"
+                                result = f"Tool error ({b.name}): {exc}"
                         else:
                             result = "Action completed."
                         tool_results.append({
@@ -425,29 +631,13 @@ class ModelClient:
                             "content": result,
                         })
 
-                    cont_messages = messages + [
+                    current_messages = current_messages + [
                         {"role": "assistant", "content": asst_content},
                         {"role": "user", "content": tool_results},
                     ]
-                    cont_kwargs: Dict[str, Any] = dict(
-                        model=model, max_tokens=max_tokens,
-                        system=system, messages=cont_messages,
-                    )
-                    if tools:
-                        cont_kwargs["tools"] = tools
 
-                    async with self.anthropic.messages.stream(**cont_kwargs) as cont:
-                        async for text in cont.text_stream:
-                            yield {"type": "chunk", "text": text}
-                        final2 = await cont.get_final_message()
-                        total = (
-                            final.usage.input_tokens + final.usage.output_tokens
-                            + final2.usage.input_tokens + final2.usage.output_tokens
-                        )
-                        yield {"type": "done", "model": model, "tokens": total}
-                else:
-                    total = final.usage.input_tokens + final.usage.output_tokens
-                    yield {"type": "done", "model": model, "tokens": total}
+            # Exceeded max rounds — emit done with accumulated token count
+            yield {"type": "done", "model": model, "tokens": total_input + total_output}
 
         except Exception as e:
             yield {"type": "error", "error": str(e)}
@@ -459,6 +649,8 @@ class ModelClient:
         max_tokens: int,
         *,
         tier: ModelTier,
+        tools: Optional[List[Dict]] = None,
+        tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Call a RunPod serverless Ollama endpoint (Tier 2 only)."""
         endpoint = TIER_ENDPOINTS[tier]
@@ -505,13 +697,15 @@ class ModelClient:
             if not choices:
                 self._mark_failed(tier)
                 logger.warning("RunPod %s returned empty choices — falling back to Claude", tier)
-                cold_model = _tier2_cold_model(messages)
-                async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
+                # If tools were requested, always use Sonnet so they remain available
+                cold_model = None if tools else _tier2_cold_model(messages)
+                async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
                     yield event
                 return
 
             self._mark_warm(tier)
             full_text: str = choices[0].get("message", {}).get("content", "")
+            full_text = _strip_tool_xml(full_text)   # remove any stray XML tool-call markup
             usage = output.get("usage", {})
             total_tokens = usage.get("total_tokens", 0)
 
@@ -525,8 +719,9 @@ class ModelClient:
         except Exception as e:
             logger.warning("RunPod %s failed (%s: %s) — falling back", tier, type(e).__name__, e)
             self._mark_failed(tier)
-            cold_model = _tier2_cold_model(messages)
-            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
+            # If tools were requested, always use Sonnet so they remain available
+            cold_model = None if tools else _tier2_cold_model(messages)
+            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
                 yield event
 
 

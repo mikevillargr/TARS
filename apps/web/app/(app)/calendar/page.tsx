@@ -45,11 +45,11 @@ interface CalendarEvent {
 }
 
 const TYPE_STYLES: Record<EventType, { dot: string; bg: string; text: string; borderColor: string; icon: React.ElementType; label: string }> = {
-  gcal:    { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "#2d5a4f", icon: CalendarIcon, label: "Calendar" },
-  meeting: { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "#2d5a4f", icon: Video,        label: "Meeting"  },
-  task:    { dot: "bg-amber",      bg: "bg-amber-soft",  text: "text-amber",     borderColor: "#b8651a", icon: CheckSquare,  label: "Task"     },
-  cron:    { dot: "bg-ink-muted",  bg: "bg-surface-2",   text: "text-ink",       borderColor: "#6b6357", icon: ClockIcon,    label: "Cron Job" },
-  agent:   { dot: "bg-rose",       bg: "bg-rose-soft",   text: "text-rose",      borderColor: "#a04848", icon: Cpu,          label: "Agent Job"},
+  gcal:    { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "var(--c-moss)",      icon: CalendarIcon, label: "Calendar" },
+  meeting: { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "var(--c-moss)",      icon: Video,        label: "Meeting"  },
+  task:    { dot: "bg-amber",      bg: "bg-amber-soft",  text: "text-amber",     borderColor: "var(--c-amber)",     icon: CheckSquare,  label: "Task"     },
+  cron:    { dot: "bg-ink-muted",  bg: "bg-surface-2",   text: "text-ink",       borderColor: "var(--c-ink-muted)", icon: ClockIcon,    label: "Cron Job" },
+  agent:   { dot: "bg-rose",       bg: "bg-rose-soft",   text: "text-rose",      borderColor: "var(--c-rose)",      icon: Cpu,          label: "Agent Job"},
 }
 
 const TODAY = new Date()
@@ -100,9 +100,10 @@ function fromApi(e: CalendarEventOut): CalendarEvent | null {
   }
 }
 
-const HOURS = Array.from({ length: 14 }, (_, i) => i + 7)
+const HOURS = Array.from({ length: 24 }, (_, i) => i)
 
 function formatHour(h: number) {
+  if (h === 0) return "12 AM"
   if (h === 12) return "12 PM"
   return h > 12 ? `${h - 12} PM` : `${h} AM`
 }
@@ -376,7 +377,7 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
               <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Optional" className="input-field w-full" />
             </div>
           </div>
-          {error && <p className="text-xs" style={{ color: "#a04848" }}>{error}</p>}
+          {error && <p className="text-xs" style={{ color: "var(--c-rose)" }}>{error}</p>}
         </div>
         <div className="p-4 border-t border-border bg-canvas flex justify-end gap-2">
           <button onClick={onClose} className="btn-ghost text-sm">Cancel</button>
@@ -403,13 +404,13 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
   }
 
   return (
-    <div className="w-[300px] border-l flex flex-col shrink-0 overflow-y-auto" style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}>
-      <div className="px-4 py-3 border-b flex items-center justify-between shrink-0" style={{ borderColor: "#d8d2c4" }}>
+    <div className="w-[300px] border-l flex flex-col shrink-0 overflow-y-auto" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
+      <div className="px-4 py-3 border-b flex items-center justify-between shrink-0" style={{ borderColor: "var(--c-border)" }}>
         <span className={`badge ${style.bg} ${style.text} flex items-center gap-1 text-[11px]`}>
           <Icon size={11} /> {style.label}
         </span>
-        <button onClick={onClose} className="p-1 rounded-md" style={{ color: "#6b6357" }}
-          onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+        <button onClick={onClose} className="p-1 rounded-md" style={{ color: "var(--c-ink-muted)" }}
+          onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
         >
           <X size={15} />
@@ -418,10 +419,10 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
 
       <div className="p-4 space-y-4">
         <div>
-          <h2 className="font-semibold text-sm text-[#1a1714] leading-snug" style={{ fontFamily: "var(--font-heading), serif" }}>
+          <h2 className="font-semibold text-sm leading-snug" style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}>
             {event.title}
           </h2>
-          <p className="text-xs text-[#6b6357] mt-1">
+          <p className="text-xs mt-1" style={{ color: "var(--c-ink-muted)" }}>
             {event.start.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
             {!event.source.all_day && (
               <> · {event.start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</>
@@ -429,7 +430,7 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
           </p>
         </div>
 
-        <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: "#efeadf", border: "1px solid #e8e2d4" }}>
+        <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border-faint)" }}>
           {(event.type === "gcal" || event.type === "meeting") && <>
             {event.source.duration_min && <Row label="Duration" value={`${event.source.duration_min}m`} />}
             {event.source.location && <Row label="Location" value={event.source.location} />}
@@ -443,10 +444,10 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
 
         {event.source.attendees?.length > 0 && (
           <div>
-            <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-1">Attendees</div>
+            <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>Attendees</div>
             <div className="space-y-1">
               {event.source.attendees.map((a, i) => (
-                <p key={i} className="text-xs text-[#1a1714]">{a}</p>
+                <p key={i} className="text-xs" style={{ color: "var(--c-ink)" }}>{a}</p>
               ))}
             </div>
           </div>
@@ -454,10 +455,10 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
 
         {event.source.description && (
           <div>
-            <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-1">
+            <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>
               {event.type === "meeting" ? "Summary" : "Description"}
             </div>
-            <p className="text-xs text-[#1a1714] leading-relaxed">{event.source.description.slice(0, 300)}</p>
+            <p className="text-xs leading-relaxed" style={{ color: "var(--c-ink)" }}>{event.source.description.slice(0, 300)}</p>
           </div>
         )}
 
@@ -477,8 +478,8 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between text-xs">
-      <span className="text-[#6b6357]">{label}</span>
-      <span className="font-medium text-[#1a1714]">{value}</span>
+      <span style={{ color: "var(--c-ink-muted)" }}>{label}</span>
+      <span className="font-medium" style={{ color: "var(--c-ink)" }}>{value}</span>
     </div>
   )
 }
@@ -491,6 +492,7 @@ export default function CalendarPage() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const fetchEvents = useCallback(async (mode: ViewMode, anc: Date) => {
     const range = getDateRange(mode, anc)
@@ -510,6 +512,15 @@ export default function CalendarPage() {
   useEffect(() => {
     fetchEvents(viewMode, anchor)
   }, [viewMode, anchor, fetchEvents])
+
+  // Scroll to current hour when switching to/from week or day view
+  useEffect(() => {
+    if (viewMode === "month" || !scrollRef.current) return
+    const hour = new Date().getHours()
+    const rowHeight = viewMode === "week" ? 64 : 80 // h-16 / h-20
+    const scrollTo = Math.max(0, (hour - 1) * rowHeight)
+    scrollRef.current.scrollTop = scrollTo
+  }, [viewMode])
 
   const eventsForDay = (d: Date) => events.filter((e) => isSameDay(e.start, d)).sort((a, b) => a.start.getTime() - b.start.getTime())
 
@@ -629,6 +640,7 @@ export default function CalendarPage() {
 
         {/* Body */}
         <div
+          ref={scrollRef}
           className="flex-1 overflow-auto"
           onTouchStart={viewMode === "day" ? onTouchStart : undefined}
           onTouchEnd={viewMode === "day" ? onTouchEnd : undefined}

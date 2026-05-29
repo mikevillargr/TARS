@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback } from "react"
+import React, { useState, useCallback, useEffect, useRef } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
@@ -14,6 +14,68 @@ const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/g
 
 function extractUrls(text: string): string[] {
   return [...new Set(text.match(URL_REGEX) || [])]
+}
+
+// ─── Mermaid renderer ─────────────────────────────────────────────
+// Lazy-loaded: mermaid.js is browser-only and large (~2MB).
+// Falls back to a styled code block if the diagram fails to render.
+function MermaidRenderer({ code }: { code: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const idRef        = useRef(`mermaid-${Math.random().toString(36).slice(2)}`)
+  const [error, setError] = useState<string | null>(null)
+  const [rendered, setRendered] = useState(false)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    setError(null)
+    setRendered(false)
+    import("mermaid").then(({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "neutral",
+        fontFamily: "inherit",
+        fontSize: 13,
+      })
+      // Each render needs a unique id; reuse idRef across re-renders of same diagram
+      mermaid.render(idRef.current, code)
+        .then(({ svg }) => {
+          if (containerRef.current) {
+            containerRef.current.innerHTML = svg
+            // Make svg responsive
+            const svgEl = containerRef.current.querySelector("svg")
+            if (svgEl) { svgEl.style.width = "100%"; svgEl.style.height = "auto" }
+            setRendered(true)
+          }
+        })
+        .catch((err: Error) => {
+          setError(err.message || "Diagram failed to render")
+        })
+    }).catch(() => setError("Mermaid library failed to load"))
+  }, [code])
+
+  if (error) {
+    // Graceful fallback — show as a copyable code block
+    return <CodeBlock language="mermaid" code={code} />
+  }
+
+  return (
+    <div
+      className="my-3 rounded-xl overflow-hidden"
+      style={{ border: "1px solid var(--c-border)", background: "var(--c-canvas)" }}
+    >
+      <div
+        className="flex items-center px-3 py-1.5 border-b"
+        style={{ borderColor: "var(--c-border-faint)", backgroundColor: "var(--c-surface)" }}
+      >
+        <span className="text-[11px] font-mono" style={{ color: "var(--c-ink-faint)" }}>diagram</span>
+      </div>
+      <div
+        ref={containerRef}
+        className="p-4 overflow-x-auto"
+        style={{ minHeight: rendered ? undefined : 60 }}
+      />
+    </div>
+  )
 }
 
 // ─── SVG renderer ─────────────────────────────────────────────────
@@ -82,7 +144,7 @@ function SvgRenderer({ code }: { code: string }) {
       ) : (
         <div
           className="w-full"
-          style={{ backgroundColor: "#fafafa", padding: "1rem" }}
+          style={{ backgroundColor: "var(--c-canvas)", padding: "1rem" }}
         >
           <div
             className="w-full"
@@ -133,7 +195,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   }, [code, language])
 
   return (
-    <div className="my-3 rounded-xl overflow-hidden" style={{ border: "1px solid #2a2a2a" }}>
+    <div className="my-3 rounded-xl overflow-hidden max-w-full w-full" style={{ border: "1px solid #2a2a2a" }}>
       {/* Header bar */}
       <div
         className="flex items-center justify-between px-3 py-1.5"
@@ -166,21 +228,24 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
         </div>
       </div>
 
-      <SyntaxHighlighter
-        language={language || "text"}
-        style={oneDark}
-        customStyle={{
-          margin: 0,
-          borderRadius: 0,
-          fontSize: "0.75rem",
-          lineHeight: "1.5",
-          padding: "1rem",
-          background: "#1a1a1a",
-        }}
-        wrapLongLines
-      >
-        {code}
-      </SyntaxHighlighter>
+      {/* Scroll wrapper: the pre inside SyntaxHighlighter scrolls, not the page */}
+      <div style={{ overflowX: "auto" }}>
+        <SyntaxHighlighter
+          language={language || "text"}
+          style={oneDark}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: "0.75rem",
+            lineHeight: "1.5",
+            padding: "1rem",
+            background: "#1a1a1a",
+            overflowX: "auto",
+          }}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
     </div>
   )
 }
@@ -190,7 +255,7 @@ function InlineCode({ children }: { children: React.ReactNode }) {
   return (
     <code
       className="px-1.5 py-0.5 rounded text-[0.8em] font-mono"
-      style={{ backgroundColor: "#efeadf", color: "#b45309", border: "1px solid #d8d2c4" }}
+      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)", border: "1px solid var(--c-border)" }}
     >
       {children}
     </code>
@@ -202,10 +267,14 @@ export function MessageContent({ content }: { content: string }) {
   const urls = extractUrls(content)
 
   return (
-    <div className="message-content space-y-0.5" data-selectable>
+    <div className="message-content space-y-0.5 min-w-0 max-w-full" data-selectable>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // Strip the outer <pre> ReactMarkdown wraps around code blocks —
+          // our CodeBlock component already handles its own container.
+          pre: ({ children }) => <>{children}</>,
+
           // Code blocks
           code({ node, className, children, ...props }) {
             const inline = !className
@@ -218,18 +287,21 @@ export function MessageContent({ content }: { content: string }) {
             if (language === "svg" || (language === "xml" && code.trimStart().startsWith("<svg"))) {
               return <SvgRenderer code={code} />
             }
+            if (language === "mermaid") {
+              return <MermaidRenderer code={code} />
+            }
             return <CodeBlock language={language} code={code} />
           },
 
           // Headings
           h1: ({ children }) => (
-            <h1 className="text-lg font-semibold mt-4 mb-2 first:mt-0" style={{ color: "#1a1714" }}>{children}</h1>
+            <h1 className="text-lg font-semibold mt-4 mb-2 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-base font-semibold mt-3 mb-1.5 first:mt-0" style={{ color: "#1a1714" }}>{children}</h2>
+            <h2 className="text-base font-semibold mt-3 mb-1.5 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-sm font-semibold mt-2 mb-1 first:mt-0" style={{ color: "#1a1714" }}>{children}</h3>
+            <h3 className="text-sm font-semibold mt-2 mb-1 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h3>
           ),
 
           // Paragraphs
@@ -250,7 +322,7 @@ export function MessageContent({ content }: { content: string }) {
               ? <li className="leading-relaxed">{children}</li>
               : (
                 <li className="leading-relaxed flex gap-2">
-                  <span className="shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#2d5a4f" }} />
+                  <span className="shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "var(--c-moss)" }} />
                   <span>{children}</span>
                 </li>
               )
@@ -258,27 +330,27 @@ export function MessageContent({ content }: { content: string }) {
 
           // Tables
           table: ({ children }) => (
-            <div className="my-3 overflow-x-auto rounded-lg" style={{ border: "1px solid #d8d2c4" }}>
+            <div className="my-3 overflow-x-auto rounded-lg" style={{ border: "1px solid var(--c-border)" }}>
               <table className="text-sm w-full">{children}</table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead style={{ backgroundColor: "#efeadf" }}>{children}</thead>
+            <thead style={{ backgroundColor: "var(--c-surface-2)" }}>{children}</thead>
           ),
           th: ({ children }) => (
-            <th className="px-3 py-2 text-left text-xs font-semibold" style={{ color: "#6b6357", borderBottom: "1px solid #d8d2c4" }}>
+            <th className="px-3 py-2 text-left text-xs font-semibold" style={{ color: "var(--c-ink-muted)", borderBottom: "1px solid var(--c-border)" }}>
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-3 py-2 text-sm" style={{ borderBottom: "1px solid #e8e2d4" }}>{children}</td>
+            <td className="px-3 py-2 text-sm" style={{ borderBottom: "1px solid var(--c-border-faint)" }}>{children}</td>
           ),
 
           // Blockquote
           blockquote: ({ children }) => (
             <blockquote
               className="my-2 pl-3 py-1 text-sm italic"
-              style={{ borderLeft: "3px solid #2d5a4f", color: "#6b6357" }}
+              style={{ borderLeft: "3px solid var(--c-moss)", color: "var(--c-ink-muted)" }}
             >
               {children}
             </blockquote>
@@ -286,15 +358,15 @@ export function MessageContent({ content }: { content: string }) {
 
           // Bold / italic
           strong: ({ children }) => (
-            <strong className="font-semibold" style={{ color: "#1a1714" }}>{children}</strong>
+            <strong className="font-semibold" style={{ color: "var(--c-ink)" }}>{children}</strong>
           ),
           em: ({ children }) => (
-            <em className="italic" style={{ color: "#4a4540" }}>{children}</em>
+            <em className="italic" style={{ color: "var(--c-ink-muted)" }}>{children}</em>
           ),
 
           // Horizontal rule
           hr: () => (
-            <hr className="my-3" style={{ borderColor: "#d8d2c4" }} />
+            <hr className="my-3" style={{ borderColor: "var(--c-border)" }} />
           ),
 
           // Links — open in new tab
@@ -304,7 +376,7 @@ export function MessageContent({ content }: { content: string }) {
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-2 hover:opacity-80 transition-opacity"
-              style={{ color: "#2d5a4f" }}
+              style={{ color: "var(--c-moss)" }}
             >
               {children}
             </a>

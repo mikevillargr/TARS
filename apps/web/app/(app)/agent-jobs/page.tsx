@@ -9,41 +9,28 @@ type AgentJob = typeof MOCK_AGENT_JOBS[number]
 function StatusIcon({ status }: { status: string }) {
   if (status === "Running") {
     return (
-      <span
-        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-        style={{ backgroundColor: "#e3ede9" }}
-      >
-        <Loader2 size={16} className="animate-spin" style={{ color: "#2d5a4f" }} />
+      <span className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-moss-soft)" }}>
+        <Loader2 size={16} className="animate-spin" style={{ color: "var(--c-moss)" }} />
       </span>
     )
   }
   if (status === "Needs Input") {
     return (
-      <span
-        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-        style={{ backgroundColor: "#f5e8d5" }}
-      >
-        <AlertCircle size={16} style={{ color: "#b8651a" }} />
+      <span className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-amber-soft)" }}>
+        <AlertCircle size={16} style={{ color: "var(--c-amber)" }} />
       </span>
     )
   }
   if (status === "Done") {
     return (
-      <span
-        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-        style={{ backgroundColor: "#efeadf" }}
-      >
-        <CheckCircle size={16} style={{ color: "#6b6357" }} />
+      <span className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-surface-2)" }}>
+        <CheckCircle size={16} style={{ color: "var(--c-ink-muted)" }} />
       </span>
     )
   }
-  // Failed
   return (
-    <span
-      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-      style={{ backgroundColor: "#f0dcdc" }}
-    >
-      <XCircle size={16} style={{ color: "#a04848" }} />
+    <span className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-rose-soft)" }}>
+      <XCircle size={16} style={{ color: "var(--c-rose)" }} />
     </span>
   )
 }
@@ -72,26 +59,21 @@ export default function AgentJobsPage() {
   const [selected, setSelected] = useState<AgentJob | null>(null)
 
   return (
-    <div className="flex flex-1 overflow-hidden" style={{ backgroundColor: "#f6f3ec" }}>
+    <div className="flex flex-1 overflow-hidden bg-canvas">
       {/* ── Main ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div
-          className="px-6 py-4 border-b flex items-center justify-between shrink-0"
-          style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}
-        >
+        <div className="px-6 py-4 border-b flex items-center justify-between shrink-0"
+          style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
           <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ backgroundColor: "#e3ede9" }}
-            >
-              <Cpu size={17} style={{ color: "#2d5a4f" }} />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-moss-soft)" }}>
+              <Cpu size={17} style={{ color: "var(--c-moss)" }} />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-[#1a1714] leading-tight" style={{ fontFamily: "var(--font-heading), serif" }}>
+              <h1 className="text-lg font-semibold leading-tight" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>
                 Agent Jobs
               </h1>
-              <p className="text-xs text-[#948a7b]">Delegated tasks executing autonomously.</p>
+              <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>Delegated tasks executing autonomously.</p>
             </div>
           </div>
           <button className="btn-primary" style={{ padding: "0.35rem 0.75rem", fontSize: "0.8125rem" }}>
@@ -108,28 +90,24 @@ export default function AgentJobsPage() {
               className="card flex items-center gap-3 hover:shadow-md transition-shadow cursor-pointer w-full text-left"
               style={{
                 padding: "0.875rem 1rem",
-                outline: selected?.id === job.id ? "2px solid #2d5a4f" : "none",
+                outline: selected?.id === job.id ? "2px solid var(--c-moss)" : "none",
                 outlineOffset: "1px",
               }}
             >
               <StatusIcon status={job.status} />
-
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-[#1a1714] leading-snug truncate">{job.instruction}</p>
+                <p className="text-sm font-medium leading-snug truncate" style={{ color: "var(--c-ink)" }}>{job.instruction}</p>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <code
-                    className="text-[11px] rounded px-1.5 py-0.5 font-mono"
-                    style={{ backgroundColor: "#efeadf", color: "#6b6357" }}
-                  >
+                  <code className="text-[11px] rounded px-1.5 py-0.5 font-mono"
+                    style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}>
                     {job.context}
                   </code>
-                  <span className="text-[11px] text-[#948a7b]">{job.duration}</span>
-                  <span className="text-[11px] text-[#948a7b]">{formatCreated(job.created)}</span>
+                  <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{job.duration}</span>
+                  <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{formatCreated(job.created)}</span>
                 </div>
               </div>
-
               <StatusBadge status={job.status} />
-              <ChevronRight size={15} style={{ color: "#948a7b", flexShrink: 0 }} />
+              <ChevronRight size={15} style={{ color: "var(--c-ink-faint)", flexShrink: 0 }} />
             </button>
           ))}
         </div>
@@ -137,23 +115,19 @@ export default function AgentJobsPage() {
 
       {/* ── Right panel ── */}
       {selected && (
-        <div
-          className="w-[340px] border-l flex flex-col shrink-0 overflow-y-auto"
-          style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}
-        >
-          <div
-            className="px-4 py-3 border-b flex items-center justify-between shrink-0"
-            style={{ borderColor: "#d8d2c4" }}
-          >
+        <div className="w-[340px] border-l flex flex-col shrink-0 overflow-y-auto"
+          style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
+          <div className="px-4 py-3 border-b flex items-center justify-between shrink-0"
+            style={{ borderColor: "var(--c-border)" }}>
             <div className="flex items-center gap-2">
               <StatusBadge status={selected.status} />
-              <span className="text-xs text-[#948a7b]">{selected.duration}</span>
+              <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{selected.duration}</span>
             </div>
             <button
               onClick={() => setSelected(null)}
               className="p-1 rounded-md transition-colors"
-              style={{ color: "#6b6357" }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+              style={{ color: "var(--c-ink-muted)" }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
               onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
             >
               <X size={15} />
@@ -162,47 +136,37 @@ export default function AgentJobsPage() {
 
           <div className="p-4 flex flex-col gap-4">
             <div>
-              <p className="text-sm font-semibold text-[#1a1714] leading-snug">{selected.instruction}</p>
+              <p className="text-sm font-semibold leading-snug" style={{ color: "var(--c-ink)" }}>{selected.instruction}</p>
               <div className="mt-2 flex items-center gap-2">
-                <code
-                  className="text-[11px] rounded px-1.5 py-0.5 font-mono"
-                  style={{ backgroundColor: "#efeadf", color: "#6b6357" }}
-                >
+                <code className="text-[11px] rounded px-1.5 py-0.5 font-mono"
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}>
                   {selected.context}
                 </code>
-                <span className="text-[11px] text-[#948a7b]">{formatCreated(selected.created)}</span>
+                <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{formatCreated(selected.created)}</span>
               </div>
             </div>
 
             {/* Needs Input approval */}
             {selected.status === "Needs Input" && (
-              <div
-                className="rounded-lg p-3 flex flex-col gap-3"
-                style={{ backgroundColor: "#f5e8d5", border: "1px solid rgba(184,101,26,0.2)" }}
-              >
+              <div className="rounded-lg p-3 flex flex-col gap-3"
+                style={{ backgroundColor: "var(--c-amber-soft)", border: "1px solid color-mix(in srgb, var(--c-amber) 25%, transparent)" }}>
                 <div className="flex items-start gap-2">
-                  <AlertCircle size={14} style={{ color: "#b8651a", marginTop: 1, flexShrink: 0 }} />
-                  <p className="text-xs font-medium" style={{ color: "#b8651a" }}>
+                  <AlertCircle size={14} style={{ color: "var(--c-amber)", marginTop: 1, flexShrink: 0 }} />
+                  <p className="text-xs font-medium" style={{ color: "var(--c-amber)" }}>
                     TARS needs your input to continue.
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    className="flex-1 flex items-center justify-center gap-1 rounded-md py-1.5 text-xs font-medium transition-colors"
-                    style={{ backgroundColor: "#2d5a4f", color: "#fbfaf6" }}
-                  >
+                  <button className="flex-1 flex items-center justify-center gap-1 rounded-md py-1.5 text-xs font-medium transition-colors"
+                    style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}>
                     <Check size={12} /> Approve
                   </button>
-                  <button
-                    className="flex-1 rounded-md py-1.5 text-xs font-medium border transition-colors"
-                    style={{ borderColor: "#d8d2c4", color: "#6b6357", backgroundColor: "#fbfaf6" }}
-                  >
+                  <button className="flex-1 rounded-md py-1.5 text-xs font-medium border transition-colors"
+                    style={{ borderColor: "var(--c-border)", color: "var(--c-ink-muted)", backgroundColor: "var(--c-surface)" }}>
                     Modify
                   </button>
-                  <button
-                    className="flex-1 rounded-md py-1.5 text-xs font-medium transition-colors"
-                    style={{ backgroundColor: "#f0dcdc", color: "#a04848" }}
-                  >
+                  <button className="flex-1 rounded-md py-1.5 text-xs font-medium transition-colors"
+                    style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }}>
                     Reject
                   </button>
                 </div>
@@ -211,13 +175,11 @@ export default function AgentJobsPage() {
 
             {/* Terminal output */}
             <div>
-              <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-2">
+              <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>
                 Output
               </div>
-              <pre
-                className="rounded-lg p-3 text-[11px] font-mono overflow-x-auto leading-relaxed"
-                style={{ backgroundColor: "#1a1714", color: "#e3ede9", whiteSpace: "pre-wrap", wordBreak: "break-all" }}
-              >
+              <pre className="rounded-lg p-3 text-[11px] font-mono overflow-x-auto leading-relaxed"
+                style={{ backgroundColor: "#1a1714", color: "#e3ede9", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
                 {MOCK_OUTPUT[selected.id] ?? "No output yet."}
               </pre>
             </div>

@@ -35,6 +35,20 @@ export async function apiDelete(path: string): Promise<void> {
   if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`)
 }
 
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    body: formData,
+    // No Content-Type header — browser sets it with boundary automatically
+  })
+  if (!res.ok) {
+    let detail = ""
+    try { detail = (await res.json()).detail ?? "" } catch { /* ignore */ }
+    throw new Error(detail || `UPLOAD ${path} failed: ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function apiStream(
   path: string,
   body: unknown,

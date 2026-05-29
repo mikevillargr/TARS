@@ -7,7 +7,7 @@ import json as _json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc, update as sa_update, delete as sa_delete
+from sqlalchemy import select, desc, update as sa_update, delete as sa_delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
@@ -19,12 +19,13 @@ from core.model_client import (
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
-    READ_EMAIL_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
+    READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
+    GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from db.session import get_db, AsyncSessionLocal
-from db.models import Conversation, Message, User, Task
+from db.models import Conversation, Message, User, Task, Artifact
 
 router = APIRouter()
 
@@ -41,6 +42,11 @@ class ConversationOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    def model_post_init(self, __context) -> None:
+        # Cap title at 60 chars regardless of what's stored in DB
+        if self.title and len(self.title) > 60:
+            object.__setattr__(self, "title", self.title[:60])
 
 
 class MessageOut(BaseModel):
@@ -63,6 +69,10 @@ class ConversationDetailOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+    def model_post_init(self, __context) -> None:
+        if self.title and len(self.title) > 60:
+            object.__setattr__(self, "title", self.title[:60])
 
 
 _IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
@@ -243,6 +253,80 @@ async def _extract_and_save_facts(
         log.warning("Memory fact extraction failed: %s", exc)
 
 
+_EXT_MAP = {
+    "python": ".py", "typescript": ".ts", "tsx": ".tsx", "javascript": ".js",
+    "jsx": ".jsx", "go": ".go", "rust": ".rs", "java": ".java", "ruby": ".rb",
+    "bash": ".sh", "sh": ".sh", "diff": ".diff", "patch": ".patch",
+    "sql": ".sql", "yaml": ".yaml", "yml": ".yml", "json": ".json",
+    "css": ".css", "html": ".html", "markdown": ".md", "md": ".md",
+    "csv": ".csv", "text": ".txt",
+}
+
+def _detect_artifacts(text: str) -> list[dict]:
+    """
+    Scan assistant response for artifact-worthy content.
+    Returns a list of dicts: {filename, type, content}.
+
+    Rules:
+    - Code block with language tag AND ≥ 200 chars → Code artifact
+    - Response ≥ 600 chars that starts with or contains a # heading → Document artifact
+    """
+    import re
+    results = []
+
+    # ── Code blocks with language hints ──────────────────────────────────────
+    code_pattern = re.compile(r"```(\w+)\n(.*?)```", re.DOTALL)
+    for m in code_pattern.finditer(text):
+        lang = m.group(1).lower()
+        body = m.group(2).strip()
+        if len(body) < 200:
+            continue
+        ext = _EXT_MAP.get(lang, ".txt")
+        artifact_type = "spreadsheet" if ext == ".csv" else "code"
+        # Try to infer a filename from a comment on the first line
+        first_line = body.splitlines()[0] if body else ""
+        name_match = re.search(r"(?:#|//|--)\s*([\w.\-/]+\.\w+)", first_line)
+        filename = name_match.group(1) if name_match else f"output{ext}"
+        results.append({"filename": filename, "type": artifact_type, "content": body})
+
+    # ── Document: long markdown response with a heading ───────────────────────
+    if not results and len(text) >= 600:
+        heading_match = re.search(r"^#{1,3} (.+)$", text, re.MULTILINE)
+        if heading_match:
+            title = heading_match.group(1).strip()
+            # Sanitise title → filename
+            safe = re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+            results.append({"filename": f"{safe}.md", "type": "document", "content": text})
+
+    return results
+
+
+async def _auto_save_artifacts(
+    db,
+    user_id: str,
+    conversation_id: str,
+    message_id: str,
+    assistant_content: str,
+) -> None:
+    """Detect and save any artifact-worthy content from an assistant response."""
+    detected = _detect_artifacts(assistant_content)
+    for art in detected:
+        artifact = Artifact(
+            user_id=user_id,
+            filename=art["filename"],
+            type=art["type"],
+            source="chat",
+            source_id=message_id,
+            content=art["content"],
+            version=1,
+            size_bytes=len(art["content"].encode("utf-8")),
+            tags=[],
+        )
+        db.add(artifact)
+    if detected:
+        await db.commit()
+
+
 def _strip_tool_artifacts(text: str) -> str:
     """Remove raw tool-call tags and internal tool syntax from message text."""
     import re
@@ -270,7 +354,7 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
             system="Write a 3-5 word title for this conversation. No quotes, no punctuation, no explanation. Just the title.",
             messages=[{"role": "user", "content": context}],
         )
-        return resp.content[0].text.strip()[:80]
+        return resp.content[0].text.strip()[:60]
     except Exception as exc:
         log.warning("Title generation failed: %s", exc)
         return None
@@ -296,10 +380,18 @@ async def list_conversations(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    # Sort by most recent activity: join to messages and order by max(message.created_at),
+    # falling back to conversation.created_at for new conversations with no messages yet.
+    latest_msg = (
+        select(Message.conversation_id, func.max(Message.created_at).label("last_at"))
+        .group_by(Message.conversation_id)
+        .subquery()
+    )
     result = await db.execute(
         select(Conversation)
+        .outerjoin(latest_msg, Conversation.id == latest_msg.c.conversation_id)
         .where(Conversation.user_id == user_id)
-        .order_by(desc(Conversation.created_at))
+        .order_by(desc(func.coalesce(latest_msg.c.last_at, Conversation.created_at)))
         .limit(50)
     )
     return result.scalars().all()
@@ -333,6 +425,17 @@ async def get_conversation(
     messages = result.scalars().all()
 
     title = conv.title
+
+    # Lazily truncate titles that predate the 60-char cap
+    if title and len(title) > 60:
+        title = title[:60]
+        await db.execute(
+            sa_update(Conversation)
+            .where(Conversation.id == conversation_id)
+            .values(title=title)
+        )
+        await db.commit()
+
     if not title and messages:
         msg_dicts = [{"role": m.role, "content": m.content} for m in messages]
         client = get_model_client()
@@ -371,6 +474,7 @@ async def send_message(
     conversation_id: str,
     content: str = Form(default=""),
     files: List[UploadFile] = File(default=[]),
+    artifact_id: Optional[str] = Form(default=None),
     tier_override: Optional[str] = Form(default=None),
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
@@ -393,10 +497,28 @@ async def send_message(
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
 
+    # If artifact_id provided, inject artifact content as invisible model context
+    if artifact_id:
+        art_result = await db.execute(
+            select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
+        )
+        art_obj = art_result.scalar_one_or_none()
+        if art_obj and art_obj.content:
+            MAX_ART = 12000
+            art_text = art_obj.content
+            if len(art_text) > MAX_ART:
+                art_text = art_text[:MAX_ART] + f"\n\n[… truncated, {len(art_obj.content):,} total chars]"
+            doc_snippets.append(
+                f"[UPLOADED FILE: {art_obj.filename}]\n{art_text}\n\n"
+                f"Analyze this file and provide a clear summary of the key insights."
+            )
+
     # Classify the request to pick the right model tier.
     # Images always need vision (Claude). Override wins if provided.
     if image_blocks:
         tier = ModelTier.TIER3
+    elif artifact_id:
+        tier = ModelTier.TIER3  # artifact analysis always uses the frontier model
     elif tier_override:
         tier = ModelTier(tier_override)
     elif content:
@@ -432,6 +554,39 @@ async def send_message(
         {"role": m.role, "content": m.content} for m in history if m.role != "system"
     ]
 
+    # ── Normalise for Anthropic API ──────────────────────────────────────────
+    # Race condition: background tasks save the assistant reply asynchronously.
+    # A new user message can arrive *before* the previous assistant reply is
+    # committed, so the DB row for the assistant ends up with a later
+    # created_at than the new user row.  That produces a history like:
+    #   [user_old, user_new, assistant_old]
+    # …which the API rejects as "assistant prefill" (last msg = assistant).
+    # The same ordering bug can also leave two consecutive user messages.
+    # Fix: strip trailing assistant messages, then merge any consecutive
+    # same-role pairs so the final list strictly alternates and ends with user.
+    def _sanitize(msgs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        # 1. Drop trailing assistant messages.
+        trimmed = list(msgs)
+        while trimmed and trimmed[-1]["role"] != "user":
+            trimmed.pop()
+        if not trimmed:
+            return trimmed
+        # 2. Collapse consecutive same-role messages (merge text; keep newer on rich).
+        result: List[Dict[str, Any]] = [dict(trimmed[0])]
+        for m in trimmed[1:]:
+            prev = result[-1]
+            if prev["role"] == m["role"]:
+                p, c = prev["content"], m["content"]
+                if isinstance(p, str) and isinstance(c, str):
+                    result[-1] = {"role": prev["role"], "content": p + "\n\n" + c}
+                else:
+                    result[-1] = dict(m)   # rich content: keep the newer block
+            else:
+                result.append(dict(m))
+        return result
+
+    messages = _sanitize(messages)
+
     # Replace last user message with rich content if needed
     if messages and messages[-1]["role"] == "user":
         if image_blocks:
@@ -443,11 +598,21 @@ async def send_message(
         elif full_text != content:
             messages[-1]["content"] = full_text
 
-    system_prompt = await assemble(user_id, content or "attachment", db=db, tier=tier)
-
     client = get_model_client()
-    # Tools only for TIER3 (Claude) — Ollama and RunPod don't support Anthropic tool_use.
-    # The classifier is responsible for routing action requests to TIER3.
+    # When RunPod (Tier2) is cold and falls back to Claude, upgrade to Tier3 so the
+    # request gets full tools + capabilities block instead of a tool-deaf response.
+    effective_tier = tier
+    if tier == ModelTier.TIER2 and not client._is_warm(ModelTier.TIER2):
+        effective_tier = ModelTier.TIER3
+        log.info("RunPod Tier2 cold — upgrading to Tier3 for full tool support")
+
+    system_prompt = await assemble(user_id, content or "attachment", db=db, tier=effective_tier)
+
+    # Tools available for TIER2 and TIER3.
+    # TIER2 (RunPod) ignores them in the payload but the Sonnet fallback path
+    # uses them — so we must build them here regardless, otherwise a RunPod
+    # timeout with a "warm" start would fall back to Sonnet with no tools.
+    # TIER1 (Haiku) handles simple queries and never needs tool execution.
     tools = [
         CREATE_TASK_TOOL,
         CREATE_CALENDAR_EVENT_TOOL,
@@ -456,9 +621,14 @@ async def send_message(
         SAVE_MEMORY_TOOL,
         SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL,
+        SEND_EMAIL_TOOL,
+        READ_MEETING_TOOL,
         SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL,
-    ] if tier == ModelTier.TIER3 else None
+        GENERATE_DOCUMENT_TOOL,
+        GENERATE_PRESENTATION_TOOL,
+        GENERATE_PDF_TOOL,
+    ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:
@@ -549,7 +719,7 @@ async def send_message(
                     if name == "save_to_second_brain":
                         try:
                             from memory import second_brain as _sb
-                            await _sb.ingest_text(
+                            await _sb.ingest_document(
                                 bg_db,
                                 user_id,
                                 content=tool_input["content"],
@@ -619,6 +789,40 @@ async def send_message(
                             log.warning("read_email tool failed: %s", exc)
                             return f"Failed to read email: {exc}"
 
+                    if name == "send_email":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Connector
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Gmail",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Gmail not connected — cannot send email."
+
+                            from connectors.gmail import GmailClient
+                            import asyncio as _asyncio
+
+                            gclient = GmailClient(conn.auth)
+                            loop = _asyncio.get_event_loop()
+                            result = await loop.run_in_executor(
+                                None,
+                                lambda: gclient.send_email(
+                                    to=tool_input["to"],
+                                    subject=tool_input["subject"],
+                                    body=tool_input["body"],
+                                    cc=tool_input.get("cc"),
+                                    thread_id=tool_input.get("thread_id"),
+                                ),
+                            )
+                            return result
+                        except Exception as exc:
+                            log.warning("send_email tool failed: %s", exc)
+                            return f"Failed to send email: {exc}"
+
                     if name == "sync_meetings":
                         try:
                             from core.config import settings as _settings
@@ -647,6 +851,62 @@ async def send_message(
                         except Exception as exc:
                             log.warning("sync_meetings tool failed: %s", exc)
                             return f"Failed to sync meetings: {exc}"
+
+                    if name == "read_meeting":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Meeting, MeetingActionItem
+
+                            meeting_id = tool_input.get("meeting_id", "").strip()
+                            include_transcript = tool_input.get("include_transcript", False)
+
+                            m_result = await bg_db.execute(
+                                _select(Meeting).where(
+                                    Meeting.id == meeting_id,
+                                    Meeting.user_id == user_id,
+                                )
+                            )
+                            meeting = m_result.scalar_one_or_none()
+                            if not meeting:
+                                return f"Meeting '{meeting_id}' not found."
+
+                            ai_result = await bg_db.execute(
+                                _select(MeetingActionItem).where(
+                                    MeetingActionItem.meeting_id == meeting_id
+                                )
+                            )
+                            action_items = ai_result.scalars().all()
+
+                            parts = [f"# {meeting.title}"]
+                            if meeting.started_at:
+                                parts.append(f"Date: {meeting.started_at.strftime('%B %-d, %Y')}")
+                            if meeting.attendees:
+                                parts.append(f"Attendees: {', '.join(meeting.attendees)}")
+                            parts.append(f"Status: {meeting.status}")
+
+                            if meeting.summary:
+                                parts.append(f"\n## Summary\n{meeting.summary}")
+
+                            if action_items:
+                                parts.append(f"\n## Action Items ({len(action_items)})")
+                                for ai in action_items:
+                                    owner = f" [{ai.owner}]" if ai.owner else ""
+                                    done = " ✓" if ai.task_id else ""
+                                    parts.append(f"  • {ai.raw_text}{owner}{done}")
+
+                            if include_transcript and meeting.transcript:
+                                # Cap at 20k chars — enough for a 2h meeting without token explosion
+                                transcript = meeting.transcript
+                                if len(transcript) > 20000:
+                                    transcript = transcript[:20000] + "\n\n[... transcript truncated — full text available in Meetings section ...]"
+                                parts.append(f"\n## Transcript\n{transcript}")
+                            elif not include_transcript and meeting.transcript:
+                                parts.append(f"\n(Transcript available — call read_meeting again with include_transcript=true to see it.)")
+
+                            return "\n".join(parts)
+                        except Exception as exc:
+                            log.warning("read_meeting tool failed: %s", exc)
+                            return f"Failed to read meeting: {exc}"
 
                     if name == "web_search":
                         try:
@@ -684,9 +944,156 @@ async def send_message(
                             log.warning("web_search tool failed: %s", exc)
                             return f"Web search failed: {exc}"
 
+                    if name == "generate_document":
+                        try:
+                            import re as _re
+                            from io import BytesIO
+                            import docx as _docx
+                            title = tool_input.get("title", "Document")
+                            content_md = tool_input.get("content", "")
+                            fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+                            doc = _docx.Document()
+                            doc.add_heading(title, 0)
+                            for line in content_md.split("\n"):
+                                s = line.strip()
+                                if not s:
+                                    continue
+                                if s.startswith("### "):
+                                    doc.add_heading(s[4:], level=3)
+                                elif s.startswith("## "):
+                                    doc.add_heading(s[3:], level=2)
+                                elif s.startswith("# "):
+                                    doc.add_heading(s[2:], level=1)
+                                elif s.startswith("- ") or s.startswith("* "):
+                                    doc.add_paragraph(s[2:], style="List Bullet")
+                                elif _re.match(r"^\d+\.", s):
+                                    doc.add_paragraph(_re.sub(r"^\d+\.\s*", "", s), style="List Number")
+                                else:
+                                    doc.add_paragraph(s)
+                            buf = BytesIO()
+                            doc.save(buf)
+                            raw = buf.getvalue()
+                            b64 = base64.b64encode(raw).decode()
+                            filename = fn_base + ".docx"
+                            artifact = Artifact(
+                                user_id=user_id, filename=filename, type="document",
+                                source="chat", source_id=conversation_id,
+                                content="base64:" + b64, version=1,
+                                size_bytes=len(raw), tags=["generated"],
+                            )
+                            bg_db.add(artifact)
+                            await bg_db.commit()
+                            await bg_db.refresh(artifact)
+                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "docx"}))
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
+                        except Exception as exc:
+                            log.warning("generate_document failed: %s", exc)
+                            return f"Failed to generate document: {exc}"
+
+                    if name == "generate_presentation":
+                        try:
+                            import re as _re
+                            from io import BytesIO
+                            from pptx import Presentation as _Prs
+                            from pptx.util import Pt as _Pt
+                            title = tool_input.get("title", "Presentation")
+                            subtitle = tool_input.get("subtitle", "")
+                            slides_data = tool_input.get("slides", [])
+                            fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+                            prs = _Prs()
+                            # Title slide
+                            title_slide = prs.slides.add_slide(prs.slide_layouts[0])
+                            title_slide.shapes.title.text = title
+                            if subtitle and len(title_slide.placeholders) > 1:
+                                title_slide.placeholders[1].text = subtitle
+                            # Content slides
+                            for s in slides_data:
+                                slide = prs.slides.add_slide(prs.slide_layouts[1])
+                                slide.shapes.title.text = s.get("title", "")
+                                tf = slide.placeholders[1].text_frame
+                                tf.clear()
+                                bullets = s.get("bullets", [])
+                                for i, bullet in enumerate(bullets):
+                                    if i == 0:
+                                        tf.text = bullet
+                                    else:
+                                        p = tf.add_paragraph()
+                                        p.text = bullet
+                                        p.level = 0
+                            buf = BytesIO()
+                            prs.save(buf)
+                            raw = buf.getvalue()
+                            b64 = base64.b64encode(raw).decode()
+                            filename = fn_base + ".pptx"
+                            artifact = Artifact(
+                                user_id=user_id, filename=filename, type="document",
+                                source="chat", source_id=conversation_id,
+                                content="base64:" + b64, version=1,
+                                size_bytes=len(raw), tags=["generated", "presentation"],
+                            )
+                            bg_db.add(artifact)
+                            await bg_db.commit()
+                            await bg_db.refresh(artifact)
+                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pptx"}))
+                            return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts."
+                        except Exception as exc:
+                            log.warning("generate_presentation failed: %s", exc)
+                            return f"Failed to generate presentation: {exc}"
+
+                    if name == "generate_pdf":
+                        try:
+                            import re as _re
+                            from io import BytesIO
+                            from reportlab.lib.pagesizes import A4
+                            from reportlab.lib.styles import getSampleStyleSheet
+                            from reportlab.lib.units import inch
+                            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                            title = tool_input.get("title", "Document")
+                            content_md = tool_input.get("content", "")
+                            fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+                            buf = BytesIO()
+                            doc = SimpleDocTemplate(buf, pagesize=A4,
+                                rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+                            styles = getSampleStyleSheet()
+                            story = [Paragraph(title, styles["Title"]), Spacer(1, 0.2 * inch)]
+                            for line in content_md.split("\n"):
+                                s = line.strip()
+                                if not s:
+                                    story.append(Spacer(1, 0.08 * inch))
+                                    continue
+                                if s.startswith("### "):
+                                    story.append(Paragraph(s[4:], styles["Heading3"]))
+                                elif s.startswith("## "):
+                                    story.append(Paragraph(s[3:], styles["Heading2"]))
+                                elif s.startswith("# "):
+                                    story.append(Paragraph(s[2:], styles["Heading1"]))
+                                elif s.startswith("- ") or s.startswith("* "):
+                                    story.append(Paragraph("&#8226; " + s[2:], styles["Normal"]))
+                                else:
+                                    story.append(Paragraph(s, styles["Normal"]))
+                                    story.append(Spacer(1, 0.05 * inch))
+                            doc.build(story)
+                            raw = buf.getvalue()
+                            b64 = base64.b64encode(raw).decode()
+                            filename = fn_base + ".pdf"
+                            artifact = Artifact(
+                                user_id=user_id, filename=filename, type="document",
+                                source="chat", source_id=conversation_id,
+                                content="base64:" + b64, version=1,
+                                size_bytes=len(raw), tags=["generated", "pdf"],
+                            )
+                            bg_db.add(artifact)
+                            await bg_db.commit()
+                            await bg_db.refresh(artifact)
+                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pdf"}))
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
+                        except Exception as exc:
+                            log.warning("generate_pdf failed: %s", exc)
+                            return f"Failed to generate PDF: {exc}"
+
                     return "Action completed."
 
-                async for event in client.stream(messages, tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
+                async for event in client.stream(messages, effective_tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
@@ -730,6 +1137,7 @@ async def send_message(
 
                 user_input = content or "[attachment]"
                 await _extract_and_save_facts(bg_db, user_id, user_input, assistant_content, client)
+                await _auto_save_artifacts(bg_db, user_id, conversation_id, assistant_msg.id, assistant_content)
 
         except Exception as exc:
             log.error("background_generate failed: %s", exc)
