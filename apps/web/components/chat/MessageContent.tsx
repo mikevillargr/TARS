@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback } from "react"
+import React, { useState, useCallback, useEffect, useRef } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
@@ -14,6 +14,68 @@ const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/g
 
 function extractUrls(text: string): string[] {
   return [...new Set(text.match(URL_REGEX) || [])]
+}
+
+// ─── Mermaid renderer ─────────────────────────────────────────────
+// Lazy-loaded: mermaid.js is browser-only and large (~2MB).
+// Falls back to a styled code block if the diagram fails to render.
+function MermaidRenderer({ code }: { code: string }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const idRef        = useRef(`mermaid-${Math.random().toString(36).slice(2)}`)
+  const [error, setError] = useState<string | null>(null)
+  const [rendered, setRendered] = useState(false)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    setError(null)
+    setRendered(false)
+    import("mermaid").then(({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "neutral",
+        fontFamily: "inherit",
+        fontSize: 13,
+      })
+      // Each render needs a unique id; reuse idRef across re-renders of same diagram
+      mermaid.render(idRef.current, code)
+        .then(({ svg }) => {
+          if (containerRef.current) {
+            containerRef.current.innerHTML = svg
+            // Make svg responsive
+            const svgEl = containerRef.current.querySelector("svg")
+            if (svgEl) { svgEl.style.width = "100%"; svgEl.style.height = "auto" }
+            setRendered(true)
+          }
+        })
+        .catch((err: Error) => {
+          setError(err.message || "Diagram failed to render")
+        })
+    }).catch(() => setError("Mermaid library failed to load"))
+  }, [code])
+
+  if (error) {
+    // Graceful fallback — show as a copyable code block
+    return <CodeBlock language="mermaid" code={code} />
+  }
+
+  return (
+    <div
+      className="my-3 rounded-xl overflow-hidden"
+      style={{ border: "1px solid var(--c-border)", background: "var(--c-canvas)" }}
+    >
+      <div
+        className="flex items-center px-3 py-1.5 border-b"
+        style={{ borderColor: "var(--c-border-faint)", backgroundColor: "var(--c-surface)" }}
+      >
+        <span className="text-[11px] font-mono" style={{ color: "var(--c-ink-faint)" }}>diagram</span>
+      </div>
+      <div
+        ref={containerRef}
+        className="p-4 overflow-x-auto"
+        style={{ minHeight: rendered ? undefined : 60 }}
+      />
+    </div>
+  )
 }
 
 // ─── SVG renderer ─────────────────────────────────────────────────
@@ -224,6 +286,9 @@ export function MessageContent({ content }: { content: string }) {
             }
             if (language === "svg" || (language === "xml" && code.trimStart().startsWith("<svg"))) {
               return <SvgRenderer code={code} />
+            }
+            if (language === "mermaid") {
+              return <MermaidRenderer code={code} />
             }
             return <CodeBlock language={language} code={code} />
           },

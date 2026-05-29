@@ -337,6 +337,63 @@ function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
   return null
 }
 
+// ─── Message area ────────────────────────────────────────────────
+// memo: allMessages is stable during typing (useMemo on [messages,streaming]),
+// so this entire section is skipped on every keystroke → no O(n) reconcile cost.
+interface MessageAreaProps {
+  allMessages: (Message | StreamingMsg)[]
+  calendarSuggestions: CalendarSuggestion[]
+  taskSuggestions: TaskSuggestion[]
+  setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
+  setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
+  quoteIndex: number
+  messagesEndRef: React.RefObject<HTMLDivElement | null>
+}
+
+const MessageArea = memo(function MessageArea({
+  allMessages,
+  calendarSuggestions,
+  taskSuggestions,
+  setCalendarSuggestions,
+  setTaskSuggestions,
+  quoteIndex,
+  messagesEndRef,
+}: MessageAreaProps) {
+  return (
+    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
+      {allMessages.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
+          <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>TARS</p>
+          <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
+            &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
+          </p>
+        </div>
+      ) : allMessages.map((msg, i) => (
+        <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
+      ))}
+      {(calendarSuggestions.length > 0 || taskSuggestions.length > 0) && (
+        <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
+          {calendarSuggestions.map((s) => (
+            <CalendarSuggestChip
+              key={s.tool_use_id}
+              suggestion={s}
+              onDismiss={() => setCalendarSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+            />
+          ))}
+          {taskSuggestions.map((s) => (
+            <TaskSuggestChip
+              key={s.tool_use_id}
+              suggestion={s}
+              onDismiss={() => setTaskSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+            />
+          ))}
+        </div>
+      )}
+      <div ref={messagesEndRef} />
+    </div>
+  )
+})
+
 // ─── Page ─────────────────────────────────────────────────────────
 const TARS_QUOTES = [
   "I have a cue light I can use to show you when I'm joking, if you like.",
@@ -922,38 +979,16 @@ export default function ChatPage() {
           </button>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
-          {allMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
-              <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>TARS</p>
-              <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
-                &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
-              </p>
-            </div>
-          ) : allMessages.map((msg, i) => (
-            <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
-          ))}
-          {(calendarSuggestions.length > 0 || taskSuggestions.length > 0) && (
-            <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
-              {calendarSuggestions.map((s) => (
-                <CalendarSuggestChip
-                  key={s.tool_use_id}
-                  suggestion={s}
-                  onDismiss={() => setCalendarSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
-                />
-              ))}
-              {taskSuggestions.map((s) => (
-                <TaskSuggestChip
-                  key={s.tool_use_id}
-                  suggestion={s}
-                  onDismiss={() => setTaskSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
-                />
-              ))}
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+        {/* Messages — memoized so keystrokes don't trigger O(n) reconcile */}
+        <MessageArea
+          allMessages={allMessages}
+          calendarSuggestions={calendarSuggestions}
+          taskSuggestions={taskSuggestions}
+          setCalendarSuggestions={setCalendarSuggestions}
+          setTaskSuggestions={setTaskSuggestions}
+          quoteIndex={quoteIndex}
+          messagesEndRef={messagesEndRef}
+        />
 
         {/* ── Floating input ─────────────────────────────────────── */}
         {/* Gradient fade creates a soft visual lift from the message stream */}

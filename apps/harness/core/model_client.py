@@ -498,15 +498,17 @@ class ModelClient:
         # ── Tier 2: RunPod 32B → Haiku or Sonnet when cold ───────────────────
         endpoint_2 = TIER_ENDPOINTS.get(ModelTier.TIER2)
         if endpoint_2 and self._is_warm(ModelTier.TIER2):
-            async for event in self._stream_runpod(messages, system, max_tokens, tier=ModelTier.TIER2):
+            # Pass tools so RunPod-level fallback can hand them to Sonnet if RunPod fails
+            async for event in self._stream_runpod(messages, system, max_tokens, tier=ModelTier.TIER2, tools=tools, tool_executor=tool_executor):
                 yield event
         else:
-            cold_model = _tier2_cold_model(messages)
+            # If tools were requested, always use Sonnet so they remain available
+            cold_model = None if tools else _tier2_cold_model(messages)
             logger.info(
                 "Tier2 RunPod cold — falling back to %s",
-                "haiku" if cold_model else "sonnet",
+                "sonnet (tools)" if tools else ("haiku" if cold_model else "sonnet"),
             )
-            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
+            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
                 yield event
 
     async def _stream_anthropic(
@@ -606,6 +608,8 @@ class ModelClient:
         max_tokens: int,
         *,
         tier: ModelTier,
+        tools: Optional[List[Dict]] = None,
+        tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Call a RunPod serverless Ollama endpoint (Tier 2 only)."""
         endpoint = TIER_ENDPOINTS[tier]
@@ -652,8 +656,9 @@ class ModelClient:
             if not choices:
                 self._mark_failed(tier)
                 logger.warning("RunPod %s returned empty choices — falling back to Claude", tier)
-                cold_model = _tier2_cold_model(messages)
-                async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
+                # If tools were requested, always use Sonnet so they remain available
+                cold_model = None if tools else _tier2_cold_model(messages)
+                async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
                     yield event
                 return
 
@@ -673,8 +678,9 @@ class ModelClient:
         except Exception as e:
             logger.warning("RunPod %s failed (%s: %s) — falling back", tier, type(e).__name__, e)
             self._mark_failed(tier)
-            cold_model = _tier2_cold_model(messages)
-            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model):
+            # If tools were requested, always use Sonnet so they remain available
+            cold_model = None if tools else _tier2_cold_model(messages)
+            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
                 yield event
 
 
