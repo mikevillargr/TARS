@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
-import { Copy, Check, BookOpen } from "lucide-react"
+import { Copy, Check, BookOpen, Code2, Image } from "lucide-react"
 import { apiPost } from "@/lib/api-client"
 import { UrlPreviewCard } from "./UrlPreviewCard"
 
@@ -14,6 +14,92 @@ const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/g
 
 function extractUrls(text: string): string[] {
   return [...new Set(text.match(URL_REGEX) || [])]
+}
+
+// ─── SVG renderer ─────────────────────────────────────────────────
+function SvgRenderer({ code }: { code: string }) {
+  const [showSource, setShowSource] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const copy = useCallback(async () => {
+    await navigator.clipboard.writeText(code)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [code])
+
+  // Extract width/height from SVG to maintain aspect ratio
+  const widthMatch = code.match(/width="(\d+)"/)
+  const heightMatch = code.match(/height="(\d+)"/)
+  const svgWidth = widthMatch ? parseInt(widthMatch[1]) : 600
+  const svgHeight = heightMatch ? parseInt(heightMatch[1]) : 400
+  const aspectRatio = svgHeight / svgWidth
+
+  return (
+    <div className="my-3 rounded-xl overflow-hidden" style={{ border: "1px solid #2a2a2a" }}>
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-3 py-1.5"
+        style={{ backgroundColor: "#1e1e1e" }}
+      >
+        <span className="text-[11px] font-mono" style={{ color: "#888" }}>svg</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSource(!showSource)}
+            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
+            style={{ color: showSource ? "#a78bfa" : "#888" }}
+            title={showSource ? "Show rendered" : "Show source"}
+          >
+            {showSource ? <Image size={10} /> : <Code2 size={10} />}
+            {showSource ? "Render" : "Source"}
+          </button>
+          <button
+            onClick={copy}
+            className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
+            style={{ color: copied ? "#4ade80" : "#888" }}
+          >
+            {copied ? <Check size={10} /> : <Copy size={10} />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      </div>
+
+      {showSource ? (
+        <SyntaxHighlighter
+          language="xml"
+          style={oneDark}
+          customStyle={{
+            margin: 0,
+            borderRadius: 0,
+            fontSize: "0.75rem",
+            lineHeight: "1.5",
+            padding: "1rem",
+            background: "#1a1a1a",
+          }}
+          wrapLongLines
+        >
+          {code}
+        </SyntaxHighlighter>
+      ) : (
+        <div
+          className="w-full"
+          style={{ backgroundColor: "#fafafa", padding: "1rem" }}
+        >
+          <div
+            className="w-full"
+            style={{ paddingBottom: `${Math.min(aspectRatio * 100, 100)}%`, position: "relative" }}
+          >
+            <div
+              style={{ position: "absolute", inset: 0 }}
+              dangerouslySetInnerHTML={{ __html: code
+                .replace(/width="[^"]*"/, 'width="100%"')
+                .replace(/height="[^"]*"/, 'height="100%"')
+              }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Code block ───────────────────────────────────────────────────
@@ -128,6 +214,9 @@ export function MessageContent({ content }: { content: string }) {
 
             if (inline) {
               return <InlineCode>{children}</InlineCode>
+            }
+            if (language === "svg" || (language === "xml" && code.trimStart().startsWith("<svg"))) {
+              return <SvgRenderer code={code} />
             }
             return <CodeBlock language={language} code={code} />
           },
