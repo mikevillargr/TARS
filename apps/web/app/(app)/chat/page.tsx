@@ -321,6 +321,21 @@ function ArtifactLoader({ onArtifactLoad }: { onArtifactLoad: (artifactId: strin
   return null
 }
 
+// ─── Ask loader — handles ?ask=<query> from command palette ──────
+// Sets the input value and auto-sends on first load.
+function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
+  const searchParams = useSearchParams()
+  const handledRef = useRef(false)
+  useEffect(() => {
+    const q = searchParams.get("ask")
+    if (!q || handledRef.current) return
+    handledRef.current = true
+    onAsk(decodeURIComponent(q))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+  return null
+}
+
 // ─── Page ─────────────────────────────────────────────────────────
 const TARS_QUOTES = [
   "I have a cue light I can use to show you when I'm joking, if you like.",
@@ -690,6 +705,13 @@ export default function ChatPage() {
           setMessages([])
           setInputValue(`📎 **${filename}** — [View in Artifacts](/artifacts)`)
           pendingArtifactIdRef.current = artifactId
+          autoSendPendingRef.current = true
+        }} />
+        <AskLoader onAsk={(q) => {
+          // Pre-fill from command palette "Ask TARS: …" and auto-send
+          setActiveChatId(null)
+          setMessages([])
+          setInputValue(q)
           autoSendPendingRef.current = true
         }} />
       </Suspense>

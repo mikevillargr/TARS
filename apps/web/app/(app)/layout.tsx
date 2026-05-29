@@ -3,12 +3,13 @@
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
 import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Sun, Moon } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
 import { useTheme } from "@/components/ThemeProvider"
+import { CommandPalette } from "@/components/shell/CommandPalette"
 
 // Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
 function BottomTabBar() {
@@ -76,7 +77,20 @@ function BottomTabBar() {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [agentActive] = useState(true)
   const [captureOpen, setCaptureOpen] = useState(false)
+  const [cmdOpen, setCmdOpen] = useState(false)
   const { theme, toggle: toggleTheme } = useTheme()
+
+  // Global Cmd+K / Ctrl+K listener
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        setCmdOpen(prev => !prev)
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [])
 
   return (
     <SidebarProvider>
@@ -94,22 +108,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         >
           <div className="flex items-center gap-2 flex-1">
             <SidebarTrigger className="size-7 text-[#6b6357] hover:text-[#1a1714]" />
-            <div className="relative max-w-md w-full hidden sm:block ml-2">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#948a7b]" />
-              <input
-                type="text"
-                placeholder="Ask TARS or search… (⌘K)"
-                className="w-full rounded-full pl-9 pr-4 py-1.5 text-sm focus:outline-none transition-all"
-                style={{
-                  backgroundColor: "#f6f3ec",
-                  border: "1px solid #d8d2c4",
-                  color: "#1a1714",
-                }}
-              />
-            </div>
+            <button
+              onClick={() => setCmdOpen(true)}
+              className="relative max-w-md w-full hidden sm:flex items-center gap-2 ml-2 rounded-full pl-3 pr-3 py-1.5 text-sm transition-all text-left"
+              style={{
+                backgroundColor: "var(--c-surface-2)",
+                border: "1px solid var(--c-border)",
+                color: "var(--c-ink-faint)",
+              }}
+            >
+              <Search size={14} className="shrink-0" />
+              <span className="flex-1">Ask TARS or search…</span>
+              <kbd
+                className="hidden lg:inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0"
+                style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink-faint)" }}
+              >
+                ⌘K
+              </kbd>
+            </button>
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Mobile search icon */}
+            <button
+              onClick={() => setCmdOpen(true)}
+              className="sm:hidden p-2 rounded-lg"
+              style={{ color: "var(--c-ink-muted)" }}
+              title="Search"
+            >
+              <Search size={18} />
+            </button>
+
             {agentActive && (
               <div
                 className="flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-medium hidden sm:flex"
@@ -169,6 +198,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onClose={() => setCaptureOpen(false)}
         defaultTab="file"
       />
+
+      {/* Global Command Palette */}
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
     </SidebarProvider>
   )
 }
