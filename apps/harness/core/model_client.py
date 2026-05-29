@@ -2,13 +2,12 @@
 Unified model client.
 
 Tier 1: Claude Haiku  — always available, ~200-500ms, cheap (~$0.001/req)
-Tier 2: RunPod 32B    — warm: ~2-10s GPU inference
+Tier 2: RunPod        — GPU inference via RunPod Serverless; model set by WORKHORSE_MODEL env var
          cold fallback: Haiku  if message ≤ 500 chars (standard tasks)
                         Sonnet if message > 500 chars or contains complexity signals
 Tier 3: Claude Sonnet — frontier, tools, streaming, always Claude
 
-NOTE: llama3.2:3b / Ollama is fully retired from the response path.
-      The classifier is now a Haiku API call (router.py).
+NOTE: Ollama is fully retired. The classifier is a Haiku API call (router.py).
 """
 
 import asyncio
@@ -23,9 +22,9 @@ import httpx
 import anthropic
 
 # ── XML tool-call strip ────────────────────────────────────────────────────────
-# Qwen3 and other non-Claude models sometimes emit XML tool-call markup
-# (e.g. <function_calls>…</function_calls>) when they see a capabilities section.
-# We now gate capabilities on Tier 3 only, but keep this filter as a safety net.
+# Non-Claude models (RunPod Tier 2) sometimes emit XML tool-call markup
+# (e.g. <function_calls>…</function_calls>) in response text.
+# Capabilities are gated to Tier 3 only, but this filter is a safety net.
 _TOOL_XML_RE = re.compile(
     r"<function_calls>.*?</function_calls>|"
     r"<invoke\b[^>]*>.*?</invoke>|"
@@ -291,19 +290,22 @@ SAVE_TO_SECOND_BRAIN_TOOL = {
 
 # ─── Tier routing tables ─────────────────────────────────────────────────────
 
+# Tier 2 display label derived from the model name (strip org prefix for brevity)
+_tier2_label = settings.workhorse_model.split("/")[-1].lower() if settings.workhorse_model else "runpod"
+
 TIER_MODELS = {
     ModelTier.TIER1: "haiku",
-    ModelTier.TIER2: "qwen3-32b",
+    ModelTier.TIER2: _tier2_label,
     ModelTier.TIER3: "claude-sonnet-4-6",
 }
 
-# Only Tier 2 uses RunPod now; Tier 1 = Haiku, Tier 3 = Sonnet
+# Only Tier 2 uses RunPod; Tier 1 = Haiku, Tier 3 = Sonnet (both Anthropic API)
 TIER_ENDPOINTS = {
     ModelTier.TIER2: settings.runpod_endpoint_32b,
 }
 
 TIER_MODEL_NAMES = {
-    ModelTier.TIER2: settings.workhorse_model,    # Qwen/Qwen3-32B-AWQ
+    ModelTier.TIER2: settings.workhorse_model,
 }
 
 _TIER_COOLDOWN = {

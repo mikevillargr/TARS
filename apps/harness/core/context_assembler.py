@@ -32,8 +32,8 @@ def _format_event_time(start: str, all_day: bool, tz_name: str = "UTC") -> str:
 
 
 # Capabilities block — only injected for Tier 3 (Claude, which has native tool support).
-# Tier 1/2 (Haiku/Qwen via Ollama) do NOT receive this — they have no tool support and
-# would otherwise output raw XML tool-call markup in the response text.
+# Tier 1 (Haiku) and Tier 2 (RunPod) do NOT receive this — they have no tool support
+# and would otherwise output raw XML tool-call markup in the response text.
 _CAPABILITIES_BLOCK = """[CAPABILITIES]
 You have the following tools available. Use them proactively — don't wait to be asked when the intent is clear.
 

@@ -37,11 +37,11 @@ Built on Next.js 15 + FastAPI with a three-tier model routing architecture — l
 ```
 Request
   │
-  ├─ Llama 3.2 3B classifier (local, ~100ms)
+  ├─ Classifier: Claude Haiku (~200ms)
   │
-  ├─ Tier 1 (simple)  → Claude Haiku  (~500ms)
-  ├─ Tier 2 (most)    → Qwen3 32B via Ollama/RunPod  (~2-4s)
-  └─ Tier 3 (frontier)→ Claude Sonnet/Opus via Anthropic API  (~3-8s)
+  ├─ Tier 1 (simple / fast)  → Claude Haiku     (~500ms)
+  ├─ Tier 2 (most tasks)     → RunPod GPU        (~2-4s, cold fallback to Haiku/Sonnet)
+  └─ Tier 3 (frontier/tools) → Claude Sonnet     (~3-8s)
 ```
 
 **Stack**
@@ -52,8 +52,9 @@ Request
 | Backend | FastAPI (Python) |
 | Database | PostgreSQL + pgvector |
 | Memory | Mnemon (episodic) + Second Brain (semantic) |
-| Local inference | Ollama on server |
-| Frontier | Anthropic API |
+| Tier 1 + classifier | Claude Haiku via Anthropic API |
+| Tier 2 | RunPod Serverless GPU — model set via `WORKHORSE_MODEL` env var |
+| Tier 3 | Claude Sonnet via Anthropic API |
 | Process manager | pm2 |
 | Reverse proxy | Nginx |
 
