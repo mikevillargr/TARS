@@ -6,6 +6,21 @@
 
 // ─── List item extraction ─────────────────────────────────────────────────────
 
+// Words that signal a question or clarification, not an action item
+const QUESTION_STARTS =
+  /^(is|are|was|were|do|does|did|can|could|would|should|will|has|have|had|what|when|where|why|how|which|who|whom)\b/i
+
+function isActionableItem(text: string): boolean {
+  // Reject questions
+  if (text.endsWith("?")) return false
+  if (QUESTION_STARTS.test(text.trim())) return false
+  // Reject very short fragments
+  if (text.trim().length < 8) return false
+  // Reject pure descriptions / single nouns with no verb signal
+  // (heuristic: actionable items usually have a verb or are imperative)
+  return true
+}
+
 export function extractListItems(content: string): string[] {
   const items: string[] = []
   for (const line of content.split("\n")) {
@@ -15,7 +30,9 @@ export function extractListItems(content: string): string[] {
         .replace(/\*\*(.*?)\*\*/g, "$1") // strip bold markers
         .replace(/\[(.*?)\]/g, "$1")     // strip markdown links
         .trim()
-      if (text.length > 3 && text.length < 200) items.push(text)
+      if (text.length > 3 && text.length < 200 && isActionableItem(text)) {
+        items.push(text)
+      }
     }
   }
   return items

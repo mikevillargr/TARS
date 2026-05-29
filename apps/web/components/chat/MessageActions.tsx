@@ -1,32 +1,45 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { BookOpen, CheckSquare, Check, Calendar, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
+import { BookOpen, CheckSquare, Square, Check, Calendar, ChevronDown, ChevronUp, Loader2, X } from "lucide-react"
 import { apiPost } from "@/lib/api-client"
 import { analyzeContent, type CalendarHint } from "./contentAnalysis"
 
 // ─── Bulk task chip ───────────────────────────────────────────────────────────
 
 function BulkTasksChip({ items }: { items: string[] }) {
-  const [state, setState] = useState<"idle" | "loading" | "done" | "expanded">("idle")
-  const [created, setCreated] = useState(0)
+  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState<Set<number>>(() => new Set(items.map((_, i) => i)))
+  const [loading, setLoading] = useState(false)
+  const [created, setCreated] = useState<number | null>(null)
+
+  const toggle = (i: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(i) ? next.delete(i) : next.add(i)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    setSelected(selected.size === items.length ? new Set() : new Set(items.map((_, i) => i)))
+  }
 
   const create = async () => {
-    setState("loading")
+    setLoading(true)
     let count = 0
-    for (const title of items) {
+    for (const i of selected) {
       try {
-        await apiPost("/tasks", { title, priority: "normal", source: "chat" })
+        await apiPost("/tasks", { title: items[i], priority: "normal", source: "chat" })
         count++
       } catch {}
     }
     setCreated(count)
-    setState("done")
+    setLoading(false)
+    setOpen(false)
   }
 
-  const label = items.length === 1 ? "1 task" : `${items.length} tasks`
-
-  if (state === "done") {
+  if (created !== null) {
     return (
       <div
         className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl"
@@ -38,65 +51,89 @@ function BulkTasksChip({ items }: { items: string[] }) {
     )
   }
 
+  const numSelected = selected.size
+  const chipLabel = open
+    ? `${items.length} tasks`
+    : numSelected === items.length
+      ? `${items.length} tasks`
+      : `${numSelected}/${items.length} tasks`
+
   return (
-    <div className="flex items-start gap-1.5">
+    <div className="relative">
+      {/* Trigger chip */}
       <button
-        onClick={state === "loading" ? undefined : create}
-        disabled={state === "loading"}
+        onClick={() => setOpen(!open)}
         className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl transition-colors"
         style={{
-          backgroundColor: "#f6f3ec",
+          backgroundColor: open ? "#efeadf" : "#f6f3ec",
           color: "#6b6357",
-          border: "1px solid #d8d2c4",
+          border: `1px solid ${open ? "#c8c2b4" : "#d8d2c4"}`,
         }}
       >
-        {state === "loading" ? (
-          <Loader2 size={11} className="animate-spin" />
-        ) : (
-          <CheckSquare size={11} style={{ color: "#2d5a4f" }} />
-        )}
-        {state === "loading" ? "Creating…" : `Create ${label}`}
+        <CheckSquare size={11} style={{ color: "#2d5a4f" }} />
+        Add {chipLabel}
+        <ChevronDown size={10} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
-      {/* Preview toggle */}
-      {state === "idle" && (
-        <button
-          onClick={() => setState("expanded")}
-          className="inline-flex items-center gap-1 text-[10px] px-2 py-1.5 rounded-xl transition-colors"
-          style={{ color: "#948a7b" }}
-        >
-          Preview <ChevronDown size={10} />
-        </button>
-      )}
-      {state === "expanded" && (
-        <button
-          onClick={() => setState("idle")}
-          className="inline-flex items-center gap-1 text-[10px] px-2 py-1.5 rounded-xl transition-colors"
-          style={{ color: "#948a7b" }}
-        >
-          Hide <ChevronUp size={10} />
-        </button>
-      )}
-
-      {/* Expanded preview */}
-      {state === "expanded" && (
+      {/* Picker dropdown */}
+      {open && (
         <div
-          className="absolute mt-8 z-10 rounded-xl p-2 shadow-md min-w-[240px] max-w-xs"
+          className="absolute left-0 mt-1.5 z-20 rounded-xl shadow-lg w-72"
           style={{ backgroundColor: "#fff", border: "1px solid #e8e2d4" }}
         >
-          {items.map((item, i) => (
-            <div key={i} className="flex items-start gap-2 py-1 px-1">
-              <CheckSquare size={11} className="mt-0.5 shrink-0" style={{ color: "#2d5a4f" }} />
-              <span className="text-xs leading-snug" style={{ color: "#1a1714" }}>{item}</span>
-            </div>
-          ))}
-          <div className="pt-2 border-t mt-1" style={{ borderColor: "#e8e2d4" }}>
+          {/* Header */}
+          <div
+            className="flex items-center justify-between px-3 py-2"
+            style={{ borderBottom: "1px solid #f0ebe2" }}
+          >
+            <button
+              onClick={toggleAll}
+              className="text-[10px] font-medium transition-colors"
+              style={{ color: "#6b6357" }}
+            >
+              {selected.size === items.length ? "Deselect all" : "Select all"}
+            </button>
+            <button onClick={() => setOpen(false)} style={{ color: "#948a7b" }}>
+              <X size={13} />
+            </button>
+          </div>
+
+          {/* Item list */}
+          <div className="py-1 max-h-56 overflow-y-auto">
+            {items.map((item, i) => (
+              <button
+                key={i}
+                onClick={() => toggle(i)}
+                className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#faf8f4]"
+              >
+                {selected.has(i)
+                  ? <CheckSquare size={13} className="mt-0.5 shrink-0" style={{ color: "#2d5a4f" }} />
+                  : <Square size={13} className="mt-0.5 shrink-0" style={{ color: "#c4bdb2" }} />
+                }
+                <span
+                  className="text-xs leading-snug"
+                  style={{ color: selected.has(i) ? "#1a1714" : "#948a7b" }}
+                >
+                  {item}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Footer */}
+          <div className="px-3 py-2.5" style={{ borderTop: "1px solid #f0ebe2" }}>
             <button
               onClick={create}
-              className="w-full text-xs py-1.5 rounded-lg font-medium"
+              disabled={loading || numSelected === 0}
+              className="w-full text-xs py-1.5 rounded-lg font-medium disabled:opacity-40 transition-opacity"
               style={{ backgroundColor: "#2d5a4f", color: "#fff" }}
             >
-              Create all {label}
+              {loading
+                ? "Creating…"
+                : numSelected === 0
+                  ? "Select tasks to add"
+                  : `Add ${numSelected} ${numSelected === 1 ? "task" : "tasks"}`
+              }
             </button>
           </div>
         </div>
