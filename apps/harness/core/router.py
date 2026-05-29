@@ -40,8 +40,9 @@ _CLASSIFY_SYSTEM = (
     "writing, coding, analysis, summarization, research, explaining, most chat\n"
     "tier3 — ANY of the following: "
     "(a) actions that change state: create/add/book/schedule/remind/mark/cancel/update/track/follow-up/note/log/capture; "
-    "(b) requests that need tools or web search; "
-    "(c) frontier tasks: strategy, proposals, client deliverables, deep analysis. "
+    "(b) requests that need tools or web search (current events, live prices, recent news, real-time data); "
+    "(c) document/file generation: create a document/report/PDF/PPTX/DOCX/presentation/slide deck; "
+    "(d) frontier tasks: strategy, proposals, client deliverables, deep analysis. "
     "Default to tier3 whenever there is any doubt.\n\n"
     "Reply with exactly one word: tier1, tier2, or tier3"
 )
@@ -103,14 +104,22 @@ _ACTION_RE = re.compile(
 _TIER3_RE = re.compile(
     r"\b("
     r"write (a |an |the |me )?(full|complete|detailed|comprehensive|long)"
-    r"|create (a |an )?(strategy|proposal|report)"
-    r"|draft (a |an )?(proposal|contract|strategy|email|memo)"
+    r"|create (a |an )?(strategy|proposal|report|presentation|slide.?deck|document|docx|pptx|pdf)"
+    r"|draft (a |an )?(proposal|contract|strategy|email|memo|document|report)"
+    r"|generate (a |an )?(document|report|presentation|pdf|docx|pptx|slide)"
+    r"|make (a |an )?(presentation|slide.?deck|report|document|pdf)"
+    r"|build (a |an )?(presentation|slide.?deck|deck)"
     r"|deep (dive|analysis|review)"
     r"|comprehensive (analysis|report|strategy|review)"
     r"|client (deliverable|presentation|proposal|report)"
     r"|search (the |online|web|internet|for )"
     r"|look (it |this |that )?up online"
     r"|find (me )?(information|details|news) (about|on)"
+    r"|what.?s (the )?(latest|current|recent|new)"
+    r"|is .{0,30} (still|currently|now)"
+    r"|current (price|status|version|news|update)"
+    r"|latest (news|update|version|release|price)"
+    r"|live (data|price|rate|status)"
     r")\b",
     re.IGNORECASE,
 )

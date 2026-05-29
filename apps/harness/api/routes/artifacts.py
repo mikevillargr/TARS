@@ -1,6 +1,8 @@
+import base64
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,14 @@ from db.models import Artifact
 from ingest.pipeline import ingest_file
 
 router = APIRouter()
+
+# MIME type map for generated binary artifacts
+_BINARY_MIME = {
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pdf":  "application/pdf",
+}
 
 
 # ─── Response models ──────────────────────────────────────────────────────────
@@ -188,6 +198,46 @@ async def delete_artifact(
         raise HTTPException(status_code=404, detail="Artifact not found")
     await db.execute(delete(Artifact).where(Artifact.id == artifact_id))
     await db.commit()
+
+
+@router.get("/{artifact_id}/download")
+async def download_artifact(
+    artifact_id: str,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Serve an artifact as a downloadable binary file.
+    Text artifacts are served as text/plain; base64-encoded binary artifacts
+    (DOCX, PPTX, PDF) are decoded and served with the correct MIME type.
+    """
+    result = await db.execute(
+        select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
+    )
+    art = result.scalar_one_or_none()
+    if not art:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    filename = art.filename or "download"
+    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+
+    if art.content and art.content.startswith("base64:"):
+        # Binary artifact — decode and serve
+        raw = base64.b64decode(art.content[7:])
+        mime = _BINARY_MIME.get(ext, "application/octet-stream")
+        return Response(
+            content=raw,
+            media_type=mime,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # Text artifact — serve as UTF-8
+    content = art.content or ""
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/ingest", response_model=ArtifactDetailOut, status_code=201)

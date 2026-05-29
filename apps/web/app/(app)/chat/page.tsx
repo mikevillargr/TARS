@@ -660,7 +660,16 @@ export default function ChatPage() {
               apiGet<Conversation[]>("/chat/conversations").then(setConversations).catch(console.error)
             } else if (evt.type === "error") {
               console.error("TARS stream error:", evt.error)
-              if (chatId === activeChatIdRef.current) setStreaming(null)
+              if (chatId === activeChatIdRef.current) {
+                const errMsg: Message = {
+                  id: `error-${Date.now()}`,
+                  role: "assistant",
+                  content: `⚠️ **Error:** ${evt.error || "Something went wrong. Please try again."}`,
+                  created_at: new Date().toISOString(),
+                }
+                setMessages(prev => [...prev.filter(m => m.id !== tempUser.id), tempUser, errMsg])
+                setStreaming(null)
+              }
             }
           } catch { /* ignore malformed SSE */ }
         }
@@ -677,7 +686,17 @@ export default function ChatPage() {
         return
       }
       console.error(err)
-      if (chatId === activeChatIdRef.current) setStreaming(null)
+      if (chatId === activeChatIdRef.current) {
+        const errText = err instanceof Error ? err.message : "Connection failed. Please try again."
+        const errMsg: Message = {
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: `⚠️ **Error:** ${errText}`,
+          created_at: new Date().toISOString(),
+        }
+        setMessages(prev => [...prev, errMsg])
+        setStreaming(null)
+      }
     } finally {
       if (!stopInitiatedRef.current) setBusy(false)
       // If stop was initiated, handleStop already called setBusy(false)

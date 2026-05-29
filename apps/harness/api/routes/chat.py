@@ -20,6 +20,7 @@ from core.model_client import (
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
     READ_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
+    GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -552,6 +553,9 @@ async def send_message(
         READ_MEETING_TOOL,
         SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL,
+        GENERATE_DOCUMENT_TOOL,
+        GENERATE_PRESENTATION_TOOL,
+        GENERATE_PDF_TOOL,
     ] if tier == ModelTier.TIER3 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -833,6 +837,150 @@ async def send_message(
                         except Exception as exc:
                             log.warning("web_search tool failed: %s", exc)
                             return f"Web search failed: {exc}"
+
+                    if name == "generate_document":
+                        try:
+                            import re as _re
+                            from io import BytesIO
+                            import docx as _docx
+                            title = tool_input.get("title", "Document")
+                            content_md = tool_input.get("content", "")
+                            fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+                            doc = _docx.Document()
+                            doc.add_heading(title, 0)
+                            for line in content_md.split("\n"):
+                                s = line.strip()
+                                if not s:
+                                    continue
+                                if s.startswith("### "):
+                                    doc.add_heading(s[4:], level=3)
+                                elif s.startswith("## "):
+                                    doc.add_heading(s[3:], level=2)
+                                elif s.startswith("# "):
+                                    doc.add_heading(s[2:], level=1)
+                                elif s.startswith("- ") or s.startswith("* "):
+                                    doc.add_paragraph(s[2:], style="List Bullet")
+                                elif _re.match(r"^\d+\.", s):
+                                    doc.add_paragraph(_re.sub(r"^\d+\.\s*", "", s), style="List Number")
+                                else:
+                                    doc.add_paragraph(s)
+                            buf = BytesIO()
+                            doc.save(buf)
+                            raw = buf.getvalue()
+                            b64 = base64.b64encode(raw).decode()
+                            filename = fn_base + ".docx"
+                            artifact = Artifact(
+                                user_id=user_id, filename=filename, type="document",
+                                source="chat", source_id=conversation_id,
+                                content="base64:" + b64, version=1,
+                                size_bytes=len(raw), tags=["generated"],
+                            )
+                            bg_db.add(artifact)
+                            await bg_db.commit()
+                            await bg_db.refresh(artifact)
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts (ID: {artifact.id}). Mike can download it from the Artifacts section."
+                        except Exception as exc:
+                            log.warning("generate_document failed: %s", exc)
+                            return f"Failed to generate document: {exc}"
+
+                    if name == "generate_presentation":
+                        try:
+                            import re as _re
+                            from io import BytesIO
+                            from pptx import Presentation as _Prs
+                            from pptx.util import Pt as _Pt
+                            title = tool_input.get("title", "Presentation")
+                            subtitle = tool_input.get("subtitle", "")
+                            slides_data = tool_input.get("slides", [])
+                            fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+                            prs = _Prs()
+                            # Title slide
+                            title_slide = prs.slides.add_slide(prs.slide_layouts[0])
+                            title_slide.shapes.title.text = title
+                            if subtitle and len(title_slide.placeholders) > 1:
+                                title_slide.placeholders[1].text = subtitle
+                            # Content slides
+                            for s in slides_data:
+                                slide = prs.slides.add_slide(prs.slide_layouts[1])
+                                slide.shapes.title.text = s.get("title", "")
+                                tf = slide.placeholders[1].text_frame
+                                tf.clear()
+                                bullets = s.get("bullets", [])
+                                for i, bullet in enumerate(bullets):
+                                    if i == 0:
+                                        tf.text = bullet
+                                    else:
+                                        p = tf.add_paragraph()
+                                        p.text = bullet
+                                        p.level = 0
+                            buf = BytesIO()
+                            prs.save(buf)
+                            raw = buf.getvalue()
+                            b64 = base64.b64encode(raw).decode()
+                            filename = fn_base + ".pptx"
+                            artifact = Artifact(
+                                user_id=user_id, filename=filename, type="document",
+                                source="chat", source_id=conversation_id,
+                                content="base64:" + b64, version=1,
+                                size_bytes=len(raw), tags=["generated", "presentation"],
+                            )
+                            bg_db.add(artifact)
+                            await bg_db.commit()
+                            await bg_db.refresh(artifact)
+                            return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts (ID: {artifact.id}). Mike can download it from the Artifacts section."
+                        except Exception as exc:
+                            log.warning("generate_presentation failed: %s", exc)
+                            return f"Failed to generate presentation: {exc}"
+
+                    if name == "generate_pdf":
+                        try:
+                            import re as _re
+                            from io import BytesIO
+                            from reportlab.lib.pagesizes import A4
+                            from reportlab.lib.styles import getSampleStyleSheet
+                            from reportlab.lib.units import inch
+                            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                            title = tool_input.get("title", "Document")
+                            content_md = tool_input.get("content", "")
+                            fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+                            buf = BytesIO()
+                            doc = SimpleDocTemplate(buf, pagesize=A4,
+                                rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+                            styles = getSampleStyleSheet()
+                            story = [Paragraph(title, styles["Title"]), Spacer(1, 0.2 * inch)]
+                            for line in content_md.split("\n"):
+                                s = line.strip()
+                                if not s:
+                                    story.append(Spacer(1, 0.08 * inch))
+                                    continue
+                                if s.startswith("### "):
+                                    story.append(Paragraph(s[4:], styles["Heading3"]))
+                                elif s.startswith("## "):
+                                    story.append(Paragraph(s[3:], styles["Heading2"]))
+                                elif s.startswith("# "):
+                                    story.append(Paragraph(s[2:], styles["Heading1"]))
+                                elif s.startswith("- ") or s.startswith("* "):
+                                    story.append(Paragraph("&#8226; " + s[2:], styles["Normal"]))
+                                else:
+                                    story.append(Paragraph(s, styles["Normal"]))
+                                    story.append(Spacer(1, 0.05 * inch))
+                            doc.build(story)
+                            raw = buf.getvalue()
+                            b64 = base64.b64encode(raw).decode()
+                            filename = fn_base + ".pdf"
+                            artifact = Artifact(
+                                user_id=user_id, filename=filename, type="document",
+                                source="chat", source_id=conversation_id,
+                                content="base64:" + b64, version=1,
+                                size_bytes=len(raw), tags=["generated", "pdf"],
+                            )
+                            bg_db.add(artifact)
+                            await bg_db.commit()
+                            await bg_db.refresh(artifact)
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts (ID: {artifact.id}). Mike can download it from the Artifacts section."
+                        except Exception as exc:
+                            log.warning("generate_pdf failed: %s", exc)
+                            return f"Failed to generate PDF: {exc}"
 
                     return "Action completed."
 

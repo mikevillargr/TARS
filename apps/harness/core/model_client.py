@@ -288,6 +288,109 @@ SAVE_TO_SECOND_BRAIN_TOOL = {
     },
 }
 
+GENERATE_DOCUMENT_TOOL = {
+    "name": "generate_document",
+    "description": (
+        "Generate a Word document (DOCX) from structured content and save it to Artifacts. "
+        "Use when Mike asks to create, write, draft, or generate a document, report, proposal, "
+        "brief, memo, or any formal written piece. Supports headings, bullets, and numbered lists "
+        "via markdown syntax. Returns the artifact ID and filename so Mike can download it."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Document title — used as the main heading and filename.",
+            },
+            "content": {
+                "type": "string",
+                "description": (
+                    "Full document body. Use # H1, ## H2, ### H3 for headings; "
+                    "- or * for bullet points; 1. 2. for numbered lists; plain text for paragraphs. "
+                    "Write the complete, detailed content — don't abbreviate."
+                ),
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional base filename (no extension). Defaults to slugified title.",
+            },
+        },
+        "required": ["title", "content"],
+    },
+}
+
+GENERATE_PRESENTATION_TOOL = {
+    "name": "generate_presentation",
+    "description": (
+        "Generate a PowerPoint presentation (PPTX) from a slide structure and save it to Artifacts. "
+        "Use when Mike asks to create, build, or generate a presentation, slide deck, pitch deck, "
+        "or slides. Produces a PPTX file with a title slide plus content slides."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Presentation title — shown on the title slide.",
+            },
+            "subtitle": {
+                "type": "string",
+                "description": "Optional subtitle shown on the title slide.",
+            },
+            "slides": {
+                "type": "array",
+                "description": "Array of content slides after the title slide.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Slide heading."},
+                        "bullets": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Bullet points for this slide. Write complete sentences.",
+                        },
+                    },
+                    "required": ["title", "bullets"],
+                },
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional base filename (no extension).",
+            },
+        },
+        "required": ["title", "slides"],
+    },
+}
+
+GENERATE_PDF_TOOL = {
+    "name": "generate_pdf",
+    "description": (
+        "Generate a PDF document from structured content and save it to Artifacts. "
+        "Use when Mike explicitly asks for a PDF, or when generating a report/document that "
+        "should be in PDF format. Supports headings (# ## ###), bullet lists (- *), and paragraphs."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Document title.",
+            },
+            "content": {
+                "type": "string",
+                "description": "Content in markdown-like format. # H1, ## H2, ### H3, - bullets, plain paragraphs.",
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional base filename (no extension).",
+            },
+        },
+        "required": ["title", "content"],
+    },
+}
+
+
 # ─── Tier routing tables ─────────────────────────────────────────────────────
 
 # Tier 2 display label derived from the model name (strip org prefix for brevity)
@@ -420,31 +523,44 @@ class ModelClient:
         _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
 
         model = model or "claude-sonnet-4-6"
+        current_messages = list(messages)
+        total_input = 0
+        total_output = 0
+
         try:
-            kwargs: Dict[str, Any] = dict(
-                model=model,
-                max_tokens=max_tokens,
-                system=system,
-                messages=messages,
-            )
-            if tools:
-                kwargs["tools"] = tools
+            for _round in range(8):  # max 8 tool-call rounds before giving up
+                kwargs: Dict[str, Any] = dict(
+                    model=model,
+                    max_tokens=max_tokens,
+                    system=system,
+                    messages=current_messages,
+                )
+                if tools:
+                    kwargs["tools"] = tools
 
-            async with self.anthropic.messages.stream(**kwargs) as stream:
-                async for text in stream.text_stream:
-                    yield {"type": "chunk", "text": text}
+                async with self.anthropic.messages.stream(**kwargs) as stream:
+                    async for text in stream.text_stream:
+                        yield {"type": "chunk", "text": text}
 
-                final = await stream.get_final_message()
-                tool_uses = [b for b in final.content if b.type == "tool_use"]
+                    final = await stream.get_final_message()
+                    total_input += final.usage.input_tokens
+                    total_output += final.usage.output_tokens
 
-                # Emit suggestion events for proposal tools (shown as chips in UI)
-                for b in tool_uses:
-                    if b.name == "propose_calendar_event":
-                        yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
-                    elif b.name == "propose_task":
-                        yield {"type": "task_suggest", "tool_use_id": b.id, **b.input}
+                    tool_uses = [b for b in final.content if b.type == "tool_use"]
 
-                if final.stop_reason == "tool_use" and tool_uses:
+                    # Emit suggestion events for proposal tools (shown as chips in UI)
+                    for b in tool_uses:
+                        if b.name == "propose_calendar_event":
+                            yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
+                        elif b.name == "propose_task":
+                            yield {"type": "task_suggest", "tool_use_id": b.id, **b.input}
+
+                    if final.stop_reason != "tool_use" or not tool_uses:
+                        # Natural completion — no more tool calls needed
+                        yield {"type": "done", "model": model, "tokens": total_input + total_output}
+                        return
+
+                    # Build assistant turn + execute tools → continue loop
                     asst_content = []
                     for b in final.content:
                         if b.type == "text":
@@ -463,7 +579,7 @@ class ModelClient:
                             try:
                                 result = await tool_executor(b.name, b.input)
                             except Exception as exc:
-                                result = f"Error: {exc}"
+                                result = f"Tool error ({b.name}): {exc}"
                         else:
                             result = "Action completed."
                         tool_results.append({
@@ -472,29 +588,13 @@ class ModelClient:
                             "content": result,
                         })
 
-                    cont_messages = messages + [
+                    current_messages = current_messages + [
                         {"role": "assistant", "content": asst_content},
                         {"role": "user", "content": tool_results},
                     ]
-                    cont_kwargs: Dict[str, Any] = dict(
-                        model=model, max_tokens=max_tokens,
-                        system=system, messages=cont_messages,
-                    )
-                    if tools:
-                        cont_kwargs["tools"] = tools
 
-                    async with self.anthropic.messages.stream(**cont_kwargs) as cont:
-                        async for text in cont.text_stream:
-                            yield {"type": "chunk", "text": text}
-                        final2 = await cont.get_final_message()
-                        total = (
-                            final.usage.input_tokens + final.usage.output_tokens
-                            + final2.usage.input_tokens + final2.usage.output_tokens
-                        )
-                        yield {"type": "done", "model": model, "tokens": total}
-                else:
-                    total = final.usage.input_tokens + final.usage.output_tokens
-                    yield {"type": "done", "model": model, "tokens": total}
+            # Exceeded max rounds — emit done with accumulated token count
+            yield {"type": "done", "model": model, "tokens": total_input + total_output}
 
         except Exception as e:
             yield {"type": "error", "error": str(e)}

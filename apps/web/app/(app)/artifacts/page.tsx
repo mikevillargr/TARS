@@ -75,6 +75,15 @@ function sourceLabel(source: string) {
 }
 
 function downloadArtifact(artifact: ArtifactDetail) {
+  // Binary artifacts (DOCX, PPTX, PDF) are stored as base64 — use the server download endpoint
+  if (artifact.content?.startsWith("base64:")) {
+    const a = document.createElement("a")
+    a.href = `/api/proxy/artifacts/${artifact.id}/download`
+    a.download = artifact.filename
+    a.click()
+    return
+  }
+  // Text artifacts — client-side blob download
   const blob = new Blob([artifact.content ?? ""], { type: "text/plain" })
   const url  = URL.createObjectURL(blob)
   const a    = document.createElement("a")
