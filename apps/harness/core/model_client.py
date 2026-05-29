@@ -169,6 +169,33 @@ READ_EMAIL_TOOL = {
     },
 }
 
+READ_MEETING_TOOL = {
+    "name": "read_meeting",
+    "description": (
+        "Read the full details of a specific meeting — summary, action items, and optionally the "
+        "transcript. Use whenever Mike asks what was discussed in a meeting, what action items came "
+        "out of it, who attended, or any details about a past meeting. "
+        "The meeting ID is shown in the [RECENT MEETINGS] section of context as [id:...]."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "meeting_id": {
+                "type": "string",
+                "description": "The full meeting ID from the [RECENT MEETINGS] context (the value after 'id:').",
+            },
+            "include_transcript": {
+                "type": "boolean",
+                "description": (
+                    "Set true to include the full transcript text. Default false — "
+                    "summary and action items are usually sufficient."
+                ),
+            },
+        },
+        "required": ["meeting_id"],
+    },
+}
+
 SYNC_MEETINGS_TOOL = {
     "name": "sync_meetings",
     "description": (

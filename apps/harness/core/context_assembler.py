@@ -65,10 +65,11 @@ EMAIL:
   Also accepts a search_query like "from:john@example.com subject:invoice" if you don't have the thread_id.
 
 MEETINGS (Fireflies):
+• read_meeting — read the full summary, action items, and optionally transcript of a specific meeting. \
+Use whenever Mike asks what was discussed, what came out of, or what action items a meeting produced. \
+Meeting IDs are listed in the [RECENT MEETINGS] section below.
 • sync_meetings — pull the latest transcripts from Fireflies, process them (AI summary + action items), \
-and save to memory. Use when Mike asks to sync meetings, check recent meetings, or says "what meetings \
-did I have". Fireflies automatically sends new meetings via webhook — sync is only needed to manually \
-pull or backfill.
+and save to memory. Use when Mike explicitly asks to sync or refresh meetings from Fireflies.
 
 TASK & CALENDAR:
 • create_task — create a task immediately. Use when Mike explicitly asks to add/track/remember a task, to-do, or action item.
@@ -87,11 +88,10 @@ WHEN TO STORE MEMORY VS SECOND BRAIN:
 
 [RELEVANT KNOWLEDGE]
 {second_brain_context}
-{gmail_section}{gcal_section}{tasks_section}
+{gmail_section}{gcal_section}{tasks_section}{meetings_section}
 [ACTIVE CONTEXT]
 Timezone: {user_timezone}
 {active_tasks_count} open tasks
-{todays_meetings} today
 Last interaction: {last_seen}
 
 Always express dates and times in the user's timezone ({user_timezone}) unless explicitly asked otherwise.
@@ -167,6 +167,44 @@ async def _fetch_tasks_context(db: AsyncSession, user_id: str) -> str:
         return ""
 
 
+async def _fetch_meetings_context(db: AsyncSession, user_id: str, limit: int = 7) -> str:
+    """Inject recent meetings with IDs so TARS can reference them in read_meeting calls."""
+    try:
+        from sqlalchemy import select, func
+        from db.models import Meeting, MeetingActionItem
+
+        result = await db.execute(
+            select(Meeting)
+            .where(Meeting.user_id == user_id)
+            .order_by(Meeting.created_at.desc())
+            .limit(limit)
+        )
+        meetings = result.scalars().all()
+        if not meetings:
+            return ""
+
+        lines = ["\n[RECENT MEETINGS — use read_meeting(meeting_id) to get full details]"]
+        for m in meetings:
+            ai_result = await db.execute(
+                select(func.count(MeetingActionItem.id))
+                .where(MeetingActionItem.meeting_id == m.id)
+            )
+            ai_count = ai_result.scalar() or 0
+
+            date_str = (m.started_at or m.created_at).strftime("%b %-d")
+            status_str = m.status.replace("_", " ")
+            ai_str = f", {ai_count} action item{'s' if ai_count != 1 else ''}" if ai_count else ""
+            summary_hint = f" — {m.summary[:80].strip()}…" if m.summary else ""
+
+            lines.append(f"  • [id:{m.id}] {m.title} | {date_str} ({status_str}{ai_str}){summary_hint}")
+
+        lines.append("")
+        return "\n".join(lines)
+    except Exception as exc:
+        log.warning("Meetings context fetch failed: %s", exc)
+        return ""
+
+
 async def _fetch_gcal_context(db: AsyncSession, user_id: str, tz_name: str = "Asia/Manila") -> str:
     try:
         from sqlalchemy import select
@@ -214,17 +252,16 @@ async def assemble(
     db: Optional[AsyncSession] = None,
     tier=None,                          # ModelTier — controls context depth
     active_tasks_count: int = 0,
-    todays_meetings: str = "No meetings",
     last_seen: str = "First interaction",
     user_timezone: str = "Asia/Manila",
 ) -> str:
     """
     Build the system prompt for a conversation turn.
 
-    Tier 1 (Haiku): lightweight context — top 3 memories + tasks + calendar.
-    No second brain search (not needed for quick Q&A) and no email (keeps prompt small).
+    Tier 1 (Haiku): lightweight context — top 3 memories + tasks + calendar + recent meetings list.
+    No second brain search (not needed for quick Q&A).
 
-    Tier 2/3: full context — top 6 memories, second brain, email, calendar, tasks.
+    Tier 2/3: full context — top 6 memories, second brain, email, calendar, tasks, meetings.
     """
     from core.model_client import ModelTier
 
@@ -235,6 +272,7 @@ async def assemble(
     gmail_section = ""
     gcal_section = ""
     tasks_section = ""
+    meetings_section = ""
     user_tz = user_timezone
 
     if db is not None:
@@ -268,13 +306,13 @@ async def assemble(
                 pass
 
         if is_lightweight:
-            # Tier 1: tasks + calendar + Gmail (email queries are common even for quick replies)
-            # Memory is limited to top 3 (set in _fetch_memory). Second Brain skipped.
+            # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings list
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
                 _fetch_gcal_context(db, user_id, user_tz),
                 _fetch_gmail_context(db, user_id),
+                _fetch_meetings_context(db, user_id, limit=5),
                 return_exceptions=True,
             )
             if len(results) > 1 and isinstance(results[1], str):
@@ -283,13 +321,16 @@ async def assemble(
                 gcal_section = results[2]
             if len(results) > 3 and isinstance(results[3], str):
                 gmail_section = results[3]
+            if len(results) > 4 and isinstance(results[4], str):
+                meetings_section = results[4]
         else:
-            # Tier 2/3: full context — tasks, email, calendar, memory
+            # Tier 2/3: full context — tasks, email, calendar, memory, meetings
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
                 _fetch_gmail_context(db, user_id),
                 _fetch_gcal_context(db, user_id, user_tz),
+                _fetch_meetings_context(db, user_id, limit=7),
                 return_exceptions=True,
             )
             if len(results) > 1 and isinstance(results[1], str):
@@ -298,6 +339,8 @@ async def assemble(
                 gmail_section = results[2]
             if len(results) > 3 and isinstance(results[3], str):
                 gcal_section = results[3]
+            if len(results) > 4 and isinstance(results[4], str):
+                meetings_section = results[4]
 
     return SYSTEM_TEMPLATE.format(
         mnemon_context=mnemon_context,
@@ -305,8 +348,8 @@ async def assemble(
         gmail_section=gmail_section,
         gcal_section=gcal_section,
         tasks_section=tasks_section,
+        meetings_section=meetings_section,
         user_timezone=user_tz,
         active_tasks_count=active_tasks_count,
-        todays_meetings=todays_meetings,
         last_seen=last_seen,
     )

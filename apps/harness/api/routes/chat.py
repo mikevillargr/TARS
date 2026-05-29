@@ -19,7 +19,7 @@ from core.model_client import (
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
-    READ_EMAIL_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
+    READ_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -456,6 +456,7 @@ async def send_message(
         SAVE_MEMORY_TOOL,
         SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL,
+        READ_MEETING_TOOL,
         SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL,
     ] if tier == ModelTier.TIER3 else None
@@ -647,6 +648,62 @@ async def send_message(
                         except Exception as exc:
                             log.warning("sync_meetings tool failed: %s", exc)
                             return f"Failed to sync meetings: {exc}"
+
+                    if name == "read_meeting":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Meeting, MeetingActionItem
+
+                            meeting_id = tool_input.get("meeting_id", "").strip()
+                            include_transcript = tool_input.get("include_transcript", False)
+
+                            m_result = await bg_db.execute(
+                                _select(Meeting).where(
+                                    Meeting.id == meeting_id,
+                                    Meeting.user_id == user_id,
+                                )
+                            )
+                            meeting = m_result.scalar_one_or_none()
+                            if not meeting:
+                                return f"Meeting '{meeting_id}' not found."
+
+                            ai_result = await bg_db.execute(
+                                _select(MeetingActionItem).where(
+                                    MeetingActionItem.meeting_id == meeting_id
+                                )
+                            )
+                            action_items = ai_result.scalars().all()
+
+                            parts = [f"# {meeting.title}"]
+                            if meeting.started_at:
+                                parts.append(f"Date: {meeting.started_at.strftime('%B %-d, %Y')}")
+                            if meeting.attendees:
+                                parts.append(f"Attendees: {', '.join(meeting.attendees)}")
+                            parts.append(f"Status: {meeting.status}")
+
+                            if meeting.summary:
+                                parts.append(f"\n## Summary\n{meeting.summary}")
+
+                            if action_items:
+                                parts.append(f"\n## Action Items ({len(action_items)})")
+                                for ai in action_items:
+                                    owner = f" [{ai.owner}]" if ai.owner else ""
+                                    done = " ✓" if ai.task_id else ""
+                                    parts.append(f"  • {ai.raw_text}{owner}{done}")
+
+                            if include_transcript and meeting.transcript:
+                                # Cap transcript to avoid token explosion
+                                transcript = meeting.transcript
+                                if len(transcript) > 6000:
+                                    transcript = transcript[:6000] + "\n\n[... transcript truncated ...]"
+                                parts.append(f"\n## Transcript\n{transcript}")
+                            elif not include_transcript and meeting.transcript:
+                                parts.append(f"\n(Transcript available — call read_meeting again with include_transcript=true to see it.)")
+
+                            return "\n".join(parts)
+                        except Exception as exc:
+                            log.warning("read_meeting tool failed: %s", exc)
+                            return f"Failed to read meeting: {exc}"
 
                     if name == "web_search":
                         try:
