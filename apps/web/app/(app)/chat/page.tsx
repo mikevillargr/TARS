@@ -750,10 +750,10 @@ export default function ChatPage() {
               {conversations.length === 0 ? (
                 <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
               ) : conversations.map((conv) => (
-                <div key={conv.id} className="group relative flex items-center">
+                <div key={conv.id} className="group relative flex items-center min-w-0 overflow-hidden">
                   <button
                     onClick={() => { setActiveChatId(conv.id); setMobileConvOpen(false) }}
-                    className={`flex-1 text-left px-3 py-2.5 rounded-md text-sm truncate transition-colors pr-9 ${
+                    className={`flex-1 min-w-0 text-left px-3 py-2.5 rounded-md text-sm truncate transition-colors pr-9 ${
                       activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted"
                     }`}
                     style={activeChatId === conv.id
@@ -761,7 +761,7 @@ export default function ChatPage() {
                       : {}
                     }
                   >
-                    {conv.title ?? "New conversation"}
+                    {(conv.title ?? "New conversation").slice(0, 60)}
                   </button>
                   {/* Always visible on mobile (no hover state on touch) */}
                   <button
@@ -815,11 +815,11 @@ export default function ChatPage() {
           ) : conversations.map((conv) => (
             <div
               key={conv.id}
-              className="group relative flex items-center"
+              className="group relative flex items-center min-w-0 overflow-hidden"
             >
               <button
                 onClick={() => setActiveChatId(conv.id)}
-                className={`flex-1 text-left px-3 py-2 rounded-md text-sm truncate transition-colors pr-8 ${
+                className={`flex-1 min-w-0 text-left px-3 py-2 rounded-md text-sm truncate transition-colors pr-8 ${
                   activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted hover:bg-surface-2"
                 }`}
                 style={activeChatId === conv.id
@@ -827,7 +827,7 @@ export default function ChatPage() {
                   : {}
                 }
               >
-                {conv.title ?? "New conversation"}
+                {(conv.title ?? "New conversation").slice(0, 60)}
               </button>
               <button
                 onClick={(e) => handleDeleteConversation(conv.id, e)}
