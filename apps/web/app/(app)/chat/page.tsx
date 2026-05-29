@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import {
   Send, Paperclip, Camera, Mic, Plus, User,
   Terminal, ChevronLeft, PanelLeft, Maximize2,
@@ -277,6 +278,23 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
   )
 }
 
+// ─── Second Brain loader (needs Suspense for useSearchParams) ─────
+function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const loadId = searchParams.get("load")
+    if (!loadId) return
+    apiGet<{ source_title: string | null }>(`/second-brain/items/${loadId}`)
+      .then((item) => {
+        const title = item.source_title ?? "this item"
+        onLoad(`Summarize and tell me the key points from: "${title}"`)
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return null
+}
+
 // ─── Page ─────────────────────────────────────────────────────────
 export default function ChatPage() {
   const { setOpen: setSidebarOpen, open: sidebarOpen } = useSidebar()
@@ -299,6 +317,8 @@ export default function ChatPage() {
   const pollTimerRef                                = useRef<ReturnType<typeof setInterval> | null>(null)
   const accumulatedRef                              = useRef<string>("")  // live text during streaming
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
+
+  // Pre-fill input when navigating from Second Brain "Open in Chat" — handled via SecondBrainLoader below
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? [])
@@ -606,6 +626,9 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
+      <Suspense fallback={null}>
+        <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
+      </Suspense>
 
       {/* ── Mobile conversation drawer ────────────────────────── */}
       {mobileConvOpen && (
