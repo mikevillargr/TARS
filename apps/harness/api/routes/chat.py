@@ -545,9 +545,16 @@ async def send_message(
         elif full_text != content:
             messages[-1]["content"] = full_text
 
-    system_prompt = await assemble(user_id, content or "attachment", db=db, tier=tier)
-
     client = get_model_client()
+    # When RunPod (Tier2) is cold and falls back to Claude, upgrade to Tier3 so the
+    # request gets full tools + capabilities block instead of a tool-deaf response.
+    effective_tier = tier
+    if tier == ModelTier.TIER2 and not client._is_warm(ModelTier.TIER2):
+        effective_tier = ModelTier.TIER3
+        log.info("RunPod Tier2 cold — upgrading to Tier3 for full tool support")
+
+    system_prompt = await assemble(user_id, content or "attachment", db=db, tier=effective_tier)
+
     # Tools only for TIER3 (Claude) — Ollama and RunPod don't support Anthropic tool_use.
     # The classifier is responsible for routing action requests to TIER3.
     tools = [
@@ -564,7 +571,7 @@ async def send_message(
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
-    ] if tier == ModelTier.TIER3 else None
+    ] if effective_tier == ModelTier.TIER3 else None
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:
@@ -992,7 +999,7 @@ async def send_message(
 
                     return "Action completed."
 
-                async for event in client.stream(messages, tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
+                async for event in client.stream(messages, effective_tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))

@@ -213,18 +213,18 @@ function EditorToolbar({
       onMouseDown={e => { e.preventDefault(); onClick() }}
       title={title}
       className="p-1.5 rounded-md transition-colors"
-      style={{ color: active ? "#2d5a4f" : "#948a7b", background: active ? "#e3ede9" : "transparent" }}
+      style={{ color: active ? "var(--c-moss)" : "var(--c-ink-faint)", background: active ? "var(--c-moss-soft)" : "transparent" }}
     >
       <Icon size={14} />
     </button>
   )
 
-  const sep = () => <div className="w-px h-4 self-center" style={{ background: "#e8e2d4" }} />
+  const sep = () => <div className="w-px h-4 self-center" style={{ background: "var(--c-border-faint)" }} />
 
   return (
     <div
       className="flex items-center flex-wrap gap-0.5 px-3 py-1.5 border-b shrink-0"
-      style={{ borderColor: "#e8e2d4", background: "#faf8f4" }}
+      style={{ borderColor: "var(--c-border-faint)", background: "var(--c-surface)" }}
     >
       {btn(editor.isActive("bold"),    () => editor.chain().focus().toggleBold().run(),                  Bold,         "Bold")}
       {btn(editor.isActive("italic"),  () => editor.chain().focus().toggleItalic().run(),                Italic,       "Italic")}
@@ -251,7 +251,7 @@ function EditorToolbar({
         onMouseDown={e => { e.preventDefault(); onImageUpload() }}
         title="Insert image"
         className="p-1.5 rounded-md transition-colors"
-        style={{ color: "#948a7b" }}
+        style={{ color: "var(--c-ink-faint)" }}
       >
         <ImageIcon size={14} />
       </button>
@@ -263,7 +263,7 @@ function EditorToolbar({
         onMouseDown={e => { e.preventDefault(); onAskTars() }}
         title="Ask TARS to generate content at cursor"
         className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
-        style={{ color: "#2d5a4f", backgroundColor: "#e3ede9" }}
+        style={{ color: "var(--c-moss)", backgroundColor: "var(--c-moss-soft)" }}
       >
         <Wand2 size={12} />
         Ask TARS
@@ -427,7 +427,7 @@ export function TiptapEditor({
   if (!editor) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 size={18} className="animate-spin" style={{ color: "#948a7b" }} />
+        <Loader2 size={18} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
       </div>
     )
   }
@@ -450,10 +450,10 @@ export function TiptapEditor({
           >
             <div
               className="rounded-lg shadow-xl border overflow-hidden"
-              style={{ background: "#fbfaf6", borderColor: "#d8d2c4", minWidth: "200px" }}
+              style={{ background: "var(--c-surface)", borderColor: "var(--c-border)", minWidth: "200px" }}
             >
-              <div className="px-3 py-1.5 border-b" style={{ borderColor: "#e8e2d4" }}>
-                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "#948a7b" }}>
+              <div className="px-3 py-1.5 border-b" style={{ borderColor: "var(--c-border-faint)" }}>
+                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--c-ink-faint)" }}>
                   Insert block
                 </span>
               </div>
@@ -474,9 +474,9 @@ export function TiptapEditor({
                     }
                   }}
                   className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-left transition-colors hover:bg-surface-2"
-                  style={{ color: special === "ask-tars" ? "#2d5a4f" : "#1a1714" }}
+                  style={{ color: special === "ask-tars" ? "var(--c-moss)" : "var(--c-ink)" }}
                 >
-                  <Icon size={14} style={{ color: special === "ask-tars" ? "#2d5a4f" : "#948a7b" }} />
+                  <Icon size={14} style={{ color: special === "ask-tars" ? "var(--c-moss)" : "var(--c-ink-faint)" }} />
                   {label}
                 </button>
               ))}
@@ -497,7 +497,7 @@ export function TiptapEditor({
               onMouseDown={e => { e.preventDefault(); showGenPrompt() }}
               title="Ask TARS to write something here"
               className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-all"
-              style={{ color: "#2d5a4f", opacity: 0.5 }}
+              style={{ color: "var(--c-moss)", opacity: 0.5 }}
               onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
               onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
             >
