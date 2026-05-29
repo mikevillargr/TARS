@@ -75,7 +75,16 @@ export default function MeetingsPage() {
     try {
       const data = await apiGet<Meeting[]>("/meetings")
       setMeetings(data)
-      if (data.length > 0 && !selected) setSelected(data[0])
+      if (data.length > 0 && !selected) {
+        // Fetch full detail immediately so transcript + action_items are available on first render
+        try {
+          const detail = await apiGet<Meeting>(`/meetings/${data[0].id}`)
+          setSelected(detail)
+          setMeetings(prev => prev.map(m => m.id === data[0].id ? { ...m, ...detail } : m))
+        } catch {
+          setSelected(data[0])
+        }
+      }
     } catch (err) {
       console.error(err)
     } finally {
