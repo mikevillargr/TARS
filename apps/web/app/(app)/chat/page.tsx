@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import {
   Send, Paperclip, Camera, Mic, Plus, User,
-  Code, Terminal, ChevronLeft, PanelLeft, Maximize2,
+  Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2,
 } from "lucide-react"
@@ -208,10 +208,24 @@ function MessageContent({ content }: { content: string }) {
   )
 }
 
+// ─── Model name formatter ─────────────────────────────────────────
+function formatModelName(model?: string): string | null {
+  if (!model) return null
+  const m = model.toLowerCase()
+  if (m.includes("opus"))   return "opus"
+  if (m.includes("sonnet")) return "sonnet"
+  if (m.includes("haiku"))  return "haiku"
+  if (m.includes("qwen") && m.includes("32")) return "qwen 32b"
+  if (m.includes("qwen") && m.includes("8"))  return "qwen 8b"
+  if (m.startsWith("tier")) return null   // don't surface raw tier names
+  return null
+}
+
 // ─── Single message bubble ────────────────────────────────────────
 function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
   const isUser = msg.role === "user"
   const toolCalls = !isUser && "tool_calls" in msg ? msg.tool_calls : undefined
+  const modelLabel = !isUser && "model_used" in msg ? formatModelName(msg.model_used) : null
 
   return (
     <div className={`flex gap-3 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
@@ -229,9 +243,10 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
       </div>
 
       <div className={`flex flex-col max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
-        {!isUser && "model_used" in msg && msg.model_used && (
-          <span className="text-[10px] uppercase tracking-wider font-medium mb-1 ml-1" style={{ color: "#2d5a4f" }}>
-            {msg.model_used}
+        {/* Always show "TARS" as the sender name for assistant messages */}
+        {!isUser && (
+          <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "#2d5a4f" }}>
+            TARS
           </span>
         )}
 
@@ -265,6 +280,13 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
             </span>
           )}
         </div>
+
+        {/* Subtle model badge below the bubble — only when known */}
+        {modelLabel && (
+          <span className="text-[10px] ml-1 mt-1" style={{ color: "#c4bdb2" }}>
+            · {modelLabel}
+          </span>
+        )}
       </div>
     </div>
   )
@@ -282,7 +304,6 @@ export default function ChatPage() {
   const [taskSuggestions, setTaskSuggestions]         = useState<TaskSuggestion[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
-  const [isContextDismissed, setContextDismissed]   = useState(false)
   const [inputValue, setInputValue]                 = useState("")
   const [attachments, setAttachments]               = useState<File[]>([])
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
@@ -784,31 +805,6 @@ export default function ChatPage() {
           </button>
         </div>
 
-        {/* Context bar */}
-        {!isContextDismissed && (
-          <div
-            className="border-b px-4 py-2 flex items-center gap-2 text-xs shrink-0 overflow-x-auto"
-            style={{ borderColor: "#e8e2d4", backgroundColor: "rgba(246,243,236,0.9)", backdropFilter: "blur(4px)" }}
-          >
-            <span className="font-medium" style={{ color: "#6b6357" }}>Context:</span>
-            <span className="badge badge-neutral flex items-center gap-1 text-[10px]">
-              <Terminal size={10} /> Q2 Review Meeting
-            </span>
-            <span className="badge badge-neutral flex items-center gap-1 text-[10px]">
-              <Code size={10} /> frontend-repo
-            </span>
-            <button
-              onClick={() => setContextDismissed(true)}
-              className="ml-auto p-1 rounded transition-colors"
-              style={{ color: "#948a7b" }}
-              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#1a1714"; (e.currentTarget as HTMLElement).style.backgroundColor = "#efeadf" }}
-              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#948a7b"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
-            >
-              <X size={12} />
-            </button>
-          </div>
-        )}
-
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {allMessages.length === 0 ? (
@@ -840,12 +836,17 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input area */}
-        <div className="p-4 shrink-0" style={{ backgroundColor: "#f6f3ec", borderTop: "1px solid #d8d2c4" }}>
+        {/* ── Floating input ─────────────────────────────────────── */}
+        {/* Gradient fade creates a soft visual lift from the message stream */}
+        <div
+          className="shrink-0 px-3 pb-3 pt-0"
+          style={{ background: "linear-gradient(to bottom, rgba(251,250,246,0) 0%, #fbfaf6 28px)" }}
+        >
           <div className="max-w-3xl mx-auto">
+
             {/* Attachment chips */}
             {attachments.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
+              <div className="flex flex-wrap gap-2 mb-2 px-1">
                 {attachments.map((file, i) => (
                   <div
                     key={i}
@@ -859,10 +860,7 @@ export default function ChatPage() {
                       <Paperclip size={11} style={{ color: "#6b6357", flexShrink: 0 }} />
                     )}
                     <span className="max-w-[120px] truncate">{file.name}</span>
-                    <button
-                      onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
-                      style={{ color: "#948a7b" }}
-                    >
+                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))} style={{ color: "#948a7b" }}>
                       <X size={11} />
                     </button>
                   </div>
@@ -870,120 +868,101 @@ export default function ChatPage() {
               </div>
             )}
 
+            {/* Floating composer pill */}
             <div
-              className="rounded-xl shadow-sm transition-all p-2"
-              style={{ backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4" }}
-              onFocus={e => (e.currentTarget.style.borderColor = "#2d5a4f")}
-              onBlur={e => (e.currentTarget.style.borderColor = "#d8d2c4")}
+              className="rounded-2xl transition-shadow"
+              style={{
+                backgroundColor: "#fbfaf6",
+                border: "1px solid #d8d2c4",
+                boxShadow: "0 4px 16px rgba(26,23,20,0.08), 0 1px 3px rgba(26,23,20,0.06)",
+              }}
             >
               <textarea
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSend()
-                  }
+                onChange={(e) => {
+                  setInputValue(e.target.value)
+                  // Auto-grow
+                  const el = e.target
+                  el.style.height = "auto"
+                  el.style.height = Math.min(el.scrollHeight, 180) + "px"
                 }}
-                className="w-full bg-transparent border-none focus:ring-0 resize-none p-2 text-sm focus:outline-none"
-                style={{ minHeight: 60, maxHeight: 200, color: "#1a1714" }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
+                }}
+                className="w-full bg-transparent border-none focus:ring-0 resize-none text-sm focus:outline-none px-4 pt-3 pb-1"
+                style={{ minHeight: 44, maxHeight: 180, color: "#1a1714", lineHeight: "1.5" }}
                 placeholder="Ask anything or command an agent…"
+                rows={1}
                 disabled={busy}
               />
-              <div className="flex justify-between items-center mt-1 px-1">
-                <div className="flex gap-1" style={{ color: "#6b6357" }}>
+
+              <div className="flex items-center justify-between px-2 pb-2">
+                <div className="flex gap-0.5" style={{ color: "#948a7b" }}>
                   <label
                     htmlFor="chat-attach-file"
                     title="Attach file"
-                    className="p-1.5 rounded-md transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg transition-colors cursor-pointer"
                     style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
-                    <Paperclip size={17} />
+                    <Paperclip size={16} />
                   </label>
                   <label
                     htmlFor="chat-attach-camera"
                     title="Take photo"
-                    className="p-1.5 rounded-md transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg transition-colors cursor-pointer"
                     style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
-                    <Camera size={17} />
+                    <Camera size={16} />
                   </label>
                   <button
                     title="Voice memo"
-                    className="p-1.5 rounded-md transition-colors"
+                    className="p-1.5 rounded-lg transition-colors"
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
-                    <Mic size={17} />
+                    <Mic size={16} />
                   </button>
                 </div>
+
                 {busy ? (
                   <button
                     onClick={handleStop}
-                    className="p-2 rounded-lg transition-colors"
-                    style={{ backgroundColor: "#a04848", color: "#fbfaf6" }}
+                    className="p-2 rounded-xl transition-opacity"
+                    style={{ backgroundColor: "#1a1714", color: "#fbfaf6" }}
                     title="Stop generating"
-                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
                     onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                   >
-                    <Square size={14} strokeWidth={0} fill="currentColor" />
+                    <Square size={13} strokeWidth={0} fill="currentColor" />
                   </button>
                 ) : (
                   <button
                     onClick={handleSend}
                     disabled={!inputValue.trim() && attachments.length === 0}
-                    className="p-2 rounded-lg transition-colors disabled:opacity-40"
+                    className="p-2 rounded-xl transition-opacity disabled:opacity-30"
                     style={{ backgroundColor: "#2d5a4f", color: "#fbfaf6" }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
                     onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                   >
-                    <Send size={15} />
+                    <Send size={14} />
                   </button>
                 )}
               </div>
             </div>
 
             {/* Hidden file inputs */}
-            <input
-              ref={fileInputRef}
-              id="chat-attach-file"
-              type="file"
-              multiple
-              accept=".pdf,.docx,.txt,.md,image/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <input
-              ref={cameraInputRef}
-              id="chat-attach-camera"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleFileChange}
-            />
+            <input ref={fileInputRef} id="chat-attach-file" type="file" multiple accept=".pdf,.docx,.txt,.md,image/*" className="hidden" onChange={handleFileChange} />
+            <input ref={cameraInputRef} id="chat-attach-camera" type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
-            <p className="text-center mt-2 text-[10px]" style={{ color: "#948a7b" }}>
+            <p className="text-center mt-2 text-[10px]" style={{ color: "#c4bdb2" }}>
               TARS can make mistakes. Verify important information.
             </p>
           </div>
         </div>
-
-        {isContextDismissed && (
-          <button
-            onClick={() => setContextDismissed(false)}
-            className="absolute top-12 right-3 px-2.5 py-1 rounded-full text-[10px] font-medium transition-colors shadow-sm"
-            style={{ backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4", color: "#6b6357" }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(45,90,79,0.4)")}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = "#d8d2c4")}
-          >
-            Show context
-          </button>
-        )}
       </div>
     </div>
   )
