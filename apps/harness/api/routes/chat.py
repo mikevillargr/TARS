@@ -19,7 +19,7 @@ from core.model_client import (
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
-    READ_EMAIL_TOOL, SYNC_MEETINGS_TOOL,
+    READ_EMAIL_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -457,6 +457,7 @@ async def send_message(
         SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL,
         SYNC_MEETINGS_TOOL,
+        WEB_SEARCH_TOOL,
     ] if tier == ModelTier.TIER3 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -646,6 +647,42 @@ async def send_message(
                         except Exception as exc:
                             log.warning("sync_meetings tool failed: %s", exc)
                             return f"Failed to sync meetings: {exc}"
+
+                    if name == "web_search":
+                        try:
+                            from core.config import settings as _settings
+                            if not _settings.tavily_api_key:
+                                return "Web search is not configured (missing TAVILY_API_KEY)."
+                            import httpx as _httpx
+                            query = tool_input["query"]
+                            depth = tool_input.get("search_depth", "basic")
+                            async with _httpx.AsyncClient(timeout=15.0) as _hx:
+                                resp = await _hx.post(
+                                    "https://api.tavily.com/search",
+                                    json={
+                                        "api_key": _settings.tavily_api_key,
+                                        "query": query,
+                                        "search_depth": depth,
+                                        "max_results": 6,
+                                        "include_answer": True,
+                                    },
+                                )
+                                resp.raise_for_status()
+                                data = resp.json()
+
+                            lines = [f"Search: {query}\n"]
+                            if data.get("answer"):
+                                lines.append(f"Summary: {data['answer']}\n")
+                            for r in data.get("results", []):
+                                lines.append(f"• {r['title']}")
+                                lines.append(f"  {r['url']}")
+                                if r.get("content"):
+                                    lines.append(f"  {r['content'][:300]}")
+                                lines.append("")
+                            return "\n".join(lines)
+                        except Exception as exc:
+                            log.warning("web_search tool failed: %s", exc)
+                            return f"Web search failed: {exc}"
 
                     return "Action completed."
 

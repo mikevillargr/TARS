@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     ollama_url: str = ""
     classifier_model: str = "llama3.2:3b"
 
+    # Web search
+    tavily_api_key: str = ""
+
     # Connectors
     fireflies_api_key: str = ""
     gmail_client_id: str = ""

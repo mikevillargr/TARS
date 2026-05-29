@@ -184,6 +184,32 @@ SYNC_MEETINGS_TOOL = {
     },
 }
 
+WEB_SEARCH_TOOL = {
+    "name": "web_search",
+    "description": (
+        "Search the web for current information. Use when Mike asks about recent events, "
+        "news, prices, live data, or anything that requires up-to-date information beyond "
+        "your training cutoff. Also use for research tasks where you need to find specific "
+        "facts, articles, or external references. "
+        "Returns titles, URLs, and content snippets from the top results."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query. Be specific and concise for best results.",
+            },
+            "search_depth": {
+                "type": "string",
+                "enum": ["basic", "advanced"],
+                "description": "basic = fast, top results. advanced = deeper research. Default: basic.",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
 SAVE_TO_SECOND_BRAIN_TOOL = {
     "name": "save_to_second_brain",
     "description": (
