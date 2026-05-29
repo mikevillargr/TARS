@@ -209,7 +209,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
   const isStreaming = "streaming" in msg
 
   return (
-    <div className={`group flex gap-3 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`group flex gap-3 min-w-0 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
       <div
         className="w-8 h-8 rounded-full shrink-0 overflow-hidden"
         style={isUser
@@ -223,7 +223,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
         }
       </div>
 
-      <div className={`flex flex-col max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
+      <div className={`flex flex-col min-w-0 max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
         {/* Always show "TARS" as the sender name for assistant messages */}
         {!isUser && (
           <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "#2d5a4f" }}>
@@ -296,7 +296,9 @@ function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
 }
 
 // ─── Artifact loader — handles ?artifact=<id> from file upload ────
-function ArtifactLoader({ onLoad }: { onLoad: (msg: string) => void }) {
+// Calls onAutoSend with the built message; the page will clear active chat
+// and auto-send into a brand-new conversation.
+function ArtifactLoader({ onAutoSend }: { onAutoSend: (msg: string) => void }) {
   const searchParams = useSearchParams()
   useEffect(() => {
     const artifactId = searchParams.get("artifact")
@@ -305,7 +307,6 @@ function ArtifactLoader({ onLoad }: { onLoad: (msg: string) => void }) {
       .then((artifact) => {
         const name = artifact.filename ?? "uploaded file"
         const content = artifact.content ?? ""
-        // Truncate very large files to keep message manageable
         const MAX_CHARS = 12000
         const truncated = content.length > MAX_CHARS
           ? content.slice(0, MAX_CHARS) + `\n\n[… content truncated — ${content.length.toLocaleString()} total chars]`
@@ -313,7 +314,7 @@ function ArtifactLoader({ onLoad }: { onLoad: (msg: string) => void }) {
         const msg = truncated
           ? `I just uploaded "${name}". Here's the extracted content:\n\n---\n${truncated}\n---\n\nPlease summarize this and tell me the key points.`
           : `I just uploaded "${name}" but no text content could be extracted. What can you tell me about it?`
-        onLoad(msg)
+        onAutoSend(msg)
       })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -357,6 +358,7 @@ export default function ChatPage() {
   const pollTimerRef                                = useRef<ReturnType<typeof setInterval> | null>(null)
   const accumulatedRef                              = useRef<string>("")  // live text during streaming
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
+  const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
 
   // Pre-fill input when navigating from Second Brain "Open in Chat" — handled via SecondBrainLoader below
 
@@ -389,6 +391,7 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, streaming?.content])
+
 
   // Load conversation list and auto-select the most recent one
   useEffect(() => {
@@ -662,13 +665,29 @@ export default function ChatPage() {
     }
   }, [activeChatId, attachments, busy, inputValue])
 
+  // Auto-send when an artifact has been loaded — fires after handleSend is defined
+  useEffect(() => {
+    if (!autoSendPendingRef.current) return
+    if (!inputValue || busy) return
+    autoSendPendingRef.current = false
+    handleSend()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputValue, busy, handleSend])
+
   const allMessages = streaming ? [...messages, streaming] : messages
 
   return (
     <div className="flex h-full overflow-hidden">
       <Suspense fallback={null}>
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
-        <ArtifactLoader onLoad={(msg) => setInputValue(msg)} />
+        <ArtifactLoader onAutoSend={(msg) => {
+          // Drop into a clean slate — handleSend creates a new conversation
+          // automatically when activeChatId is null
+          setActiveChatId(null)
+          setMessages([])
+          setInputValue(msg)
+          autoSendPendingRef.current = true
+        }} />
       </Suspense>
 
       {/* ── Mobile conversation drawer ────────────────────────── */}
@@ -855,7 +874,7 @@ export default function ChatPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
           {allMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "#948a7b" }}>
               <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}>TARS</p>
