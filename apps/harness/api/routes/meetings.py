@@ -180,7 +180,10 @@ async def sync_from_fireflies(
     if not settings.fireflies_api_key:
         raise HTTPException(status_code=503, detail="Fireflies not configured")
 
+    captured_user_id = user_id  # capture before session closes
+
     async def _sync():
+        from db.session import AsyncSessionLocal
         from connectors.fireflies import FirefliesClient
         from jobs.meeting_processor import ingest_from_webhook, process_meeting
 
@@ -190,9 +193,13 @@ async def sync_from_fireflies(
             tid = t.get("id")
             if not tid:
                 continue
-            new_id = await ingest_from_webhook(db, user_id, tid)
-            if new_id:
-                await process_meeting(db, new_id, user_id)
+            async with AsyncSessionLocal() as bg_db:
+                try:
+                    new_id = await ingest_from_webhook(bg_db, captured_user_id, tid)
+                    if new_id:
+                        await process_meeting(bg_db, new_id, captured_user_id)
+                except Exception:
+                    log.exception("Sync failed for transcript %s", tid)
 
     background_tasks.add_task(_sync)
     return {"queued": True}

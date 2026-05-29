@@ -98,7 +98,7 @@ class MeetingActionItem(Base):
     __tablename__ = "meeting_action_items"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
     meeting_id: Mapped[str] = mapped_column(String, ForeignKey("meetings.id"), nullable=False)
-    task_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("tasks.id"), nullable=True)
+    task_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
     owner: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

@@ -227,16 +227,34 @@ async def fireflies_webhook(
     )
     db.add(event)
     await db.commit()
-    await db.refresh(event)
+
+    # Capture IDs now — the request-scoped session closes after this handler returns
+    event_id   = event.id
+    user_id    = user.id
 
     async def _process():
+        """Background task: own session, independent of request lifecycle."""
+        from db.session import AsyncSessionLocal
         from jobs.meeting_processor import ingest_from_webhook, process_meeting
-        meeting_id = await ingest_from_webhook(db, user.id, transcript_id)
-        if meeting_id:
-            await process_meeting(db, meeting_id, user.id)
-            event.processed = True
-            event.processed_at = datetime.now(timezone.utc)
-            await db.commit()
+        from sqlalchemy import select as sa_select
+
+        async with AsyncSessionLocal() as bg_db:
+            try:
+                meeting_id = await ingest_from_webhook(bg_db, user_id, transcript_id)
+                if meeting_id:
+                    await process_meeting(bg_db, meeting_id, user_id)
+
+                # Mark webhook event as processed
+                ev_result = await bg_db.execute(
+                    sa_select(WebhookEvent).where(WebhookEvent.id == event_id)
+                )
+                ev = ev_result.scalar_one_or_none()
+                if ev:
+                    ev.processed    = True
+                    ev.processed_at = datetime.now(timezone.utc)
+                    await bg_db.commit()
+            except Exception:
+                log.exception("Background meeting processing failed for transcript %s", transcript_id)
 
     background_tasks.add_task(_process)
     return {"ok": True, "queued": transcript_id}
