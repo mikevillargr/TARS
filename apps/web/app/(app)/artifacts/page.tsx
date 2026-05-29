@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm"
 import {
   Archive, Search, Grid2x2, List, Download, MessageSquare, X,
   FileText, Code2, FileSpreadsheet, FileAudio, BarChart2,
-  ChevronDown, Loader2, Trash2, CheckSquare, Eye, Brain, ListTodo, Check,
+  ChevronDown, Loader2, Trash2, Eye, Brain, ListTodo, Check,
 } from "lucide-react"
 import { apiGet, apiDelete } from "@/lib/api-client"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
