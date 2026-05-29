@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import React, { useState, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
@@ -244,7 +244,8 @@ export function MessageContent({ content }: { content: string }) {
           ol: ({ children }) => (
             <ol className="text-sm space-y-1 my-2 pl-4 list-decimal">{children}</ol>
           ),
-          li: ({ children, ordered, ...props }: any) => (
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          li: ({ children, ordered }: { children?: React.ReactNode; ordered?: boolean; [key: string]: any }) => (
             ordered
               ? <li className="leading-relaxed">{children}</li>
               : (

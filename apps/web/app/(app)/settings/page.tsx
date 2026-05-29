@@ -462,7 +462,7 @@ export default function SettingsPage() {
                 >
                   <p className="font-medium text-[#1a1714]">Add to Home Screen on iOS:</p>
                   <ol className="flex flex-col gap-1.5 text-xs text-[#6b6357] list-decimal list-inside">
-                    <li>Tap the <strong>Share</strong> button <span style={{ color: "#2d5a4f" }}>⎋</span> in Safari's toolbar</li>
+                    <li>Tap the <strong>Share</strong> button <span style={{ color: "#2d5a4f" }}>⎋</span> in Safari&apos;s toolbar</li>
                     <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
                     <li>Tap <strong>Add</strong> in the top-right corner</li>
                   </ol>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react"
 import { useRouter } from "next/navigation"
 import {
   Calendar as CalendarIcon,
@@ -44,7 +44,7 @@ interface CalendarEvent {
   source: CalendarEventOut
 }
 
-const TYPE_STYLES: Record<EventType, { dot: string; bg: string; text: string; borderColor: string; icon: any; label: string }> = {
+const TYPE_STYLES: Record<EventType, { dot: string; bg: string; text: string; borderColor: string; icon: React.ElementType; label: string }> = {
   gcal:    { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "#2d5a4f", icon: CalendarIcon, label: "Calendar" },
   meeting: { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "#2d5a4f", icon: Video,        label: "Meeting"  },
   task:    { dot: "bg-amber",      bg: "bg-amber-soft",  text: "text-amber",     borderColor: "#b8651a", icon: CheckSquare,  label: "Task"     },

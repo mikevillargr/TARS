@@ -526,7 +526,8 @@ export default function SecondBrainPage() {
     } finally { setIngesting(false) }
   }
 
-  const SidebarContent = () => (
+  // JSX variable (not a component) — avoids "create component during render" lint error
+  const sidebarContent = (
     <div className="flex flex-col h-full p-4">
       <div className="flex items-center justify-between mb-6">
         <h2 className="font-semibold text-lg" style={{ color: "#1a1714", fontFamily: "var(--font-heading), serif" }}>Domains</h2>
@@ -561,7 +562,7 @@ export default function SecondBrainPage() {
     <div className="flex flex-1 overflow-hidden bg-canvas relative">
       {/* Desktop sidebar */}
       <div className="hidden md:flex flex-col w-52 shrink-0 border-r" style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}>
-        <SidebarContent />
+        {sidebarContent}
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -570,7 +571,7 @@ export default function SecondBrainPage() {
           <div className="absolute inset-0" style={{ backgroundColor: "rgba(26,23,20,0.2)" }} onClick={() => setMobileSidebar(false)} />
           <div className="relative w-72 max-w-[80%] h-full shadow-xl flex flex-col" style={{ backgroundColor: "#fbfaf6" }}>
             <button onClick={() => setMobileSidebar(false)} className="absolute top-4 right-4 p-2" style={{ color: "#948a7b" }}><X size={20} /></button>
-            <SidebarContent />
+            {sidebarContent}
           </div>
         </div>
       )}
