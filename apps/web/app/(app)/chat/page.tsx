@@ -527,6 +527,7 @@ export default function ChatPage() {
     setBusy(false)
     setCalendarSuggestions([])
     setTaskSuggestions([])
+    setArtifactNotifications([])
   }, [activeChatId])
 
   // Scroll to bottom on new messages

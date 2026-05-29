@@ -608,8 +608,11 @@ async def send_message(
 
     system_prompt = await assemble(user_id, content or "attachment", db=db, tier=effective_tier)
 
-    # Tools only for TIER3 (Claude) — Ollama and RunPod don't support Anthropic tool_use.
-    # The classifier is responsible for routing action requests to TIER3.
+    # Tools available for TIER2 and TIER3.
+    # TIER2 (RunPod) ignores them in the payload but the Sonnet fallback path
+    # uses them — so we must build them here regardless, otherwise a RunPod
+    # timeout with a "warm" start would fall back to Sonnet with no tools.
+    # TIER1 (Haiku) handles simple queries and never needs tool execution.
     tools = [
         CREATE_TASK_TOOL,
         CREATE_CALENDAR_EVENT_TOOL,
@@ -624,7 +627,7 @@ async def send_message(
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
-    ] if effective_tier == ModelTier.TIER3 else None
+    ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:

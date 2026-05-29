@@ -251,9 +251,8 @@ function ArtifactModal({
     <Dialog open={artifactId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
         showCloseButton={false}
-        className="max-w-4xl w-full p-0 gap-0 overflow-hidden flex flex-col"
+        className="w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
         style={{
-          maxHeight: "90vh",
           backgroundColor: "var(--c-surface)",
           border: "1px solid var(--c-border)",
           borderRadius: "0.75rem",
