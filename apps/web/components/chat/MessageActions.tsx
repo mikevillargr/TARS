@@ -43,7 +43,7 @@ function BulkTasksChip({ items }: { items: string[] }) {
     return (
       <div
         className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl"
-        style={{ backgroundColor: "#e3ede9", color: "#2d5a4f", border: "1px solid rgba(45,90,79,0.2)" }}
+        style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}
       >
         <Check size={11} />
         Created {created} {created === 1 ? "task" : "tasks"}
@@ -65,12 +65,12 @@ function BulkTasksChip({ items }: { items: string[] }) {
         onClick={() => setOpen(!open)}
         className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl transition-colors"
         style={{
-          backgroundColor: open ? "#efeadf" : "#f6f3ec",
-          color: "#6b6357",
-          border: `1px solid ${open ? "#c8c2b4" : "#d8d2c4"}`,
+          backgroundColor: open ? "var(--c-surface-2)" : "var(--c-canvas)",
+          color: "var(--c-ink-muted)",
+          border: `1px solid ${open ? "var(--c-border)" : "var(--c-border)"}`,
         }}
       >
-        <CheckSquare size={11} style={{ color: "#2d5a4f" }} />
+        <CheckSquare size={11} style={{ color: "var(--c-moss)" }} />
         Add {chipLabel}
         <ChevronDown size={10} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -79,21 +79,21 @@ function BulkTasksChip({ items }: { items: string[] }) {
       {open && (
         <div
           className="absolute left-0 mt-1.5 z-20 rounded-xl shadow-lg w-72"
-          style={{ backgroundColor: "#fff", border: "1px solid #e8e2d4" }}
+          style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border-faint)" }}
         >
           {/* Header */}
           <div
             className="flex items-center justify-between px-3 py-2"
-            style={{ borderBottom: "1px solid #f0ebe2" }}
+            style={{ borderBottom: "1px solid var(--c-border-faint)" }}
           >
             <button
               onClick={toggleAll}
               className="text-[10px] font-medium transition-colors"
-              style={{ color: "#6b6357" }}
+              style={{ color: "var(--c-ink-muted)" }}
             >
               {selected.size === items.length ? "Deselect all" : "Select all"}
             </button>
-            <button onClick={() => setOpen(false)} style={{ color: "#948a7b" }}>
+            <button onClick={() => setOpen(false)} style={{ color: "var(--c-ink-faint)" }}>
               <X size={13} />
             </button>
           </div>
@@ -104,15 +104,15 @@ function BulkTasksChip({ items }: { items: string[] }) {
               <button
                 key={i}
                 onClick={() => toggle(i)}
-                className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#faf8f4]"
+                className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-surface-2"
               >
                 {selected.has(i)
-                  ? <CheckSquare size={13} className="mt-0.5 shrink-0" style={{ color: "#2d5a4f" }} />
-                  : <Square size={13} className="mt-0.5 shrink-0" style={{ color: "#c4bdb2" }} />
+                  ? <CheckSquare size={13} className="mt-0.5 shrink-0" style={{ color: "var(--c-moss)" }} />
+                  : <Square size={13} className="mt-0.5 shrink-0" style={{ color: "var(--c-ink-faint)" }} />
                 }
                 <span
                   className="text-xs leading-snug"
-                  style={{ color: selected.has(i) ? "#1a1714" : "#948a7b" }}
+                  style={{ color: selected.has(i) ? "var(--c-ink)" : "var(--c-ink-faint)" }}
                 >
                   {item}
                 </span>
@@ -121,12 +121,12 @@ function BulkTasksChip({ items }: { items: string[] }) {
           </div>
 
           {/* Footer */}
-          <div className="px-3 py-2.5" style={{ borderTop: "1px solid #f0ebe2" }}>
+          <div className="px-3 py-2.5" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
             <button
               onClick={create}
               disabled={loading || numSelected === 0}
               className="w-full text-xs py-1.5 rounded-lg font-medium disabled:opacity-40 transition-opacity"
-              style={{ backgroundColor: "#2d5a4f", color: "#fff" }}
+              style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
             >
               {loading
                 ? "Creating…"
@@ -176,7 +176,7 @@ function CalendarChip({ hint }: { hint: CalendarHint }) {
     return (
       <div
         className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl"
-        style={{ backgroundColor: "#e3ede9", color: "#2d5a4f", border: "1px solid rgba(45,90,79,0.2)" }}
+        style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}
       >
         <Check size={11} />
         Added to calendar
@@ -190,12 +190,12 @@ function CalendarChip({ hint }: { hint: CalendarHint }) {
         onClick={() => setOpen(!open)}
         className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl transition-colors"
         style={{
-          backgroundColor: open ? "#efeadf" : "#f6f3ec",
-          color: "#6b6357",
-          border: "1px solid #d8d2c4",
+          backgroundColor: open ? "var(--c-surface-2)" : "var(--c-canvas)",
+          color: "var(--c-ink-muted)",
+          border: "1px solid var(--c-border)",
         }}
       >
-        <Calendar size={11} style={{ color: "#2d5a4f" }} />
+        <Calendar size={11} style={{ color: "var(--c-moss)" }} />
         Add to Calendar
         <ChevronDown size={10} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -203,48 +203,48 @@ function CalendarChip({ hint }: { hint: CalendarHint }) {
       {open && (
         <div
           className="absolute left-0 mt-1.5 z-20 rounded-xl p-3 shadow-lg w-72"
-          style={{ backgroundColor: "#fff", border: "1px solid #e8e2d4" }}
+          style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border-faint)" }}
         >
-          <p className="text-[10px] mb-2.5 leading-relaxed line-clamp-2" style={{ color: "#948a7b" }}>
+          <p className="text-[10px] mb-2.5 leading-relaxed line-clamp-2" style={{ color: "var(--c-ink-faint)" }}>
             {hint.rawText}
           </p>
 
           <div className="space-y-2">
             <div>
-              <label className="text-[10px] font-medium block mb-0.5" style={{ color: "#6b6357" }}>Title</label>
+              <label className="text-[10px] font-medium block mb-0.5" style={{ color: "var(--c-ink-muted)" }}>Title</label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full text-xs px-2.5 py-1.5 rounded-lg outline-none"
-                style={{ backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] font-medium block mb-0.5" style={{ color: "#6b6357" }}>Date</label>
+                <label className="text-[10px] font-medium block mb-0.5" style={{ color: "var(--c-ink-muted)" }}>Date</label>
                 <input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   className="w-full text-xs px-2 py-1.5 rounded-lg outline-none"
-                  style={{ backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                  style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
                 />
               </div>
               <div>
-                <label className="text-[10px] font-medium block mb-0.5" style={{ color: "#6b6357" }}>Time</label>
+                <label className="text-[10px] font-medium block mb-0.5" style={{ color: "var(--c-ink-muted)" }}>Time</label>
                 <input
                   type="time"
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
                   className="w-full text-xs px-2 py-1.5 rounded-lg outline-none"
-                  style={{ backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                  style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-[10px] font-medium block mb-0.5" style={{ color: "#6b6357" }}>Duration (min)</label>
+              <label className="text-[10px] font-medium block mb-0.5" style={{ color: "var(--c-ink-muted)" }}>Duration (min)</label>
               <input
                 type="number"
                 value={duration}
@@ -252,7 +252,7 @@ function CalendarChip({ hint }: { hint: CalendarHint }) {
                 min={15}
                 step={15}
                 className="w-full text-xs px-2.5 py-1.5 rounded-lg outline-none"
-                style={{ backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
               />
             </div>
           </div>
@@ -262,14 +262,14 @@ function CalendarChip({ hint }: { hint: CalendarHint }) {
               onClick={save}
               disabled={saving || !date || !time}
               className="flex-1 text-xs py-1.5 rounded-lg font-medium disabled:opacity-40 transition-opacity"
-              style={{ backgroundColor: "#2d5a4f", color: "#fff" }}
+              style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
             >
               {saving ? "Adding…" : "Add to Calendar"}
             </button>
             <button
               onClick={() => setOpen(false)}
               className="text-xs px-3 py-1.5 rounded-lg"
-              style={{ backgroundColor: "#f6f3ec", color: "#6b6357", border: "1px solid #d8d2c4" }}
+              style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
             >
               Cancel
             </button>
@@ -312,9 +312,9 @@ function HoverAction({
       disabled={state === "loading" || state === "done"}
       className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full transition-all"
       style={{
-        backgroundColor: state === "done" ? "#e3ede9" : "transparent",
-        color: state === "done" ? "#2d5a4f" : "#c4bdb2",
-        border: `1px solid ${state === "done" ? "rgba(45,90,79,0.2)" : "transparent"}`,
+        backgroundColor: state === "done" ? "var(--c-moss-soft)" : "transparent",
+        color: state === "done" ? "var(--c-moss)" : "var(--c-ink-faint)",
+        border: `1px solid ${state === "done" ? "color-mix(in srgb, var(--c-moss) 25%, transparent)" : "transparent"}`,
       }}
     >
       {state === "loading" ? (

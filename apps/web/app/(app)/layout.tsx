@@ -40,19 +40,19 @@ function BottomTabBar() {
             key={href}
             href={href}
             className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors"
-            style={{ color: active ? "#2d5a4f" : "#948a7b", minHeight: "56px" }}
+            style={{ color: active ? "var(--c-moss)" : "var(--c-ink-faint)", minHeight: "56px" }}
           >
             <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
             <span
               className="text-[10px] font-medium leading-none"
-              style={{ color: active ? "#2d5a4f" : "#948a7b" }}
+              style={{ color: active ? "var(--c-moss)" : "var(--c-ink-faint)" }}
             >
               {label}
             </span>
             {active && (
               <span
                 className="absolute bottom-0 w-10 h-0.5 rounded-full"
-                style={{ backgroundColor: "#2d5a4f" }}
+                style={{ backgroundColor: "var(--c-moss)" }}
               />
             )}
           </Link>
@@ -63,10 +63,10 @@ function BottomTabBar() {
       <button
         onClick={() => setOpenMobile(true)}
         className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors relative"
-        style={{ color: "#948a7b", minHeight: "56px" }}
+        style={{ color: "var(--c-ink-faint)", minHeight: "56px" }}
       >
         <MoreHorizontal size={22} strokeWidth={1.8} />
-        <span className="text-[10px] font-medium leading-none" style={{ color: "#948a7b" }}>
+        <span className="text-[10px] font-medium leading-none" style={{ color: "var(--c-ink-faint)" }}>
           More
         </span>
       </button>
@@ -107,7 +107,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="flex items-center gap-2 flex-1">
-            <SidebarTrigger className="size-7 text-[#6b6357] hover:text-[#1a1714]" />
+            <SidebarTrigger className="size-7 text-ink-muted hover:text-ink" />
             <button
               onClick={() => setCmdOpen(true)}
               className="relative max-w-md w-full hidden sm:flex items-center gap-2 ml-2 rounded-full pl-3 pr-3 py-1.5 text-sm transition-all text-left"
@@ -143,12 +143,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div
                 className="flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-medium hidden sm:flex"
                 style={{
-                  backgroundColor: "#e3ede9",
-                  borderColor: "rgba(45,90,79,0.2)",
-                  color: "#2d5a4f",
+                  backgroundColor: "var(--c-moss-soft)",
+                  borderColor: "color-mix(in srgb, var(--c-moss) 25%, transparent)",
+                  color: "var(--c-moss)",
                 }}
               >
-                <span className="w-2 h-2 rounded-full bg-[#2d5a4f] animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-moss animate-pulse" />
                 Agent Active
               </div>
             )}
@@ -163,18 +163,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            <button className="p-2 relative" style={{ color: "#6b6357" }}>
+            <button className="p-2 relative" style={{ color: "var(--c-ink-muted)" }}>
               <Bell size={20} />
               <span
                 className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full border-2"
-                style={{ backgroundColor: "#b8651a", borderColor: "#fbfaf6" }}
+                style={{ backgroundColor: "var(--c-amber)", borderColor: "var(--c-surface)" }}
               />
             </button>
 
             <button
               onClick={() => setCaptureOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer hover:opacity-80"
-              style={{ backgroundColor: "#1a1714", color: "#fbfaf6" }}
+              style={{ backgroundColor: "var(--c-ink)", color: "var(--c-canvas)" }}
             >
               <Plus size={16} />
               <span className="hidden sm:inline">Capture</span>

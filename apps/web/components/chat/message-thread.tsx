@@ -103,7 +103,34 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
         )}
         {msg.content && (
           <div className={cn("prose prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
-            <ReactMarkdown>{msg.content}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                // Strip the outer <pre> wrapper ReactMarkdown adds — prevents overflow
+                pre: ({ children }) => <>{children}</>,
+                // Handle code blocks with overflow-x: auto
+                code({ className, children }) {
+                  if (className) {
+                    // Fenced code block (language-*)
+                    return (
+                      <pre
+                        className="overflow-x-auto rounded-md my-2 p-3 text-xs font-mono"
+                        style={{ maxWidth: "100%", whiteSpace: "pre-wrap", wordBreak: "break-all" }}
+                      >
+                        <code className={className}>{children}</code>
+                      </pre>
+                    )
+                  }
+                  // Inline code
+                  return (
+                    <code className="px-1 py-0.5 rounded text-xs font-mono" style={{ backgroundColor: "rgba(0,0,0,0.08)" }}>
+                      {children}
+                    </code>
+                  )
+                },
+              }}
+            >
+              {msg.content}
+            </ReactMarkdown>
           </div>
         )}
 

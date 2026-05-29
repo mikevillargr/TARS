@@ -179,11 +179,11 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
         showCloseButton={false}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: "#d8d2c4" }}>
+        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}>
           <div className="flex items-center gap-3">
-            <span className="font-serif text-base font-medium" style={{ color: "#1a1714" }}>Quick Capture</span>
+            <span className="font-serif text-base font-medium" style={{ color: "var(--c-ink)" }}>Quick Capture</span>
             {/* Tab switcher */}
-            <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: "#f0ebe1" }}>
+            <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: "var(--c-surface-2)" }}>
               {([
                 { id: "url", label: "URL", icon: LinkIcon },
                 { id: "document", label: "Document", icon: FileText },
@@ -194,8 +194,8 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
                   onClick={() => setTab(id)}
                   className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all"
                   style={tab === id
-                    ? { background: "#fff", color: "#1a1714", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
-                    : { color: "#948a7b" }
+                    ? { background: "var(--c-surface)", color: "var(--c-ink)", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
+                    : { color: "var(--c-ink-faint)" }
                   }
                 >
                   <Icon size={11} />
@@ -207,7 +207,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
           <button
             onClick={handleClose}
             className="p-1.5 rounded-md transition-colors hover:bg-surface-2"
-            style={{ color: "#948a7b" }}
+            style={{ color: "var(--c-ink-faint)" }}
           >
             <X size={16} />
           </button>
@@ -217,7 +217,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
         {tab === "url" ? (
           <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1.5" style={{ color: "#948a7b" }}>
+              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
                 URL
               </label>
               <input
@@ -249,11 +249,11 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
                 onChange={e => setDocTitle(e.target.value)}
                 placeholder="Document title…"
                 className="w-full text-lg font-semibold bg-transparent border-none outline-none"
-                style={{ color: "#1a1714", fontFamily: "var(--font-heading), serif" }}
+                style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}
               />
             </div>
             {/* Editor */}
-            <div className="flex-1 min-h-0 overflow-hidden border-t" style={{ borderColor: "#e8e2d4" }}>
+            <div className="flex-1 min-h-0 overflow-hidden border-t" style={{ borderColor: "var(--c-border-faint)" }}>
               <TiptapEditor
                 content=""
                 onChange={setDocMarkdown}
@@ -263,7 +263,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               />
             </div>
             {/* Metadata accordion */}
-            <div className="border-t px-5 py-2 shrink-0" style={{ borderColor: "#e8e2d4" }}>
+            <div className="border-t px-5 py-2 shrink-0" style={{ borderColor: "var(--c-border-faint)" }}>
               <MetadataFields
                 note={captureNote} onNoteChange={setCaptureNote}
                 tags={captureTags} onTagsChange={setCaptureTags}
@@ -280,26 +280,26 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               /* File selected — show preview card */
               <div
                 className="flex items-start gap-4 rounded-xl p-4 border"
-                style={{ background: "#f6f3ec", borderColor: "#d8d2c4" }}
+                style={{ background: "var(--c-canvas)", borderColor: "var(--c-border)" }}
               >
                 <div
                   className="flex items-center justify-center w-12 h-12 rounded-lg shrink-0"
-                  style={{ background: "#e3ede9" }}
+                  style={{ background: "var(--c-moss-soft)" }}
                 >
-                  <FileIcon size={22} style={{ color: "#2d5a4f" }} />
+                  <FileIcon size={22} style={{ color: "var(--c-moss)" }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate" style={{ color: "#1a1714" }}>
+                  <p className="font-medium text-sm truncate" style={{ color: "var(--c-ink)" }}>
                     {selectedFile.name}
                   </p>
-                  <p className="text-xs mt-0.5" style={{ color: "#948a7b" }}>
+                  <p className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
                     {formatBytes(selectedFile.size)} · {selectedFile.type || "unknown type"}
                   </p>
                 </div>
                 <button
                   onClick={() => setSelectedFile(null)}
                   className="p-1 rounded-md"
-                  style={{ color: "#948a7b" }}
+                  style={{ color: "var(--c-ink-faint)" }}
                 >
                   <X size={14} />
                 </button>
@@ -312,22 +312,22 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
                 onDrop={onDrop}
                 className="flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed gap-4 cursor-pointer min-h-[220px] transition-colors"
                 style={{
-                  borderColor: dragOver ? "#2d5a4f" : "#d8d2c4",
-                  background: dragOver ? "#e3ede9" : "#faf8f4",
+                  borderColor: dragOver ? "var(--c-moss)" : "var(--c-border)",
+                  background: dragOver ? "var(--c-moss-soft)" : "var(--c-surface)",
                 }}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <div
                   className="w-14 h-14 rounded-full flex items-center justify-center"
-                  style={{ background: dragOver ? "#2d5a4f" : "#e8e2d4" }}
+                  style={{ background: dragOver ? "var(--c-moss)" : "var(--c-border-faint)" }}
                 >
-                  <Upload size={24} style={{ color: dragOver ? "#fff" : "#948a7b" }} />
+                  <Upload size={24} style={{ color: dragOver ? "var(--c-surface)" : "var(--c-ink-faint)" }} />
                 </div>
                 <div className="text-center">
-                  <p className="font-medium text-sm" style={{ color: "#1a1714" }}>
+                  <p className="font-medium text-sm" style={{ color: "var(--c-ink)" }}>
                     Drop a file here, or click to browse
                   </p>
-                  <p className="text-xs mt-1" style={{ color: "#948a7b" }}>
+                  <p className="text-xs mt-1" style={{ color: "var(--c-ink-faint)" }}>
                     PDF, DOCX, PPTX, XLSX, images, code files, and more
                   </p>
                 </div>
@@ -339,7 +339,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition-colors"
-                style={{ borderColor: "#d8d2c4", color: "#1a1714", background: "#fff" }}
+                style={{ borderColor: "var(--c-border)", color: "var(--c-ink)", background: "var(--c-surface)" }}
               >
                 <FileIcon size={15} />
                 Browse Files
@@ -347,7 +347,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               <button
                 onClick={() => cameraInputRef.current?.click()}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition-colors"
-                style={{ borderColor: "#d8d2c4", color: "#1a1714", background: "#fff" }}
+                style={{ borderColor: "var(--c-border)", color: "var(--c-ink)", background: "var(--c-surface)" }}
               >
                 <Camera size={15} />
                 Take Photo
@@ -358,10 +358,10 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
             {!selectedFile && (
               <div
                 className="rounded-lg px-4 py-3 text-xs"
-                style={{ background: "#e3ede9", color: "#2d5a4f" }}
+                style={{ background: "var(--c-moss-soft)", color: "var(--c-moss)" }}
               >
                 <p className="font-medium mb-0.5">After uploading</p>
-                <p style={{ color: "#3d7a6f" }}>
+                <p style={{ color: "var(--c-moss)" }}>
                   TARS will extract the content and open a new chat so you can ask questions, get summaries, or take action on it.
                 </p>
               </div>
@@ -397,14 +397,14 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
         {/* Footer */}
         <div
           className="flex items-center justify-between px-5 py-3 border-t shrink-0"
-          style={{ borderColor: "#d8d2c4", background: "#faf8f4" }}
+          style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}
         >
           <div>
             {ingestError && (
-              <p className="text-xs" style={{ color: "#a04848" }}>{ingestError}</p>
+              <p className="text-xs" style={{ color: "var(--c-rose)" }}>{ingestError}</p>
             )}
             {tab === "file" && ingesting && (
-              <p className="text-xs" style={{ color: "#948a7b" }}>
+              <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>
                 Processing file — this may take a moment…
               </p>
             )}
@@ -416,7 +416,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               disabled={!canSave || ingesting}
               className="flex items-center gap-1.5 text-sm disabled:opacity-50"
               style={{
-                background: "#2d5a4f", color: "#fff",
+                background: "var(--c-moss)", color: "var(--c-surface)",
                 padding: "0.375rem 1rem", borderRadius: "0.5rem",
                 fontWeight: 500,
               }}
@@ -447,7 +447,7 @@ function MetadataFields({
         type="button"
         onClick={onToggle}
         className="flex items-center gap-1 text-xs mb-2 transition-colors"
-        style={{ color: "#948a7b" }}
+        style={{ color: "var(--c-ink-faint)" }}
       >
         <ChevronDown size={12} style={{ transform: show ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
         Metadata {show ? "" : "(optional)"}
@@ -455,7 +455,7 @@ function MetadataFields({
       {show && (
         <div className="space-y-3">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "#948a7b" }}>
+            <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
               Personal note
             </label>
             <textarea
@@ -468,7 +468,7 @@ function MetadataFields({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "#948a7b" }}>
+              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
                 Tags
               </label>
               <input
@@ -479,7 +479,7 @@ function MetadataFields({
               />
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "#948a7b" }}>
+              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
                 Domain
               </label>
               <select

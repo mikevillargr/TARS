@@ -190,16 +190,16 @@ export function ItemDetailModal({
         {/* Header */}
         <div
           className="flex items-center justify-between px-5 py-3 border-b shrink-0"
-          style={{ borderColor: "#d8d2c4", background: "#faf8f4" }}
+          style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 shrink-0" style={{ color: "#948a7b" }}>
+            <div className="flex items-center gap-1.5 shrink-0" style={{ color: "var(--c-ink-faint)" }}>
               <TypeIcon type={item?.type ?? ""} size={13} />
               <span className="text-[10px] uppercase tracking-wider font-medium">{typeLabel(item?.type ?? "")}</span>
               {(item?.chunk_count ?? 0) > 0 && (
                 <span
                   className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px]"
-                  style={{ backgroundColor: "#efeadf", color: "#6b6357" }}
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
                 >
                   <Layers size={9} /> {item!.chunk_count} chunks
                 </span>
@@ -213,12 +213,12 @@ export function ItemDetailModal({
                   onChange={e => setEditTitle(e.target.value)}
                   placeholder="Untitled document"
                   className="w-full bg-transparent border-none outline-none text-sm font-semibold truncate"
-                  style={{ color: "#1a1714", fontFamily: "var(--font-heading), serif" }}
+                  style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}
                 />
               ) : (
                 <h2
                   className="text-sm font-semibold truncate"
-                  style={{ color: "#1a1714", fontFamily: "var(--font-heading), serif" }}
+                  style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}
                 >
                   {item?.source_title ?? item?.url ?? "Untitled"}
                 </h2>
@@ -231,7 +231,7 @@ export function ItemDetailModal({
             {isDocument && saveStatus !== "idle" && (
               <span
                 className="text-[11px] transition-opacity"
-                style={{ color: saveStatus === "saved" ? "#2d5a4f" : "#948a7b" }}
+                style={{ color: saveStatus === "saved" ? "var(--c-moss)" : "var(--c-ink-faint)" }}
               >
                 {saveStatus === "saving" ? "Saving…" : "Saved ✓"}
               </span>
@@ -242,7 +242,7 @@ export function ItemDetailModal({
                 <button
                   onClick={() => setEditing(true)}
                   className="p-1.5 rounded-md transition-colors hover:bg-surface-2"
-                  style={{ color: "#948a7b" }}
+                  style={{ color: "var(--c-ink-faint)" }}
                   title="Edit metadata"
                 >
                   <Pencil size={13} />
@@ -252,14 +252,14 @@ export function ItemDetailModal({
                   onClick={saveMetadata}
                   disabled={saving}
                   className="p-1.5 rounded-md"
-                  style={{ color: "#2d5a4f" }}
+                  style={{ color: "var(--c-moss)" }}
                   title="Save"
                 >
                   {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                 </button>
               )
             )}
-            <button onClick={onClose} className="p-1.5 rounded-md" style={{ color: "#948a7b" }}>
+            <button onClick={onClose} className="p-1.5 rounded-md" style={{ color: "var(--c-ink-faint)" }}>
               <X size={15} />
             </button>
           </div>
@@ -268,7 +268,7 @@ export function ItemDetailModal({
         {/* Body */}
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
-            <Loader2 size={20} className="animate-spin" style={{ color: "#948a7b" }} />
+            <Loader2 size={20} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
           </div>
         ) : !item ? null : isDocument ? (
           /* ── Document edit mode ─────────────────────────────── */
@@ -292,7 +292,7 @@ export function ItemDetailModal({
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-1.5 text-xs break-all transition-opacity hover:opacity-80"
-                style={{ color: "#2d5a4f" }}
+                style={{ color: "var(--c-moss)" }}
               >
                 <ExternalLink size={11} />
                 {item.url}
@@ -306,30 +306,30 @@ export function ItemDetailModal({
                   value={editDomain}
                   onChange={e => setEditDomain(e.target.value)}
                   className="text-xs px-2 py-1.5 rounded-lg outline-none w-full"
-                  style={{ backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                  style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
                 >
                   {DOMAINS.map(d => <option key={d}>{d}</option>)}
                 </select>
                 <div className="relative">
-                  <Tag size={11} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: "#948a7b" }} />
+                  <Tag size={11} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: "var(--c-ink-faint)" }} />
                   <input
                     value={editTags}
                     onChange={e => setEditTags(e.target.value)}
                     placeholder="tag1, tag2, tag3"
                     className="w-full text-xs pl-6 pr-2 py-1.5 rounded-lg outline-none"
-                    style={{ backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                    style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
                   />
                 </div>
               </div>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {item.domain && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: "#efeadf", color: "#6b6357" }}>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}>
                     {item.domain}
                   </span>
                 )}
                 {(item.tags ?? []).map(tag => (
-                  <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: "#f6f3ec", color: "#948a7b", border: "1px solid #e8e2d4" }}>
+                  <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-faint)", border: "1px solid var(--c-border-faint)" }}>
                     #{tag}
                   </span>
                 ))}
@@ -338,17 +338,17 @@ export function ItemDetailModal({
 
             {/* Search match highlight */}
             {searchChunk && (
-              <div className="rounded-lg p-3" style={{ backgroundColor: "#fffbe6", border: "1px solid #f0e68c" }}>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "#92740a" }}>
+              <div className="rounded-lg p-3" style={{ backgroundColor: "var(--c-amber-soft)", border: "1px solid color-mix(in srgb, var(--c-amber) 30%, transparent)" }}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--c-amber)" }}>
                   Matched passage
                 </p>
-                <p className="text-xs leading-relaxed" style={{ color: "#4a3a00" }}>{searchChunk}</p>
+                <p className="text-xs leading-relaxed" style={{ color: "var(--c-ink)" }}>{searchChunk}</p>
               </div>
             )}
 
             {/* Personal note */}
             <div className="space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>Your Note</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Your Note</p>
               {editing ? (
                 <textarea
                   value={editNote}
@@ -356,22 +356,22 @@ export function ItemDetailModal({
                   placeholder="Add a personal annotation…"
                   rows={3}
                   className="w-full text-sm px-2.5 py-2 rounded-lg outline-none resize-none"
-                  style={{ backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                  style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
                 />
               ) : item.personal_note ? (
-                <p className="text-sm leading-relaxed italic" style={{ color: "#6b6357" }}>{item.personal_note}</p>
+                <p className="text-sm leading-relaxed italic" style={{ color: "var(--c-ink-muted)" }}>{item.personal_note}</p>
               ) : (
-                <p className="text-xs" style={{ color: "#c4bdb2" }}>No note — click edit to add one</p>
+                <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>No note — click edit to add one</p>
               )}
             </div>
 
             {/* Full content */}
             {displayContent && (
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "#948a7b" }}>Content</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>Content</p>
                 <div
                   className="text-sm leading-relaxed rounded-lg p-4 overflow-hidden"
-                  style={{ backgroundColor: "#f6f3ec", border: "1px solid #e8e2d4", color: "#1a1714" }}
+                  style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)", color: "var(--c-ink)" }}
                 >
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
@@ -383,14 +383,15 @@ export function ItemDetailModal({
                       ul: ({ children }) => <ul className="pl-4 space-y-0.5 mb-2">{children}</ul>,
                       ol: ({ children }) => <ol className="pl-4 space-y-0.5 mb-2 list-decimal">{children}</ol>,
                       li: ({ children }) => <li className="text-sm leading-relaxed">{children}</li>,
+                      pre: ({ children }) => <>{children}</>,
                       code: ({ children, className }) => {
                         const isBlock = !!className
                         return isBlock
-                          ? <pre className="text-xs p-2 rounded overflow-x-auto my-2" style={{ backgroundColor: "#1a1a1a", color: "#e2e2e2" }}><code>{children}</code></pre>
-                          : <code className="text-xs px-1 py-0.5 rounded" style={{ backgroundColor: "#efeadf", color: "#b45309" }}>{children}</code>
+                          ? <pre className="text-xs p-2 rounded overflow-x-auto my-2" style={{ backgroundColor: "#1a1a1a", color: "#e2e2e2", whiteSpace: "pre-wrap" }}><code>{children}</code></pre>
+                          : <code className="text-xs px-1 py-0.5 rounded" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)" }}>{children}</code>
                       },
                       a: ({ href, children }) => (
-                        <a href={href} target="_blank" rel="noreferrer" className="underline" style={{ color: "#2d5a4f" }}>{children}</a>
+                        <a href={href} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--c-moss)" }}>{children}</a>
                       ),
                     }}
                   >
@@ -401,7 +402,7 @@ export function ItemDetailModal({
                   <button
                     onClick={() => setShowFull(!showFull)}
                     className="mt-1.5 flex items-center gap-1 text-xs"
-                    style={{ color: "#948a7b" }}
+                    style={{ color: "var(--c-ink-faint)" }}
                   >
                     {showFull
                       ? <><ChevronUp size={12} /> Show less</>
@@ -413,7 +414,7 @@ export function ItemDetailModal({
             )}
 
             {/* Metadata footer */}
-            <div className="pt-3 border-t text-[10px] space-y-0.5" style={{ borderColor: "#e8e2d4", color: "#948a7b" }}>
+            <div className="pt-3 border-t text-[10px] space-y-0.5" style={{ borderColor: "var(--c-border-faint)", color: "var(--c-ink-faint)" }}>
               <p>Saved {new Date(item.saved_at).toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })}</p>
               {item.access_count > 0 && <p>Referenced by TARS {item.access_count}×</p>}
               {item.source_author && <p>By {item.source_author}</p>}
@@ -422,11 +423,11 @@ export function ItemDetailModal({
         )}
 
         {/* Footer */}
-        <div className="shrink-0 border-t px-5 py-3 flex items-center gap-2" style={{ borderColor: "#d8d2c4", background: "#faf8f4" }}>
+        <div className="shrink-0 border-t px-5 py-3 flex items-center gap-2" style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}>
           <button
             onClick={() => { if (item) router.push(`/chat?load=${item.id}`) }}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium"
-            style={{ backgroundColor: "#2d5a4f", color: "#fff" }}
+            style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
           >
             <MessageSquare size={12} />
             Chat
@@ -434,9 +435,9 @@ export function ItemDetailModal({
           <button
             onClick={copyContent}
             className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg"
-            style={{ backgroundColor: "#f6f3ec", color: "#6b6357", border: "1px solid #d8d2c4" }}
+            style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
           >
-            {copied ? <Check size={11} style={{ color: "#2d5a4f" }} /> : <Copy size={11} />}
+            {copied ? <Check size={11} style={{ color: "var(--c-moss)" }} /> : <Copy size={11} />}
             {copied ? "Copied" : "Copy"}
           </button>
           {item?.url && !item.url.startsWith("fireflies://") && (
@@ -445,7 +446,7 @@ export function ItemDetailModal({
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg"
-              style={{ backgroundColor: "#f6f3ec", color: "#6b6357", border: "1px solid #d8d2c4" }}
+              style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
             >
               <ExternalLink size={11} />
               Open
@@ -454,7 +455,7 @@ export function ItemDetailModal({
 
           {/* Document word count */}
           {isDocument && (
-            <span className="text-[10px] ml-1" style={{ color: "#948a7b" }}>
+            <span className="text-[10px] ml-1" style={{ color: "var(--c-ink-faint)" }}>
               {wordCount} {wordCount === 1 ? "word" : "words"}
             </span>
           )}
@@ -462,14 +463,14 @@ export function ItemDetailModal({
           <div className="flex-1" />
 
           {!confirmDelete ? (
-            <button onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-md" style={{ color: "#c4bdb2" }} title="Delete">
+            <button onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-md" style={{ color: "var(--c-ink-faint)" }} title="Delete">
               <Trash2 size={14} />
             </button>
           ) : (
             <div className="flex items-center gap-1.5">
-              <span className="text-xs" style={{ color: "#6b6357" }}>Delete?</span>
-              <button onClick={deleteItem} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "#dc2626", color: "#fff" }}>Yes</button>
-              <button onClick={() => setConfirmDelete(false)} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "#f6f3ec", color: "#6b6357", border: "1px solid #d8d2c4" }}>No</button>
+              <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>Delete?</span>
+              <button onClick={deleteItem} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-rose)", color: "#fff" }}>Yes</button>
+              <button onClick={() => setConfirmDelete(false)} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}>No</button>
             </div>
           )}
         </div>

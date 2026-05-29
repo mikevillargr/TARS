@@ -19,7 +19,7 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void 
         width: "2rem",
         height: "1.25rem",
         borderRadius: "9999px",
-        backgroundColor: enabled ? "#2d5a4f" : "#d8d2c4",
+        backgroundColor: enabled ? "var(--c-moss)" : "var(--c-border)",
         transition: "background-color 0.2s",
       }}
       aria-label="Toggle"
@@ -92,9 +92,9 @@ export default function SettingsPage() {
 
   // PWA install state
   const installPromptRef = useRef<BeforeInstallPromptEvent | null>(null)
-  const [installable, setInstallable]       = useState(false)   // Chrome/Android install prompt available
-  const [isInstalled, setIsInstalled]       = useState(false)   // running as standalone PWA
-  const [isIOS, setIsIOS]                   = useState(false)   // iOS — needs manual share-sheet
+  const [installable, setInstallable]       = useState(false)
+  const [isInstalled, setIsInstalled]       = useState(false)
+  const [isIOS, setIsIOS]                   = useState(false)
   const [showIOSInstructions, setShowIOSInstructions] = useState(false)
   const [installDone, setInstallDone]       = useState(false)
 
@@ -179,21 +179,21 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: "#f6f3ec" }}>
+    <div className="flex-1 overflow-y-auto" style={{ backgroundColor: "var(--c-canvas)" }}>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
         {/* Page heading */}
-        <h1 className="text-xl font-semibold text-[#1a1714]" style={{ fontFamily: "var(--font-heading), serif" }}>
+        <h1 className="text-xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>
           Settings
         </h1>
 
         {/* ── Profile ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             Profile
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-[#6b6357] mb-1">Name</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--c-ink-muted)" }}>Name</label>
               <input
                 className="input-field w-full"
                 value={name}
@@ -201,12 +201,12 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#6b6357] mb-1">Primary Email</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--c-ink-muted)" }}>Primary Email</label>
               <input
                 className="input-field w-full"
                 value="mike@growth-rocket.com"
                 readOnly
-                style={{ color: "#948a7b", cursor: "default" }}
+                style={{ color: "var(--c-ink-faint)", cursor: "default" }}
               />
             </div>
           </div>
@@ -224,21 +224,21 @@ export default function SettingsPage() {
         {/* ── Timezone ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
+            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Timezone
             </h2>
             {tzSaved && (
-              <span className="text-xs flex items-center gap-1" style={{ color: "#2d5a4f" }}>
+              <span className="text-xs flex items-center gap-1" style={{ color: "var(--c-moss)" }}>
                 <Check size={12} /> Saved
               </span>
             )}
           </div>
-          <p className="text-xs" style={{ color: "#6b6357" }}>
+          <p className="text-xs" style={{ color: "var(--c-ink-muted)" }}>
             Used for all date and time responses, calendar formatting, and scheduling suggestions.
           </p>
           <div className="flex gap-2">
             <div className="flex-1 relative">
-              <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#948a7b" }} />
+              <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--c-ink-faint)" }} />
               <select
                 className="input-field w-full pl-8"
                 value={timezone}
@@ -261,7 +261,7 @@ export default function SettingsPage() {
               <MapPin size={13} /> <span className="hidden sm:inline">Auto-detect</span><span className="sm:hidden">Auto</span>
             </button>
           </div>
-          <p className="text-[11px]" style={{ color: "#948a7b" }}>
+          <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
             Current: <span className="font-mono">{timezone}</span>
             {" · "}
             {new Date().toLocaleTimeString(undefined, { timeZone: timezone, hour: "2-digit", minute: "2-digit", timeZoneName: "short" })}
@@ -270,10 +270,10 @@ export default function SettingsPage() {
 
         {/* ── Model Routing ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             Model Routing
           </h2>
-          <div className="flex flex-col gap-0 rounded-lg overflow-hidden" style={{ border: "1px solid #e8e2d4" }}>
+          <div className="flex flex-col gap-0 rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
             {[
               { label: "Tier 1 — Fast",      key: "tier1" as const, desc: "Simple queries, quick tasks" },
               { label: "Tier 2 — Workhorse", key: "tier2" as const, desc: "Most day-to-day tasks" },
@@ -283,13 +283,13 @@ export default function SettingsPage() {
                 key={tier.key}
                 className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 gap-2"
                 style={{
-                  borderTop: i > 0 ? "1px solid #e8e2d4" : "none",
-                  backgroundColor: "#fbfaf6",
+                  borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
+                  backgroundColor: "var(--c-surface)",
                 }}
               >
                 <div>
-                  <div className="text-sm font-medium text-[#1a1714]">{tier.label}</div>
-                  <div className="text-xs text-[#948a7b] mt-0.5">{tier.desc}</div>
+                  <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{tier.label}</div>
+                  <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{tier.desc}</div>
                 </div>
                 <select
                   className="input-field w-full sm:w-40 text-xs shrink-0"
@@ -308,21 +308,21 @@ export default function SettingsPage() {
 
         {/* ── Notifications ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             Notifications
           </h2>
-          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid #e8e2d4" }}>
+          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
             {/* Header row */}
             <div
               className="grid px-4 py-2"
               style={{
                 gridTemplateColumns: "1fr 44px 44px 44px",
-                backgroundColor: "#efeadf",
-                borderBottom: "1px solid #e8e2d4",
+                backgroundColor: "var(--c-surface-2)",
+                borderBottom: "1px solid var(--c-border-faint)",
               }}
             >
               {["", "Push", "Email", "App"].map(h => (
-                <span key={h} className="text-[0.6rem] font-semibold uppercase tracking-wider text-center" style={{ color: "#948a7b" }}>
+                <span key={h} className="text-[0.6rem] font-semibold uppercase tracking-wider text-center" style={{ color: "var(--c-ink-faint)" }}>
                   {h}
                 </span>
               ))}
@@ -333,11 +333,11 @@ export default function SettingsPage() {
                 className="grid items-center px-4 py-2.5"
                 style={{
                   gridTemplateColumns: "1fr 44px 44px 44px",
-                  borderTop: i > 0 ? "1px solid #e8e2d4" : "none",
-                  backgroundColor: "#fbfaf6",
+                  borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
+                  backgroundColor: "var(--c-surface)",
                 }}
               >
-                <span className="text-sm text-[#1a1714] pr-2">{notif.label}</span>
+                <span className="text-sm pr-2" style={{ color: "var(--c-ink)" }}>{notif.label}</span>
                 <span className="flex justify-center"><Toggle enabled={notif.push}  onChange={() => toggleNotif(notif.id, "push")} /></span>
                 <span className="flex justify-center"><Toggle enabled={notif.email} onChange={() => toggleNotif(notif.id, "email")} /></span>
                 <span className="flex justify-center"><Toggle enabled={notif.inApp} onChange={() => toggleNotif(notif.id, "inApp")} /></span>
@@ -348,7 +348,7 @@ export default function SettingsPage() {
 
         {/* ── API Keys ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             API Keys
           </h2>
           <div className="flex flex-col gap-2">
@@ -356,11 +356,11 @@ export default function SettingsPage() {
               <div
                 key={k.id}
                 className="rounded-lg px-3 py-3 flex items-center gap-3"
-                style={{ backgroundColor: "#fbfaf6", border: "1px solid #e8e2d4" }}
+                style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border-faint)" }}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-[#1a1714] mb-0.5">{k.provider}</div>
-                  <div className="text-[11px] font-mono truncate" style={{ color: "#948a7b" }}>
+                  <div className="text-xs font-semibold mb-0.5" style={{ color: "var(--c-ink)" }}>{k.provider}</div>
+                  <div className="text-[11px] font-mono truncate" style={{ color: "var(--c-ink-faint)" }}>
                     {visibleKeys[k.id] ? k.key : k.key.replace(/[^•·]/g, "•").slice(0, 32) + "…"}
                   </div>
                 </div>
@@ -368,8 +368,8 @@ export default function SettingsPage() {
                   <button
                     onClick={() => toggleKeyVisibility(k.id)}
                     className="p-1.5 rounded transition-colors"
-                    style={{ color: "#948a7b" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    style={{ color: "var(--c-ink-faint)" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                     title={visibleKeys[k.id] ? "Hide" : "Show"}
                   >
@@ -377,8 +377,8 @@ export default function SettingsPage() {
                   </button>
                   <button
                     className="p-1.5 rounded transition-colors"
-                    style={{ color: "#948a7b" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+                    style={{ color: "var(--c-ink-faint)" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                     title="Rotate"
                   >
@@ -386,8 +386,8 @@ export default function SettingsPage() {
                   </button>
                   <button
                     className="p-1.5 rounded transition-colors"
-                    style={{ color: "#a04848" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#f0dcdc")}
+                    style={{ color: "var(--c-rose)" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-rose-soft)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                     title="Delete"
                   >
@@ -401,7 +401,7 @@ export default function SettingsPage() {
 
         {/* ── App Installation ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "#948a7b" }}>
+          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             App Installation
           </h2>
 
@@ -409,34 +409,33 @@ export default function SettingsPage() {
             /* Already installed */
             <div
               className="rounded-xl p-4 flex items-center gap-4"
-              style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.15)" }}
+              style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 20%, transparent)" }}
             >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#2d5a4f" }}>
-                <Check size={20} style={{ color: "#fbfaf6" }} />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-moss)" }}>
+                <Check size={20} style={{ color: "var(--c-surface)" }} />
               </div>
               <div>
-                <div className="text-sm font-semibold text-[#1a1714]">TARS is installed</div>
-                <div className="text-xs text-[#6b6357] mt-0.5">Running as a native app on this device.</div>
+                <div className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>TARS is installed</div>
+                <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-muted)" }}>Running as a native app on this device.</div>
               </div>
             </div>
           ) : (
             <>
               <div
                 className="rounded-xl p-4 flex items-center gap-4"
-                style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.15)" }}
+                style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 20%, transparent)" }}
               >
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "#2d5a4f" }}>
-                  <Smartphone size={20} style={{ color: "#fbfaf6" }} />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-moss)" }}>
+                  <Smartphone size={20} style={{ color: "var(--c-surface)" }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-[#1a1714]">Install TARS on this device</div>
-                  <div className="text-xs text-[#6b6357] mt-0.5">
+                  <div className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>Install TARS on this device</div>
+                  <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-muted)" }}>
                     {isIOS
                       ? "Add to Home Screen for a full-screen native experience."
                       : "Add to home screen for offline access and push notifications."}
                   </div>
                 </div>
-                {/* Install button — shows on Android/Chrome or iOS */}
                 {(installable || isIOS) && (
                   <button
                     onClick={handleInstall}
@@ -446,9 +445,8 @@ export default function SettingsPage() {
                     {isIOS ? <><Share size={13} /> Share</> : "Install"}
                   </button>
                 )}
-                {/* On desktop Chrome before the prompt fires, show a hint */}
                 {!installable && !isIOS && (
-                  <span className="text-xs shrink-0" style={{ color: "#948a7b" }}>
+                  <span className="text-xs shrink-0" style={{ color: "var(--c-ink-faint)" }}>
                     Open in Chrome or Safari
                   </span>
                 )}
@@ -458,15 +456,15 @@ export default function SettingsPage() {
               {isIOS && showIOSInstructions && (
                 <div
                   className="rounded-xl px-4 py-3 flex flex-col gap-2 text-sm"
-                  style={{ backgroundColor: "#fbfaf6", border: "1px solid #e8e2d4" }}
+                  style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border-faint)" }}
                 >
-                  <p className="font-medium text-[#1a1714]">Add to Home Screen on iOS:</p>
-                  <ol className="flex flex-col gap-1.5 text-xs text-[#6b6357] list-decimal list-inside">
-                    <li>Tap the <strong>Share</strong> button <span style={{ color: "#2d5a4f" }}>⎋</span> in Safari&apos;s toolbar</li>
+                  <p className="font-medium" style={{ color: "var(--c-ink)" }}>Add to Home Screen on iOS:</p>
+                  <ol className="flex flex-col gap-1.5 text-xs list-decimal list-inside" style={{ color: "var(--c-ink-muted)" }}>
+                    <li>Tap the <strong>Share</strong> button <span style={{ color: "var(--c-moss)" }}>⎋</span> in Safari&apos;s toolbar</li>
                     <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
                     <li>Tap <strong>Add</strong> in the top-right corner</li>
                   </ol>
-                  <p className="text-[11px]" style={{ color: "#948a7b" }}>
+                  <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
                     TARS will appear on your Home Screen like a native app.
                   </p>
                 </div>

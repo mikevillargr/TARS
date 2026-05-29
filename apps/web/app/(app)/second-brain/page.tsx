@@ -49,8 +49,6 @@ function typeLabel(type: string) {
   return { url: "URL", note: "Note", meeting: "Meeting", document: "Doc" }[type] ?? type
 }
 
-const DOMAINS = ["work", "personal", "cycling", "client", "health"]
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SecondBrainPage() {
@@ -105,8 +103,8 @@ export default function SecondBrainPage() {
   const sidebarContent = (
     <div className="flex flex-col h-full p-4">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="font-semibold text-lg" style={{ color: "#1a1714", fontFamily: "var(--font-heading), serif" }}>Domains</h2>
-        <span className="text-xs" style={{ color: "#948a7b" }}>{items.length} items</span>
+        <h2 className="font-semibold text-lg" style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}>Domains</h2>
+        <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{items.length} items</span>
       </div>
       <div className="space-y-1 flex-1">
         {domains.map((domain) => {
@@ -118,14 +116,14 @@ export default function SecondBrainPage() {
               onClick={() => { setSelectedDomain(domain); setMobileSidebar(false) }}
               className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors"
               style={{
-                backgroundColor: isActive ? "#e3ede9" : "transparent",
-                color: isActive ? "#2d5a4f" : "#1a1714",
+                backgroundColor: isActive ? "var(--c-moss-soft)" : "transparent",
+                color: isActive ? "var(--c-moss)" : "var(--c-ink)",
                 fontWeight: isActive ? 500 : 400,
-                borderLeft: isActive ? "2px solid #2d5a4f" : "2px solid transparent",
+                borderLeft: isActive ? "2px solid var(--c-moss)" : "2px solid transparent",
               }}
             >
               <span>{domain === "All" ? "All Items" : domain}</span>
-              <span style={{ color: isActive ? "#2d5a4f" : "#948a7b" }}>{count}</span>
+              <span style={{ color: isActive ? "var(--c-moss)" : "var(--c-ink-faint)" }}>{count}</span>
             </button>
           )
         })}
@@ -136,16 +134,16 @@ export default function SecondBrainPage() {
   return (
     <div className="flex flex-1 overflow-hidden bg-canvas relative">
       {/* Desktop sidebar */}
-      <div className="hidden md:flex flex-col w-52 shrink-0 border-r" style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}>
+      <div className="hidden md:flex flex-col w-52 shrink-0 border-r" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
         {sidebarContent}
       </div>
 
       {/* Mobile sidebar overlay */}
       {isMobileSidebarOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
-          <div className="absolute inset-0" style={{ backgroundColor: "rgba(26,23,20,0.2)" }} onClick={() => setMobileSidebar(false)} />
-          <div className="relative w-72 max-w-[80%] h-full shadow-xl flex flex-col" style={{ backgroundColor: "#fbfaf6" }}>
-            <button onClick={() => setMobileSidebar(false)} className="absolute top-4 right-4 p-2" style={{ color: "#948a7b" }}><X size={20} /></button>
+          <div className="absolute inset-0" style={{ backgroundColor: "rgba(0,0,0,0.3)" }} onClick={() => setMobileSidebar(false)} />
+          <div className="relative w-72 max-w-[80%] h-full shadow-xl flex flex-col" style={{ backgroundColor: "var(--c-surface)" }}>
+            <button onClick={() => setMobileSidebar(false)} className="absolute top-4 right-4 p-2" style={{ color: "var(--c-ink-faint)" }}><X size={20} /></button>
             {sidebarContent}
           </div>
         </div>
@@ -154,26 +152,26 @@ export default function SecondBrainPage() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="p-5 border-b shrink-0" style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}>
+        <div className="p-5 border-b shrink-0" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
           <div className="max-w-4xl mx-auto space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <button className="md:hidden p-2 -ml-2 rounded-md" style={{ color: "#948a7b" }} onClick={() => setMobileSidebar(true)}>
+                <button className="md:hidden p-2 -ml-2 rounded-md" style={{ color: "var(--c-ink-faint)" }} onClick={() => setMobileSidebar(true)}>
                   <Menu size={20} />
                 </button>
-                <h1 className="font-semibold text-xl" style={{ color: "#1a1714", fontFamily: "var(--font-heading), serif" }}>
+                <h1 className="font-semibold text-xl" style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}>
                   {query ? "Search Results" : selectedDomain === "All" ? "Second Brain" : selectedDomain}
                 </h1>
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-0.5 p-1 rounded-lg" style={{ backgroundColor: "#efeadf", border: "1px solid #d8d2c4" }}>
-                  <button onClick={() => setViewMode("grid")} className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: viewMode === "grid" ? "#fff" : "transparent", color: viewMode === "grid" ? "#1a1714" : "#948a7b" }}><LayoutGrid size={15} /></button>
-                  <button onClick={() => setViewMode("list")} className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: viewMode === "list" ? "#fff" : "transparent", color: viewMode === "list" ? "#1a1714" : "#948a7b" }}><ListIcon size={15} /></button>
+                <div className="flex items-center gap-0.5 p-1 rounded-lg" style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}>
+                  <button onClick={() => setViewMode("grid")} className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: viewMode === "grid" ? "var(--c-surface)" : "transparent", color: viewMode === "grid" ? "var(--c-ink)" : "var(--c-ink-faint)" }}><LayoutGrid size={15} /></button>
+                  <button onClick={() => setViewMode("list")} className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: viewMode === "list" ? "var(--c-surface)" : "transparent", color: viewMode === "list" ? "var(--c-ink)" : "var(--c-ink-faint)" }}><ListIcon size={15} /></button>
                 </div>
                 <button
                   onClick={() => setShowCapture(true)}
                   className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium"
-                  style={{ backgroundColor: "#2d5a4f", color: "#fff" }}
+                  style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
                 >
                   <Plus size={15} /> Capture
                 </button>
@@ -181,15 +179,15 @@ export default function SecondBrainPage() {
             </div>
 
             <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#948a7b" }} />
-              {searching && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin" style={{ color: "#948a7b" }} />}
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--c-ink-faint)" }} />
+              {searching && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin" style={{ color: "var(--c-ink-faint)" }} />}
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Semantic search across all knowledge…"
                 className="w-full pl-9 pr-4 py-2.5 rounded-xl text-sm outline-none transition-shadow focus:ring-1"
-                style={{ backgroundColor: "#f6f3ec", border: "1px solid #d8d2c4", color: "#1a1714" }}
+                style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
               />
             </div>
           </div>
@@ -200,10 +198,10 @@ export default function SecondBrainPage() {
           <div className={`max-w-4xl mx-auto ${viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" : "space-y-2"}`}>
             {loading ? (
               <div className="col-span-full py-16 flex justify-center">
-                <Loader2 size={22} className="animate-spin" style={{ color: "#948a7b" }} />
+                <Loader2 size={22} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
               </div>
             ) : displayItems.length === 0 ? (
-              <div className="col-span-full py-16 text-center text-sm" style={{ color: "#948a7b" }}>
+              <div className="col-span-full py-16 text-center text-sm" style={{ color: "var(--c-ink-faint)" }}>
                 {query ? "No items matched that search." : "Nothing here yet — hit Capture to add your first item."}
               </div>
             ) : displayItems.map((item) => {
@@ -216,18 +214,18 @@ export default function SecondBrainPage() {
                   onClick={() => setSelectedId(item.id)}
                   className={`group cursor-pointer rounded-xl p-3.5 transition-all ${viewMode === "list" ? "flex items-center gap-4" : "flex flex-col min-h-[120px]"}`}
                   style={{
-                    backgroundColor: isSelected ? "#e3ede9" : "#fff",
-                    border: `1px solid ${isSelected ? "rgba(45,90,79,0.4)" : "#e8e2d4"}`,
-                    outline: isSelected ? "1px solid rgba(45,90,79,0.3)" : "none",
+                    backgroundColor: isSelected ? "var(--c-moss-soft)" : "var(--c-surface)",
+                    border: `1px solid ${isSelected ? "var(--c-moss)" : "var(--c-border-faint)"}`,
+                    outline: isSelected ? "1px solid color-mix(in srgb, var(--c-moss) 40%, transparent)" : "none",
                   }}
                 >
                   {/* Type + date */}
                   <div className={`flex items-center justify-between ${viewMode === "list" ? "w-40 shrink-0" : "mb-2"}`}>
-                    <div className="flex items-center gap-1.5" style={{ color: "#948a7b" }}>
+                    <div className="flex items-center gap-1.5" style={{ color: "var(--c-ink-faint)" }}>
                       <TypeIcon type={item.type} size={12} />
                       <span className="text-[10px] uppercase tracking-wider font-medium">{item.domain ?? typeLabel(item.type)}</span>
                     </div>
-                    <span className="text-[10px]" style={{ color: "#c4bdb2" }}>
+                    <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>
                       {new Date(item.saved_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                     </span>
                   </div>
@@ -236,13 +234,13 @@ export default function SecondBrainPage() {
                   <div className={`${viewMode === "list" ? "flex-1 min-w-0" : "flex-1"}`}>
                     <h3
                       className="font-medium text-sm leading-snug mb-1"
-                      style={{ color: isSelected ? "#2d5a4f" : "#1a1714", fontFamily: "var(--font-heading), serif" }}
+                      style={{ color: isSelected ? "var(--c-moss)" : "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}
                     >
                       {item.source_title ?? item.url ?? "Untitled"}
                     </h3>
                     <p
                       className={`text-xs leading-relaxed ${viewMode === "list" ? "truncate" : "line-clamp-2"}`}
-                      style={{ color: matchedChunk ? "#6b5c00" : "#948a7b" }}
+                      style={{ color: matchedChunk ? "var(--c-amber)" : "var(--c-ink-faint)" }}
                     >
                       {matchedChunk
                         ? `"${matchedChunk.slice(0, 120)}…"`
@@ -254,7 +252,7 @@ export default function SecondBrainPage() {
                   {viewMode === "grid" && item.tags?.length > 0 && (
                     <div className="flex gap-1 flex-wrap mt-2">
                       {item.tags.slice(0, 3).map((tag) => (
-                        <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f6f3ec", color: "#948a7b" }}>#{tag}</span>
+                        <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-faint)" }}>#{tag}</span>
                       ))}
                     </div>
                   )}

@@ -85,12 +85,12 @@ export function AppSidebar() {
                       render={<Link href={item.href} />}
                       className={
                         isActive
-                          ? "bg-[#e3ede9] text-[#2d5a4f] hover:bg-[#e3ede9] hover:text-[#2d5a4f]"
-                          : "text-[#6b6357] hover:bg-[#efeadf] hover:text-[#1a1714]"
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
                       }
                     >
                       <Icon
-                        className={`size-4 ${isActive ? "text-[#2d5a4f]" : "text-[#948a7b]"}`}
+                        className={`size-4 ${isActive ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}`}
                       />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
@@ -105,11 +105,11 @@ export function AppSidebar() {
       <SidebarFooter className="px-3 py-3 border-t border-sidebar-border">
         <div className="flex items-center gap-3 px-2">
           <Avatar className="size-8">
-            <AvatarFallback className="text-xs bg-[#efeadf] text-[#6b6357]">MV</AvatarFallback>
+            <AvatarFallback className="text-xs bg-sidebar-accent text-sidebar-accent-foreground">MV</AvatarFallback>
           </Avatar>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-medium text-sidebar-foreground truncate">Mike Villar</span>
-            <span className="text-xs text-[#948a7b] truncate">CEO, Growth Rocket</span>
+            <span className="text-xs text-sidebar-foreground/50 truncate">CEO, Growth Rocket</span>
           </div>
         </div>
       </SidebarFooter>

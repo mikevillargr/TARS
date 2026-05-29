@@ -82,7 +82,7 @@ function SvgRenderer({ code }: { code: string }) {
       ) : (
         <div
           className="w-full"
-          style={{ backgroundColor: "#fafafa", padding: "1rem" }}
+          style={{ backgroundColor: "var(--c-canvas)", padding: "1rem" }}
         >
           <div
             className="w-full"
@@ -257,7 +257,7 @@ export function MessageContent({ content }: { content: string }) {
               ? <li className="leading-relaxed">{children}</li>
               : (
                 <li className="leading-relaxed flex gap-2">
-                  <span className="shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#2d5a4f" }} />
+                  <span className="shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "var(--c-moss)" }} />
                   <span>{children}</span>
                 </li>
               )
@@ -273,12 +273,12 @@ export function MessageContent({ content }: { content: string }) {
             <thead style={{ backgroundColor: "var(--c-surface-2)" }}>{children}</thead>
           ),
           th: ({ children }) => (
-            <th className="px-3 py-2 text-left text-xs font-semibold" style={{ color: "#6b6357", borderBottom: "1px solid #d8d2c4" }}>
+            <th className="px-3 py-2 text-left text-xs font-semibold" style={{ color: "var(--c-ink-muted)", borderBottom: "1px solid var(--c-border)" }}>
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-3 py-2 text-sm" style={{ borderBottom: "1px solid #e8e2d4" }}>{children}</td>
+            <td className="px-3 py-2 text-sm" style={{ borderBottom: "1px solid var(--c-border-faint)" }}>{children}</td>
           ),
 
           // Blockquote

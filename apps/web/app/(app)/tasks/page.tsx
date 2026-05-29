@@ -31,11 +31,11 @@ interface ArtifactMeta { id: string; filename: string; type: string }
 interface KnowledgeMeta { id: string; source_title: string | null; type: string }
 
 const COLUMNS = [
-  { key: "inbox",       label: "Inbox",       color: "#6b6357" },
-  { key: "todo",        label: "Todo",         color: "#2d5a4f" },
-  { key: "in-progress", label: "In Progress",  color: "#b8651a" },
-  { key: "done",        label: "Done",         color: "#2d5a4f" },
-  { key: "snoozed",     label: "Snoozed",      color: "#948a7b" },
+  { key: "inbox",       label: "Inbox",       color: "var(--c-ink-muted)" },
+  { key: "todo",        label: "Todo",         color: "var(--c-moss)" },
+  { key: "in-progress", label: "In Progress",  color: "var(--c-amber)" },
+  { key: "done",        label: "Done",         color: "var(--c-moss)" },
+  { key: "snoozed",     label: "Snoozed",      color: "var(--c-ink-faint)" },
 ] as const
 
 type ColKey = typeof COLUMNS[number]["key"]
@@ -44,8 +44,8 @@ type ColKey = typeof COLUMNS[number]["key"]
 
 function priorityBorder(priority: string): React.CSSProperties {
   const p = priority.toLowerCase()
-  if (p === "urgent") return { borderLeft: "3px solid #b8651a" }
-  if (p === "high")   return { borderLeft: "3px solid #a04848" }
+  if (p === "urgent") return { borderLeft: "3px solid var(--c-amber)" }
+  if (p === "high")   return { borderLeft: "3px solid var(--c-rose)" }
   return { borderLeft: "3px solid transparent" }
 }
 
@@ -373,7 +373,7 @@ function TaskModal({
                   onClick={() => handleMove(col.key)}
                   className="text-[11px] px-2.5 py-1 rounded-full font-medium transition-colors"
                   style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
-                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--c-moss)"; e.currentTarget.style.color = "#fbfaf6" }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--c-moss)"; e.currentTarget.style.color = "var(--c-surface)" }}
                   onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--c-surface-2)"; e.currentTarget.style.color = "var(--c-ink-muted)" }}
                 >
                   {col.label}
@@ -508,7 +508,7 @@ function TaskModal({
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>Delete permanently?</span>
-                <button onClick={handleDelete} className="text-xs px-2.5 py-1 rounded-md font-medium" style={{ backgroundColor: "var(--c-rose)", color: "#fff" }}>Yes</button>
+                <button onClick={handleDelete} className="text-xs px-2.5 py-1 rounded-md font-medium" style={{ backgroundColor: "var(--c-rose)", color: "var(--c-surface)" }}>Yes</button>
                 <button onClick={() => setConfDel(false)} className="text-xs px-2.5 py-1 rounded-md" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}>No</button>
               </div>
             )}

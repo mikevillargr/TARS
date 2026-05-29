@@ -76,7 +76,6 @@ export default function MeetingsPage() {
       const data = await apiGet<Meeting[]>("/meetings")
       setMeetings(data)
       if (data.length > 0 && !selected) {
-        // Fetch full detail immediately so transcript + action_items are available on first render
         try {
           const detail = await apiGet<Meeting>(`/meetings/${data[0].id}`)
           setSelected(detail)
@@ -138,31 +137,35 @@ export default function MeetingsPage() {
   const isProcessing = selected?.status === "processing"
 
   return (
-    <div className="flex h-full" style={{ backgroundColor: "#f6f3ec" }}>
+    <div className="flex h-full bg-canvas">
       {/* ── List ───────────────────────────────────────────────── */}
-      <div className="w-80 border-r flex-col hidden md:flex" style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}>
-        <div className="p-4 border-b space-y-3" style={{ borderColor: "#d8d2c4" }}>
+      <div className="w-80 border-r flex-col hidden md:flex" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
+        <div className="p-4 border-b space-y-3" style={{ borderColor: "var(--c-border)" }}>
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-medium" style={{ fontFamily: "var(--font-heading), serif" }}>Meetings</h1>
+            <h1 className="text-xl font-medium" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>Meetings</h1>
             <button
               onClick={sync}
               disabled={syncing}
               title="Sync from Fireflies"
               className="p-1.5 rounded-md transition-colors disabled:opacity-50"
-              style={{ color: "#6b6357" }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
+              style={{ color: "var(--c-ink-muted)" }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
               onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
             >
               <RefreshCw size={15} className={syncing ? "animate-spin" : ""} />
             </button>
           </div>
           <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "#948a7b" }} />
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--c-ink-faint)" }} />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search meetings…" className="input-field w-full pl-8 py-1.5 text-xs" />
           </div>
           <div className="flex gap-1 flex-wrap">
             {["All", "Action Required", "Ready", "Processing"].map(s => (
-              <button key={s} onClick={() => setFilter(s)} className="text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors" style={{ backgroundColor: statusFilter === s ? "#1a1714" : "#efeadf", color: statusFilter === s ? "#fbfaf6" : "#6b6357" }}>
+              <button key={s} onClick={() => setFilter(s)} className="text-[10px] px-2 py-0.5 rounded-full font-medium transition-colors"
+                style={{
+                  backgroundColor: statusFilter === s ? "var(--c-ink)" : "var(--c-surface-2)",
+                  color: statusFilter === s ? "var(--c-surface)" : "var(--c-ink-muted)",
+                }}>
                 {s}
               </button>
             ))}
@@ -172,19 +175,25 @@ export default function MeetingsPage() {
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 size={18} className="animate-spin" style={{ color: "#948a7b" }} />
+              <Loader2 size={18} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
             </div>
           ) : filtered.length === 0 ? (
-            <p className="text-xs text-center py-12" style={{ color: "#948a7b" }}>
+            <p className="text-xs text-center py-12" style={{ color: "var(--c-ink-faint)" }}>
               {meetings.length === 0 ? "No meetings yet. Sync from Fireflies to get started." : "No matches."}
             </p>
           ) : filtered.map(m => (
-            <button key={m.id} onClick={() => { setTab("summary"); loadDetail(m.id) }} className="w-full text-left p-3 rounded-lg transition-colors border" style={{ backgroundColor: selected?.id === m.id ? "#f6f3ec" : "transparent", borderColor: selected?.id === m.id ? "#d8d2c4" : "transparent", boxShadow: selected?.id === m.id ? "0 1px 2px rgba(26,23,20,0.05)" : "none" }}>
+            <button key={m.id} onClick={() => { setTab("summary"); loadDetail(m.id) }}
+              className="w-full text-left p-3 rounded-lg transition-colors border"
+              style={{
+                backgroundColor: selected?.id === m.id ? "var(--c-canvas)" : "transparent",
+                borderColor: selected?.id === m.id ? "var(--c-border)" : "transparent",
+                boxShadow: selected?.id === m.id ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+              }}>
               <div className="flex items-start justify-between gap-2 mb-1.5">
-                <h3 className="font-medium text-sm leading-snug" style={{ color: "#1a1714" }}>{m.title}</h3>
+                <h3 className="font-medium text-sm leading-snug" style={{ color: "var(--c-ink)" }}>{m.title}</h3>
                 <span className={`shrink-0 badge text-[9px] ${STATUS_BADGE[m.status] ?? "badge-neutral"}`}>{STATUS_LABEL[m.status] ?? m.status}</span>
               </div>
-              <div className="flex items-center justify-between text-[11px]" style={{ color: "#6b6357" }}>
+              <div className="flex items-center justify-between text-[11px]" style={{ color: "var(--c-ink-muted)" }}>
                 <span className="flex items-center gap-1"><Calendar size={10} />{relativeDay(m.created_at)}</span>
                 {duration(m) && <span className="flex items-center gap-1"><Clock size={10} />{duration(m)}</span>}
               </div>
@@ -196,41 +205,47 @@ export default function MeetingsPage() {
       {/* ── Detail ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {!selected ? (
-          <div className="flex-1 flex items-center justify-center" style={{ color: "#948a7b" }}>
+          <div className="flex-1 flex items-center justify-center" style={{ color: "var(--c-ink-faint)" }}>
             <p className="text-sm">{loading ? "Loading…" : "Select a meeting"}</p>
           </div>
         ) : (
           <>
-            <div className="px-6 py-5 border-b" style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}>
+            <div className="px-6 py-5 border-b" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-xs mb-2 flex-wrap" style={{ color: "#6b6357" }}>
+                  <div className="flex items-center gap-2 text-xs mb-2 flex-wrap" style={{ color: "var(--c-ink-muted)" }}>
                     <span className="badge badge-neutral flex items-center gap-1"><Video size={10} />Fireflies</span>
                     {duration(selected) && <span className="flex items-center gap-1"><Clock size={12} />{duration(selected)}</span>}
                     <span>·</span>
                     <span>{new Date(selected.created_at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                   </div>
-                  <h2 className="text-2xl font-medium leading-tight" style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}>{selected.title}</h2>
+                  <h2 className="text-2xl font-medium leading-tight" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>{selected.title}</h2>
                   {selected.attendees.length > 0 && (
                     <div className="flex items-center gap-3 mt-3">
                       <div className="flex -space-x-2">
                         {selected.attendees.slice(0, 4).map(a => (
-                          <div key={a} title={a} className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-medium" style={{ backgroundColor: "#efeadf", borderColor: "#fbfaf6", color: "#6b6357" }}>{initials(a)}</div>
+                          <div key={a} title={a} className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-medium"
+                            style={{ backgroundColor: "var(--c-surface-2)", borderColor: "var(--c-surface)", color: "var(--c-ink-muted)" }}>{initials(a)}</div>
                         ))}
                       </div>
-                      <span className="text-xs" style={{ color: "#6b6357" }}>{selected.attendees.join(", ")}</span>
+                      <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>{selected.attendees.join(", ")}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex gap-1 mt-5 -mb-5 border-b" style={{ borderColor: "#e8e2d4" }}>
+              <div className="flex gap-1 mt-5 -mb-5 border-b" style={{ borderColor: "var(--c-border-faint)" }}>
                 {([
                   { id: "summary" as Tab,    label: "Summary",    icon: Sparkles },
                   { id: "transcript" as Tab, label: "Transcript", icon: FileText },
                   { id: "actions" as Tab,    label: `Actions${selected.action_items?.length ? ` (${selected.action_items.length})` : ""}`, icon: CheckSquare },
                 ] as const).map(({ id, label, icon: Icon }) => (
-                  <button key={id} onClick={() => setTab(id)} className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors" style={{ borderBottomColor: tab === id ? "#2d5a4f" : "transparent", color: tab === id ? "#2d5a4f" : "#6b6357" }}>
+                  <button key={id} onClick={() => setTab(id)}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+                    style={{
+                      borderBottomColor: tab === id ? "var(--c-moss)" : "transparent",
+                      color: tab === id ? "var(--c-moss)" : "var(--c-ink-muted)",
+                    }}>
                     <Icon size={14} />{label}
                   </button>
                 ))}
@@ -240,31 +255,31 @@ export default function MeetingsPage() {
             <div className="flex-1 overflow-y-auto" data-selectable>
               {isProcessing ? (
                 <div className="h-full flex flex-col items-center justify-center text-center px-6">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 animate-pulse" style={{ backgroundColor: "#efeadf" }}>
-                    <Sparkles size={20} style={{ color: "#6b6357" }} />
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4 animate-pulse" style={{ backgroundColor: "var(--c-surface-2)" }}>
+                    <Sparkles size={20} style={{ color: "var(--c-ink-muted)" }} />
                   </div>
-                  <h3 className="text-lg font-medium mb-1" style={{ fontFamily: "var(--font-heading), serif" }}>Processing transcript</h3>
-                  <p className="text-sm max-w-xs" style={{ color: "#6b6357" }}>TARS is summarizing this meeting. Refresh in a moment.</p>
+                  <h3 className="text-lg font-medium mb-1" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>Processing transcript</h3>
+                  <p className="text-sm max-w-xs" style={{ color: "var(--c-ink-muted)" }}>TARS is summarizing this meeting. Refresh in a moment.</p>
                 </div>
               ) : tab === "summary" ? (
                 <div className="max-w-3xl mx-auto px-8 py-8 space-y-8">
                   {selected.summary ? (
                     <section>
-                      <h3 className="text-xs font-medium uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: "#6b6357" }}>
-                        <Sparkles size={14} style={{ color: "#2d5a4f" }} />Summary
+                      <h3 className="text-xs font-medium uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: "var(--c-ink-muted)" }}>
+                        <Sparkles size={14} style={{ color: "var(--c-moss)" }} />Summary
                       </h3>
-                      <p className="text-lg leading-relaxed" style={{ fontFamily: "var(--font-heading), serif", color: "#1a1714" }}>{selected.summary}</p>
+                      <p className="text-lg leading-relaxed" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>{selected.summary}</p>
                     </section>
                   ) : (
-                    <p className="text-sm italic" style={{ color: "#6b6357" }}>No summary yet.</p>
+                    <p className="text-sm italic" style={{ color: "var(--c-ink-muted)" }}>No summary yet.</p>
                   )}
                   {(selected.action_items?.length ?? 0) > 0 && (
                     <section>
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-xs font-medium uppercase tracking-wider flex items-center gap-2" style={{ color: "#6b6357" }}>
-                          <CheckSquare size={14} style={{ color: "#2d5a4f" }} />Action items
+                        <h3 className="text-xs font-medium uppercase tracking-wider flex items-center gap-2" style={{ color: "var(--c-ink-muted)" }}>
+                          <CheckSquare size={14} style={{ color: "var(--c-moss)" }} />Action items
                         </h3>
-                        <button onClick={() => setTab("actions")} className="text-xs font-medium hover:underline" style={{ color: "#2d5a4f" }}>View all →</button>
+                        <button onClick={() => setTab("actions")} className="text-xs font-medium hover:underline" style={{ color: "var(--c-moss)" }}>View all →</button>
                       </div>
                       <div className="space-y-2">
                         {selected.action_items!.slice(0, 3).map(a => (
@@ -277,9 +292,9 @@ export default function MeetingsPage() {
               ) : tab === "transcript" ? (
                 <div className="max-w-3xl mx-auto px-8 py-8">
                   {selected.transcript ? (
-                    <pre className="text-sm leading-relaxed whitespace-pre-wrap font-sans" style={{ color: "#1a1714" }}>{selected.transcript}</pre>
+                    <pre className="text-sm leading-relaxed whitespace-pre-wrap font-sans" style={{ color: "var(--c-ink)" }}>{selected.transcript}</pre>
                   ) : (
-                    <p className="text-sm italic text-center py-12" style={{ color: "#6b6357" }}>No transcript available.</p>
+                    <p className="text-sm italic text-center py-12" style={{ color: "var(--c-ink-muted)" }}>No transcript available.</p>
                   )}
                 </div>
               ) : (
@@ -289,7 +304,7 @@ export default function MeetingsPage() {
                       <ActionItemRow key={a.id} item={a} onCreateTask={createTaskFromItem} creating={creatingTask === a.id} />
                     ))
                   ) : (
-                    <p className="text-sm italic text-center py-12" style={{ color: "#6b6357" }}>No action items extracted from this meeting.</p>
+                    <p className="text-sm italic text-center py-12" style={{ color: "var(--c-ink-muted)" }}>No action items extracted from this meeting.</p>
                   )}
                 </div>
               )}
@@ -303,11 +318,11 @@ export default function MeetingsPage() {
 
 function ActionItemRow({ item, onCreateTask, creating }: { item: ActionItem; onCreateTask: (i: ActionItem) => void; creating: boolean }) {
   return (
-    <div className="card flex items-start gap-3 group" style={{ backgroundColor: "#f6f3ec", borderColor: "#e8e2d4" }}>
+    <div className="card flex items-start gap-3 group">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium leading-snug" style={{ color: "#1a1714" }}>{item.raw_text}</p>
+        <p className="text-sm font-medium leading-snug" style={{ color: "var(--c-ink)" }}>{item.raw_text}</p>
         {item.owner && (
-          <div className="flex items-center gap-1 text-xs mt-1" style={{ color: "#6b6357" }}>
+          <div className="flex items-center gap-1 text-xs mt-1" style={{ color: "var(--c-ink-muted)" }}>
             <Users size={11} />{item.owner}
           </div>
         )}
@@ -319,7 +334,7 @@ function ActionItemRow({ item, onCreateTask, creating }: { item: ActionItem; onC
           onClick={() => onCreateTask(item)}
           disabled={creating}
           className="text-xs font-medium shrink-0 disabled:opacity-50 transition-colors"
-          style={{ color: "#2d5a4f" }}
+          style={{ color: "var(--c-moss)" }}
           onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
           onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
         >

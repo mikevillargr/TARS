@@ -83,9 +83,9 @@ function CalendarSuggestChip({ suggestion, onDismiss }: { suggestion: CalendarSu
 
   if (added) {
     return (
-      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.2)" }}>
-        <Calendar size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
-        <span className="flex-1 font-medium" style={{ color: "#2d5a4f" }}>Added to calendar</span>
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
+        <Calendar size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Added to calendar</span>
         <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
       </div>
     )
@@ -93,7 +93,7 @@ function CalendarSuggestChip({ suggestion, onDismiss }: { suggestion: CalendarSu
 
   return (
     <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}>
-      <Calendar size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
+      <Calendar size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
       <div className="flex-1 min-w-0">
         <span className="font-medium" style={{ color: "var(--c-ink)" }}>{suggestion.title}</span>
         <span className="ml-1.5" style={{ color: "var(--c-ink-faint)" }}>{formatSuggestTime(suggestion.datetime_iso)}</span>
@@ -102,7 +102,7 @@ function CalendarSuggestChip({ suggestion, onDismiss }: { suggestion: CalendarSu
         onClick={addToCalendar}
         disabled={adding}
         className="shrink-0 font-medium disabled:opacity-50 flex items-center gap-1"
-        style={{ color: "#2d5a4f" }}
+        style={{ color: "var(--c-moss)" }}
         onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
         onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
       >
@@ -146,9 +146,9 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
 
   if (added) {
     return (
-      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "#e3ede9", border: "1px solid rgba(45,90,79,0.2)" }}>
-        <CheckSquare size={12} style={{ color: "#2d5a4f", flexShrink: 0 }} />
-        <span className="flex-1 font-medium" style={{ color: "#2d5a4f" }}>Added to tasks</span>
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
+        <CheckSquare size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Added to tasks</span>
         <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
       </div>
     )
@@ -174,7 +174,7 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
         onClick={addTask}
         disabled={adding}
         className="shrink-0 font-medium disabled:opacity-50 flex items-center gap-1"
-        style={{ color: "#2d5a4f" }}
+        style={{ color: "var(--c-moss)" }}
         onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
         onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
       >
@@ -214,7 +214,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
         className="w-8 h-8 rounded-full shrink-0 overflow-hidden"
         style={isUser
           ? { backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", display: "flex", alignItems: "center", justifyContent: "center" }
-          : { border: "2px solid #2d5a4f" }
+          : { border: "2px solid var(--c-moss)" }
         }
       >
         {isUser
@@ -227,7 +227,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
       <div className={`flex flex-col min-w-0 max-w-[80%] ${isUser ? "items-end" : ""}`}>
         {/* Always show "TARS" as the sender name for assistant messages */}
         {!isUser && (
-          <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "#2d5a4f" }}>
+          <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>
             TARS
           </span>
         )}
@@ -240,7 +240,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
                 className="badge badge-neutral text-[10px] flex items-center gap-1"
                 style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}
               >
-                <Terminal size={10} style={{ color: "#2d5a4f" }} /> {tool}
+                <Terminal size={10} style={{ color: "var(--c-moss)" }} /> {tool}
               </span>
             ))}
           </div>
@@ -767,10 +767,10 @@ export default function ChatPage() {
                   <button
                     onClick={(e) => { handleDeleteConversation(conv.id, e); setMobileConvOpen(false) }}
                     className="absolute right-1 p-1.5 rounded transition-colors"
-                    style={{ color: "#c4b8a8" }}
+                    style={{ color: "var(--c-ink-faint)" }}
                     title="Delete"
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-rose)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)" }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "#c4b8a8"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -887,7 +887,7 @@ export default function ChatPage() {
             onClick={toggleFocus}
             className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0"
             style={isFocusMode
-              ? { backgroundColor: "#e3ede9", color: "#2d5a4f" }
+              ? { backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }
               : { color: "var(--c-ink-faint)" }
             }
             title={isFocusMode ? "Exit focus mode" : "Enter focus mode"}
