@@ -98,13 +98,20 @@ async def lifespan(app: FastAPI):
     # Start Ollama keepalive — warms model on startup, recovers backoff after restarts
     keepalive_task = asyncio.create_task(_ollama_keepalive())
 
+    # Start scheduled cron jobs (Fireflies sync, etc.)
+    from jobs.scheduler import build_tasks
+    cron_tasks = build_tasks()
+
     yield
 
     keepalive_task.cancel()
-    try:
-        await keepalive_task
-    except asyncio.CancelledError:
-        pass
+    for t in cron_tasks:
+        t.cancel()
+    for t in [keepalive_task, *cron_tasks]:
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(

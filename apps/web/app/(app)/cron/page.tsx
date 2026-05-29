@@ -1,68 +1,112 @@
 "use client"
 
-import { useState } from "react"
-import { Clock, X, Play, Pause } from "lucide-react"
-import { MOCK_CRON_JOBS } from "@/lib/mock-ui-data"
+import { useCallback, useEffect, useState } from "react"
+import { Clock, Play, Loader2, CheckCircle2, XCircle, RefreshCw, Circle } from "lucide-react"
+import { apiGet, apiPost } from "@/lib/api-client"
 
-type CronJob = typeof MOCK_CRON_JOBS[number]
-
-function StatusBadge({ status }: { status: string }) {
-  if (status === "Active") {
-    return (
-      <span className="badge badge-moss flex items-center gap-1">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#2d5a4f] inline-block" />
-        Active
-      </span>
-    )
-  }
-  if (status === "Failed") return <span className="badge badge-rose">Failed</span>
-  return <span className="badge badge-neutral">{status}</span>
+interface CronJob {
+  name:          string
+  description:   string
+  interval_sec:  number
+  last_run_at:   string | null
+  next_run_at:   string | null
+  last_status:   "pending" | "running" | "ok" | "error"
+  last_error:    string | null
+  run_count:     number
 }
 
-function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
+function humanInterval(sec: number): string {
+  if (sec < 60)        return `Every ${sec}s`
+  if (sec < 3600)      return `Every ${sec / 60}m`
+  if (sec % 3600 === 0) return `Every ${sec / 3600}h`
+  return `Every ${Math.round(sec / 60)}m`
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return "—"
+  const diff = (new Date(iso).getTime() - Date.now()) / 1000
+  const abs   = Math.abs(diff)
+  const past  = diff < 0
+  const label =
+    abs < 60    ? `${Math.round(abs)}s`
+    : abs < 3600  ? `${Math.round(abs / 60)}m`
+    : abs < 86400 ? `${Math.round(abs / 3600)}h`
+    :               `${Math.round(abs / 86400)}d`
+  return past ? `${label} ago` : `in ${label}`
+}
+
+function StatusChip({ status }: { status: CronJob["last_status"] }) {
+  const cfg = {
+    ok:      { label: "OK",      color: "#2d5a4f", bg: "#e3ede9", icon: CheckCircle2 },
+    error:   { label: "Error",   color: "#a04848", bg: "#f9ecec", icon: XCircle },
+    running: { label: "Running", color: "#7c6a48", bg: "#f5eddc", icon: Loader2 },
+    pending: { label: "Pending", color: "#948a7b", bg: "#efeadf", icon: Circle },
+  }[status]
+
+  const Icon = cfg.icon
+
   return (
-    <button
-      onClick={e => { e.stopPropagation(); onChange() }}
-      className="relative inline-flex items-center shrink-0 transition-colors"
-      style={{
-        width: "2rem",
-        height: "1.25rem",
-        borderRadius: "9999px",
-        backgroundColor: enabled ? "#2d5a4f" : "#d8d2c4",
-      }}
-      aria-label="Toggle"
+    <span
+      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+      style={{ color: cfg.color, backgroundColor: cfg.bg }}
     >
-      <span
-        className="absolute transition-transform"
-        style={{
-          width: "0.875rem",
-          height: "0.875rem",
-          borderRadius: "9999px",
-          backgroundColor: "#ffffff",
-          top: "50%",
-          transform: `translateY(-50%) translateX(${enabled ? "1rem" : "0.125rem"})`,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-        }}
-      />
-    </button>
+      <Icon size={10} className={status === "running" ? "animate-spin" : ""} />
+      {cfg.label}
+    </span>
   )
 }
 
 export default function CronPage() {
-  const [jobs, setJobs] = useState<CronJob[]>(MOCK_CRON_JOBS)
+  const [jobs,     setJobs]     = useState<CronJob[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [running,  setRunning]  = useState<string | null>(null)
   const [selected, setSelected] = useState<CronJob | null>(null)
 
-  const toggleJob = (id: string) => {
-    setJobs(prev =>
-      prev.map(j => j.id === id ? { ...j, enabled: !j.enabled } : j)
-    )
-    setSelected(prev => prev && prev.id === id ? { ...prev, enabled: !prev.enabled } : prev)
+  const load = useCallback(async () => {
+    try {
+      const data = await apiGet<{ items: CronJob[] }>("/cron")
+      setJobs(data.items)
+      // Keep selected in sync
+      setSelected(prev => prev
+        ? data.items.find(j => j.name === prev.name) ?? null
+        : null
+      )
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+    // Refresh every 30s so status + next_run stay fresh
+    const t = setInterval(load, 30_000)
+    return () => clearInterval(t)
+  }, [load])
+
+  async function runNow(job: CronJob) {
+    setRunning(job.name)
+    try {
+      await apiPost(`/cron/${job.name}/run`)
+      // Poll for completion
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000))
+        await load()
+        const updated = jobs.find(j => j.name === job.name)
+        if (updated && updated.last_status !== "running") break
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setRunning(null)
+    }
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden" style={{ backgroundColor: "#f6f3ec" }}>
-      {/* ── Main ── */}
+    <div className="flex h-full" style={{ backgroundColor: "#f6f3ec" }}>
       <div className="flex-1 flex flex-col overflow-hidden">
+
         {/* Header */}
         <div
           className="px-6 py-4 border-b flex items-center justify-between shrink-0"
@@ -76,150 +120,159 @@ export default function CronPage() {
               <Clock size={17} style={{ color: "#6b6357" }} />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-[#1a1714] leading-tight" style={{ fontFamily: "var(--font-heading), serif" }}>
+              <h1
+                className="text-lg font-semibold text-[#1a1714] leading-tight"
+                style={{ fontFamily: "var(--font-heading), serif" }}
+              >
                 Cron Manager
               </h1>
-              <p className="text-xs text-[#948a7b]">Scheduled recurring tasks.</p>
+              <p className="text-xs text-[#948a7b]">Scheduled recurring tasks</p>
             </div>
           </div>
+          <button
+            onClick={load}
+            className="p-2 rounded-lg transition-colors"
+            style={{ color: "#6b6357" }}
+            title="Refresh"
+          >
+            <RefreshCw size={15} />
+          </button>
         </div>
 
         {/* Table */}
         <div className="flex-1 overflow-y-auto p-4">
-          <div
-            className="rounded-xl overflow-hidden"
-            style={{ backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4" }}
-          >
-            {/* Table header */}
-            <div
-              className="grid text-[0.65rem] font-semibold uppercase tracking-wider px-4 py-2.5"
-              style={{
-                gridTemplateColumns: "2fr 2fr 1.5fr 1fr 80px",
-                backgroundColor: "#efeadf",
-                color: "#948a7b",
-                borderBottom: "1px solid #d8d2c4",
-              }}
-            >
-              <span>Name</span>
-              <span>Schedule</span>
-              <span>Next Run</span>
-              <span>Status</span>
-              <span className="text-center">Toggle</span>
+          {loading ? (
+            <div className="flex items-center justify-center h-40">
+              <Loader2 size={20} className="animate-spin" style={{ color: "#948a7b" }} />
             </div>
-
-            {/* Rows */}
-            {jobs.map((job, i) => (
-              <button
-                key={job.id}
-                onClick={() => setSelected(prev => prev?.id === job.id ? null : job)}
-                className="grid w-full text-left px-4 py-3 transition-colors cursor-pointer"
+          ) : jobs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-2">
+              <Clock size={28} style={{ color: "#c4bdb2" }} />
+              <p className="text-sm" style={{ color: "#948a7b" }}>No jobs scheduled</p>
+            </div>
+          ) : (
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{ backgroundColor: "#fbfaf6", border: "1px solid #d8d2c4" }}
+            >
+              {/* Column headers */}
+              <div
+                className="grid text-[0.65rem] font-semibold uppercase tracking-wider px-4 py-2.5"
                 style={{
-                  gridTemplateColumns: "2fr 2fr 1.5fr 1fr 80px",
-                  alignItems: "center",
-                  borderTop: i > 0 ? "1px solid #e8e2d4" : "none",
-                  backgroundColor: selected?.id === job.id ? "#f0ece4" : "transparent",
+                  gridTemplateColumns: "2fr 1.2fr 1.4fr 1.4fr 1fr",
+                  backgroundColor: "#efeadf",
+                  color: "#948a7b",
+                  borderBottom: "1px solid #d8d2c4",
                 }}
-                onMouseEnter={e => { if (selected?.id !== job.id) e.currentTarget.style.backgroundColor = "#f6f3ec" }}
-                onMouseLeave={e => { if (selected?.id !== job.id) e.currentTarget.style.backgroundColor = "transparent" }}
               >
-                <span className="text-sm font-medium text-[#1a1714] truncate pr-3">{job.name}</span>
-                <span className="text-xs text-[#6b6357] truncate pr-3">{job.schedule}</span>
-                <span className="text-xs text-[#948a7b]">{job.nextRun}</span>
-                <span><StatusBadge status={job.status} /></span>
-                <span className="flex justify-center">
-                  <Toggle enabled={job.enabled} onChange={() => toggleJob(job.id)} />
-                </span>
-              </button>
-            ))}
-          </div>
+                <span>Job</span>
+                <span>Cadence</span>
+                <span>Last Run</span>
+                <span>Next Run</span>
+                <span>Status</span>
+              </div>
+
+              {/* Rows */}
+              {jobs.map((job, i) => (
+                <button
+                  key={job.name}
+                  onClick={() => setSelected(prev => prev?.name === job.name ? null : job)}
+                  className="grid w-full text-left px-4 py-3.5 transition-colors"
+                  style={{
+                    gridTemplateColumns: "2fr 1.2fr 1.4fr 1.4fr 1fr",
+                    alignItems: "center",
+                    borderTop: i > 0 ? "1px solid #e8e2d4" : "none",
+                    backgroundColor: selected?.name === job.name ? "#f0ece4" : "transparent",
+                  }}
+                >
+                  <div className="pr-3">
+                    <div className="text-sm font-medium text-[#1a1714] leading-snug">
+                      {job.name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                    </div>
+                    <div className="text-[11px] text-[#948a7b] mt-0.5 truncate">{job.description}</div>
+                  </div>
+                  <span className="text-xs text-[#6b6357]">{humanInterval(job.interval_sec)}</span>
+                  <span className="text-xs text-[#948a7b]">{relativeTime(job.last_run_at)}</span>
+                  <span className="text-xs text-[#948a7b]">{relativeTime(job.next_run_at)}</span>
+                  <StatusChip status={job.last_status} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Right panel ── */}
+      {/* Right panel */}
       {selected && (
         <div
-          className="w-[320px] border-l flex flex-col shrink-0"
+          className="w-72 border-l flex flex-col shrink-0"
           style={{ borderColor: "#d8d2c4", backgroundColor: "#fbfaf6" }}
         >
           <div
-            className="px-4 py-3 border-b flex items-center justify-between shrink-0"
+            className="px-4 py-3 border-b flex items-center justify-between"
             style={{ borderColor: "#d8d2c4" }}
           >
-            <span className="text-sm font-semibold text-[#1a1714] truncate pr-2">{selected.name}</span>
-            <button
-              onClick={() => setSelected(null)}
-              className="p-1 rounded-md transition-colors shrink-0"
-              style={{ color: "#6b6357" }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#efeadf")}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-            >
-              <X size={15} />
+            <span className="text-sm font-semibold text-[#1a1714]">
+              {selected.name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+            </span>
+            <button onClick={() => setSelected(null)} style={{ color: "#948a7b" }}>
+              ✕
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {/* Enable toggle */}
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#1a1714] font-medium">Enabled</span>
-              <Toggle
-                enabled={jobs.find(j => j.id === selected.id)?.enabled ?? false}
-                onChange={() => toggleJob(selected.id)}
-              />
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Cadence",   value: humanInterval(selected.interval_sec) },
+                { label: "Runs",      value: selected.run_count.toString() },
+                { label: "Last run",  value: relativeTime(selected.last_run_at) },
+                { label: "Next run",  value: relativeTime(selected.next_run_at) },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-lg p-2.5" style={{ backgroundColor: "#efeadf" }}>
+                  <div className="text-[10px] text-[#948a7b] mb-0.5">{label}</div>
+                  <div className="text-xs font-medium text-[#1a1714]">{value}</div>
+                </div>
+              ))}
             </div>
 
-            {/* Schedule info */}
+            {/* Status */}
             <div>
-              <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-2">
-                Schedule
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[#948a7b] mb-2">
+                Status
               </div>
-              <div
-                className="rounded-lg p-3 text-xs text-[#1a1714] leading-relaxed"
-                style={{ backgroundColor: "#efeadf" }}
-              >
-                <div className="font-medium mb-0.5">{selected.schedule}</div>
-                <div className="text-[#948a7b]">Next run: {selected.nextRun}</div>
+              <div className="flex items-center gap-2">
+                <StatusChip status={selected.last_status} />
+                {selected.last_error && (
+                  <span className="text-[11px]" style={{ color: "#a04848" }}>
+                    {selected.last_error}
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Run history */}
+            {/* Description */}
             <div>
-              <div className="text-[0.6rem] font-semibold uppercase tracking-wider text-[#948a7b] mb-2">
-                Run History
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-[#948a7b] mb-1.5">
+                Description
               </div>
-              <div className="flex flex-col gap-2">
-                {selected.runHistory.map((run, i) => (
-                  <div
-                    key={i}
-                    className="rounded-lg p-3"
-                    style={{
-                      backgroundColor: "#fbfaf6",
-                      border: `1px solid ${run.status === "Failed" ? "rgba(160,72,72,0.25)" : "#e8e2d4"}`,
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span
-                        className={`badge ${run.status === "Success" ? "badge-moss" : "badge-rose"}`}
-                        style={{ fontSize: "0.65rem" }}
-                      >
-                        {run.status}
-                      </span>
-                      <span className="text-[10px] text-[#948a7b]">{run.duration}</span>
-                    </div>
-                    <div className="text-[10px] text-[#6b6357] mb-1.5">{run.timestamp}</div>
-                    <pre
-                      className="text-[10px] font-mono leading-relaxed overflow-x-auto"
-                      style={{ color: "#6b6357", whiteSpace: "pre-wrap", wordBreak: "break-all" }}
-                    >
-                      {run.output}
-                    </pre>
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs leading-relaxed" style={{ color: "#6b6357" }}>
+                {selected.description}
+              </p>
             </div>
 
-            {/* Manual trigger */}
-            <button className="btn-secondary w-full justify-center" style={{ padding: "0.4rem 0.75rem", fontSize: "0.8125rem" }}>
-              <Play size={13} /> Run Now
+            {/* Run now */}
+            <button
+              onClick={() => runNow(selected)}
+              disabled={running === selected.name || selected.last_status === "running"}
+              className="w-full flex items-center justify-center gap-2 text-sm py-2 rounded-xl font-medium transition-opacity disabled:opacity-50"
+              style={{ backgroundColor: "#2d5a4f", color: "#fff" }}
+            >
+              {running === selected.name || selected.last_status === "running" ? (
+                <><Loader2 size={14} className="animate-spin" /> Running…</>
+              ) : (
+                <><Play size={14} /> Run Now</>
+              )}
             </button>
           </div>
         </div>
