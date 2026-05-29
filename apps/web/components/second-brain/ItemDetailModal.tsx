@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -74,7 +74,10 @@ export function ItemDetailModal({
   const [docMarkdown, setDocMarkdown] = useState("")
   const [wordCount, setWordCount]     = useState(0)
   const [saving, setSaving]           = useState(false)
+  const [saveStatus, setSaveStatus]   = useState<"idle" | "saving" | "saved">("idle")
   const [copied, setCopied]           = useState(false)
+  const lastSavedContent              = useRef("")
+  const lastSavedTitle                = useRef("")
   const [showFull, setShowFull]       = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
@@ -97,6 +100,8 @@ export function ItemDetailModal({
         setEditDomain(d.domain ?? "work")
         if (d.type === "document") {
           setDocMarkdown(d.clean_content ?? "")
+          lastSavedContent.current = d.clean_content ?? ""
+          lastSavedTitle.current = d.source_title ?? ""
         }
       })
       .catch(console.error)
@@ -136,12 +141,27 @@ export function ItemDetailModal({
       })
       setItem(updated)
       onUpdated(updated)
+      lastSavedContent.current = docMarkdown
+      lastSavedTitle.current = editTitle
+      setSaveStatus("saved")
+      setTimeout(() => setSaveStatus(s => s === "saved" ? "idle" : s), 2000)
     } catch (err) {
       console.error(err)
+      setSaveStatus("idle")
     } finally {
       setSaving(false)
     }
   }
+
+  // Auto-save for document items — debounced 1.5s after last keystroke
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!item || !isDocument) return
+    if (docMarkdown === lastSavedContent.current && editTitle === lastSavedTitle.current) return
+    setSaveStatus("saving")
+    const t = setTimeout(() => { saveDocument() }, 1500)
+    return () => clearTimeout(t)
+  }, [docMarkdown, editTitle])
 
   async function copyContent() {
     const text = item?.clean_content ?? item?.summary ?? ""
@@ -164,7 +184,7 @@ export function ItemDetailModal({
   return (
     <Dialog open={itemId !== null} onOpenChange={(isOpen) => { if (!isOpen) onClose() }}>
       <DialogContent
-        className="max-w-4xl w-full max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
+        className="max-w-[95vw] w-full h-[95vh] p-0 gap-0 overflow-hidden flex flex-col"
         showCloseButton={false}
       >
         {/* Header */}
@@ -206,8 +226,17 @@ export function ItemDetailModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0 ml-3">
-            {/* Document: always shows save indicator; non-document: pencil toggle */}
+          <div className="flex items-center gap-1.5 shrink-0 ml-3">
+            {/* Auto-save status for documents */}
+            {isDocument && saveStatus !== "idle" && (
+              <span
+                className="text-[11px] transition-opacity"
+                style={{ color: saveStatus === "saved" ? "#2d5a4f" : "#948a7b" }}
+              >
+                {saveStatus === "saving" ? "Saving…" : "Saved ✓"}
+              </span>
+            )}
+            {/* Non-document: pencil toggle */}
             {!isDocument && (
               !editing ? (
                 <button
@@ -423,22 +452,11 @@ export function ItemDetailModal({
             </a>
           )}
 
-          {/* Document word count + save */}
+          {/* Document word count */}
           {isDocument && (
-            <>
-              <span className="text-[10px] ml-1" style={{ color: "#948a7b" }}>
-                {wordCount} {wordCount === 1 ? "word" : "words"}
-              </span>
-              <button
-                onClick={saveDocument}
-                disabled={saving}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50"
-                style={{ backgroundColor: "#f0ebe1", color: "#2d5a4f", border: "1px solid #d8d2c4" }}
-              >
-                {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                Save
-              </button>
-            </>
+            <span className="text-[10px] ml-1" style={{ color: "#948a7b" }}>
+              {wordCount} {wordCount === 1 ? "word" : "words"}
+            </span>
           )}
 
           <div className="flex-1" />
