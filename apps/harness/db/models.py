@@ -75,6 +75,8 @@ class Task(Base):
     source_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     assigned_to: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     connector_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    linked_artifacts: Mapped[list] = mapped_column(JSON, default=list)   # list of artifact IDs
+    linked_knowledge: Mapped[list] = mapped_column(JSON, default=list)   # list of knowledge item IDs
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

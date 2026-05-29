@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Lora, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { ThemeProvider } from "@/components/ThemeProvider";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -28,6 +29,9 @@ export const metadata: Metadata = {
     title: "TARS",
   },
   icons: {
+    icon: [
+      { url: "/tars-avatar.svg", type: "image/svg+xml" },
+    ],
     apple: "/apple-touch-icon.png",
   },
 };
@@ -52,7 +56,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ServiceWorkerRegister />
-        {children}
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -88,6 +88,67 @@
   --sidebar-accent-foreground: #2d5a4f;
   --sidebar-border: #d8d2c4;
   --sidebar-ring: #2d5a4f;
+
+  /* Semantic color tokens — use in inline styles via var() */
+  --c-canvas: #f6f3ec;
+  --c-surface: #fbfaf6;
+  --c-surface-2: #efeadf;
+  --c-ink: #1a1714;
+  --c-ink-muted: #6b6357;
+  --c-ink-faint: #948a7b;
+  --c-border: #d8d2c4;
+  --c-border-faint: #e8e2d4;
+  --c-moss: #2d5a4f;
+  --c-moss-soft: #e3ede9;
+  --c-amber: #b8651a;
+  --c-amber-soft: #f5e8d5;
+  --c-rose: #a04848;
+  --c-rose-soft: #f0dcdc;
+}
+
+.dark {
+  --background: #1c1a17;
+  --foreground: #f0ece4;
+  --card: #232018;
+  --card-foreground: #f0ece4;
+  --popover: #232018;
+  --popover-foreground: #f0ece4;
+  --primary: #4a9a87;
+  --primary-foreground: #0e1f1c;
+  --secondary: #2d2a24;
+  --secondary-foreground: #f0ece4;
+  --muted: #2d2a24;
+  --muted-foreground: #a09890;
+  --accent: #2d2a24;
+  --accent-foreground: #f0ece4;
+  --destructive: #c46060;
+  --border: #3d3830;
+  --input: #3d3830;
+  --ring: #4a9a87;
+
+  --sidebar: #1c1a17;
+  --sidebar-foreground: #f0ece4;
+  --sidebar-primary: #4a9a87;
+  --sidebar-primary-foreground: #0e1f1c;
+  --sidebar-accent: #1e3530;
+  --sidebar-accent-foreground: #4a9a87;
+  --sidebar-border: #3d3830;
+  --sidebar-ring: #4a9a87;
+
+  --c-canvas: #1c1a17;
+  --c-surface: #232018;
+  --c-surface-2: #2d2a24;
+  --c-ink: #f0ece4;
+  --c-ink-muted: #c4bdb2;
+  --c-ink-faint: #948a7b;
+  --c-border: #3d3830;
+  --c-border-faint: #2d2a24;
+  --c-moss: #4a9a87;
+  --c-moss-soft: #1e3530;
+  --c-amber: #d4882a;
+  --c-amber-soft: #3a2a14;
+  --c-rose: #c46060;
+  --c-rose-soft: #2e1818;
 }
 
 @layer base {
@@ -211,7 +272,55 @@
   }
 }
 
-/* Safe-area-aware bottom padding for content area on iOS PWA.
+/* ── Dark mode overrides for component classes ── */
+.dark .card {
+  background-color: var(--c-surface);
+  border-color: var(--c-border);
+  color: var(--c-ink);
+}
+.dark .badge-neutral {
+  background-color: var(--c-surface-2);
+  color: var(--c-ink-muted);
+  border-color: var(--c-border);
+}
+.dark .badge-moss {
+  background-color: var(--c-moss-soft);
+  color: var(--c-moss);
+}
+.dark .badge-amber {
+  background-color: var(--c-amber-soft);
+  color: var(--c-amber);
+}
+.dark .badge-rose {
+  background-color: var(--c-rose-soft);
+  color: var(--c-rose);
+}
+.dark .btn-primary {
+  background-color: var(--c-moss);
+  color: #0e1f1c;
+}
+.dark .btn-secondary {
+  background-color: var(--c-surface-2);
+  color: var(--c-ink);
+  border-color: var(--c-border);
+}
+.dark .btn-secondary:hover { background-color: var(--c-border); }
+.dark .btn-ghost { color: var(--c-ink-muted); }
+.dark .btn-ghost:hover { color: var(--c-ink); background-color: var(--c-surface-2); }
+.dark .input-field {
+  background-color: var(--c-surface-2);
+  border-color: var(--c-border);
+  color: var(--c-ink);
+}
+.dark .input-field:focus {
+  border-color: var(--c-moss);
+  box-shadow: 0 0 0 2px rgba(74, 154, 135, 0.2);
+}
+.dark .input-field::placeholder { color: var(--c-ink-faint); }
+.dark ::-webkit-scrollbar-thumb { background: #3d3830; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #5a5448; }
+
+/* ── Safe-area-aware bottom padding for content area on iOS PWA.
    Tab bar is 56px tall + env(safe-area-inset-bottom) for the home indicator. */
 .pb-safe-tab {
   padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));

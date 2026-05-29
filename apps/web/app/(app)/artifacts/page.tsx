@@ -7,9 +7,9 @@ import remarkGfm from "remark-gfm"
 import {
   Archive, Search, Grid2x2, List, Download, MessageSquare, X,
   FileText, Code2, FileSpreadsheet, FileAudio, BarChart2,
-  ChevronDown, Loader2, Trash2,
+  ChevronDown, Loader2, Trash2, CheckSquare,
 } from "lucide-react"
-import { apiGet, apiDelete } from "@/lib/api-client"
+import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,48 +84,68 @@ function downloadArtifact(artifact: ArtifactDetail) {
 
 // ─── Grid card ────────────────────────────────────────────────────────────────
 
-function GridCard({ artifact, selected, onClick }: { artifact: Artifact; selected: boolean; onClick: () => void }) {
+function GridCard({
+  artifact,
+  selected,
+  onClick,
+  onDelete,
+}: {
+  artifact: Artifact
+  selected: boolean
+  onClick: () => void
+  onDelete: (id: string) => void
+}) {
   const [hovered, setHovered] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
   const router = useRouter()
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!confirmDel) { setConfirmDel(true); return }
+    try {
+      await apiDelete(`/artifacts/${artifact.id}`)
+      onDelete(artifact.id)
+    } catch (err) { console.error(err) }
+  }
 
   return (
     <button
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseLeave={() => { setHovered(false); setConfirmDel(false) }}
       className="card text-left flex flex-col cursor-pointer transition-shadow hover:shadow-md relative overflow-hidden"
-      style={{ padding: "0.875rem", height: "10rem", outline: selected ? "2px solid #2d5a4f" : "none", outlineOffset: "1px" }}
+      style={{ padding: "0.875rem", height: "10rem", outline: selected ? "2px solid var(--c-moss)" : "none", outlineOffset: "1px" }}
     >
       <div className="flex items-start gap-3 flex-1 min-h-0">
         <TypeIcon type={artifact.type} />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-[#1a1714] leading-snug line-clamp-2">{artifact.filename}</p>
-          <p className="text-[11px] text-[#948a7b] mt-0.5 truncate">{sourceLabel(artifact.source)}</p>
+          <p className="text-sm font-medium leading-snug line-clamp-2" style={{ color: "var(--c-ink)" }}>{artifact.filename}</p>
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: "var(--c-ink-faint)" }}>{sourceLabel(artifact.source)}</p>
         </div>
       </div>
-      <div className="flex items-center justify-between mt-2 pt-2" style={{ borderTop: "1px solid #e8e2d4" }}>
-        <span className="text-[10px] text-[#948a7b]">{formatDate(artifact.created_at)}</span>
-        <span className="text-[10px] text-[#948a7b]">{formatSize(artifact.size_bytes)}</span>
+      <div className="flex items-center justify-between mt-2 pt-2" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
+        <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>{formatDate(artifact.created_at)}</span>
+        <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>{formatSize(artifact.size_bytes)}</span>
       </div>
 
       {hovered && (
         <div
-          className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg"
-          style={{ backgroundColor: "rgba(251,250,246,0.92)", backdropFilter: "blur(2px)" }}
+          className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg flex-wrap p-2"
+          style={{ backgroundColor: "color-mix(in srgb, var(--c-surface) 92%, transparent)", backdropFilter: "blur(2px)" }}
         >
           <button
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
-            style={{ backgroundColor: "#efeadf", color: "#1a1714" }}
-            onClick={e => e.stopPropagation()}
-          >
-            <Download size={13} /> Download
-          </button>
-          <button
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium"
-            style={{ backgroundColor: "#e3ede9", color: "#2d5a4f" }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)" }}
             onClick={e => { e.stopPropagation(); router.push("/chat") }}
           >
-            <MessageSquare size={13} /> Chat
+            <MessageSquare size={12} /> Chat
+          </button>
+          <button
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ backgroundColor: confirmDel ? "var(--c-rose)" : "var(--c-rose-soft)", color: confirmDel ? "#fff" : "var(--c-rose)" }}
+            onClick={handleDelete}
+          >
+            <Trash2 size={12} /> {confirmDel ? "Confirm" : "Delete"}
           </button>
         </div>
       )}
@@ -239,7 +259,7 @@ function DetailPanel({
           )}
 
           {/* Actions */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => detail.content && downloadArtifact(detail)}
               className="btn-secondary flex-1 justify-center"
@@ -253,6 +273,22 @@ function DetailPanel({
               style={{ padding: "0.4rem 0.5rem", fontSize: "0.8rem" }}
             >
               <MessageSquare size={13} /> Open in Chat
+            </button>
+            <button
+              onClick={async () => {
+                try {
+                  await apiPost("/tasks", {
+                    title: `Review: ${detail.filename}`,
+                    status: "inbox",
+                    linked_artifacts: [detail.id],
+                  })
+                  router.push("/tasks")
+                } catch (err) { console.error(err) }
+              }}
+              className="btn-secondary flex-1 justify-center"
+              style={{ padding: "0.4rem 0.5rem", fontSize: "0.8rem" }}
+            >
+              <CheckSquare size={13} /> Create Task
             </button>
           </div>
 
@@ -393,7 +429,13 @@ export default function ArtifactsPage() {
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {filtered.map(a => (
-                <GridCard key={a.id} artifact={a} selected={selectedId === a.id} onClick={() => setSelectedId(p => p === a.id ? null : a.id)} />
+                <GridCard
+                  key={a.id}
+                  artifact={a}
+                  selected={selectedId === a.id}
+                  onClick={() => setSelectedId(p => p === a.id ? null : a.id)}
+                  onDelete={id => { setArtifacts(p => p.filter(x => x.id !== id)); if (selectedId === id) setSelectedId(null) }}
+                />
               ))}
             </div>
           ) : (

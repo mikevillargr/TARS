@@ -2,12 +2,13 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal } from "lucide-react"
+import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Sun, Moon } from "lucide-react"
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
+import { useTheme } from "@/components/ThemeProvider"
 
 // Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
 function BottomTabBar() {
@@ -25,9 +26,9 @@ function BottomTabBar() {
     <nav
       className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t flex items-stretch"
       style={{
-        backgroundColor: "rgba(251,250,246,0.97)",
+        backgroundColor: "color-mix(in srgb, var(--c-surface) 97%, transparent)",
         backdropFilter: "blur(12px)",
-        borderColor: "#d8d2c4",
+        borderColor: "var(--c-border)",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }}
     >
@@ -75,6 +76,7 @@ function BottomTabBar() {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [agentActive] = useState(true)
   const [captureOpen, setCaptureOpen] = useState(false)
+  const { theme, toggle: toggleTheme } = useTheme()
 
   return (
     <SidebarProvider>
@@ -84,8 +86,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <header
           className="border-b flex items-center justify-between px-4 shrink-0 backdrop-blur-sm z-10"
           style={{
-            borderColor: "#d8d2c4",
-            backgroundColor: "rgba(251,250,246,0.8)",
+            borderColor: "var(--c-border)",
+            backgroundColor: "color-mix(in srgb, var(--c-surface) 80%, transparent)",
             paddingTop: "env(safe-area-inset-top, 0px)",
             minHeight: "calc(3.5rem + env(safe-area-inset-top, 0px))",
           }}
@@ -121,6 +123,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 Agent Active
               </div>
             )}
+
+            {/* Dark mode toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: "var(--c-ink-muted)" }}
+              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
 
             <button className="p-2 relative" style={{ color: "#6b6357" }}>
               <Bell size={20} />
