@@ -59,7 +59,7 @@ class FirefliesClient:
         }
 
     async def fetch_transcript(self, transcript_id: str) -> Optional[dict]:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 FIREFLIES_API,
                 headers=self._headers,

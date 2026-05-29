@@ -7,7 +7,7 @@ import json as _json
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc, update as sa_update, delete as sa_delete
+from sqlalchemy import select, desc, update as sa_update, delete as sa_delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
@@ -371,10 +371,18 @@ async def list_conversations(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    # Sort by most recent activity: join to messages and order by max(message.created_at),
+    # falling back to conversation.created_at for new conversations with no messages yet.
+    latest_msg = (
+        select(Message.conversation_id, func.max(Message.created_at).label("last_at"))
+        .group_by(Message.conversation_id)
+        .subquery()
+    )
     result = await db.execute(
         select(Conversation)
+        .outerjoin(latest_msg, Conversation.id == latest_msg.c.conversation_id)
         .where(Conversation.user_id == user_id)
-        .order_by(desc(Conversation.created_at))
+        .order_by(desc(func.coalesce(latest_msg.c.last_at, Conversation.created_at)))
         .limit(50)
     )
     return result.scalars().all()
@@ -789,10 +797,10 @@ async def send_message(
                                     parts.append(f"  • {ai.raw_text}{owner}{done}")
 
                             if include_transcript and meeting.transcript:
-                                # Cap transcript to avoid token explosion
+                                # Cap at 20k chars — enough for a 2h meeting without token explosion
                                 transcript = meeting.transcript
-                                if len(transcript) > 6000:
-                                    transcript = transcript[:6000] + "\n\n[... transcript truncated ...]"
+                                if len(transcript) > 20000:
+                                    transcript = transcript[:20000] + "\n\n[... transcript truncated — full text available in Meetings section ...]"
                                 parts.append(f"\n## Transcript\n{transcript}")
                             elif not include_transcript and meeting.transcript:
                                 parts.append(f"\n(Transcript available — call read_meeting again with include_transcript=true to see it.)")

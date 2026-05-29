@@ -103,15 +103,24 @@ _ACTION_RE = re.compile(
 
 _TIER3_RE = re.compile(
     r"\b("
+    # Writing with adjectives (existing)
     r"write (a |an |the |me )?(full|complete|detailed|comprehensive|long)"
-    r"|create (a |an )?(strategy|proposal|report|presentation|slide.?deck|document|docx|pptx|pdf)"
-    r"|draft (a |an )?(proposal|contract|strategy|email|memo|document|report)"
-    r"|generate (a |an )?(document|report|presentation|pdf|docx|pptx|slide)"
-    r"|make (a |an )?(presentation|slide.?deck|report|document|pdf)"
-    r"|build (a |an )?(presentation|slide.?deck|deck)"
+    # Writing any document type, no adjective required
+    r"|write (a |an |the |me )?(document|report|proposal|brief|memo|summary|plan|strategy|analysis|doc)"
+    r"|write up (a |an )?"
+    # Create / generate / make / build / prepare / put together
+    r"|create (a |an )?(strategy|proposal|report|presentation|slide.?deck|document|docx|pptx|pdf|deck|brief|memo|plan)"
+    r"|draft (a |an )?(proposal|contract|strategy|email|memo|document|report|brief|plan)"
+    r"|generate (a |an )?(document|report|presentation|pdf|docx|pptx|slide|deck|brief)"
+    r"|make (a |an )?(presentation|slide.?deck|report|document|pdf|deck|brief|proposal)"
+    r"|build (a |an )?(presentation|slide.?deck|deck|document|report)"
+    r"|prepare (a |an )?(document|report|presentation|brief|proposal|summary|deck)"
+    r"|put together (a |an )?(document|report|presentation|deck|brief|proposal)"
+    # Frontier / deep work
     r"|deep (dive|analysis|review)"
     r"|comprehensive (analysis|report|strategy|review)"
     r"|client (deliverable|presentation|proposal|report)"
+    # Web search signals
     r"|search (the |online|web|internet|for )"
     r"|look (it |this |that )?up online"
     r"|find (me )?(information|details|news) (about|on)"

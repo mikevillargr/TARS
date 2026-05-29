@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
 import { useSearchParams } from "next/navigation"
 import {
   Send, Paperclip, Camera, Mic, Plus, User,
@@ -202,7 +202,8 @@ function formatModelName(model?: string): string | null {
 }
 
 // ─── Single message bubble ────────────────────────────────────────
-function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
+// memo: skips re-render when msg reference is stable (i.e. on inputValue keystrokes)
+const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
   const isUser = msg.role === "user"
   const toolCalls = !isUser && "tool_calls" in msg ? msg.tool_calls : undefined
   const modelLabel = !isUser && "model_used" in msg ? formatModelName(msg.model_used) : null
@@ -277,7 +278,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
       </div>
     </div>
   )
-}
+})
 
 // ─── Second Brain loader (needs Suspense for useSearchParams) ─────
 function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
@@ -712,7 +713,10 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputValue, busy, handleSend])
 
-  const allMessages = streaming ? [...messages, streaming] : messages
+  const allMessages = useMemo(
+    () => (streaming ? [...messages, streaming] : messages),
+    [messages, streaming],
+  )
 
   return (
     <div className="flex h-full overflow-hidden">
