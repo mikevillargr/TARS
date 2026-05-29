@@ -893,7 +893,8 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts (ID: {artifact.id}). Mike can download it from the Artifacts section."
+                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "docx"}))
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_document failed: %s", exc)
                             return f"Failed to generate document: {exc}"
@@ -942,7 +943,8 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts (ID: {artifact.id}). Mike can download it from the Artifacts section."
+                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pptx"}))
+                            return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_presentation failed: %s", exc)
                             return f"Failed to generate presentation: {exc}"
@@ -992,7 +994,8 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts (ID: {artifact.id}). Mike can download it from the Artifacts section."
+                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pdf"}))
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_pdf failed: %s", exc)
                             return f"Failed to generate PDF: {exc}"

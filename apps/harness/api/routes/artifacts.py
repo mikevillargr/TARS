@@ -240,6 +240,102 @@ async def download_artifact(
     )
 
 
+@router.get("/{artifact_id}/view")
+async def view_artifact(
+    artifact_id: str,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Serve artifact inline (for iframe/preview embedding).
+    Same as /download but uses Content-Disposition: inline so the browser
+    renders it in-place rather than triggering a save dialog.
+    """
+    result = await db.execute(
+        select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
+    )
+    art = result.scalar_one_or_none()
+    if not art:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    filename = art.filename or "preview"
+    ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
+
+    if art.content and art.content.startswith("base64:"):
+        raw = base64.b64decode(art.content[7:])
+        mime = _BINARY_MIME.get(ext, "application/octet-stream")
+        return Response(
+            content=raw,
+            media_type=mime,
+            headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        )
+
+    content = art.content or ""
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.get("/{artifact_id}/preview")
+async def preview_artifact(
+    artifact_id: str,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Extract human-readable preview text from binary artifacts.
+    Returns JSON { text: str, type: "docx"|"pptx"|"text" }.
+    PDF files should use /view (rendered by the browser via iframe).
+    """
+    result = await db.execute(
+        select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
+    )
+    art = result.scalar_one_or_none()
+    if not art:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    content = art.content or ""
+    filename = (art.filename or "").lower()
+
+    if not content.startswith("base64:"):
+        return {"text": content[:8000], "type": "text"}
+
+    raw = base64.b64decode(content[7:])
+
+    if filename.endswith(".docx"):
+        try:
+            import docx as _docx
+            from io import BytesIO as _BIO
+            doc = _docx.Document(_BIO(raw))
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            return {"text": "\n\n".join(paragraphs[:300]), "type": "docx"}
+        except Exception as exc:
+            return {"text": f"(preview extraction failed: {exc})", "type": "text"}
+
+    if filename.endswith(".pptx"):
+        try:
+            from pptx import Presentation as _Prs
+            from io import BytesIO as _BIO
+            prs = _Prs(_BIO(raw))
+            slides_text = []
+            for i, slide in enumerate(prs.slides):
+                texts = [
+                    shp.text_frame.text.strip()
+                    for shp in slide.shapes
+                    if hasattr(shp, "text_frame") and shp.text_frame.text.strip()
+                ]
+                if texts:
+                    slides_text.append(f"## Slide {i + 1}\n" + "\n".join(texts))
+            return {"text": "\n\n".join(slides_text), "type": "pptx"}
+        except Exception as exc:
+            return {"text": f"(preview extraction failed: {exc})", "type": "text"}
+
+    # Unknown binary (shouldn't normally reach here for DOCX/PPTX/PDF)
+    return {"text": "", "type": "binary"}
+
+
 @router.post("/ingest", response_model=ArtifactDetailOut, status_code=201)
 async def ingest_artifact(
     file: UploadFile = File(...),

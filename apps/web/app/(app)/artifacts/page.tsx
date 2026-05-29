@@ -1,15 +1,16 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import {
   Archive, Search, Grid2x2, List, Download, MessageSquare, X,
   FileText, Code2, FileSpreadsheet, FileAudio, BarChart2,
-  ChevronDown, Loader2, Trash2, CheckSquare,
+  ChevronDown, Loader2, Trash2, CheckSquare, Eye,
 } from "lucide-react"
-import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
+import { apiGet, apiDelete } from "@/lib/api-client"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,14 +32,19 @@ interface ArtifactDetail extends Artifact {
   content: string | null
 }
 
+interface PreviewResult {
+  text: string
+  type: "docx" | "pptx" | "text" | "binary"
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const TYPE_META: Record<string, { icon: React.ReactNode; bg: string; color: string; label: string }> = {
-  document:    { icon: <FileText size={16} />,        bg: "var(--c-moss-soft)",  color: "var(--c-moss)",  label: "Document" },
+  document:    { icon: <FileText size={16} />,        bg: "var(--c-moss-soft)",  color: "var(--c-moss)",      label: "Document" },
   code:        { icon: <Code2 size={16} />,           bg: "var(--c-surface-2)", color: "var(--c-ink-muted)", label: "Code" },
-  report:      { icon: <BarChart2 size={16} />,       bg: "var(--c-amber-soft)", color: "var(--c-amber)", label: "Report" },
-  transcript:  { icon: <FileAudio size={16} />,       bg: "var(--c-rose-soft)",  color: "var(--c-rose)",  label: "Transcript" },
-  spreadsheet: { icon: <FileSpreadsheet size={16} />, bg: "var(--c-moss-soft)",  color: "var(--c-moss)",  label: "Spreadsheet" },
+  report:      { icon: <BarChart2 size={16} />,       bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "Report" },
+  transcript:  { icon: <FileAudio size={16} />,       bg: "var(--c-rose-soft)",  color: "var(--c-rose)",      label: "Transcript" },
+  spreadsheet: { icon: <FileSpreadsheet size={16} />, bg: "var(--c-moss-soft)",  color: "var(--c-moss)",      label: "Spreadsheet" },
 }
 
 function typeMeta(type: string) {
@@ -74,21 +80,20 @@ function sourceLabel(source: string) {
   return { chat: "Chat", agent_job: "Agent Job", cron: "Cron", meeting: "Meeting", upload: "Upload" }[source] ?? source
 }
 
-function downloadArtifact(artifact: ArtifactDetail) {
-  // Binary artifacts (DOCX, PPTX, PDF) are stored as base64 — use the server download endpoint
-  if (artifact.content?.startsWith("base64:")) {
-    const a = document.createElement("a")
-    a.href = `/api/proxy/artifacts/${artifact.id}/download`
-    a.download = artifact.filename
-    a.click()
-    return
-  }
-  // Text artifacts — client-side blob download
-  const blob = new Blob([artifact.content ?? ""], { type: "text/plain" })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement("a")
-  a.href = url; a.download = artifact.filename; a.click()
-  URL.revokeObjectURL(url)
+function isBinaryArtifact(detail: ArtifactDetail | null) {
+  return detail?.content?.startsWith("base64:") ?? false
+}
+
+function isPdf(detail: ArtifactDetail | null) {
+  return detail?.filename?.toLowerCase().endsWith(".pdf") ?? false
+}
+
+function isDocx(detail: ArtifactDetail | null) {
+  return detail?.filename?.toLowerCase().endsWith(".docx") ?? false
+}
+
+function isPptx(detail: ArtifactDetail | null) {
+  return detail?.filename?.toLowerCase().endsWith(".pptx") ?? false
 }
 
 // ─── Grid card ────────────────────────────────────────────────────────────────
@@ -145,6 +150,13 @@ function GridCard({
           <button
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
             style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)" }}
+            onClick={e => { e.stopPropagation(); onClick() }}
+          >
+            <Eye size={12} /> Preview
+          </button>
+          <button
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)" }}
             onClick={e => { e.stopPropagation(); router.push("/chat") }}
           >
             <MessageSquare size={12} /> Chat
@@ -162,167 +174,371 @@ function GridCard({
   )
 }
 
-// ─── Detail panel ─────────────────────────────────────────────────────────────
+// ─── Artifact Modal ───────────────────────────────────────────────────────────
 
-function DetailPanel({
+type PreviewTab = "preview" | "info"
+
+function ArtifactModal({
   artifactId,
   onClose,
   onDeleted,
 }: {
-  artifactId: string
+  artifactId: string | null
   onClose: () => void
   onDeleted: (id: string) => void
 }) {
   const router = useRouter()
   const [detail, setDetail]           = useState<ArtifactDetail | null>(null)
-  const [loading, setLoading]         = useState(true)
+  const [loading, setLoading]         = useState(false)
   const [confirmDelete, setConfirm]   = useState(false)
+  const [activeTab, setActiveTab]     = useState<PreviewTab>("preview")
+  const [preview, setPreview]         = useState<PreviewResult | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const prevIdRef = useRef<string | null>(null)
 
   useEffect(() => {
+    if (!artifactId || artifactId === prevIdRef.current) return
+    prevIdRef.current = artifactId
     setLoading(true)
     setDetail(null)
+    setPreview(null)
+    setConfirm(false)
+    setActiveTab("preview")
+
     apiGet<ArtifactDetail>(`/artifacts/${artifactId}`)
-      .then(setDetail)
-      .catch(console.error)
-      .finally(() => setLoading(false))
+      .then(async (d) => {
+        setDetail(d)
+        setLoading(false)
+
+        // Fetch preview for binary artifacts (DOCX / PPTX)
+        // PDF handled by iframe; code / text displayed directly
+        if (d.content?.startsWith("base64:") && !d.filename?.toLowerCase().endsWith(".pdf")) {
+          setPreviewLoading(true)
+          try {
+            const p = await fetch(`/api/proxy/artifacts/${artifactId}/preview`)
+              .then(r => r.json()) as PreviewResult
+            setPreview(p)
+          } catch { /* silently fall back */ }
+          finally { setPreviewLoading(false) }
+        }
+      })
+      .catch(err => { console.error(err); setLoading(false) })
+  }, [artifactId])
+
+  // Reset state when modal closes so it's fresh on next open
+  useEffect(() => {
+    if (!artifactId) {
+      prevIdRef.current = null
+      setDetail(null)
+      setPreview(null)
+    }
   }, [artifactId])
 
   async function handleDelete() {
+    if (!artifactId) return
     await apiDelete(`/artifacts/${artifactId}`)
     onDeleted(artifactId)
+    onClose()
   }
 
   const meta = detail ? typeMeta(detail.type) : typeMeta("document")
   const isCode = detail?.type === "code"
+  const isBinary = isBinaryArtifact(detail)
+  const showPdfFrame = isBinary && isPdf(detail)
+  const showExtractedPreview = isBinary && (isDocx(detail) || isPptx(detail))
 
   return (
-    <div
-      className="w-[340px] border-l flex flex-col shrink-0"
-      style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}
-    >
-      {/* Header */}
-      <div className="px-4 py-3 border-b flex items-center justify-between shrink-0" style={{ borderColor: "var(--c-border)" }}>
-        <div className="flex items-center gap-2 min-w-0">
-          {detail && <TypeIcon type={detail.type} />}
-          <span className="text-sm font-semibold truncate" style={{ color: "var(--c-ink)" }}>{detail?.filename ?? "…"}</span>
-        </div>
-        <button onClick={onClose} className="p-1 rounded-md shrink-0 ml-1 hover:bg-surface-2" style={{ color: "var(--c-ink-muted)" }}>
-          <X size={15} />
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 size={18} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
-        </div>
-      ) : !detail ? null : (
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-          {/* Meta badges */}
-          <div className="flex flex-wrap gap-1.5">
-            <span className="badge badge-neutral" style={{ backgroundColor: meta.bg, color: meta.color }}>{meta.label}</span>
-            <span className="badge badge-neutral">{sourceLabel(detail.source)}</span>
-            {detail.version > 1 && <span className="badge badge-amber">v{detail.version}</span>}
-            <span className="badge badge-neutral">{formatSize(detail.size_bytes)}</span>
+    <Dialog open={artifactId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-4xl w-full p-0 gap-0 overflow-hidden flex flex-col"
+        style={{
+          maxHeight: "90vh",
+          backgroundColor: "var(--c-surface)",
+          border: "1px solid var(--c-border)",
+          borderRadius: "0.75rem",
+        }}
+      >
+        {/* ── Header ── */}
+        <div
+          className="flex items-center gap-3 px-5 py-3.5 border-b shrink-0"
+          style={{ borderColor: "var(--c-border)" }}
+        >
+          {detail && <TypeIcon type={detail.type} size="sm" />}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate" style={{ color: "var(--c-ink)" }}>
+              {detail?.filename ?? "…"}
+            </p>
+            {detail && (
+              <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
+                {meta.label} · {sourceLabel(detail.source)} · {formatSize(detail.size_bytes)}
+                {detail.version > 1 && ` · v${detail.version}`}
+              </p>
+            )}
           </div>
-          <div className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{formatDate(detail.created_at)}</div>
 
-          {/* Tags */}
-          {detail.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {detail.tags.map(t => (
-                <span key={t} className="badge badge-neutral" style={{ fontSize: "0.7rem" }}>#{t}</span>
-              ))}
+          {/* Tab switcher */}
+          <div
+            className="flex items-center gap-0.5 rounded-lg p-0.5 text-xs"
+            style={{ backgroundColor: "var(--c-surface-2)" }}
+          >
+            {(["preview", "info"] as PreviewTab[]).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className="px-3 py-1 rounded-md font-medium capitalize transition-colors"
+                style={{
+                  backgroundColor: activeTab === tab ? "var(--c-surface)" : "transparent",
+                  color: activeTab === tab ? "var(--c-ink)" : "var(--c-ink-faint)",
+                  boxShadow: activeTab === tab ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-1 shrink-0">
+            <a
+              href={detail ? `/api/proxy/artifacts/${detail.id}/download` : "#"}
+              download={detail?.filename}
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: "var(--c-ink-faint)", backgroundColor: "transparent" }}
+              title="Download"
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+            >
+              <Download size={15} />
+            </a>
+            <button
+              onClick={() => { onClose(); router.push(`/chat?artifact=${detail?.id}`) }}
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: "var(--c-ink-faint)", backgroundColor: "transparent" }}
+              title="Open in Chat"
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+            >
+              <MessageSquare size={15} />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg transition-colors"
+              style={{ color: "var(--c-ink-faint)", backgroundColor: "transparent" }}
+              title="Close"
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 size={22} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
             </div>
-          )}
-
-          {/* Preview */}
-          {detail.content && (
-            <div>
-              <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>Preview</div>
-              {isCode ? (
-                <pre
-                  className="rounded-lg p-3 text-[11px] font-mono overflow-x-auto leading-relaxed"
-                  style={{ backgroundColor: "#1a1714", color: "#e3ede9", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "280px", overflowY: "auto" }}
-                >
-                  {detail.content.slice(0, 3000)}{detail.content.length > 3000 ? "\n…" : ""}
-                </pre>
-              ) : (
-                <div
-                  className="rounded-lg p-3 text-xs leading-relaxed overflow-y-auto"
-                  style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)", maxHeight: "280px" }}
-                >
+          ) : !detail ? null : activeTab === "preview" ? (
+            /* ── Preview tab ── */
+            <div className="h-full flex flex-col">
+              {showPdfFrame ? (
+                /* PDF — rendered natively by the browser */
+                <iframe
+                  src={`/api/proxy/artifacts/${detail.id}/view`}
+                  className="flex-1 w-full"
+                  style={{ minHeight: "520px", border: "none" }}
+                  title={detail.filename}
+                />
+              ) : showExtractedPreview ? (
+                /* DOCX / PPTX — extracted text rendered as markdown */
+                <div className="flex-1 overflow-y-auto p-6">
+                  {previewLoading ? (
+                    <div className="flex items-center justify-center py-10">
+                      <Loader2 size={18} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
+                    </div>
+                  ) : preview ? (
+                    <div className="prose prose-sm max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}
+                        components={{
+                          h1: ({ children }) => <h1 className="text-base font-semibold mb-2 mt-4 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h1>,
+                          h2: ({ children }) => <h2 className="text-sm font-semibold mb-1.5 mt-3 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h2>,
+                          h3: ({ children }) => <h3 className="text-sm font-medium mb-1 mt-2" style={{ color: "var(--c-ink)" }}>{children}</h3>,
+                          p: ({ children }) => <p className="text-sm leading-relaxed mb-2 last:mb-0" style={{ color: "var(--c-ink)" }}>{children}</p>,
+                          ul: ({ children }) => <ul className="text-sm space-y-0.5 my-1.5 pl-4 list-disc" style={{ color: "var(--c-ink)" }}>{children}</ul>,
+                          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          code: ({ children }: any) => <code className="px-1 py-0.5 rounded text-[11px]" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)" }}>{children}</code>,
+                        }}
+                      >
+                        {preview.text || "*No text content extracted.*"}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 gap-2">
+                      <p className="text-sm" style={{ color: "var(--c-ink-faint)" }}>Preview not available. Download to view.</p>
+                    </div>
+                  )}
+                </div>
+              ) : isCode ? (
+                /* Code — monospace block */
+                <div className="flex-1 overflow-auto p-4">
+                  <pre
+                    className="rounded-xl p-4 text-[12px] font-mono leading-relaxed overflow-x-auto"
+                    style={{ backgroundColor: "#1a1714", color: "#e3ede9", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+                  >
+                    {detail.content ?? ""}
+                  </pre>
+                </div>
+              ) : detail.content ? (
+                /* Text / Markdown */
+                <div className="flex-1 overflow-y-auto p-6">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}
                     components={{
-                      p: ({ children }) => <p className="mb-1.5 last:mb-0" style={{ color: "var(--c-ink)" }}>{children}</p>,
-                      h1: ({ children }) => <h1 className="font-semibold text-sm mb-1 mt-2" style={{ color: "var(--c-ink)" }}>{children}</h1>,
-                      h2: ({ children }) => <h2 className="font-semibold text-xs mb-1 mt-2" style={{ color: "var(--c-ink)" }}>{children}</h2>,
+                      h1: ({ children }) => <h1 className="text-lg font-semibold mb-2 mt-4 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-base font-semibold mb-1.5 mt-3 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-semibold mb-1 mt-2" style={{ color: "var(--c-ink)" }}>{children}</h3>,
+                      p: ({ children }) => <p className="text-sm leading-relaxed mb-2 last:mb-0" style={{ color: "var(--c-ink)" }}>{children}</p>,
+                      ul: ({ children }) => <ul className="text-sm space-y-1 my-2 pl-4 list-disc" style={{ color: "var(--c-ink)" }}>{children}</ul>,
+                      ol: ({ children }) => <ol className="text-sm space-y-1 my-2 pl-4 list-decimal" style={{ color: "var(--c-ink)" }}>{children}</ol>,
+                      li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                      table: ({ children }) => (
+                        <div className="my-3 overflow-x-auto rounded-lg" style={{ border: "1px solid var(--c-border)" }}>
+                          <table className="text-sm w-full">{children}</table>
+                        </div>
+                      ),
+                      thead: ({ children }) => <thead style={{ backgroundColor: "var(--c-surface-2)" }}>{children}</thead>,
+                      th: ({ children }) => <th className="px-3 py-2 text-left text-xs font-semibold" style={{ color: "var(--c-ink-muted)", borderBottom: "1px solid var(--c-border)" }}>{children}</th>,
+                      td: ({ children }) => <td className="px-3 py-2 text-sm" style={{ borderBottom: "1px solid var(--c-border-faint)" }}>{children}</td>,
+                      blockquote: ({ children }) => (
+                        <blockquote className="my-2 pl-3 py-1 text-sm italic" style={{ borderLeft: "3px solid var(--c-moss)", color: "var(--c-ink-muted)" }}>{children}</blockquote>
+                      ),
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      code: ({ children }: any) => <code className="px-1 py-0.5 rounded text-[10px]" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)" }}>{children}</code>,
+                      code: ({ children }: any) => <code className="px-1.5 py-0.5 rounded text-[0.8em] font-mono" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)", border: "1px solid var(--c-border)" }}>{children}</code>,
                     }}
                   >
-                    {`${detail.content.slice(0, 2000)}${detail.content.length > 2000 ? "\n\n…" : ""}`}
+                    {detail.content}
                   </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16 gap-2">
+                  <p className="text-sm" style={{ color: "var(--c-ink-faint)" }}>No preview available.</p>
                 </div>
               )}
             </div>
-          )}
-
-          {/* Actions */}
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => detail.content && downloadArtifact(detail)}
-              className="btn-secondary flex-1 justify-center"
-              style={{ padding: "0.4rem 0.5rem", fontSize: "0.8rem" }}
-            >
-              <Download size={13} /> Download
-            </button>
-            <button
-              onClick={() => router.push("/chat")}
-              className="btn-primary flex-1 justify-center"
-              style={{ padding: "0.4rem 0.5rem", fontSize: "0.8rem" }}
-            >
-              <MessageSquare size={13} /> Open in Chat
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  await apiPost("/tasks", {
-                    title: `Review: ${detail.filename}`,
-                    status: "inbox",
-                    linked_artifacts: [detail.id],
-                  })
-                  router.push("/tasks")
-                } catch (err) { console.error(err) }
-              }}
-              className="btn-secondary flex-1 justify-center"
-              style={{ padding: "0.4rem 0.5rem", fontSize: "0.8rem" }}
-            >
-              <CheckSquare size={13} /> Create Task
-            </button>
-          </div>
-
-          {/* Delete */}
-          <div className="pt-2 border-t" style={{ borderColor: "var(--c-border-faint)" }}>
-            {!confirmDelete ? (
-              <button
-                onClick={() => setConfirm(true)}
-                className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md"
-                style={{ color: "var(--c-ink-faint)" }}
-              >
-                <Trash2 size={12} /> Delete artifact
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>Delete permanently?</span>
-                <button onClick={handleDelete} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-rose)", color: "#fff" }}>Yes</button>
-                <button onClick={() => setConfirm(false)} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}>No</button>
+          ) : (
+            /* ── Info tab ── */
+            <div className="p-5 flex flex-col gap-4">
+              {/* Badges */}
+              <div className="flex flex-wrap gap-1.5">
+                <span className="badge badge-neutral" style={{ backgroundColor: meta.bg, color: meta.color }}>{meta.label}</span>
+                <span className="badge badge-neutral">{sourceLabel(detail.source)}</span>
+                {detail.version > 1 && <span className="badge badge-amber">v{detail.version}</span>}
+                <span className="badge badge-neutral">{formatSize(detail.size_bytes)}</span>
               </div>
-            )}
-          </div>
+
+              <div className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
+                Created {formatDate(detail.created_at)}
+              </div>
+
+              {detail.project_ref && (
+                <div>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>Project</p>
+                  <p className="text-sm" style={{ color: "var(--c-ink)" }}>{detail.project_ref}</p>
+                </div>
+              )}
+
+              {detail.tags.length > 0 && (
+                <div>
+                  <p className="text-[0.65rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Tags</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detail.tags.map(t => (
+                      <span key={t} className="badge badge-neutral" style={{ fontSize: "0.7rem" }}>#{t}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <a
+                  href={`/api/proxy/artifacts/${detail.id}/download`}
+                  download={detail.filename}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", border: "1px solid var(--c-border)" }}
+                >
+                  <Download size={13} /> Download
+                </a>
+                <button
+                  onClick={() => { onClose(); router.push(`/chat?artifact=${detail.id}`) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+                  style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
+                >
+                  <MessageSquare size={13} /> Open in Chat
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch("/api/proxy/tasks", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ title: `Review: ${detail.filename}`, status: "inbox" }),
+                      })
+                      onClose()
+                      router.push("/tasks")
+                    } catch (err) { console.error(err) }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", border: "1px solid var(--c-border)" }}
+                >
+                  <CheckSquare size={13} /> Create Task
+                </button>
+              </div>
+
+              {/* Delete */}
+              <div className="pt-3 border-t" style={{ borderColor: "var(--c-border-faint)" }}>
+                {!confirmDelete ? (
+                  <button
+                    onClick={() => setConfirm(true)}
+                    className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md"
+                    style={{ color: "var(--c-ink-faint)" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-rose)" }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)" }}
+                  >
+                    <Trash2 size={12} /> Delete artifact
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>Delete permanently?</span>
+                    <button onClick={handleDelete} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-rose)", color: "#fff" }}>Yes</button>
+                    <button onClick={() => setConfirm(false)} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}>No</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   )
+}
+
+// ─── Deep-link handler (needs Suspense for useSearchParams) ──────────────────
+
+function DeepLinkHandler({ onOpen }: { onOpen: (id: string) => void }) {
+  const searchParams = useSearchParams()
+  const handledRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const id = searchParams.get("open")
+    if (!id || handledRef.current === id) return
+    handledRef.current = id
+    onOpen(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  return null
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -364,6 +580,11 @@ export default function ArtifactsPage() {
 
   return (
     <div className="flex flex-1 overflow-hidden bg-canvas">
+      {/* Deep-link handler — opens modal when ?open=<id> is in URL */}
+      <Suspense fallback={null}>
+        <DeepLinkHandler onOpen={(id) => setSelectedId(id)} />
+      </Suspense>
+
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-5 py-3 border-b shrink-0" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
@@ -453,7 +674,7 @@ export default function ArtifactsPage() {
           </div>
         </div>
 
-        {/* Content */}
+        {/* Content — always full-width; modal handles detail */}
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center py-16"><Loader2 size={22} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} /></div>
@@ -466,13 +687,13 @@ export default function ArtifactsPage() {
               </div>
             </div>
           ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {filtered.map(a => (
                 <GridCard
                   key={a.id}
                   artifact={a}
                   selected={selectedId === a.id}
-                  onClick={() => setSelectedId(p => p === a.id ? null : a.id)}
+                  onClick={() => setSelectedId(a.id)}
                   onDelete={id => { setArtifacts(p => p.filter(x => x.id !== id)); if (selectedId === id) setSelectedId(null) }}
                 />
               ))}
@@ -484,7 +705,7 @@ export default function ArtifactsPage() {
                 {["Name", "Type", "Source", "Size", "Date"].map(h => <span key={h}>{h}</span>)}
               </div>
               {filtered.map((a, i) => (
-                <button key={a.id} onClick={() => setSelectedId(p => p === a.id ? null : a.id)}
+                <button key={a.id} onClick={() => setSelectedId(a.id)}
                   className="grid w-full text-left px-4 py-2.5 items-center transition-colors cursor-pointer"
                   style={{
                     gridTemplateColumns: "3fr 1fr 1fr 80px 100px",
@@ -509,14 +730,12 @@ export default function ArtifactsPage() {
         </div>
       </div>
 
-      {/* Detail panel */}
-      {selectedId && (
-        <DetailPanel
-          artifactId={selectedId}
-          onClose={() => setSelectedId(null)}
-          onDeleted={id => { setArtifacts(p => p.filter(a => a.id !== id)); setSelectedId(null) }}
-        />
-      )}
+      {/* Artifact detail modal */}
+      <ArtifactModal
+        artifactId={selectedId}
+        onClose={() => setSelectedId(null)}
+        onDeleted={id => { setArtifacts(p => p.filter(a => a.id !== id)); setSelectedId(null) }}
+      />
     </div>
   )
 }

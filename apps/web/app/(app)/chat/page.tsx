@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
 import { useSearchParams } from "next/navigation"
+import Link from "next/link"
 import {
   Send, Paperclip, Camera, Mic, Plus, User,
   Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
-  Square, Trash2,
+  Square, Trash2, FileText, File, Layout, Download, ExternalLink,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
@@ -186,6 +187,62 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
   )
 }
 
+// ─── Artifact notification card ──────────────────────────────────
+interface ArtifactNotification {
+  artifact_id: string
+  filename: string
+  filetype: "docx" | "pptx" | "pdf"
+}
+
+const ARTIFACT_TYPE_ICON: Record<string, React.ElementType> = {
+  docx: FileText,
+  pptx: Layout,
+  pdf:  File,
+}
+const ARTIFACT_TYPE_LABEL: Record<string, string> = {
+  docx: "Word Document",
+  pptx: "PowerPoint",
+  pdf:  "PDF",
+}
+
+function ArtifactCard({ n, onDismiss }: { n: ArtifactNotification; onDismiss: () => void }) {
+  const Icon = ARTIFACT_TYPE_ICON[n.filetype] ?? FileText
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 max-w-sm" style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-surface)" }}>
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}>
+        <Icon size={16} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate" style={{ color: "var(--c-ink)" }}>{n.filename}</p>
+        <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{ARTIFACT_TYPE_LABEL[n.filetype] ?? n.filetype.toUpperCase()} · Saved to Artifacts</p>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <a
+          href={`/api/proxy/artifacts/${n.artifact_id}/download`}
+          download={n.filename}
+          className="p-1.5 rounded-lg transition-colors"
+          style={{ color: "var(--c-ink-faint)", backgroundColor: "var(--c-surface-2)" }}
+          title="Download"
+        >
+          <Download size={14} />
+        </a>
+        <Link
+          href={`/artifacts?open=${n.artifact_id}`}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
+          style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
+        >
+          <ExternalLink size={12} />
+          Open
+        </Link>
+        <button onClick={onDismiss} className="p-1" style={{ color: "var(--c-ink-faint)" }} title="Dismiss">
+          <X size={11} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // MessageContent is now in components/chat/MessageContent.tsx
 
 // ─── Model name formatter ─────────────────────────────────────────
@@ -344,8 +401,10 @@ interface MessageAreaProps {
   allMessages: (Message | StreamingMsg)[]
   calendarSuggestions: CalendarSuggestion[]
   taskSuggestions: TaskSuggestion[]
+  artifactNotifications: ArtifactNotification[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
+  setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
 }
@@ -354,8 +413,10 @@ const MessageArea = memo(function MessageArea({
   allMessages,
   calendarSuggestions,
   taskSuggestions,
+  artifactNotifications,
   setCalendarSuggestions,
   setTaskSuggestions,
+  setArtifactNotifications,
   quoteIndex,
   messagesEndRef,
 }: MessageAreaProps) {
@@ -371,7 +432,7 @@ const MessageArea = memo(function MessageArea({
       ) : allMessages.map((msg, i) => (
         <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
       ))}
-      {(calendarSuggestions.length > 0 || taskSuggestions.length > 0) && (
+      {(calendarSuggestions.length > 0 || taskSuggestions.length > 0 || artifactNotifications.length > 0) && (
         <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
           {calendarSuggestions.map((s) => (
             <CalendarSuggestChip
@@ -385,6 +446,13 @@ const MessageArea = memo(function MessageArea({
               key={s.tool_use_id}
               suggestion={s}
               onDismiss={() => setTaskSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+            />
+          ))}
+          {artifactNotifications.map((n) => (
+            <ArtifactCard
+              key={n.artifact_id}
+              n={n}
+              onDismiss={() => setArtifactNotifications(prev => prev.filter(x => x.artifact_id !== n.artifact_id))}
             />
           ))}
         </div>
@@ -416,8 +484,9 @@ export default function ChatPage() {
   const [messages, setMessages]                     = useState<Message[]>([])
   const [streaming, setStreaming]                   = useState<StreamingMsg | null>(null)
   const [busy, setBusy]                             = useState(false)
-  const [calendarSuggestions, setCalendarSuggestions] = useState<CalendarSuggestion[]>([])
-  const [taskSuggestions, setTaskSuggestions]         = useState<TaskSuggestion[]>([])
+  const [calendarSuggestions, setCalendarSuggestions]     = useState<CalendarSuggestion[]>([])
+  const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
+  const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   const [inputValue, setInputValue]                 = useState("")
@@ -633,6 +702,7 @@ export default function ChatPage() {
     setInputValue("")
     setCalendarSuggestions([])
     setTaskSuggestions([])
+    setArtifactNotifications([])
     const pendingAttachments = attachments
     setAttachments([])
 
@@ -701,6 +771,14 @@ export default function ChatPage() {
             } else if (evt.type === "task_suggest") {
               if (chatId === activeChatIdRef.current) {
                 setTaskSuggestions(prev => [...prev, evt as TaskSuggestion])
+              }
+            } else if (evt.type === "artifact_created") {
+              if (chatId === activeChatIdRef.current) {
+                setArtifactNotifications(prev => [...prev, {
+                  artifact_id: evt.artifact_id,
+                  filename: evt.filename,
+                  filetype: evt.filetype,
+                } as ArtifactNotification])
               }
             } else if (evt.type === "done") {
               const finalMsg: Message = {
@@ -984,8 +1062,10 @@ export default function ChatPage() {
           allMessages={allMessages}
           calendarSuggestions={calendarSuggestions}
           taskSuggestions={taskSuggestions}
+          artifactNotifications={artifactNotifications}
           setCalendarSuggestions={setCalendarSuggestions}
           setTaskSuggestions={setTaskSuggestions}
+          setArtifactNotifications={setArtifactNotifications}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
         />
