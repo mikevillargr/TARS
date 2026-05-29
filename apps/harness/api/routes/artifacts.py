@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.auth import require_auth
 from db.session import get_db
 from db.models import Artifact
+from ingest.pipeline import ingest_file
 
 router = APIRouter()
 
@@ -187,3 +188,44 @@ async def delete_artifact(
         raise HTTPException(status_code=404, detail="Artifact not found")
     await db.execute(delete(Artifact).where(Artifact.id == artifact_id))
     await db.commit()
+
+
+@router.post("/ingest", response_model=ArtifactDetailOut, status_code=201)
+async def ingest_artifact(
+    file: UploadFile = File(...),
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Upload any file and have it parsed into an Artifact.
+    Supports: PDF, DOCX, PPTX, XLSX/XLS, images (via Claude Vision),
+    and all text/code/data formats.
+    """
+    content_bytes = await file.read()
+    filename = file.filename or "upload"
+    mime_type = file.content_type or ""
+
+    if not content_bytes:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    # Parse file content
+    result = await ingest_file(
+        content_bytes=content_bytes,
+        filename=filename,
+        mime_type=mime_type or None,
+    )
+
+    artifact = Artifact(
+        user_id=user_id,
+        filename=filename,
+        type=result["artifact_type"],
+        source="upload",
+        content=result["content"],
+        version=1,
+        size_bytes=len(result["content"].encode("utf-8")),
+        tags=[],
+    )
+    db.add(artifact)
+    await db.commit()
+    await db.refresh(artifact)
+    return artifact

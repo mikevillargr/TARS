@@ -295,6 +295,32 @@ function SecondBrainLoader({ onLoad }: { onLoad: (msg: string) => void }) {
   return null
 }
 
+// ─── Artifact loader — handles ?artifact=<id> from file upload ────
+function ArtifactLoader({ onLoad }: { onLoad: (msg: string) => void }) {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    const artifactId = searchParams.get("artifact")
+    if (!artifactId) return
+    apiGet<{ filename: string; content: string | null; type: string }>(`/artifacts/${artifactId}`)
+      .then((artifact) => {
+        const name = artifact.filename ?? "uploaded file"
+        const content = artifact.content ?? ""
+        // Truncate very large files to keep message manageable
+        const MAX_CHARS = 12000
+        const truncated = content.length > MAX_CHARS
+          ? content.slice(0, MAX_CHARS) + `\n\n[… content truncated — ${content.length.toLocaleString()} total chars]`
+          : content
+        const msg = truncated
+          ? `I just uploaded "${name}". Here's the extracted content:\n\n---\n${truncated}\n---\n\nPlease summarize this and tell me the key points.`
+          : `I just uploaded "${name}" but no text content could be extracted. What can you tell me about it?`
+        onLoad(msg)
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return null
+}
+
 // ─── Page ─────────────────────────────────────────────────────────
 const TARS_QUOTES = [
   "I have a cue light I can use to show you when I'm joking, if you like.",
@@ -642,6 +668,7 @@ export default function ChatPage() {
     <div className="flex h-full overflow-hidden">
       <Suspense fallback={null}>
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
+        <ArtifactLoader onLoad={(msg) => setInputValue(msg)} />
       </Suspense>
 
       {/* ── Mobile conversation drawer ────────────────────────── */}

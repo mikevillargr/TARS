@@ -1,9 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { X, Link as LinkIcon, FileText, Loader2, ChevronDown } from "lucide-react"
+import { useState, useRef, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import {
+  X, Link as LinkIcon, FileText, Loader2, ChevronDown,
+  Upload, Camera, File as FileIcon,
+} from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { apiPost } from "@/lib/api-client"
+import { apiPost, apiUpload } from "@/lib/api-client"
 import { TiptapEditor } from "./TiptapEditor"
 
 interface KnowledgeItem {
@@ -20,59 +24,133 @@ interface KnowledgeItem {
   saved_at: string
 }
 
+interface ArtifactResult {
+  id: string
+  filename: string
+  type: string
+  source: string
+  size_bytes: number
+  created_at: string
+}
+
 export interface CaptureModalProps {
   open: boolean
   onClose: () => void
-  onSaved: (item: KnowledgeItem) => void
-  defaultTab?: "url" | "document"
+  onSaved?: (item: KnowledgeItem) => void
+  defaultTab?: "url" | "document" | "file"
 }
 
 const DOMAINS = ["work", "personal", "cycling", "client", "health"]
 
+const ACCEPTED_TYPES = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "application/msword",
+  "image/jpeg", "image/png", "image/webp", "image/gif",
+  "text/*",
+].join(",")
+
+const ACCEPT_ALL =
+  ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx," +
+  ".jpg,.jpeg,.png,.webp,.gif,.heic," +
+  ".txt,.md,.csv,.json,.jsonl,.yaml,.yml,.toml," +
+  ".py,.ts,.tsx,.js,.jsx,.go,.rs,.java,.rb,.sh,.sql,.css,.html,.xml"
+
+function formatBytes(n: number) {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }: CaptureModalProps) {
-  const [tab, setTab] = useState<"url" | "document">(defaultTab)
+  const router = useRouter()
+  const [tab, setTab] = useState<"url" | "document" | "file">(defaultTab)
+
   // URL tab
   const [captureUrl, setCaptureUrl] = useState("")
   // Document tab
   const [docTitle, setDocTitle] = useState("")
   const [docMarkdown, setDocMarkdown] = useState("")
+  // File tab
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+
   // Shared metadata
   const [captureNote, setCaptureNote] = useState("")
   const [captureTags, setCaptureTags] = useState("")
   const [captureDomain, setCaptureDomain] = useState("work")
   const [showMeta, setShowMeta] = useState(false)
+
   // State
   const [ingesting, setIngesting] = useState(false)
   const [ingestError, setIngestError] = useState("")
 
-  const canSave = tab === "url"
-    ? captureUrl.trim().length > 0
-    : docTitle.trim().length > 0 && docMarkdown.trim().length > 0
+  const canSave =
+    tab === "url"
+      ? captureUrl.trim().length > 0
+      : tab === "document"
+      ? docTitle.trim().length > 0 && docMarkdown.trim().length > 0
+      : selectedFile !== null
+
+  const handleFileSelect = useCallback((file: File) => {
+    setSelectedFile(file)
+    setIngestError("")
+  }, [])
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }, [])
+
+  const onDragLeave = useCallback(() => setDragOver(false), [])
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFileSelect(file)
+  }, [handleFileSelect])
 
   async function handleSave() {
     setIngestError("")
     setIngesting(true)
     try {
-      const tags = captureTags.split(",").map(t => t.trim()).filter(Boolean)
-      let item: KnowledgeItem
       if (tab === "url") {
-        item = await apiPost<KnowledgeItem>("/second-brain/ingest/url", {
+        const tags = captureTags.split(",").map(t => t.trim()).filter(Boolean)
+        const item = await apiPost<KnowledgeItem>("/second-brain/ingest/url", {
           url: captureUrl.trim(),
           personal_note: captureNote,
           tags,
           domain: captureDomain,
         })
-      } else {
-        item = await apiPost<KnowledgeItem>("/second-brain/ingest/document", {
+        onSaved?.(item)
+        handleClose()
+
+      } else if (tab === "document") {
+        const tags = captureTags.split(",").map(t => t.trim()).filter(Boolean)
+        const item = await apiPost<KnowledgeItem>("/second-brain/ingest/document", {
           content: docMarkdown,
           title: docTitle.trim(),
           personal_note: captureNote,
           tags,
           domain: captureDomain,
         })
+        onSaved?.(item)
+        handleClose()
+
+      } else if (tab === "file" && selectedFile) {
+        const formData = new FormData()
+        formData.append("file", selectedFile)
+        const artifact = await apiUpload<ArtifactResult>("/artifacts/ingest", formData)
+        handleClose()
+        // Navigate to a new chat with the artifact as context
+        router.push(`/chat?artifact=${artifact.id}`)
       }
-      onSaved(item)
-      handleClose()
     } catch (e: unknown) {
       setIngestError(e instanceof Error ? e.message : "Failed to save")
     } finally {
@@ -81,13 +159,18 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
   }
 
   function handleClose() {
-    // Reset state
     setCaptureUrl(""); setDocTitle(""); setDocMarkdown("")
     setCaptureNote(""); setCaptureTags(""); setCaptureDomain("work")
     setShowMeta(false); setIngestError("")
+    setSelectedFile(null); setDragOver(false)
     setTab(defaultTab)
     onClose()
   }
+
+  const saveLabel =
+    tab === "url" ? "Scrape & Save" :
+    tab === "document" ? "Save Document" :
+    "Process File"
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose() }}>
@@ -104,6 +187,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               {([
                 { id: "url", label: "URL", icon: LinkIcon },
                 { id: "document", label: "Document", icon: FileText },
+                { id: "file", label: "File", icon: Upload },
               ] as const).map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
@@ -129,7 +213,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
           </button>
         </div>
 
-        {/* Body — scrollable for URL tab, flex-1 for Document tab */}
+        {/* Body */}
         {tab === "url" ? (
           <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
             <div>
@@ -153,7 +237,8 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               show={showMeta} onToggle={() => setShowMeta(p => !p)}
             />
           </div>
-        ) : (
+
+        ) : tab === "document" ? (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
             {/* Title */}
             <div className="px-5 pt-4 pb-2 shrink-0">
@@ -187,6 +272,126 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               />
             </div>
           </div>
+
+        ) : (
+          /* File tab */
+          <div className="flex-1 flex flex-col px-5 py-5 gap-4 overflow-y-auto">
+            {selectedFile ? (
+              /* File selected — show preview card */
+              <div
+                className="flex items-start gap-4 rounded-xl p-4 border"
+                style={{ background: "#f6f3ec", borderColor: "#d8d2c4" }}
+              >
+                <div
+                  className="flex items-center justify-center w-12 h-12 rounded-lg shrink-0"
+                  style={{ background: "#e3ede9" }}
+                >
+                  <FileIcon size={22} style={{ color: "#2d5a4f" }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate" style={{ color: "#1a1714" }}>
+                    {selectedFile.name}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: "#948a7b" }}>
+                    {formatBytes(selectedFile.size)} · {selectedFile.type || "unknown type"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedFile(null)}
+                  className="p-1 rounded-md"
+                  style={{ color: "#948a7b" }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              /* Drop zone */
+              <div
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onDrop={onDrop}
+                className="flex-1 flex flex-col items-center justify-center rounded-xl border-2 border-dashed gap-4 cursor-pointer min-h-[220px] transition-colors"
+                style={{
+                  borderColor: dragOver ? "#2d5a4f" : "#d8d2c4",
+                  background: dragOver ? "#e3ede9" : "#faf8f4",
+                }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div
+                  className="w-14 h-14 rounded-full flex items-center justify-center"
+                  style={{ background: dragOver ? "#2d5a4f" : "#e8e2d4" }}
+                >
+                  <Upload size={24} style={{ color: dragOver ? "#fff" : "#948a7b" }} />
+                </div>
+                <div className="text-center">
+                  <p className="font-medium text-sm" style={{ color: "#1a1714" }}>
+                    Drop a file here, or click to browse
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: "#948a7b" }}>
+                    PDF, DOCX, PPTX, XLSX, images, code files, and more
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition-colors"
+                style={{ borderColor: "#d8d2c4", color: "#1a1714", background: "#fff" }}
+              >
+                <FileIcon size={15} />
+                Browse Files
+              </button>
+              <button
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition-colors"
+                style={{ borderColor: "#d8d2c4", color: "#1a1714", background: "#fff" }}
+              >
+                <Camera size={15} />
+                Take Photo
+              </button>
+            </div>
+
+            {/* What happens next */}
+            {!selectedFile && (
+              <div
+                className="rounded-lg px-4 py-3 text-xs"
+                style={{ background: "#e3ede9", color: "#2d5a4f" }}
+              >
+                <p className="font-medium mb-0.5">After uploading</p>
+                <p style={{ color: "#3d7a6f" }}>
+                  TARS will extract the content and open a new chat so you can ask questions, get summaries, or take action on it.
+                </p>
+              </div>
+            )}
+
+            {/* Hidden inputs */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPT_ALL}
+              className="sr-only"
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (f) handleFileSelect(f)
+                e.target.value = ""
+              }}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="sr-only"
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (f) handleFileSelect(f)
+                e.target.value = ""
+              }}
+            />
+          </div>
         )}
 
         {/* Footer */}
@@ -197,6 +402,11 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
           <div>
             {ingestError && (
               <p className="text-xs" style={{ color: "#a04848" }}>{ingestError}</p>
+            )}
+            {tab === "file" && ingesting && (
+              <p className="text-xs" style={{ color: "#948a7b" }}>
+                Processing file — this may take a moment…
+              </p>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -212,7 +422,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               }}
             >
               {ingesting ? <Loader2 size={13} className="animate-spin" /> : null}
-              {tab === "url" ? "Scrape & Save" : "Save Document"}
+              {saveLabel}
             </button>
           </div>
         </div>

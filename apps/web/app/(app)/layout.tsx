@@ -7,6 +7,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
+import { CaptureModal } from "@/components/second-brain/CaptureModal"
 
 // Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
 function BottomTabBar() {
@@ -73,6 +74,7 @@ function BottomTabBar() {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [agentActive] = useState(true)
+  const [captureOpen, setCaptureOpen] = useState(false)
 
   return (
     <SidebarProvider>
@@ -129,6 +131,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </button>
 
             <button
+              onClick={() => setCaptureOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
               style={{ backgroundColor: "#1a1714", color: "#fbfaf6" }}
             >
@@ -147,6 +150,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Global selection toolbar — fires on [data-selectable] regions across all pages */}
       <SelectionToolbar />
+
+      {/* Global Capture modal */}
+      <CaptureModal
+        open={captureOpen}
+        onClose={() => setCaptureOpen(false)}
+        defaultTab="file"
+      />
     </SidebarProvider>
   )
 }
