@@ -56,7 +56,7 @@ export function MessageThread({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
       <div className="max-w-3xl mx-auto space-y-6">
         {all.map((msg, i) => (
           <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
@@ -72,10 +72,10 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
   const isStreaming = "streaming" in msg
 
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex min-w-0", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[80%] rounded-2xl px-4 py-3 text-sm",
+          "min-w-0 max-w-[80%] rounded-2xl px-4 py-3 text-sm overflow-hidden",
           isUser
             ? "bg-primary text-primary-foreground rounded-br-sm"
             : "bg-muted text-foreground rounded-bl-sm"

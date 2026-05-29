@@ -133,7 +133,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   }, [code, language])
 
   return (
-    <div className="my-3 rounded-xl overflow-hidden" style={{ border: "1px solid #2a2a2a" }}>
+    <div className="my-3 rounded-xl overflow-hidden max-w-full" style={{ border: "1px solid #2a2a2a" }}>
       {/* Header bar */}
       <div
         className="flex items-center justify-between px-3 py-1.5"
@@ -176,8 +176,8 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
           lineHeight: "1.5",
           padding: "1rem",
           background: "#1a1a1a",
+          overflowX: "auto",
         }}
-        wrapLongLines
       >
         {code}
       </SyntaxHighlighter>
@@ -202,7 +202,7 @@ export function MessageContent({ content }: { content: string }) {
   const urls = extractUrls(content)
 
   return (
-    <div className="message-content space-y-0.5" data-selectable>
+    <div className="message-content space-y-0.5 min-w-0 max-w-full" data-selectable>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
