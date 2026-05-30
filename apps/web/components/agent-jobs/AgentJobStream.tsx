@@ -69,6 +69,8 @@ interface Props {
   harnessUrl?: string
   /** Called when an approval_required / release_approval / question event fires */
   onApprovalNeeded?: () => void
+  /** Inline mode: no fixed height, receipt zone scrolls within max-h. Used for embedding in chat. */
+  inline?: boolean
 }
 
 function resolveHarnessUrl(override?: string): string {
@@ -81,7 +83,7 @@ function resolveHarnessUrl(override?: string): string {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onApprovalNeeded }: Props) {
+export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onApprovalNeeded, inline = false }: Props) {
   const harnessUrl = resolveHarnessUrl(harnessUrlProp)
 
   const [stream, setStream] = useState<StreamState>({
@@ -271,7 +273,7 @@ export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onAp
   const hasContent = stream.toolReceipts.length > 0 || stream.outputText || stream.history.length > 0 || stream.terminal
 
   return (
-    <div className="flex flex-col h-full" style={{ backgroundColor: "var(--c-surface)" }}>
+    <div className={`flex flex-col ${inline ? "" : "h-full"}`} style={{ backgroundColor: "var(--c-surface)" }}>
 
       {/* ── Ephemeral thought zone ── */}
       {isRunning && (
@@ -286,7 +288,7 @@ export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onAp
       )}
 
       {/* ── Receipt + output zone ── */}
-      <div className="flex-1 overflow-y-auto">
+      <div className={inline ? "overflow-y-auto" : "flex-1 overflow-y-auto"} style={inline ? { maxHeight: "16rem" } : undefined}>
 
         {!hasContent && (
           <div className="flex items-center justify-center h-full">
