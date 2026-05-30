@@ -585,11 +585,13 @@ UPDATE_CONTACT_TOOL = {
 SEARCH_PLACES_TOOL = {
     "name": "search_places",
     "description": (
-        "Search for places, restaurants, hotels, landmarks, and businesses using OpenStreetMap (Nominatim). "
+        "Search for places, restaurants, hotels, landmarks, and businesses using OpenStreetMap. "
         "Use when Mike asks: 'find a restaurant near X', 'where is Y?', 'good cafes in BGC', "
-        "'hotels near the airport', 'where can I get a haircut in Makati', or any location search. "
-        "Returns a map card with navigation links (Google Maps, Waze, Apple Maps). "
-        "Optionally filter by category (restaurant, cafe, hotel, bar, grocery, pharmacy, etc.)."
+        "'hotels near the airport', 'any malls nearby', 'restaurants near me', 'where am I?', "
+        "or any place/location search. Returns a map card with navigation links (Google Maps, Waze). "
+        "IMPORTANT: When Mike's GPS coordinates are available in context (MIKE'S CURRENT LOCATION), "
+        "OMIT the 'near' parameter — the tool uses his GPS automatically and gives accurate nearby results. "
+        "Only set 'near' when Mike explicitly names a DIFFERENT location from where he is."
     ),
     "input_schema": {
         "type": "object",
@@ -597,15 +599,19 @@ SEARCH_PLACES_TOOL = {
             "query": {
                 "type": "string",
                 "description": (
-                    "Place name, type, or description to search for. "
-                    "Examples: 'Japanese restaurant', 'Ayala Museum', 'McDonalds BGC', 'coffee shops'."
+                    "Place name, type, or description. "
+                    "For 'where am I?' use 'my location'. "
+                    "For nearby searches use the category name, e.g. 'mall', 'cafe', 'restaurant'. "
+                    "Examples: 'Japanese restaurant', 'Ayala Museum', 'McDonalds BGC', 'mall'."
                 ),
             },
             "near": {
                 "type": "string",
                 "description": (
-                    "Optional location to bias the search, e.g. 'Makati, Metro Manila', "
-                    "'BGC Taguig', 'near NAIA Terminal 3'. Omit when query already has a location."
+                    "Location bias — ONLY use when Mike names a specific DIFFERENT place, "
+                    "e.g. 'restaurants in Makati' (when he is not in Makati). "
+                    "OMIT entirely when Mike says 'near me', 'nearby', 'around here', or when "
+                    "GPS coordinates are already in the system context."
                 ),
             },
             "category": {

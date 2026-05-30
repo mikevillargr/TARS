@@ -123,13 +123,18 @@ PROACTIVE CONTACT BEHAVIOR:
 
 PLACES:
 Your places system uses OpenStreetMap (Nominatim + Overpass) — free, no API key, worldwide coverage.
-Results render as map cards with OSM tile thumbnails and navigation deep links (Google Maps, Waze, Apple Maps).
+Results render as map cards with OSM tile thumbnails and navigation deep links (Google Maps, Waze).
 
 • search_places — find restaurants, hotels, landmarks, businesses, etc.
-  Use for: "find a Japanese restaurant in BGC", "where is Ayala Museum?", "good coffee shops near Makati",
-  "hotels near NAIA", "nearest pharmacy", "parking near SM Mall of Asia".
-  — query: place name, type, or description
-  — near: optional location bias e.g. "Makati CBD", "BGC Taguig"
+  Trigger phrases:
+  — Named search: "find a Japanese restaurant in BGC", "where is Ayala Museum?", "parking near NAIA"
+  — Nearby (GPS): "any malls nearby", "cafes near me", "what's around here?", "nearest pharmacy",
+    "restaurants near me", "any X near me / around here / in the area" — set category, OMIT near param
+  — Location reveal: "where am I?", "what's my location?", "where are we?" — call this tool so a
+    map card renders; also summarise the [MIKE'S CURRENT LOCATION] section in your text reply
+  — query: place name, type, or description (required — use category name if no other text)
+  — near: OMIT when Mike's GPS coordinates are in context (tool uses them automatically).
+    Only provide near when Mike explicitly names a different place: "restaurants in Makati" (≠ current loc)
   — category: restaurant, cafe, bar, hotel, grocery, pharmacy, hospital, bank, atm, gas_station,
     parking, gym, park, museum, mall, cinema, spa, salon, dentist, school, church
   Results render as map cards with navigation chips — keep your text reply brief (1-2 sentences).
@@ -470,11 +475,32 @@ async def assemble(
             if len(results) > 5 and isinstance(results[5], str):
                 contacts_section = results[5]
 
-    location_section = (
-        f"Location: {user_lat:.5f}, {user_lng:.5f} (use for place searches when no location specified)\n"
-        if user_lat is not None and user_lng is not None
-        else ""
-    )
+    # Build location section — reverse-geocode to human-readable when possible
+    location_section = ""
+    if user_lat is not None and user_lng is not None:
+        human_location = ""
+        try:
+            from connectors.places import PlacesClient as _PC
+            import asyncio as _asyncio
+            loop = _asyncio.get_event_loop()
+            geo = await loop.run_in_executor(
+                None, lambda: _PC().reverse_geocode(user_lat, user_lng)
+            )
+            if geo:
+                addr = geo.get("address") or geo.get("display_name", "")
+                human_location = f" — {addr}" if addr else ""
+        except Exception:
+            pass
+
+        location_section = (
+            f"[MIKE'S CURRENT LOCATION]\n"
+            f"GPS: {user_lat:.5f}, {user_lng:.5f}{human_location}\n"
+            f"• To answer 'where am I?' / 'what's my location?': call search_places so a map card renders. "
+            f"Also summarise the location above in plain text.\n"
+            f"• To answer 'any X nearby' / 'X near me' / 'X around here': call search_places with the "
+            f"matching category and OMIT the 'near' param — the tool auto-uses these GPS coordinates.\n"
+            f"• Never ask 'where are you?' — coordinates are already provided above.\n"
+        )
 
     return SYSTEM_TEMPLATE.format(
         capabilities_section=capabilities_section,

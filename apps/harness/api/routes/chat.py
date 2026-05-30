@@ -1422,7 +1422,22 @@ async def send_message(
                             client_p = PlacesClient()
                             loop = _asyncio.get_event_loop()
 
-                            if category and _user_lat is not None and _user_lng is not None and not near:
+                            # ── "Where am I?" / reverse-geocode intent ──────────
+                            _location_queries = {
+                                "my location", "current location", "where am i", "where are we",
+                                "my position", "here", "current position",
+                            }
+                            _is_location_query = query.lower().strip("?").strip() in _location_queries
+
+                            if _is_location_query and _user_lat is not None and _user_lng is not None:
+                                geo = await loop.run_in_executor(
+                                    None, lambda: client_p.reverse_geocode(_user_lat, _user_lng)
+                                )
+                                if geo:
+                                    results = [geo]
+                                else:
+                                    results = []
+                            elif category and _user_lat is not None and _user_lng is not None and not near:
                                 # We have exact coords — go straight to Overpass nearby search
                                 results = await loop.run_in_executor(
                                     None, lambda: client_p.search_nearby(_user_lat, _user_lng, category, limit=limit)
@@ -1438,6 +1453,11 @@ async def send_message(
                                     results = await loop.run_in_executor(
                                         None, lambda: client_p.search(f"{category} {effective_near}", limit=limit)
                                     )
+                            elif not category and _user_lat is not None and _user_lng is not None and not near:
+                                # No category, no named location, but have GPS — do nearby text search biased by coords
+                                results = await loop.run_in_executor(
+                                    None, lambda: client_p.search(query, near=user_coords_str, limit=limit)
+                                )
                             else:
                                 results = await loop.run_in_executor(
                                     None, lambda: client_p.search(query, near=effective_near, limit=limit)
