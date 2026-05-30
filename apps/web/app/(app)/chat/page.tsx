@@ -1211,20 +1211,7 @@ export default function ChatPage() {
     const content = inputValue.trim()
     if (busy || (!content && attachments.length === 0)) return
 
-    // If no active conversation, create one first
-    let chatId = activeChatId
-    if (!chatId) {
-      try {
-        const conv = await apiPost<Conversation>("/chat/conversations")
-        setConversations((prev) => [conv, ...prev])
-        setActiveChatId(conv.id)
-        chatId = conv.id
-      } catch (err) {
-        console.error(err)
-        return
-      }
-    }
-
+    // Show user message + loading state IMMEDIATELY — before async conversation creation
     stopInitiatedRef.current = false
     setBusy(true)
     setInputValue("")
@@ -1244,6 +1231,24 @@ export default function ChatPage() {
     }
     setMessages((prev) => [...prev, tempUser])
     setStreaming({ role: "assistant", content: "", streaming: true })
+
+    // Create conversation if needed (UI already shows loading state)
+    let chatId = activeChatId
+    if (!chatId) {
+      try {
+        const conv = await apiPost<Conversation>("/chat/conversations")
+        setConversations((prev) => [conv, ...prev])
+        setActiveChatId(conv.id)
+        chatId = conv.id
+      } catch (err) {
+        console.error(err)
+        // Rollback UI state on failure
+        setBusy(false)
+        setStreaming(null)
+        setMessages((prev) => prev.filter((m) => m.id !== tempUser.id))
+        return
+      }
+    }
 
     try {
       // Grab location at send time — high-accuracy, races with 2 s timeout
