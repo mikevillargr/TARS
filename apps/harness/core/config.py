@@ -56,6 +56,8 @@ class Settings(BaseSettings):
 
     claude_code_path: str = "/usr/local/bin/claude"
     repos_base_path: str = "/home/tars/repos"
+    # Path to the TARS repo root — differs between local dev and VPS
+    tars_repo_path: str = "/opt/tars"
 
 
 settings = Settings()

@@ -21,9 +21,11 @@ import re
 import subprocess
 from typing import AsyncGenerator, Optional
 
+from core.config import settings
+
 log = logging.getLogger(__name__)
 
-TARS_REPO = "/Users/mike/Documents/TARS"
+TARS_REPO = settings.tars_repo_path
 
 # Patterns in bash commands that require explicit human approval
 _DESTRUCTIVE_PATTERNS = [

@@ -24,7 +24,7 @@ from core.config import settings
 
 log = logging.getLogger(__name__)
 
-TARS_REPO = "/Users/mike/Documents/TARS"
+TARS_REPO = settings.tars_repo_path
 
 DEFAULT_MODELS: dict[str, str] = {
     "evolutionarist": "claude-sonnet-4-6",

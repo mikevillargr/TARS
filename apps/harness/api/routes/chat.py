@@ -1610,12 +1610,13 @@ async def send_message(
                             from db.models import AgentJob
                             agent_type = tool_input.get("agent_type", "evolutionarist")
                             instruction = tool_input.get("instruction", "")
+                            from core.config import settings as _settings
                             job = AgentJob(
                                 user_id=user_id,
                                 agent_type=agent_type,
                                 type="agent",
                                 instruction=instruction,
-                                repo_path="/Users/mike/Documents/TARS",
+                                repo_path=_settings.tars_repo_path,
                                 branch="dev",
                                 status="pending",
                                 conversation_id=conversation_id,
