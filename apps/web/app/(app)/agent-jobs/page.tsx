@@ -1,8 +1,6 @@
 "use client"
 
-export const dynamic = "force-dynamic"
-
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Cpu, ChevronRight, Plus, X, CheckCircle, XCircle, Loader2, AlertCircle, ExternalLink } from "lucide-react"
 import AgentJobStream from "@/components/agent-jobs/AgentJobStream"
@@ -99,6 +97,14 @@ const AGENT_TYPES = [
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function AgentJobsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AgentJobsPageInner />
+    </Suspense>
+  )
+}
+
+function AgentJobsPageInner() {
   const searchParams = useSearchParams()
   const autoSelectId = searchParams.get("id")
   const didAutoSelect = useRef(false)
