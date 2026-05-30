@@ -9,6 +9,6 @@ export const navItems = [
   { label: "Email Digest", href: "/email-digest", icon: "Mail" },
   { label: "Cron Manager", href: "/cron", icon: "Clock" },
   { label: "Connectors", href: "/connectors", icon: "Plug" },
-  { label: "Memory Browser", href: "/memory", icon: "Database" },
+  { label: "Mnemon", href: "/memory", icon: "Database" },
   { label: "Settings", href: "/settings", icon: "Settings" },
 ] as const
