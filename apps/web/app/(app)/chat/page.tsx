@@ -469,97 +469,34 @@ interface PlaceResultSet {
   places: PlaceResult[]
 }
 
-/** Convert lat/lng to OSM tile coordinates at a given zoom level. */
-function latLngToTile(lat: number, lng: number, z: number) {
-  const n = Math.pow(2, z)
-  const tileX = Math.floor((lng + 180) / 360 * n)
-  const latRad = lat * Math.PI / 180
-  const mercY = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2
-  const tileY = Math.floor(mercY * n)
-  const pixX  = ((lng + 180) / 360 * n - tileX) * 256
-  const pixY  = (mercY * n - tileY) * 256
-  return { tileX, tileY, pixX, pixY }
-}
+import dynamic from "next/dynamic"
 
-const NAV_ACTIONS = [
+const PlaceMap = dynamic(
+  () => import("@/components/chat/PlaceMap"),
   {
-    label: "Google Maps",
-    color: "#4285F4",
-    url: (lat: number, lng: number) =>
-      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
-  },
-  {
-    label: "Waze",
-    color: "#33CCFF",
-    url: (lat: number, lng: number) =>
-      `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`,
-  },
-  {
-    label: "Apple Maps",
-    color: "#555",
-    url: (lat: number, lng: number, name: string) =>
-      `https://maps.apple.com/?q=${encodeURIComponent(name)}&ll=${lat},${lng}`,
-  },
-]
+    ssr: false,
+    loading: () => (
+      <div className="w-full animate-pulse rounded-t-xl" style={{ height: 200, backgroundColor: "#e8e0d0" }} />
+    ),
+  }
+)
 
-const ZOOM = 15
-const MAP_W = 260
-const MAP_H = 110
-
-function PlaceMapThumbnail({ lat, lng }: { lat: number; lng: number }) {
-  const { tileX, tileY, pixX, pixY } = latLngToTile(lat, lng, ZOOM)
-  const tileUrl = `https://tile.openstreetmap.org/${ZOOM}/${tileX}/${tileY}.png`
-
-  // Centre the map on the point
-  const bgX = Math.round(MAP_W / 2 - pixX)
-  const bgY = Math.round(MAP_H / 2 - pixY)
-
-  return (
-    <div
-      className="relative rounded-lg overflow-hidden shrink-0"
-      style={{
-        width: MAP_W,
-        height: MAP_H,
-        backgroundImage: `url(${tileUrl})`,
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: `${bgX}px ${bgY}px`,
-        backgroundColor: "#e8e0d0",
-      }}
-    >
-      {/* Pin */}
-      <div
-        className="absolute"
-        style={{ left: "50%", top: "50%", transform: "translate(-50%, -100%)" }}
-      >
-        <div
-          className="w-4 h-4 rounded-full border-2 border-white shadow-md"
-          style={{ backgroundColor: "var(--c-moss)" }}
-        />
-      </div>
-      {/* OSM attribution (required by tile usage policy) */}
-      <span
-        className="absolute bottom-0 right-0 text-[8px] px-0.5"
-        style={{ background: "rgba(255,255,255,0.7)", color: "#555" }}
-      >
-        © OpenStreetMap
-      </span>
-    </div>
-  )
+function osmUrl(p: PlaceResult) {
+  if (p.osm_type && p.osm_id) {
+    return `https://www.openstreetmap.org/${p.osm_type}/${p.osm_id}`
+  }
+  return `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=17/${p.lat}/${p.lng}`
 }
 
 function PlaceCard({
-  set, onDismiss, onAsk,
+  set, onDismiss,
 }: {
   set: PlaceResultSet
   onDismiss: () => void
-  onAsk: (q: string) => void
 }) {
-  const [savedIds, setSavedIds] = useState<Set<number>>(new Set())
-
   return (
-    <div className="flex flex-col gap-2 max-w-xl">
+    <div className="flex flex-col gap-3 w-full max-w-lg">
       {set.places.map((p, i) => {
-        const isSaved = p.is_saved || savedIds.has(i)
         const catLabel = p.category
           ? p.category.charAt(0).toUpperCase() + p.category.slice(1).replace(/_/g, " ")
           : null
@@ -567,90 +504,94 @@ function PlaceCard({
         return (
           <div
             key={i}
-            className="rounded-xl overflow-hidden"
+            className="rounded-xl overflow-hidden w-full"
             style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)" }}
           >
-            {/* Map thumbnail row */}
-            <div className="flex gap-0 overflow-hidden">
-              <PlaceMapThumbnail lat={p.lat} lng={p.lng} />
+            {/* Map — tapping opens Google Maps for full navigation experience */}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+              style={{ height: 200, position: "relative" }}
+            >
+              <PlaceMap lat={p.lat} lng={p.lng} />
+            </a>
 
-              {/* Info column */}
-              <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold text-sm leading-tight" style={{ color: "var(--c-ink)" }}>
-                      {p.name}
-                    </p>
-                    {i === 0 && (
-                      <button onClick={onDismiss} className="shrink-0" style={{ color: "var(--c-ink-faint)" }}>
-                        <X size={12} />
-                      </button>
-                    )}
-                  </div>
+            {/* Info */}
+            <div className="p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm leading-snug" style={{ color: "var(--c-ink)" }}>
+                    {p.name}
+                  </p>
                   {catLabel && (
                     <span
-                      className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                      className="inline-block mt-0.5 mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
                       style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
                     >
                       {catLabel}
                     </span>
                   )}
-                  {p.address && (
-                    <p className="mt-1 text-[11px] leading-snug" style={{ color: "var(--c-ink-muted)" }}>
-                      {p.address.length > 80 ? p.address.slice(0, 80) + "…" : p.address}
-                    </p>
-                  )}
-                  {p.notes && (
-                    <p className="mt-1 text-[11px] italic" style={{ color: "var(--c-ink-faint)" }}>
-                      {p.notes.slice(0, 100)}{p.notes.length > 100 ? "…" : ""}
-                    </p>
-                  )}
                 </div>
+                {i === 0 && (
+                  <button
+                    onClick={onDismiss}
+                    className="shrink-0 p-0.5 rounded"
+                    style={{ color: "var(--c-ink-faint)" }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
 
-                {/* Navigation chips */}
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {NAV_ACTIONS.map((nav) => (
-                    <a
-                      key={nav.label}
-                      href={nav.url(p.lat, p.lng, p.name)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-opacity hover:opacity-80"
-                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
-                    >
-                      <span
-                        className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
-                        style={{ backgroundColor: nav.color }}
-                      />
-                      {nav.label}
-                    </a>
-                  ))}
+              {p.address && (
+                <p className="mt-1.5 text-xs leading-snug" style={{ color: "var(--c-ink-muted)" }}>
+                  📍 {p.address.length > 120 ? p.address.slice(0, 120) + "…" : p.address}
+                </p>
+              )}
+              {p.notes && (
+                <p className="mt-1 text-[11px] italic" style={{ color: "var(--c-ink-faint)" }}>
+                  {p.notes.slice(0, 120)}{p.notes.length > 120 ? "…" : ""}
+                </p>
+              )}
 
-                  {/* Save chip */}
-                  {!isSaved && (
-                    <button
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-opacity hover:opacity-80"
-                      style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
-                      onClick={() => {
-                        setSavedIds(prev => new Set([...prev, i]))
-                        onAsk(
-                          `Save ${p.name}${p.address ? ` at ${p.address}` : ""} to my places` +
-                          (p.lat && p.lng ? ` (lat: ${p.lat}, lng: ${p.lng}${p.category ? `, category: ${p.category}` : ""}${p.osm_id ? `, osm_id: ${p.osm_id}, osm_type: ${p.osm_type}` : ""})` : "")
-                        )
-                      }}
-                    >
-                      + Save
-                    </button>
-                  )}
-                  {isSaved && (
-                    <span
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium"
-                      style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
-                    >
-                      ✓ Saved
-                    </span>
-                  )}
-                </div>
+              {/* Action row */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-85"
+                  style={{ backgroundColor: "#4285F4", color: "#fff" }}
+                >
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                  </svg>
+                  Google Maps
+                </a>
+                <a
+                  href={`https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-85"
+                  style={{ backgroundColor: "#05c8f7", color: "#1a1a1a" }}
+                >
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                    <path d="M20.54 6.63C19.35 4.43 17.28 2.8 14.82 2.2A9.01 9.01 0 0 0 3.46 9.93c-.22 1.8.12 3.57.93 5.13l-1.3 4.78 4.94-1.27c1.44.77 3.07 1.2 4.8 1.2 4.97 0 9-4.03 9-9 0-1.5-.37-2.92-1.29-4.14zm-8.7 13.87c-1.51 0-2.97-.4-4.24-1.12l-.3-.18-3.12.8.83-3.02-.2-.32A7.51 7.51 0 0 1 3.3 9.93a7.48 7.48 0 0 1 9.6-6.39 7.49 7.49 0 0 1 5.37 7.34c0 4.14-3.37 7.51-7.51 7.51z"/>
+                  </svg>
+                  Waze
+                </a>
+                <a
+                  href={osmUrl(p)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-medium transition-opacity hover:opacity-80"
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
+                >
+                  <ExternalLink size={11} />
+                  OSM
+                </a>
               </div>
             </div>
           </div>
@@ -898,7 +839,6 @@ const MessageArea = memo(function MessageArea({
               key={set.tool_use_id}
               set={set}
               onDismiss={() => setPlaceResults(prev => prev.filter(x => x.tool_use_id !== set.tool_use_id))}
-              onAsk={onAsk}
             />
           ))}
         </div>
@@ -956,23 +896,26 @@ export default function ChatPage() {
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
   const userLocationRef                             = useRef<{ lat: number; lng: number } | null>(null)
 
-  // ── Silent background geolocation ────────────────────────────────
-  // Request once on mount; watchPosition keeps it fresh without hammering GPS.
-  // maximumAge=300000 → browser may return a cached fix up to 5 min old (saves battery).
-  // timeout=10000     → give up after 10 s if no fix yet (desktop IP-geoloc is fast).
-  // No UI indicator — location is just context, not a user-facing feature.
-  useEffect(() => {
-    if (!navigator.geolocation) return
-    const opts: PositionOptions = { enableHighAccuracy: false, maximumAge: 300_000, timeout: 10_000 }
-    const onSuccess = (pos: GeolocationPosition) => {
-      userLocationRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-    }
-    // Immediate fix
-    navigator.geolocation.getCurrentPosition(onSuccess, () => {}, opts)
-    // Live updates (fires when position changes meaningfully)
-    const watchId = navigator.geolocation.watchPosition(onSuccess, () => {}, opts)
-    return () => navigator.geolocation.clearWatch(watchId)
-  }, [])
+  // ── Per-send geolocation helper ───────────────────────────────────
+  // Called at message send time — high-accuracy fix, cached for 60 s so consecutive
+  // sends feel instant. Races with a 2 s timeout so the send never blocks.
+  // No background GPS drain; no UI indicator.
+  function getLocationForSend(): Promise<{ lat: number; lng: number } | null> {
+    if (!navigator.geolocation) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(userLocationRef.current), 2_000)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(timer)
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+          userLocationRef.current = loc
+          resolve(loc)
+        },
+        () => { clearTimeout(timer); resolve(userLocationRef.current) },
+        { enableHighAccuracy: true, maximumAge: 60_000, timeout: 4_000 },
+      )
+    })
+  }
 
   // Pre-fill input when navigating from Second Brain "Open in Chat" — handled via SecondBrainLoader below
 
@@ -1229,15 +1172,18 @@ export default function ChatPage() {
     setStreaming({ role: "assistant", content: "", streaming: true })
 
     try {
+      // Grab location at send time — high-accuracy, races with 2 s timeout
+      const loc = await getLocationForSend()
+
       const fd = new FormData()
       fd.append("content", content)
       if (pendingArtifactIdRef.current) {
         fd.append("artifact_id", pendingArtifactIdRef.current)
         pendingArtifactIdRef.current = null
       }
-      if (userLocationRef.current) {
-        fd.append("location_lat", String(userLocationRef.current.lat))
-        fd.append("location_lng", String(userLocationRef.current.lng))
+      if (loc) {
+        fd.append("location_lat", String(loc.lat))
+        fd.append("location_lng", String(loc.lng))
       }
       for (const f of pendingAttachments) fd.append("files", f)
 
