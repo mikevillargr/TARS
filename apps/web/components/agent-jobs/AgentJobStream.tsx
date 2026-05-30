@@ -26,14 +26,26 @@ export type AgentEvent =
 
 interface Props {
   jobId: string
-  harnessUrl?: string  // default "http://localhost:8000"
+  /** Override harness base URL. Defaults to current window origin (prod) or
+   *  http://localhost:8000 when running on localhost. */
+  harnessUrl?: string
   /** Called when an approval_required / release_approval event fires */
   onApprovalNeeded?: () => void
 }
 
+/** Resolve harness base URL at runtime — works in both dev and prod. */
+function resolveHarnessUrl(override?: string): string {
+  if (override) return override
+  if (typeof window === "undefined") return "http://localhost:8000"
+  return window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : window.location.origin
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export default function AgentJobStream({ jobId, harnessUrl = "http://localhost:8000", onApprovalNeeded }: Props) {
+export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onApprovalNeeded }: Props) {
+  const harnessUrl = resolveHarnessUrl(harnessUrlProp)
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [connected, setConnected] = useState(false)
   const [pendingApproval, setPendingApproval] = useState<AgentEvent | null>(null)
