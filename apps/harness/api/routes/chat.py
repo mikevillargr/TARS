@@ -800,6 +800,7 @@ async def send_message(
                                     "job_title": c.job_title,
                                     "tars_context": c.tars_context,
                                     "source": "local",
+                                    "is_other_contact": c.is_other_contact,
                                 })
                             if cards:
                                 await queue.put(sse_event({

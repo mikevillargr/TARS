@@ -8,7 +8,8 @@ import {
   Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
-  Mail, Phone, BriefcaseBusiness, MessageSquare, Search, UserPlus,
+  Mail, Phone, PhoneCall, BriefcaseBusiness, MessageSquare, Search, UserPlus,
+  Copy, Check,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
@@ -256,6 +257,7 @@ interface ContactResult {
   job_title: string | null
   tars_context: string | null
   source: "local" | "google_live"
+  is_other_contact?: boolean
 }
 
 interface ContactResultSet {
@@ -264,17 +266,21 @@ interface ContactResultSet {
 }
 
 function ContactActionChip({
-  icon: Icon, label, href, onClick,
+  icon: Icon, label, href, onClick, accent,
 }: {
   icon: React.ElementType; label: string
-  href?: string; onClick?: () => void
+  href?: string; onClick?: () => void; accent?: boolean
 }) {
   const cls = "inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
-  const style = { backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }
-  const hoverStyle = { backgroundColor: "var(--c-surface-3)", color: "var(--c-ink)" }
+  const style = accent
+    ? { backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }
+    : { backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }
+  const hoverStyle = accent
+    ? { backgroundColor: "color-mix(in srgb, var(--c-moss) 20%, transparent)", color: "var(--c-moss)" }
+    : { backgroundColor: "var(--c-surface-3)", color: "var(--c-ink)" }
   if (href) {
     return (
-      <a href={href} target={href.startsWith("mailto") || href.startsWith("tel") ? undefined : "_self"}
+      <a href={href} target={href.startsWith("mailto:") || href.startsWith("tel:") ? undefined : "_self"}
         className={cls} style={style}
         onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, hoverStyle)}
         onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, style)}
@@ -290,6 +296,24 @@ function ContactActionChip({
     >
       <Icon size={10} />{label}
     </button>
+  )
+}
+
+function CopyChip({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard blocked — silently ignore */ }
+  }
+  return (
+    <ContactActionChip
+      icon={copied ? Check : Copy}
+      label={copied ? "Copied" : label}
+      onClick={handleCopy}
+    />
   )
 }
 
@@ -364,12 +388,26 @@ function ContactCard({ set, onDismiss, onAsk }: {
 
             {/* Action chips */}
             <div className="flex flex-wrap gap-1.5 pl-12">
+              {/* Email chips */}
               {c.primary_email && (
-                <ContactActionChip icon={Mail} label="Email" href={`mailto:${c.primary_email}`} />
+                <>
+                  <ContactActionChip icon={Mail} label="Email" href={`mailto:${c.primary_email}`} />
+                  <CopyChip value={c.primary_email} label="Copy email" />
+                </>
               )}
+
+              {/* Phone chips */}
+              {c.primary_phone && (
+                <>
+                  <ContactActionChip icon={PhoneCall} label="Call" href={`tel:${c.primary_phone}`} />
+                  <CopyChip value={c.primary_phone} label="Copy number" />
+                </>
+              )}
+
+              {/* TARS actions */}
               <ContactActionChip
                 icon={Calendar}
-                label="Schedule meeting"
+                label="Schedule"
                 onClick={() => onAsk(`Schedule a meeting with ${name}`)}
               />
               <ContactActionChip
@@ -389,11 +427,18 @@ function ContactCard({ set, onDismiss, onAsk }: {
                 label="Meeting history"
                 onClick={() => onAsk(`What meetings have I had with ${name}?`)}
               />
-              {c.source === "google_live" && c.primary_email && (
+
+              {/* Add to contacts — for live search results and unsaved other-contacts */}
+              {(c.source === "google_live" || c.is_other_contact) && (
                 <ContactActionChip
                   icon={UserPlus}
                   label="Add to contacts"
-                  onClick={() => onAsk(`Add ${name} (${c.primary_email}) to my Google Contacts`)}
+                  accent
+                  onClick={() => onAsk(
+                    c.primary_email
+                      ? `Add ${name} (${c.primary_email}) to my Google Contacts`
+                      : `Add ${name} to my Google Contacts`
+                  )}
                 />
               )}
             </div>
