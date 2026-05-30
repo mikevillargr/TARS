@@ -167,10 +167,11 @@ export default function ConnectorsPage() {
 
   // ── Actions ────────────────────────────────────────────────────────────────
   function startConnect(c: Connector) {
-    // Browser navigation — the proxy forwards the 302 from harness back to Google.
+    // Direct to harness — bypasses the Next.js proxy since OAuth redirects don't
+    // need auth token injection. Nginx routes /api/ straight to port 8000.
     // After consent, Google redirects to /api/connectors/oauth/callback/{id}
     // which lands the user back at /connectors?connected={id}.
-    window.location.href = `/api/proxy/connectors/oauth/authorize/${c.id}`
+    window.location.href = `/api/connectors/oauth/authorize/${c.id}`
   }
 
   async function disconnect(c: Connector) {
