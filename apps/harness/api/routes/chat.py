@@ -664,28 +664,59 @@ async def send_message(
 
                     if name in ("lookup_contact", "search_contacts"):
                         try:
-                            from sqlalchemy import select as _select, or_ as _or
+                            from sqlalchemy import select as _select, or_ as _or, func as _func
                             from db.models import Contact, Connector
                             query = (tool_input.get("query") or "").strip()
-                            if not query:
-                                return "Empty query."
-                            needle = f"%{query}%"
-                            limit  = int(tool_input.get("limit", 10)) if name == "search_contacts" else 5
+                            limit  = int(tool_input.get("limit", 25)) if name == "search_contacts" else 5
+                            offset = int(tool_input.get("offset", 0))
 
-                            stmt = (
-                                _select(Contact)
-                                .where(
-                                    Contact.user_id == user_id,
-                                    _or(
-                                        Contact.display_name.ilike(needle),
-                                        Contact.primary_email.ilike(needle),
-                                        Contact.organization.ilike(needle),
-                                    ),
-                                )
-                                .limit(limit)
+                            # Total unique contacts (by email) the user has
+                            total_stmt = (
+                                _select(_func.count(_func.distinct(Contact.primary_email)))
+                                .where(Contact.user_id == user_id)
                             )
+                            total_result = await bg_db.execute(total_stmt)
+                            total_unique = total_result.scalar_one() or 0
+
+                            if query:
+                                needle = f"%{query}%"
+                                filter_clause = _or(
+                                    Contact.display_name.ilike(needle),
+                                    Contact.primary_email.ilike(needle),
+                                    Contact.organization.ilike(needle),
+                                )
+                                stmt = (
+                                    _select(Contact)
+                                    .where(Contact.user_id == user_id, filter_clause)
+                                    .order_by(Contact.is_other_contact, Contact.display_name)
+                                    .offset(offset)
+                                    .limit(limit * 4)  # over-fetch to allow email dedup
+                                )
+                            else:
+                                # Browse mode — no filter, ordered by saved contacts first then name
+                                stmt = (
+                                    _select(Contact)
+                                    .where(Contact.user_id == user_id)
+                                    .order_by(Contact.is_other_contact, Contact.display_name)
+                                    .offset(offset)
+                                    .limit(limit * 4)
+                                )
+
                             result = await bg_db.execute(stmt)
-                            matches = result.scalars().all()
+                            raw = result.scalars().all()
+
+                            # Deduplicate by primary_email at query time
+                            # (saved contact wins over other_contact for same email)
+                            seen_emails: set[str] = set()
+                            matches: list = []
+                            for c in raw:
+                                key = (c.primary_email or "").lower().strip() or c.id
+                                if key in seen_emails:
+                                    continue
+                                seen_emails.add(key)
+                                matches.append(c)
+                                if len(matches) >= limit:
+                                    break
 
                             # Fallback for lookup_contact: live Google search if no local hit
                             live_cards: list[dict] = []
@@ -742,7 +773,9 @@ async def send_message(
                                         log.warning("Live People API search failed: %s", exc)
 
                             if not matches:
-                                return f"No contacts found matching '{query}'."
+                                if query:
+                                    return f"No contacts found matching '{query}'. Total contacts in database: {total_unique}."
+                                return f"No contacts found. Total contacts in database: {total_unique}."
 
                             lines = []
                             cards: list[dict] = []
@@ -773,7 +806,11 @@ async def send_message(
                                     "type": "contact_card",
                                     "contacts": cards,
                                 }))
-                            header = f"Found {len(matches)} contact(s) for '{query}':"
+                            if query:
+                                header = f"Found {len(matches)} contact(s) matching '{query}' (total unique contacts: {total_unique}):"
+                            else:
+                                shown_range = f"{offset + 1}–{offset + len(matches)}"
+                                header = f"Showing {shown_range} of {total_unique} unique contacts (use offset to page):"
                             return header + "\n" + "\n".join(lines)
                         except Exception as exc:
                             log.warning("%s tool failed: %s", name, exc)

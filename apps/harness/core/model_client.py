@@ -457,23 +457,29 @@ LOOKUP_CONTACT_TOOL = {
 SEARCH_CONTACTS_TOOL = {
     "name": "search_contacts",
     "description": (
-        "Search Mike's contacts and return multiple matches (up to 10). Use when Mike asks "
-        "broader questions like 'who works at Acme?', 'list my contacts from NCH', or "
-        "'who do I know in product?'. For single-person lookups use lookup_contact instead."
+        "Search Mike's contacts and return multiple matches. Use when Mike asks broader "
+        "questions like 'who works at Acme?', 'list my contacts from NCH', 'how many contacts "
+        "do I have?', or 'who do I know?'. Always returns the total unique contact count so "
+        "you know the real size of the database. Leave query empty to browse all contacts. "
+        "Use offset to page through results. For single-person lookups use lookup_contact instead."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Search query — matches against name, email, and organization.",
+                "description": "Search query matching name, email, or organization. Leave empty to list all contacts.",
             },
             "limit": {
                 "type": "integer",
-                "description": "Max results to return. Default 10.",
+                "description": "Max results to return. Default 25.",
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Pagination offset. Default 0.",
             },
         },
-        "required": ["query"],
+        "required": [],
     },
 }
 
