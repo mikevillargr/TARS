@@ -8,7 +8,7 @@ import {
   Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
-  Mail, Phone, Building2, BriefcaseBusiness,
+  Mail, Phone, BriefcaseBusiness, MessageSquare, Search, UserPlus,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
@@ -263,70 +263,140 @@ interface ContactResultSet {
   contacts: ContactResult[]
 }
 
-function ContactCard({ set, onDismiss }: { set: ContactResultSet; onDismiss: () => void }) {
+function ContactActionChip({
+  icon: Icon, label, href, onClick,
+}: {
+  icon: React.ElementType; label: string
+  href?: string; onClick?: () => void
+}) {
+  const cls = "inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
+  const style = { backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }
+  const hoverStyle = { backgroundColor: "var(--c-surface-3)", color: "var(--c-ink)" }
+  if (href) {
+    return (
+      <a href={href} target={href.startsWith("mailto") || href.startsWith("tel") ? undefined : "_self"}
+        className={cls} style={style}
+        onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, hoverStyle)}
+        onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, style)}
+      >
+        <Icon size={10} />{label}
+      </a>
+    )
+  }
+  return (
+    <button onClick={onClick} className={cls} style={style}
+      onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, hoverStyle)}
+      onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, style)}
+    >
+      <Icon size={10} />{label}
+    </button>
+  )
+}
+
+function ContactCard({ set, onDismiss, onAsk }: {
+  set: ContactResultSet
+  onDismiss: () => void
+  onAsk: (q: string) => void
+}) {
   return (
     <div className="flex flex-col gap-2 max-w-lg">
       {set.contacts.map((c, i) => {
         const initials = (c.display_name ?? c.primary_email ?? "?")
           .split(" ").slice(0, 2).map((p: string) => p[0] ?? "").join("").toUpperCase() || "?"
+        const name = c.display_name ?? c.primary_email ?? "this person"
+
         return (
           <div
             key={i}
-            className="rounded-xl p-3.5 flex items-start gap-3"
+            className="rounded-xl p-3.5 flex flex-col gap-2.5"
             style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)" }}
           >
-            {/* Avatar */}
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-              style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
-            >
-              {initials}
+            {/* Top row: avatar + details + dismiss */}
+            <div className="flex items-start gap-3">
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+                style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
+              >
+                {initials}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm leading-snug" style={{ color: "var(--c-ink)" }}>
+                  {c.display_name ?? c.primary_email ?? "Unknown"}
+                </div>
+                {(c.job_title || c.organization) && (
+                  <div className="flex items-center gap-1 mt-0.5 text-xs" style={{ color: "var(--c-ink-muted)" }}>
+                    <BriefcaseBusiness size={10} style={{ flexShrink: 0 }} />
+                    <span className="truncate">{[c.job_title, c.organization].filter(Boolean).join(" · ")}</span>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                  {c.primary_email && (
+                    <a href={`mailto:${c.primary_email}`}
+                      className="flex items-center gap-1 text-[11px] transition-opacity hover:opacity-75"
+                      style={{ color: "var(--c-moss)" }}
+                    >
+                      <Mail size={10} style={{ flexShrink: 0 }} />{c.primary_email}
+                    </a>
+                  )}
+                  {c.primary_phone && (
+                    <a href={`tel:${c.primary_phone}`}
+                      className="flex items-center gap-1 text-[11px] transition-opacity hover:opacity-75"
+                      style={{ color: "var(--c-ink-muted)" }}
+                    >
+                      <Phone size={10} style={{ flexShrink: 0 }} />{c.primary_phone}
+                    </a>
+                  )}
+                </div>
+                {c.tars_context && (
+                  <div className="mt-1.5 text-[11px] italic leading-relaxed" style={{ color: "var(--c-ink-faint)" }}>
+                    {c.tars_context.slice(0, 160)}{c.tars_context.length > 160 ? "…" : ""}
+                  </div>
+                )}
+              </div>
+
+              {i === 0 && (
+                <button onClick={onDismiss} className="shrink-0 mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
+                  <X size={12} />
+                </button>
+              )}
             </div>
 
-            {/* Details */}
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm leading-snug" style={{ color: "var(--c-ink)" }}>
-                {c.display_name ?? c.primary_email ?? "Unknown"}
-              </div>
-              {(c.job_title || c.organization) && (
-                <div className="flex items-center gap-1 mt-0.5 text-xs" style={{ color: "var(--c-ink-muted)" }}>
-                  <BriefcaseBusiness size={10} style={{ flexShrink: 0 }} />
-                  <span className="truncate">{[c.job_title, c.organization].filter(Boolean).join(" · ")}</span>
-                </div>
+            {/* Action chips */}
+            <div className="flex flex-wrap gap-1.5 pl-12">
+              {c.primary_email && (
+                <ContactActionChip icon={Mail} label="Email" href={`mailto:${c.primary_email}`} />
               )}
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                {c.primary_email && (
-                  <a
-                    href={`mailto:${c.primary_email}`}
-                    className="flex items-center gap-1 text-[11px] transition-opacity hover:opacity-75"
-                    style={{ color: "var(--c-moss)" }}
-                  >
-                    <Mail size={10} style={{ flexShrink: 0 }} />{c.primary_email}
-                  </a>
-                )}
-                {c.primary_phone && (
-                  <a
-                    href={`tel:${c.primary_phone}`}
-                    className="flex items-center gap-1 text-[11px] transition-opacity hover:opacity-75"
-                    style={{ color: "var(--c-ink-muted)" }}
-                  >
-                    <Phone size={10} style={{ flexShrink: 0 }} />{c.primary_phone}
-                  </a>
-                )}
-              </div>
-              {c.tars_context && (
-                <div className="mt-1.5 text-[11px] italic leading-relaxed" style={{ color: "var(--c-ink-faint)" }}>
-                  {c.tars_context.slice(0, 160)}{c.tars_context.length > 160 ? "…" : ""}
-                </div>
+              <ContactActionChip
+                icon={Calendar}
+                label="Schedule meeting"
+                onClick={() => onAsk(`Schedule a meeting with ${name}`)}
+              />
+              <ContactActionChip
+                icon={CheckSquare}
+                label="Create task"
+                onClick={() => onAsk(`Create a task related to ${name}`)}
+              />
+              {c.primary_email && (
+                <ContactActionChip
+                  icon={Search}
+                  label="Find emails"
+                  onClick={() => onAsk(`Show me recent emails from ${c.primary_email}`)}
+                />
+              )}
+              <ContactActionChip
+                icon={MessageSquare}
+                label="Meeting history"
+                onClick={() => onAsk(`What meetings have I had with ${name}?`)}
+              />
+              {c.source === "google_live" && c.primary_email && (
+                <ContactActionChip
+                  icon={UserPlus}
+                  label="Add to contacts"
+                  onClick={() => onAsk(`Add ${name} (${c.primary_email}) to my Google Contacts`)}
+                />
               )}
             </div>
-
-            {/* Dismiss (only on first card to keep UI clean) */}
-            {i === 0 && (
-              <button onClick={onDismiss} className="shrink-0 mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
-                <X size={12} />
-              </button>
-            )}
           </div>
         )
       })}
@@ -498,6 +568,7 @@ interface MessageAreaProps {
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
   setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
+  onAsk: (q: string) => void
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
 }
@@ -512,6 +583,7 @@ const MessageArea = memo(function MessageArea({
   setTaskSuggestions,
   setArtifactNotifications,
   setContactResults,
+  onAsk,
   quoteIndex,
   messagesEndRef,
 }: MessageAreaProps) {
@@ -557,6 +629,7 @@ const MessageArea = memo(function MessageArea({
               key={set.tool_use_id}
               set={set}
               onDismiss={() => setContactResults(prev => prev.filter(x => x.tool_use_id !== set.tool_use_id))}
+              onAsk={onAsk}
             />
           ))}
         </div>
@@ -1004,6 +1077,12 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputValue, busy, handleSend])
 
+  // Send a follow-up query in the current conversation (used by contact action chips)
+  const handleAsk = useCallback((q: string) => {
+    setInputValue(q)
+    autoSendPendingRef.current = true
+  }, [])
+
   const allMessages = useMemo(
     () => (streaming ? [...messages, streaming] : messages),
     [messages, streaming],
@@ -1240,6 +1319,7 @@ export default function ChatPage() {
           setTaskSuggestions={setTaskSuggestions}
           setArtifactNotifications={setArtifactNotifications}
           setContactResults={setContactResults}
+          onAsk={handleAsk}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
         />

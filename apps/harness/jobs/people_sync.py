@@ -45,20 +45,60 @@ async def _upsert_contact(
     *,
     is_other_contact: bool = False,
 ) -> None:
-    """Insert or update a Contact row keyed on google_resource_name."""
+    """
+    Insert or update a Contact row.
+
+    Saved contacts   → keyed on google_resource_name (authoritative)
+    Other contacts   → keyed on primary_email to avoid one-row-per-email-thread
+                       explosion. If a saved contact with the same email exists,
+                       skip entirely — saved contact wins.
+    """
     resource_name = contact_data.get("google_resource_name")
     if not resource_name:
         return
 
+    contact_data["is_other_contact"] = is_other_contact
+    contact_data["last_synced_at"]   = datetime.now(timezone.utc)
+
+    if is_other_contact:
+        email = (contact_data.get("primary_email") or "").lower().strip()
+        if not email:
+            return  # no email → nothing useful to store
+
+        # Check if a saved contact with this email already exists — skip if so
+        saved_result = await db.execute(
+            select(Contact).where(
+                Contact.user_id == user_id,
+                Contact.primary_email == email,
+                Contact.is_other_contact == False,  # noqa: E712
+            )
+        )
+        if saved_result.scalar_one_or_none():
+            return  # saved contact wins
+
+        # Check if we already have an other-contact row for this email
+        other_result = await db.execute(
+            select(Contact).where(
+                Contact.user_id == user_id,
+                Contact.primary_email == email,
+                Contact.is_other_contact == True,  # noqa: E712
+            )
+        )
+        existing_other = other_result.scalar_one_or_none()
+        if existing_other:
+            # Update in-place (may carry a better display_name from a later record)
+            for k, v in contact_data.items():
+                setattr(existing_other, k, v)
+            return  # done — no new row
+
+        db.add(Contact(user_id=user_id, **contact_data))
+        return
+
+    # Saved contact — upsert by resource_name as before
     result = await db.execute(
         select(Contact).where(Contact.google_resource_name == resource_name)
     )
     existing = result.scalar_one_or_none()
-
-    # Honour caller's is_other_contact override
-    contact_data["is_other_contact"] = is_other_contact
-    contact_data["last_synced_at"] = datetime.now(timezone.utc)
-
     if existing:
         for k, v in contact_data.items():
             setattr(existing, k, v)
