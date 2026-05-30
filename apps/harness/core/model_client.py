@@ -435,18 +435,25 @@ GENERATE_PDF_TOOL = {
 LOOKUP_CONTACT_TOOL = {
     "name": "lookup_contact",
     "description": (
-        "Look up a single person Mike knows. Use whenever Mike refers to a person by name "
-        "or asks who someone is (e.g. 'who is Sarah?', 'what's Tim's company?'). "
-        "Searches Mike's Google Contacts mirror first; falls back to live Google search if "
-        "no local match. Returns the contact's org, role, primary email/phone, and any "
-        "TARS-derived context about them."
+        "Look up a single person in Mike's Google Contacts. "
+        "ALWAYS call this tool when Mike asks for ANY of the following about a person: "
+        "phone number, mobile number, email address, company, job title, or any other contact detail. "
+        "Trigger phrases: 'what's X's number', 'call X', 'X's phone', 'X's email', 'who is X', "
+        "'what company is X at', 'what's X's title', 'how do I reach X', 'contact details for X'. "
+        "Searches the local Google Contacts mirror (628+ contacts with phone numbers for most). "
+        "Falls back to a live Google search if no local match. "
+        "Returns: display name, organization, job title, primary email, primary phone number, "
+        "all phone numbers on file, and any TARS-saved context notes."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Name, partial name, or email of the person to look up.",
+                "description": (
+                    "Name, partial name, email address, or phone number of the person to look up. "
+                    "Examples: 'Sarah', 'ken@growth-rocket.com', '+639171234567', 'Tim from NCH'."
+                ),
             },
         },
         "required": ["query"],
@@ -457,18 +464,22 @@ LOOKUP_CONTACT_TOOL = {
 SEARCH_CONTACTS_TOOL = {
     "name": "search_contacts",
     "description": (
-        "Search Mike's contacts and return multiple matches. Use when Mike asks broader "
-        "questions like 'who works at Acme?', 'list my contacts from NCH', 'how many contacts "
-        "do I have?', or 'who do I know?'. Always returns the total unique contact count so "
-        "you know the real size of the database. Leave query empty to browse all contacts. "
-        "Use offset to page through results. For single-person lookups use lookup_contact instead."
+        "Search Mike's Google Contacts and return multiple matches — including phone numbers, "
+        "emails, organizations, and job titles for each result. "
+        "Use for: 'who works at Acme?', 'list contacts from NCH', 'how many contacts do I have?', "
+        "'everyone in marketing', 'who do I know at that company?', 'find all contacts with a phone number'. "
+        "Always returns the total unique contact count in the response header. "
+        "Leave query empty to browse all contacts. Use offset to paginate."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Search query matching name, email, or organization. Leave empty to list all contacts.",
+                "description": (
+                    "Search term matched against name, email, organization, and phone number. "
+                    "Leave empty to list all contacts."
+                ),
             },
             "limit": {
                 "type": "integer",
@@ -476,7 +487,7 @@ SEARCH_CONTACTS_TOOL = {
             },
             "offset": {
                 "type": "integer",
-                "description": "Pagination offset. Default 0.",
+                "description": "Pagination offset for browsing large result sets. Default 0.",
             },
         },
         "required": [],

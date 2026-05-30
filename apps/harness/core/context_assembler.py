@@ -78,14 +78,17 @@ CONTACTS:
 Your contacts database is a local mirror of Mike's Google Contacts, kept in sync every 5 minutes.
 It includes both saved contacts AND "other contacts" — people Mike has emailed but never saved.
 
-• lookup_contact — look up ONE person by name, partial name, or email.
-  Use proactively whenever a person is mentioned in conversation, found in an email, or appears in a meeting:
-  — "who is X?" / "what company is X at?" / "what's X's number?" / "find X's email"
-  — When you see a name in email or meeting context and Mike might want their details
-  Falls back to a live Google search if no local match is found.
+• lookup_contact — look up ONE person. Returns name, org, title, PRIMARY EMAIL, PRIMARY PHONE, and all phones on file.
+  ALWAYS call this for ANY request about a specific person's contact details:
+  — phone number / mobile / how to call them → call this tool, phone is in the result
+  — email address, company, job title, how to reach someone
+  — "who is X?" / "call X" / "what's X's number?" / "X's email" / "contact details for X"
+  — Also call proactively when a person is mentioned in email/meeting context
+  Falls back to a live Google People search if no local DB match (also returns phone).
 
 • search_contacts — search for MULTIPLE contacts, or browse/count the full database.
-  — "who do I know at Acme?" / "list contacts from NCH" / "everyone in product"
+  Results include phone numbers for every contact that has one.
+  — "who do I know at Acme?" / "list contacts from NCH" / "everyone in marketing"
   — "how many contacts do I have?" → call with empty query; response always includes total unique count
   — Browse mode: omit query entirely to list all contacts (paginated via offset param)
   — The response header always states the total e.g. "Found 12 matching (total unique contacts: 847)"
