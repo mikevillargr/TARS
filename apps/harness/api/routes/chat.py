@@ -684,6 +684,7 @@ async def send_message(
                                     Contact.display_name.ilike(needle),
                                     Contact.primary_email.ilike(needle),
                                     Contact.organization.ilike(needle),
+                                    Contact.primary_phone.ilike(needle),
                                 )
                                 stmt = (
                                     _select(Contact)
@@ -742,9 +743,11 @@ async def send_message(
                                             for person in live:
                                                 names  = person.get("names", [])
                                                 emails = person.get("emailAddresses", [])
+                                                phones = person.get("phoneNumbers", [])
                                                 orgs   = person.get("organizations", [])
                                                 name_  = (names[0].get("displayName") if names else None) or "Unknown"
                                                 em     = emails[0].get("value") if emails else None
+                                                ph     = phones[0].get("value") if phones else None
                                                 org_   = orgs[0].get("name") if orgs else None
                                                 title_ = orgs[0].get("title") if orgs else None
                                                 parts  = [name_]
@@ -752,12 +755,14 @@ async def send_message(
                                                     parts.append(f"({', '.join(p for p in [title_, org_] if p)})")
                                                 if em:
                                                     parts.append(f"<{em}>")
+                                                if ph:
+                                                    parts.append(f"📞 {ph}")
                                                 lines.append(" ".join(parts))
                                                 live_cards.append({
                                                     "id": None,
                                                     "display_name": name_,
                                                     "primary_email": em,
-                                                    "primary_phone": None,
+                                                    "primary_phone": ph,
                                                     "organization": org_,
                                                     "job_title": title_,
                                                     "tars_context": None,
