@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 
 from core.config import settings
-from api.routes.auth import require_auth
+from core.auth import require_auth
 
 log = logging.getLogger(__name__)
 router = APIRouter()
