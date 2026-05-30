@@ -495,6 +495,93 @@ SEARCH_CONTACTS_TOOL = {
 }
 
 
+CREATE_CONTACT_TOOL = {
+    "name": "create_contact",
+    "description": (
+        "Create a new contact in Mike's Google Contacts and sync it locally. "
+        "Use when Mike says 'add X to my contacts', 'save X as a contact', "
+        "'create a contact for X', or when approving a pending/discovered contact. "
+        "After creation the contact is immediately searchable via lookup_contact."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "Full name of the contact (required).",
+            },
+            "email": {
+                "type": "string",
+                "description": "Primary email address.",
+            },
+            "phone": {
+                "type": "string",
+                "description": "Primary phone number (include country code where known, e.g. +63917...).",
+            },
+            "organization": {
+                "type": "string",
+                "description": "Company or organization name.",
+            },
+            "job_title": {
+                "type": "string",
+                "description": "Job title or role.",
+            },
+            "notes": {
+                "type": "string",
+                "description": "Any notes about this person (saved to Google Contacts biography field).",
+            },
+        },
+        "required": ["name"],
+    },
+}
+
+
+UPDATE_CONTACT_TOOL = {
+    "name": "update_contact",
+    "description": (
+        "Update an existing contact in Mike's Google Contacts. "
+        "Use when Mike says 'update X's number', 'add a phone for X', 'change X's company', "
+        "'update X's details', or 'add notes about X'. "
+        "Identify the contact by name or email (query), then provide only the fields to change. "
+        "Unchanged fields are left as-is. Changes sync to Google Contacts immediately."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Name or email to identify which contact to update.",
+            },
+            "name": {
+                "type": "string",
+                "description": "New display name (only if renaming).",
+            },
+            "email": {
+                "type": "string",
+                "description": "New primary email address.",
+            },
+            "phone": {
+                "type": "string",
+                "description": "New primary phone number.",
+            },
+            "organization": {
+                "type": "string",
+                "description": "New company or organization.",
+            },
+            "job_title": {
+                "type": "string",
+                "description": "New job title.",
+            },
+            "notes": {
+                "type": "string",
+                "description": "Notes to set (replaces existing biography/notes field).",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+
 # ─── Tier routing tables ─────────────────────────────────────────────────────
 
 # Tier 2 display label derived from the model name (strip org prefix for brevity)

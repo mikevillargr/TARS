@@ -22,6 +22,7 @@ from core.model_client import (
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
+    CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -558,6 +559,8 @@ async def send_message(
         GENERATE_PDF_TOOL,
         LOOKUP_CONTACT_TOOL,
         SEARCH_CONTACTS_TOOL,
+        CREATE_CONTACT_TOOL,
+        UPDATE_CONTACT_TOOL,
     ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -821,6 +824,173 @@ async def send_message(
                         except Exception as exc:
                             log.warning("%s tool failed: %s", name, exc)
                             return f"Contact lookup failed: {exc}"
+
+                    if name == "create_contact":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Contact, Connector
+                            from connectors.google_people import GooglePeopleClient, to_contact_dict
+                            import asyncio as _asyncio
+
+                            # Get Google Contacts connector
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Google Contacts",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Google Contacts not connected — cannot create contact."
+
+                            gp = GooglePeopleClient(conn.auth)
+                            loop = _asyncio.get_event_loop()
+                            person = await loop.run_in_executor(None, lambda: gp.create_contact(
+                                name=tool_input["name"],
+                                email=tool_input.get("email"),
+                                phone=tool_input.get("phone"),
+                                organization=tool_input.get("organization"),
+                                job_title=tool_input.get("job_title"),
+                                biography=tool_input.get("notes"),
+                            ))
+
+                            # Sync the new contact into the local DB immediately
+                            contact_data = to_contact_dict(person)
+                            contact_data["is_other_contact"] = False
+                            from datetime import datetime as _dt, timezone as _tz
+                            contact_data["last_synced_at"] = _dt.now(_tz.utc)
+                            resource_name = contact_data.get("google_resource_name")
+                            existing = None
+                            if resource_name:
+                                ex_result = await bg_db.execute(
+                                    _select(Contact).where(Contact.google_resource_name == resource_name)
+                                )
+                                existing = ex_result.scalar_one_or_none()
+                            if existing:
+                                for k, v in contact_data.items():
+                                    setattr(existing, k, v)
+                            else:
+                                bg_db.add(Contact(user_id=user_id, **contact_data))
+                            await bg_db.commit()
+
+                            parts = [f"Contact created: {tool_input['name']}"]
+                            if tool_input.get("email"):
+                                parts.append(f"<{tool_input['email']}>")
+                            if tool_input.get("phone"):
+                                parts.append(f"📞 {tool_input['phone']}")
+                            if tool_input.get("organization"):
+                                parts.append(f"@ {tool_input['organization']}")
+                            return " ".join(parts) + ". Saved to Google Contacts and local database."
+                        except Exception as exc:
+                            log.warning("create_contact tool failed: %s", exc)
+                            return f"Failed to create contact: {exc}"
+
+                    if name == "update_contact":
+                        try:
+                            from sqlalchemy import select as _select, or_ as _or
+                            from db.models import Contact, Connector
+                            from connectors.google_people import GooglePeopleClient, to_contact_dict
+                            import asyncio as _asyncio
+
+                            query = (tool_input.get("query") or "").strip()
+                            if not query:
+                                return "Provide a name or email to identify the contact to update."
+
+                            # Find the contact in local DB (saved contacts only — need resource_name + etag)
+                            needle = f"%{query}%"
+                            stmt = (
+                                _select(Contact)
+                                .where(
+                                    Contact.user_id == user_id,
+                                    Contact.is_other_contact == False,  # noqa: E712
+                                    _or(
+                                        Contact.display_name.ilike(needle),
+                                        Contact.primary_email.ilike(needle),
+                                    ),
+                                )
+                                .limit(1)
+                            )
+                            result = await bg_db.execute(stmt)
+                            contact = result.scalar_one_or_none()
+
+                            if not contact or not contact.google_resource_name:
+                                return (
+                                    f"No saved contact found matching '{query}'. "
+                                    "If this is an unsaved 'other contact', create them first with create_contact."
+                                )
+
+                            # Determine which Google fields to update
+                            update_fields: dict = {}
+                            person_fields_list: list[str] = []
+
+                            if tool_input.get("name"):
+                                update_fields["names"] = [{"unstructuredName": tool_input["name"]}]
+                                person_fields_list.append("names")
+                            if tool_input.get("email"):
+                                update_fields["emailAddresses"] = [{"value": tool_input["email"]}]
+                                person_fields_list.append("emailAddresses")
+                            if tool_input.get("phone"):
+                                update_fields["phoneNumbers"] = [{"value": tool_input["phone"]}]
+                                person_fields_list.append("phoneNumbers")
+                            if tool_input.get("organization") or tool_input.get("job_title"):
+                                org_entry: dict = {}
+                                if tool_input.get("organization"):
+                                    org_entry["name"] = tool_input["organization"]
+                                elif contact.organization:
+                                    org_entry["name"] = contact.organization
+                                if tool_input.get("job_title"):
+                                    org_entry["title"] = tool_input["job_title"]
+                                elif contact.job_title:
+                                    org_entry["title"] = contact.job_title
+                                update_fields["organizations"] = [org_entry]
+                                person_fields_list.append("organizations")
+                            if tool_input.get("notes"):
+                                update_fields["biographies"] = [{"value": tool_input["notes"], "contentType": "TEXT_PLAIN"}]
+                                person_fields_list.append("biographies")
+
+                            if not update_fields:
+                                return "No fields provided to update. Specify at least one of: name, email, phone, organization, job_title, notes."
+
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Google Contacts",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Google Contacts not connected — cannot update contact."
+
+                            gp = GooglePeopleClient(conn.auth)
+                            loop = _asyncio.get_event_loop()
+                            updated_person = await loop.run_in_executor(None, lambda: gp.update_contact(
+                                resource_name=contact.google_resource_name,
+                                etag=contact.etag or "*",
+                                fields=update_fields,
+                                update_person_fields=",".join(person_fields_list),
+                            ))
+
+                            # Update local DB row from the returned person
+                            updated_data = to_contact_dict(updated_person)
+                            from datetime import datetime as _dt, timezone as _tz
+                            updated_data["last_synced_at"] = _dt.now(_tz.utc)
+                            for k, v in updated_data.items():
+                                if hasattr(contact, k):
+                                    setattr(contact, k, v)
+                            await bg_db.commit()
+
+                            changed = []
+                            if tool_input.get("name"):     changed.append(f"name → {tool_input['name']}")
+                            if tool_input.get("phone"):    changed.append(f"phone → {tool_input['phone']}")
+                            if tool_input.get("email"):    changed.append(f"email → {tool_input['email']}")
+                            if tool_input.get("organization"): changed.append(f"org → {tool_input['organization']}")
+                            if tool_input.get("job_title"): changed.append(f"title → {tool_input['job_title']}")
+                            if tool_input.get("notes"):    changed.append("notes updated")
+                            display = contact.display_name or query
+                            return f"Updated {display}: {', '.join(changed)}. Synced to Google Contacts."
+                        except Exception as exc:
+                            log.warning("update_contact tool failed: %s", exc)
+                            return f"Failed to update contact: {exc}"
 
                     if name == "read_email":
                         try:
