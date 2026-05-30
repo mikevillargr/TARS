@@ -27,7 +27,7 @@ GCAL_SCOPES = [
 PEOPLE_SCOPES = [
     "https://www.googleapis.com/auth/contacts",                # full read/write
     "https://www.googleapis.com/auth/contacts.other.readonly", # otherContacts.list (people you've emailed)
-    "https://www.googleapis.com/auth/directory.readonly",      # workspace directory
+    # directory.readonly omitted — requires Google Workspace; breaks OAuth for personal accounts
 ]
 
 _REDIRECT_BASE = "https://tarsmv.duckdns.org"

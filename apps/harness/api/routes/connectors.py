@@ -109,15 +109,21 @@ async def oauth_authorize(connector: str, request: Request):
 @router.get("/oauth/callback/{connector}")
 async def oauth_callback(
     connector: str,
-    code: str,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    code: Optional[str] = None,
+    error: Optional[str] = None,
 ):
     """Google redirects here after user grants access. No JWT needed — browser-driven."""
     if connector not in _GOOGLE_CONNECTORS:
         raise HTTPException(status_code=400, detail="Unknown connector")
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing code")
+
+    # Google sends ?error=... if user denies or there's a scope/config problem
+    if error or not code:
+        via_prod = "localhost" not in str(request.base_url)
+        base = "https://tarsmv.duckdns.org" if via_prod else "http://localhost:3000"
+        log.warning("OAuth callback error for %s: %s", connector, error or "missing code")
+        return RedirectResponse(f"{base}/connectors?error={error or 'missing_code'}")
 
     from connectors.google_oauth import exchange_code
 
