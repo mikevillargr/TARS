@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
+import AgentJobStream from "@/components/agent-jobs/AgentJobStream"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
@@ -799,6 +800,15 @@ function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
   return null
 }
 
+function AgentJobLoader({ onJobId }: { onJobId: (id: string | null) => void }) {
+  const searchParams = useSearchParams()
+  useEffect(() => {
+    onJobId(searchParams.get("job_id"))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+  return null
+}
+
 // ─── Message area ────────────────────────────────────────────────
 // memo: allMessages is stable during typing (useMemo on [messages,streaming]),
 // so this entire section is skipped on every keystroke → no O(n) reconcile cost.
@@ -943,6 +953,7 @@ export default function ChatPage() {
   const [attachments, setAttachments]               = useState<File[]>([])
   // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
   const [pendingVoiceSend, setPendingVoiceSend]     = useState<string | null>(null)
+  const [activeJobId, setActiveJobId]               = useState<string | null>(null)
   const voice = useVoiceInput()
   const confirm = useConfirm()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -1435,6 +1446,7 @@ export default function ChatPage() {
           setInputValue(q)
           autoSendPendingRef.current = true
         }} />
+        <AgentJobLoader onJobId={setActiveJobId} />
       </Suspense>
 
       {/* ── Mobile conversation drawer ────────────────────────── */}
@@ -1652,6 +1664,35 @@ export default function ChatPage() {
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
         />
+
+        {/* ── Agent stream panel ─────────────────────────────────── */}
+        {activeJobId && (
+          <div className="shrink-0 mx-3 mb-2 rounded-xl overflow-hidden border"
+            style={{ borderColor: "var(--c-border)", maxHeight: 320, display: "flex", flexDirection: "column" }}>
+            <div className="flex items-center justify-between px-3 py-1.5 shrink-0"
+              style={{ backgroundColor: "var(--c-surface-2)", borderBottom: "1px solid var(--c-border)" }}>
+              <span className="text-[11px] font-medium" style={{ color: "var(--c-ink-muted)" }}>
+                Agent stream
+              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/agent-jobs`}
+                  className="text-[11px] hover:underline"
+                  style={{ color: "var(--c-moss)" }}
+                >
+                  Open in Agent Jobs →
+                </a>
+                <button
+                  onClick={() => setActiveJobId(null)}
+                  style={{ color: "var(--c-ink-faint)" }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+            <AgentJobStream jobId={activeJobId} />
+          </div>
+        )}
 
         {/* ── Floating input ─────────────────────────────────────── */}
         {/* Gradient fade creates a soft visual lift from the message stream */}

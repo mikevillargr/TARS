@@ -137,13 +137,31 @@ class AgentJob(Base):
     __tablename__ = "agent_jobs"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    type: Mapped[str] = mapped_column(String, nullable=False)
+    # agent_type: evolutionarist | frontend | backend | sa | release
+    agent_type: Mapped[str] = mapped_column(String, default="evolutionarist")
+    # kept for backwards compat with old stub rows
+    type: Mapped[str] = mapped_column(String, nullable=False, default="agent")
     instruction: Mapped[str] = mapped_column(Text, nullable=False)
     repo_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    branch: Mapped[str] = mapped_column(String, default="dev")
+    # status: pending | running | awaiting_approval | completed | failed | cancelled
     status: Mapped[str] = mapped_column(String, default="pending")
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=True)
     approval_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pr_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # model config per agent type, e.g. {"frontend": "claude-sonnet-4-6", "sa": "claude-opus-4-5"}
+    model_config_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    # link to chat conversation for live-stream view
+    conversation_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
+    )
+    # sub-agent jobs point to their parent orchestrator job
+    parent_job_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("agent_jobs.id", ondelete="SET NULL"), nullable=True
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
