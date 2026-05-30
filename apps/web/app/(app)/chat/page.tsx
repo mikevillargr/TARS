@@ -954,6 +954,25 @@ export default function ChatPage() {
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
   const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
+  const userLocationRef                             = useRef<{ lat: number; lng: number } | null>(null)
+
+  // ── Silent background geolocation ────────────────────────────────
+  // Request once on mount; watchPosition keeps it fresh without hammering GPS.
+  // maximumAge=300000 → browser may return a cached fix up to 5 min old (saves battery).
+  // timeout=10000     → give up after 10 s if no fix yet (desktop IP-geoloc is fast).
+  // No UI indicator — location is just context, not a user-facing feature.
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    const opts: PositionOptions = { enableHighAccuracy: false, maximumAge: 300_000, timeout: 10_000 }
+    const onSuccess = (pos: GeolocationPosition) => {
+      userLocationRef.current = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+    }
+    // Immediate fix
+    navigator.geolocation.getCurrentPosition(onSuccess, () => {}, opts)
+    // Live updates (fires when position changes meaningfully)
+    const watchId = navigator.geolocation.watchPosition(onSuccess, () => {}, opts)
+    return () => navigator.geolocation.clearWatch(watchId)
+  }, [])
 
   // Pre-fill input when navigating from Second Brain "Open in Chat" — handled via SecondBrainLoader below
 
@@ -1215,6 +1234,10 @@ export default function ChatPage() {
       if (pendingArtifactIdRef.current) {
         fd.append("artifact_id", pendingArtifactIdRef.current)
         pendingArtifactIdRef.current = null
+      }
+      if (userLocationRef.current) {
+        fd.append("location_lat", String(userLocationRef.current.lat))
+        fd.append("location_lng", String(userLocationRef.current.lng))
       }
       for (const f of pendingAttachments) fd.append("files", f)
 

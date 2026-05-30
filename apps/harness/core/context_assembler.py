@@ -182,7 +182,7 @@ and Entire Travel Group. He is a randonneur and cyclist. He manages his health a
 {gmail_section}{gcal_section}{tasks_section}{meetings_section}{contacts_section}
 [ACTIVE CONTEXT]
 Timezone: {user_timezone}
-{active_tasks_count} open tasks
+{location_section}{active_tasks_count} open tasks
 Last interaction: {last_seen}
 
 Always express dates and times in the user's timezone ({user_timezone}) unless explicitly asked otherwise.
@@ -370,6 +370,8 @@ async def assemble(
     active_tasks_count: int = 0,
     last_seen: str = "First interaction",
     user_timezone: str = "Asia/Manila",
+    user_lat: Optional[float] = None,
+    user_lng: Optional[float] = None,
 ) -> str:
     """
     Build the system prompt for a conversation turn.
@@ -468,6 +470,12 @@ async def assemble(
             if len(results) > 5 and isinstance(results[5], str):
                 contacts_section = results[5]
 
+    location_section = (
+        f"Location: {user_lat:.5f}, {user_lng:.5f} (use for place searches when no location specified)\n"
+        if user_lat is not None and user_lng is not None
+        else ""
+    )
+
     return SYSTEM_TEMPLATE.format(
         capabilities_section=capabilities_section,
         mnemon_context=mnemon_context,
@@ -477,6 +485,7 @@ async def assemble(
         tasks_section=tasks_section,
         meetings_section=meetings_section,
         contacts_section=contacts_section,
+        location_section=location_section,
         user_timezone=user_tz,
         active_tasks_count=active_tasks_count,
         last_seen=last_seen,

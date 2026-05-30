@@ -406,6 +406,8 @@ async def send_message(
     files: List[UploadFile] = File(default=[]),
     artifact_id: Optional[str] = Form(default=None),
     tier_override: Optional[str] = Form(default=None),
+    location_lat: Optional[float] = Form(default=None),
+    location_lng: Optional[float] = Form(default=None),
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -536,7 +538,10 @@ async def send_message(
         effective_tier = ModelTier.TIER3
         log.info("RunPod Tier2 cold — upgrading to Tier3 for full tool support")
 
-    system_prompt = await assemble(user_id, content or "attachment", db=db, tier=effective_tier)
+    system_prompt = await assemble(
+        user_id, content or "attachment", db=db, tier=effective_tier,
+        user_lat=location_lat, user_lng=location_lng,
+    )
 
     # Tools available for TIER2 and TIER3.
     # TIER2 (RunPod) ignores them in the payload but the Sonnet fallback path
@@ -576,6 +581,10 @@ async def send_message(
         try:
             # ── Phase 1: stream the model response ──────────────────────────
             async with AsyncSessionLocal() as bg_db:
+
+                # Capture location for tool executor (search_places default near)
+                _user_lat = location_lat
+                _user_lng = location_lng
 
                 async def _tool_executor(name: str, tool_input: dict) -> str:
                     if name == "create_task":
@@ -1393,23 +1402,36 @@ async def send_message(
                             category = tool_input.get("category")
                             limit    = int(tool_input.get("limit") or 5)
 
+                            # Fall back to user's current location when no "near" was specified
+                            user_coords_str = (
+                                f"{_user_lat},{_user_lng}"
+                                if _user_lat is not None and _user_lng is not None
+                                else None
+                            )
+                            effective_near = near or user_coords_str
+
                             client_p = PlacesClient()
                             loop = _asyncio.get_event_loop()
 
-                            if category and near:
-                                # Try to geocode "near" first, then search nearby
-                                geo = await loop.run_in_executor(None, lambda: client_p.search(near, limit=1))
+                            if category and _user_lat is not None and _user_lng is not None and not near:
+                                # We have exact coords — go straight to Overpass nearby search
+                                results = await loop.run_in_executor(
+                                    None, lambda: client_p.search_nearby(_user_lat, _user_lng, category, limit=limit)
+                                )
+                            elif category and effective_near and effective_near != user_coords_str:
+                                # Named location — geocode it first, then nearby
+                                geo = await loop.run_in_executor(None, lambda: client_p.search(effective_near, limit=1))
                                 if geo:
                                     results = await loop.run_in_executor(
                                         None, lambda: client_p.search_nearby(geo[0]["lat"], geo[0]["lng"], category, limit=limit)
                                     )
                                 else:
                                     results = await loop.run_in_executor(
-                                        None, lambda: client_p.search(f"{category} {near}", limit=limit)
+                                        None, lambda: client_p.search(f"{category} {effective_near}", limit=limit)
                                     )
                             else:
                                 results = await loop.run_in_executor(
-                                    None, lambda: client_p.search(query, near=near, limit=limit)
+                                    None, lambda: client_p.search(query, near=effective_near, limit=limit)
                                 )
 
                             if not results:
