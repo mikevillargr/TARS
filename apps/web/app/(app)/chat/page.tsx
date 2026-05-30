@@ -306,10 +306,10 @@ const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message | Stre
         )}
 
         <div
-          className={`p-4 rounded-2xl ${isUser ? "" : "w-full"}`}
+          className={`p-4 rounded-2xl min-w-0 ${isUser ? "" : "w-full"}`}
           style={isUser
-            ? { backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
-            : { color: "var(--c-ink)" }
+            ? { backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)", overflowWrap: "break-word" }
+            : { color: "var(--c-ink)", overflowWrap: "break-word" }
           }
         >
           <MessageContent content={msg.content} />
@@ -1042,8 +1042,8 @@ export default function ChatPage() {
           className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0 overflow-hidden"
           style={{ borderColor: "var(--c-border)", backgroundColor: "color-mix(in srgb, var(--c-surface) 95%, transparent)", backdropFilter: "blur(4px)" }}
         >
-          {/* min-w-0 + overflow-hidden are both required for truncate to work in flex */}
-          <div className="flex-1 flex items-center gap-1 min-w-0 overflow-hidden">
+          {/* min-w-0 + overflow-hidden both required for truncate to work in flex */}
+          <div className="flex-1 flex items-center gap-1 min-w-0 overflow-hidden max-w-full">
             {/* Mobile: open conversation drawer */}
             <button
               onClick={() => setMobileConvOpen(true)}
