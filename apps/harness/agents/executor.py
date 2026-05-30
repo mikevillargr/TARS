@@ -49,6 +49,9 @@ _DESTRUCTIVE_PATTERNS = [
     re.compile(r"\bTRUNCATE\b", re.IGNORECASE),
 ]
 
+# Claude signals a question by running: tars-ask "question text here"
+_QUESTION_PATTERN = re.compile(r'^tars-ask\s+"(.+)"$', re.DOTALL)
+
 
 def _is_destructive(command: str) -> Optional[str]:
     """Return a human-readable reason if the command matches a destructive pattern."""
@@ -139,33 +142,48 @@ async def run(
                         tool_name = block.name
                         tool_input = block.input or {}
 
-                        # Approval gate for destructive bash commands
                         if tool_name.lower() == "bash":
                             command = tool_input.get("command", "")
-                            reason = _is_destructive(command)
-                            if reason:
-                                yield {
-                                    "type": "approval_required",
-                                    "command": command,
-                                    "reason": reason,
-                                }
-                                await approval_gate.event.wait()
 
-                                if not approval_gate.result.get("approved"):
-                                    yield {"type": "approval_rejected"}
-                                    _stop = True
-                                    break
-
-                                modified = approval_gate.result.get("modified_command")
-                                if modified:
-                                    tool_input = {**tool_input, "command": modified}
-                                yield {
-                                    "type": "approval_granted",
-                                    "command": tool_input.get("command", command),
-                                }
-
+                            # Question gate: tars-ask "question text"
+                            q_match = _QUESTION_PATTERN.match(command.strip())
+                            if q_match:
                                 from agents import approval as _approval_mod
-                                _approval_mod.reset(job_id)
+                                question_text = q_match.group(1)
+                                q_gate = _approval_mod.get_or_create_question(job_id)
+                                yield {"type": "question", "id": job_id, "text": question_text}
+                                await q_gate.event.wait()
+                                answer = q_gate.answer
+                                tool_input = {**tool_input, "command": f'echo "User answered: {answer}"'}
+                                yield {"type": "question_answered", "id": job_id}
+                                _approval_mod.reset_question(job_id)
+
+                            else:
+                                # Approval gate for destructive bash commands
+                                reason = _is_destructive(command)
+                                if reason:
+                                    yield {
+                                        "type": "approval_required",
+                                        "command": command,
+                                        "reason": reason,
+                                    }
+                                    await approval_gate.event.wait()
+
+                                    if not approval_gate.result.get("approved"):
+                                        yield {"type": "approval_rejected"}
+                                        _stop = True
+                                        break
+
+                                    modified = approval_gate.result.get("modified_command")
+                                    if modified:
+                                        tool_input = {**tool_input, "command": modified}
+                                    yield {
+                                        "type": "approval_granted",
+                                        "command": tool_input.get("command", command),
+                                    }
+
+                                    from agents import approval as _approval_mod
+                                    _approval_mod.reset(job_id)
 
                         yield {"type": "tool_start", "tool": tool_name, "input": tool_input}
 
@@ -225,7 +243,7 @@ async def run(
                                     summary=summary_text or instruction[:120])
 
     # ── 4. Merge PR → detect changes → auto-deploy ────────────────────────────
-    async for deploy_event in _auto_deploy(cwd=cwd, job_id=job_id, pr_url=pr_url):
+    async for deploy_event in _auto_deploy(cwd=cwd, job_id=job_id, pr_url=pr_url, branch=branch):
         yield deploy_event
 
     yield {
@@ -238,45 +256,71 @@ async def run(
 
 # ── Auto-deploy helper ────────────────────────────────────────────────────────
 
-async def _auto_deploy(*, cwd: str, job_id: str, pr_url: Optional[str]):
+async def _auto_deploy(*, cwd: str, job_id: str, pr_url: Optional[str], branch: str):
     """
     After a sub-agent job completes:
-      1. Merge the PR to dev (if one was created)
-      2. Detect which parts of the codebase changed
+      1. Detect changed files (from feature branch vs dev) while still on branch
+      2. Merge the PR to dev
       3. Run deploy.sh <target> dev
       4. Yield deploy_started / deploy_completed events
 
     Yields nothing if there are no relevant changes.
     """
-    # Merge PR if one was created, then pull the merge commit
+    # ── Detect changes BEFORE merging (while still on feature branch) ──────────
+    # This ensures we always know what changed regardless of merge outcome.
+    # Compare feature branch against dev to get the full set of changed files.
+    if branch != "dev":
+        diff = await _run_git(["git", "diff", f"dev...{branch}", "--name-only"], cwd=cwd)
+    else:
+        # Already on dev — diff last commit
+        diff = await _run_git(["git", "diff", "HEAD~1..HEAD", "--name-only"], cwd=cwd)
+    changed = [p for p in diff.stdout.strip().splitlines() if p]
+
+    has_web     = any(p.startswith("apps/web/") for p in changed)
+    has_harness = any(p.startswith("apps/harness/") for p in changed)
+
+    if not changed or (not has_web and not has_harness):
+        log.info("Job %s: no web/harness changes detected (%d files) — skipping deploy",
+                 job_id, len(changed))
+
+    # ── Merge PR to dev ─────────────────────────────────────────────────────────
     if pr_url:
         yield {"type": "text_chunk", "text": "\nMerging PR to dev…\n"}
+        # --yes was removed: not supported on older gh versions.
+        # GH_TOKEN is set in env so gh runs non-interactively.
         merge = await _run_git(
-            ["gh", "pr", "merge", pr_url, "--merge", "--delete-branch", "--yes"],
+            ["gh", "pr", "merge", pr_url, "--merge", "--delete-branch"],
             cwd=cwd, timeout=30,
         )
         if merge.returncode != 0:
-            log.warning("Job %s: PR merge failed (%s) — continuing with deploy anyway",
-                        job_id, merge.stderr.strip())
+            log.warning("Job %s: PR merge failed (%s) — attempting direct git merge",
+                        job_id, merge.stderr.strip()[:200])
+            # Fallback: merge locally and push
+            await _run_git(["git", "checkout", "dev"], cwd=cwd)
+            await _run_git(["git", "pull", "--ff-only", "origin", "dev"], cwd=cwd)
+            merge2 = await _run_git(
+                ["git", "merge", branch, "--no-ff", "-m", f"Merge {branch} to dev"],
+                cwd=cwd,
+            )
+            if merge2.returncode == 0:
+                await _run_git(["git", "push", "origin", "dev"], cwd=cwd, timeout=60)
+                log.info("Job %s: direct git merge succeeded", job_id)
+            else:
+                log.warning("Job %s: direct merge also failed — changes are on GitHub PR only",
+                            job_id)
+        else:
+            log.info("Job %s: PR merged to dev", job_id)
 
     # Always ensure we're on dev with latest
     await _run_git(["git", "checkout", "dev"], cwd=cwd)
     await _run_git(["git", "pull", "--ff-only", "origin", "dev"], cwd=cwd)
 
-    # Detect what changed in the last commit
-    diff = await _run_git(["git", "diff", "HEAD~1..HEAD", "--name-only"], cwd=cwd)
-    changed = [p for p in diff.stdout.strip().splitlines() if p]
-
-    if not changed:
-        log.info("Job %s: no changed files detected — skipping deploy", job_id)
+    # Skip deploy if nothing relevant changed
+    if not changed or (not has_web and not has_harness):
         return
 
-    has_web     = any(p.startswith("apps/web/") for p in changed)
-    has_harness = any(p.startswith("apps/harness/") for p in changed)
-
-    if not has_web and not has_harness:
-        log.info("Job %s: changes only outside web/harness — skipping deploy", job_id)
-        return
+    target = "both" if (has_web and has_harness) else ("web" if has_web else "harness")
+    yield {"type": "deploy_started", "target": target}
 
     target = "both" if (has_web and has_harness) else ("web" if has_web else "harness")
     yield {"type": "deploy_started", "target": target}
