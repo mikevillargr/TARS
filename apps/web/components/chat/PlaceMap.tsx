@@ -3,7 +3,6 @@
 import { useEffect } from "react"
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet"
 import L from "leaflet"
-import "leaflet/dist/leaflet.css"
 
 // Custom DivIcon — no broken image references, matches TARS moss palette
 const PIN_ICON = L.divIcon({

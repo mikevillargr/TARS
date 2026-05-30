@@ -804,7 +804,7 @@ const MessageArea = memo(function MessageArea({
         <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
       ))}
       {hasCards && (
-        <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
+        <div className="max-w-3xl mx-auto pl-0 sm:pl-11 flex flex-col gap-2">
           {calendarSuggestions.map((s) => (
             <CalendarSuggestChip
               key={s.tool_use_id}
