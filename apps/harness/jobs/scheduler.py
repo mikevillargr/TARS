@@ -127,9 +127,16 @@ async def _sync_fireflies() -> None:
     log.info("Fireflies sync: %d new meeting(s) ingested", ingested)
 
 
+async def _sync_google_people() -> None:
+    """Pull Google Contacts diffs via sync token (or full sync on first run)."""
+    from jobs.people_sync import sync_people
+    await sync_people()
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
-_FOUR_HOURS = 4 * 60 * 60
+_FOUR_HOURS  = 4 * 60 * 60
+_FIVE_MINUTES = 5 * 60
 
 def build_tasks() -> list[asyncio.Task]:
     """
@@ -145,6 +152,15 @@ def build_tasks() -> list[asyncio.Task]:
                 run_immediately=True,
             ),
             _sync_fireflies,
+        ),
+        (
+            JobState(
+                name="google_people_sync",
+                description="Pull Google Contacts diffs every 5 minutes",
+                interval_sec=_FIVE_MINUTES,
+                run_immediately=True,
+            ),
+            _sync_google_people,
         ),
     ]
 

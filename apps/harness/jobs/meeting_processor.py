@@ -86,6 +86,9 @@ async def process_meeting(
 
         # Feed into RAG stores so TARS can recall and search meeting content
         await _save_to_rag(db, user_id, meeting, action_items)
+
+        # Auto-detect new people from attendees → pending review queue
+        await _enqueue_attendee_contacts(db, user_id, meeting)
         return True
 
     except Exception as exc:
@@ -250,6 +253,33 @@ Be specific and concrete. If no action items, return an empty array."""
     except Exception:
         log.warning("Failed to parse AI meeting response as JSON")
         return ff_overview or raw[:500], _parse_ff_action_items(ff_action_items)
+
+
+async def _enqueue_attendee_contacts(
+    db: AsyncSession,
+    user_id: str,
+    meeting: Meeting,
+) -> None:
+    """
+    Enqueue any meeting attendees not yet in the contact graph as PendingContacts.
+    """
+    if not meeting.attendees:
+        return
+    from jobs.pending_contacts import enqueue_from_strings
+    date_str = meeting.started_at.strftime("%b %-d, %Y") if meeting.started_at else ""
+    context  = f"Attended '{meeting.title}'" + (f" on {date_str}" if date_str else "")
+    try:
+        created = await enqueue_from_strings(
+            db, user_id, meeting.attendees,
+            source="meeting",
+            source_id=meeting.id,
+            extracted_context=context,
+        )
+        if created:
+            await db.commit()
+            log.info("Meeting %s: queued %d new contact(s) for review", meeting.id, created)
+    except Exception as exc:
+        log.warning("Failed to enqueue meeting attendees as pending contacts: %s", exc)
 
 
 def _parse_ff_action_items(raw: str) -> list:

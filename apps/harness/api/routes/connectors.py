@@ -17,6 +17,21 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ── Single source of truth: connector id → human name / capabilities ──────────
+# Used by both the OAuth callback and the status enrichment in get_connectors.
+_CONNECTOR_NAMES = {
+    "gmail":         "Gmail",
+    "gcal":          "Google Calendar",
+    "google_people": "Google Contacts",
+}
+_CONNECTOR_CAPS = {
+    "gmail":         ["read", "webhook"],
+    "gcal":          ["read", "write"],
+    "google_people": ["read", "write"],
+}
+_GOOGLE_CONNECTORS = set(_CONNECTOR_NAMES.keys())
+
+
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class ConnectorOut(BaseModel):
@@ -49,13 +64,17 @@ async def get_connectors(
 ):
     static = list_connectors()
 
-    # Enrich Gmail / GCal with last_synced_at from DB if tokens stored
+    # Enrich each connector with last_synced_at + true connected status from DB
+    # Map static.id → DB row via _CONNECTOR_NAMES (handles non-trivial mappings
+    # like "gcal" → "Google Calendar" and "google_people" → "Google Contacts")
     db_result = await db.execute(select(Connector))
-    db_connectors = {c.name.lower(): c for c in db_result.scalars().all()}
+    db_by_name = {c.name: c for c in db_result.scalars().all()}
 
     out = []
     for c in static:
-        db_conn = db_connectors.get(c.id)
+        # Prefer mapped name; fall back to lookup-by-name for any id we don't
+        # know about (e.g. Fireflies — name in DB == name in registry)
+        db_conn = db_by_name.get(_CONNECTOR_NAMES.get(c.id, c.name))
         last_synced = (
             db_conn.last_synced_at.isoformat() if db_conn and db_conn.last_synced_at else None
         )
@@ -78,7 +97,7 @@ async def get_connectors(
 @router.get("/oauth/authorize/{connector}")
 async def oauth_authorize(connector: str, request: Request):
     """Redirect user to Google's OAuth consent page. No auth needed — just a redirect."""
-    if connector not in ("gmail", "gcal"):
+    if connector not in _GOOGLE_CONNECTORS:
         raise HTTPException(status_code=400, detail="Unknown connector")
 
     from connectors.google_oauth import get_auth_url
@@ -95,7 +114,7 @@ async def oauth_callback(
     db: AsyncSession = Depends(get_db),
 ):
     """Google redirects here after user grants access. No JWT needed — browser-driven."""
-    if connector not in ("gmail", "gcal"):
+    if connector not in _GOOGLE_CONNECTORS:
         raise HTTPException(status_code=400, detail="Unknown connector")
     if not code:
         raise HTTPException(status_code=400, detail="Missing code")
@@ -115,13 +134,10 @@ async def oauth_callback(
     if not user:
         raise HTTPException(status_code=500, detail="No user in database")
 
-    name_map = {"gmail": "Gmail", "gcal": "Google Calendar"}
-    caps_map = {"gmail": ["read", "webhook"], "gcal": ["read", "write"]}
-
     conn_result = await db.execute(
         select(Connector).where(
             Connector.user_id == user.id,
-            Connector.name == name_map[connector],
+            Connector.name == _CONNECTOR_NAMES[connector],
         )
     )
     conn = conn_result.scalar_one_or_none()
@@ -131,15 +147,15 @@ async def oauth_callback(
     else:
         conn = Connector(
             user_id=user.id,
-            name=name_map[connector],
+            name=_CONNECTOR_NAMES[connector],
             status="connected",
             auth=auth,
-            capabilities=caps_map[connector],
+            capabilities=_CONNECTOR_CAPS[connector],
         )
         db.add(conn)
 
     await db.commit()
-    log.info("%s connected for user %s", name_map[connector], user.id)
+    log.info("%s connected for user %s", _CONNECTOR_NAMES[connector], user.id)
 
     # Redirect back to connectors page
     base = "https://tarsmv.duckdns.org" if via_prod else "http://localhost:3000"
@@ -152,14 +168,13 @@ async def oauth_disconnect(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    name_map = {"gmail": "Gmail", "gcal": "Google Calendar"}
-    if connector not in name_map:
+    if connector not in _GOOGLE_CONNECTORS:
         raise HTTPException(status_code=400, detail="Unknown connector")
 
     result = await db.execute(
         select(Connector).where(
             Connector.user_id == user_id,
-            Connector.name == name_map[connector],
+            Connector.name == _CONNECTOR_NAMES[connector],
         )
     )
     conn = result.scalar_one_or_none()

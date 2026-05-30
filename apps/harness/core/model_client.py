@@ -432,6 +432,52 @@ GENERATE_PDF_TOOL = {
 }
 
 
+LOOKUP_CONTACT_TOOL = {
+    "name": "lookup_contact",
+    "description": (
+        "Look up a single person Mike knows. Use whenever Mike refers to a person by name "
+        "or asks who someone is (e.g. 'who is Sarah?', 'what's Tim's company?'). "
+        "Searches Mike's Google Contacts mirror first; falls back to live Google search if "
+        "no local match. Returns the contact's org, role, primary email/phone, and any "
+        "TARS-derived context about them."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Name, partial name, or email of the person to look up.",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+
+SEARCH_CONTACTS_TOOL = {
+    "name": "search_contacts",
+    "description": (
+        "Search Mike's contacts and return multiple matches (up to 10). Use when Mike asks "
+        "broader questions like 'who works at Acme?', 'list my contacts from NCH', or "
+        "'who do I know in product?'. For single-person lookups use lookup_contact instead."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Search query — matches against name, email, and organization.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results to return. Default 10.",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+
 # ─── Tier routing tables ─────────────────────────────────────────────────────
 
 # Tier 2 display label derived from the model name (strip org prefix for brevity)

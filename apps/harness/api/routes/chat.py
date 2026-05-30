@@ -21,6 +21,7 @@ from core.model_client import (
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
+    LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -555,6 +556,8 @@ async def send_message(
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
+        LOOKUP_CONTACT_TOOL,
+        SEARCH_CONTACTS_TOOL,
     ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -659,6 +662,91 @@ async def send_message(
                             log.warning("save_to_second_brain tool failed: %s", exc)
                             return f"Failed to save to Second Brain: {exc}"
 
+                    if name in ("lookup_contact", "search_contacts"):
+                        try:
+                            from sqlalchemy import select as _select, or_ as _or
+                            from db.models import Contact, Connector
+                            query = (tool_input.get("query") or "").strip()
+                            if not query:
+                                return "Empty query."
+                            needle = f"%{query}%"
+                            limit  = int(tool_input.get("limit", 10)) if name == "search_contacts" else 5
+
+                            stmt = (
+                                _select(Contact)
+                                .where(
+                                    Contact.user_id == user_id,
+                                    _or(
+                                        Contact.display_name.ilike(needle),
+                                        Contact.primary_email.ilike(needle),
+                                        Contact.organization.ilike(needle),
+                                    ),
+                                )
+                                .limit(limit)
+                            )
+                            result = await bg_db.execute(stmt)
+                            matches = result.scalars().all()
+
+                            # Fallback for lookup_contact: live Google search if no local hit
+                            if name == "lookup_contact" and not matches:
+                                conn_result = await bg_db.execute(
+                                    _select(Connector).where(
+                                        Connector.user_id == user_id,
+                                        Connector.name == "Google Contacts",
+                                    )
+                                )
+                                conn = conn_result.scalar_one_or_none()
+                                if conn and conn.auth.get("refresh_token"):
+                                    from connectors.google_people import GooglePeopleClient
+                                    import asyncio as _asyncio
+                                    loop = _asyncio.get_event_loop()
+                                    try:
+                                        gp = GooglePeopleClient(conn.auth)
+                                        live = await loop.run_in_executor(
+                                            None, lambda: gp.search_contacts(query, page_size=5)
+                                        )
+                                        if live:
+                                            lines = []
+                                            for person in live:
+                                                names = person.get("names", [])
+                                                emails = person.get("emailAddresses", [])
+                                                orgs = person.get("organizations", [])
+                                                name_ = (names[0].get("displayName") if names else None) or "Unknown"
+                                                em    = emails[0].get("value") if emails else None
+                                                org_  = orgs[0].get("name") if orgs else None
+                                                title_= orgs[0].get("title") if orgs else None
+                                                parts = [name_]
+                                                if title_ or org_:
+                                                    parts.append(f"({', '.join(p for p in [title_, org_] if p)})")
+                                                if em:
+                                                    parts.append(f"<{em}>")
+                                                lines.append(" ".join(parts))
+                                            return f"Live Google search results for '{query}':\n" + "\n".join(lines)
+                                    except Exception as exc:
+                                        log.warning("Live People API search failed: %s", exc)
+
+                            if not matches:
+                                return f"No contacts found matching '{query}'."
+
+                            lines = []
+                            for c in matches:
+                                parts = [c.display_name or "Unknown"]
+                                if c.job_title or c.organization:
+                                    parts.append(f"({', '.join(p for p in [c.job_title, c.organization] if p)})")
+                                if c.primary_email:
+                                    parts.append(f"<{c.primary_email}>")
+                                if c.primary_phone:
+                                    parts.append(f"📞 {c.primary_phone}")
+                                line = " ".join(parts)
+                                if c.tars_context:
+                                    line += f"\n  context: {c.tars_context[:200]}"
+                                lines.append(line)
+                            header = f"Found {len(matches)} contact(s) for '{query}':"
+                            return header + "\n" + "\n".join(lines)
+                        except Exception as exc:
+                            log.warning("%s tool failed: %s", name, exc)
+                            return f"Contact lookup failed: {exc}"
+
                     if name == "read_email":
                         try:
                             from sqlalchemy import select as _select
@@ -708,6 +796,33 @@ async def send_message(
                             body = extract_thread_text(thread)
                             if not body:
                                 return "Email body is empty or could not be extracted."
+
+                            # Enqueue any unique sender as a PendingContact for review
+                            try:
+                                senders: list[str] = []
+                                subject = ""
+                                for msg in thread.get("messages", []):
+                                    headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+                                    if not subject:
+                                        subject = headers.get("Subject", "")
+                                    s = headers.get("From", "").strip()
+                                    if s and s not in senders:
+                                        senders.append(s)
+                                if senders:
+                                    from jobs.pending_contacts import enqueue_from_strings
+                                    context = f"Emailed about: {subject[:120]}" if subject else "Detected from email thread"
+                                    new_count = await enqueue_from_strings(
+                                        bg_db, user_id, senders,
+                                        source="email",
+                                        source_id=thread_id,
+                                        extracted_context=context,
+                                    )
+                                    if new_count:
+                                        await bg_db.commit()
+                                        log.info("read_email: queued %d new contact(s) for review", new_count)
+                            except Exception as exc:
+                                log.warning("Failed to enqueue email senders: %s", exc)
+
                             # Cap at 4000 chars to stay within token budget
                             if len(body) > 4000:
                                 body = body[:4000] + "\n\n[... email truncated ...]"
