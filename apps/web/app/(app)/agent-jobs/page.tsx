@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Cpu, ChevronRight, Plus, X, CheckCircle, XCircle, Loader2, AlertCircle, ExternalLink } from "lucide-react"
 import AgentJobStream from "@/components/agent-jobs/AgentJobStream"
 
@@ -96,6 +97,10 @@ const AGENT_TYPES = [
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function AgentJobsPage() {
+  const searchParams = useSearchParams()
+  const autoSelectId = searchParams.get("id")
+  const didAutoSelect = useRef(false)
+
   const [jobs, setJobs] = useState<AgentJob[]>([])
   const [selected, setSelected] = useState<AgentJob | null>(null)
   const [loading, setLoading] = useState(true)
@@ -123,6 +128,16 @@ export default function AgentJobsPage() {
     const interval = setInterval(loadJobs, 5000)
     return () => clearInterval(interval)
   }, [loadJobs])
+
+  // Auto-select job from ?id= query param (from "Watch live" / "Full view" links)
+  useEffect(() => {
+    if (!autoSelectId || didAutoSelect.current) return
+    const match = jobs.find(j => j.id === autoSelectId)
+    if (match) {
+      setSelected(match)
+      didAutoSelect.current = true
+    }
+  }, [autoSelectId, jobs])
 
   async function handleCreate() {
     if (!newInstruction.trim()) return

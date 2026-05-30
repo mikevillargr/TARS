@@ -1738,7 +1738,7 @@ export default function ChatPage() {
               </div>
               <div className="flex items-center gap-3">
                 <a
-                  href="/agent-jobs"
+                  href={`/agent-jobs?id=${activeJobId}`}
                   className="text-[11px] hover:underline flex items-center gap-1"
                   style={{ color: "var(--c-moss)" }}
                 >
