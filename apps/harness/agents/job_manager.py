@@ -236,16 +236,17 @@ async def _run_subagent(
                     await db.commit()
 
         elif event["type"] == "completed":
-            pr_url = event.get("pr_url")
-            if pr_url:
-                async with db_session_factory() as db:
-                    from sqlalchemy import select
-                    from db.models import AgentJob
-                    row = (await db.execute(select(AgentJob).where(AgentJob.id == job_id))).scalar_one_or_none()
-                    if row:
-                        row.pr_url = pr_url
-                        row.output = event.get("summary", "")
-                        await db.commit()
+            async with db_session_factory() as db:
+                from sqlalchemy import select
+                from db.models import AgentJob
+                row = (await db.execute(select(AgentJob).where(AgentJob.id == job_id))).scalar_one_or_none()
+                if row:
+                    if event.get("pr_url"):
+                        row.pr_url = event["pr_url"]
+                    if event.get("branch"):
+                        row.branch = event["branch"]
+                    row.output = event.get("summary", "")
+                    await db.commit()
 
         await broadcast(job_id, event)
 
@@ -338,17 +339,19 @@ async def _run_evolutionarist(
                 await broadcast(job_id, enriched)
                 if event["type"] == "completed":
                     sub_result = event.get("summary", "Sub-agent completed.")
-                    pr_url = event.get("pr_url")
-                    if pr_url:
-                        async with db_session_factory() as db:
-                            from sqlalchemy import select
-                            from db.models import AgentJob
-                            row = (await db.execute(select(AgentJob).where(AgentJob.id == sub_job_id))).scalar_one_or_none()
-                            if row:
-                                row.pr_url = pr_url
-                                row.status = "completed"
-                                row.completed_at = datetime.now(timezone.utc)
-                                await db.commit()
+                    async with db_session_factory() as db:
+                        from sqlalchemy import select
+                        from db.models import AgentJob
+                        row = (await db.execute(select(AgentJob).where(AgentJob.id == sub_job_id))).scalar_one_or_none()
+                        if row:
+                            if event.get("pr_url"):
+                                row.pr_url = event["pr_url"]
+                            if event.get("branch"):
+                                row.branch = event["branch"]
+                            row.output = sub_result
+                            row.status = "completed"
+                            row.completed_at = datetime.now(timezone.utc)
+                            await db.commit()
 
             _approval.cleanup(sub_job_id)
 

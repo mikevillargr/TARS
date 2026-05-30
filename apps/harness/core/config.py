@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     # Options: tiny, tiny.en, small, small.en, medium, medium.en, large-v3
     whisper_model: str = "small"
 
+    github_token: str = ""   # PAT for agent git push + gh pr create
+
     claude_code_path: str = "/usr/local/bin/claude"
     repos_base_path: str = "/home/tars/repos"
     # Path to the TARS repo root — differs between local dev and VPS

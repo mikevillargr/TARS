@@ -1,8 +1,15 @@
 """
 AgentExecutor — wraps claude-code-sdk and yields typed events.
 
-Only used for sub-agents (frontend / backend / sa / release).
+Only used for sub-agents (frontend / backend / sa).
 Evolutionarist uses the standard Anthropic SDK directly in job_manager.
+
+Git workflow per job:
+  1. checkout -b agent/<job_id[:8]> (feature branch off current HEAD)
+  2. Claude does its work (Read / Write / Edit / Bash / Glob / Grep)
+  3. git add -A && git commit
+  4. git push origin agent/<job_id[:8]>
+  5. gh pr create --base dev  →  PR URL stored in DB + shown in UI
 
 Typed event schema (all dicts with a "type" field):
   text_chunk        — Claude's streamed text
@@ -17,6 +24,7 @@ Typed event schema (all dicts with a "type" field):
 """
 import asyncio
 import logging
+import os
 import re
 import subprocess
 from typing import AsyncGenerator, Optional
@@ -46,6 +54,17 @@ def _is_destructive(command: str) -> Optional[str]:
     return None
 
 
+def _gh_env() -> dict:
+    """Environment for gh CLI and git push — injects GITHUB_TOKEN + ANTHROPIC_API_KEY."""
+    env = dict(os.environ)
+    if settings.github_token:
+        env["GITHUB_TOKEN"] = settings.github_token
+        env["GH_TOKEN"] = settings.github_token
+    if settings.anthropic_api_key:
+        env["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
+    return env
+
+
 async def run(
     *,
     job_id: str,
@@ -56,7 +75,11 @@ async def run(
 ) -> AsyncGenerator[dict, None]:
     """
     Async generator that runs a claude-code-sdk agent and yields typed events.
-    Caller is responsible for catching StopAsyncIteration.
+
+    Git flow:
+      - Creates feature branch agent/<job_id[:8]> before the agent starts.
+      - On completion: stages all changes, commits, pushes, creates a PR to dev.
+      - No changes → no commit, no PR.
     """
     try:
         from claude_code_sdk import query, ClaudeCodeOptions  # type: ignore
@@ -68,9 +91,11 @@ async def run(
         yield {"type": "error", "message": "claude-code-sdk not installed. Run: pip install claude-code-sdk"}
         return
 
-    # Pass ANTHROPIC_API_KEY via options.env so the claude CLI subprocess gets it.
-    # The harness uses TARS_ANTHROPIC_API_KEY (pydantic alias) to avoid collision
-    # with Claude Desktop — but the claude CLI expects the standard name.
+    # ── 1. Create feature branch ───────────────────────────────────────────────
+    branch = await _setup_branch(cwd=cwd, job_id=job_id)
+    yield {"type": "text_chunk", "text": f"Working on branch `{branch}`…\n"}
+
+    # ── 2. Run agent ───────────────────────────────────────────────────────────
     extra_env: dict = {}
     if settings.anthropic_api_key:
         extra_env["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
@@ -85,14 +110,10 @@ async def run(
     )
 
     summary_text = ""
-    # Track whether we should stop processing (set when we yield a terminal event
-    # but still need to drain the SDK generator cleanly).
     _stop = False
 
-    # Get a reference to the generator so we can explicitly close it in the
-    # finally block.  Explicit aclose() from the SAME asyncio task avoids the
-    # anyio "cancel scope in a different task" RuntimeError that occurs when
-    # Python's GC finalizer tries to close the generator from a background task.
+    # Hold an explicit reference to the generator so we can aclose() it from
+    # THIS asyncio task (avoids anyio "cancel scope in different task" error).
     _gen = query(prompt=instruction, options=options)
 
     try:
@@ -124,7 +145,6 @@ async def run(
                                     "command": command,
                                     "reason": reason,
                                 }
-                                # Wait for frontend response (blocks this generator)
                                 await approval_gate.event.wait()
 
                                 if not approval_gate.result.get("approved"):
@@ -132,7 +152,6 @@ async def run(
                                     _stop = True
                                     break
 
-                                # Use modified command if provided
                                 modified = approval_gate.result.get("modified_command")
                                 if modified:
                                     tool_input = {**tool_input, "command": modified}
@@ -141,7 +160,6 @@ async def run(
                                     "command": tool_input.get("command", command),
                                 }
 
-                                # Reset gate for next approval in this job
                                 from agents import approval as _approval_mod
                                 _approval_mod.reset(job_id)
 
@@ -154,7 +172,6 @@ async def run(
                         if isinstance(block, ToolResultBlock):
                             content = block.content or ""
                             if isinstance(content, list):
-                                # List of content dicts from tool output
                                 content = "\n".join(
                                     c.get("text", str(c)) if isinstance(c, dict) else str(c)
                                     for c in content
@@ -169,7 +186,7 @@ async def run(
             # ── ResultMessage: final outcome ───────────────────────────────
             elif isinstance(message, ResultMessage):
                 if message.is_error:
-                    err_text = message.result or "Agent run failed with unknown error."
+                    err_text = message.result or "Agent run failed."
                     yield {"type": "error", "message": err_text}
                     _stop = True
                     break
@@ -185,50 +202,123 @@ async def run(
         _stop = True
 
     finally:
-        # Explicitly close the SDK generator from THIS asyncio task.
-        # Without this, Python's GC finalizer closes it from a background task,
-        # which triggers: RuntimeError("Attempted to exit cancel scope in a
-        # different task than it was entered in") from anyio's cleanup code.
+        # Explicitly close the SDK generator in THIS task to avoid anyio
+        # RuntimeError from GC finalizer running in a different asyncio task.
         try:
             await _gen.aclose()
         except Exception:
             pass
 
     if _stop:
+        # Still try to commit any partial work so nothing is lost
+        await _commit_and_push(cwd=cwd, job_id=job_id, branch=branch,
+                               summary=summary_text or "Partial work before error.")
         return
 
-    # Attempt to create a PR after successful completion
-    pr_url = await _create_pr(cwd=cwd, job_id=job_id)
+    # ── 3. Commit, push, open PR ───────────────────────────────────────────────
+    yield {"type": "text_chunk", "text": "\nCommitting and pushing changes…\n"}
+    pr_url = await _commit_and_push(cwd=cwd, job_id=job_id, branch=branch,
+                                    summary=summary_text or instruction[:120])
 
     yield {
         "type": "completed",
         "summary": summary_text[:500] if summary_text else "Agent completed.",
         "pr_url": pr_url,
+        "branch": branch,
     }
 
 
-async def _create_pr(*, cwd: str, job_id: str) -> Optional[str]:
-    """Create a PR from current branch to dev using gh CLI. Returns PR URL or None."""
-    try:
-        result = await asyncio.to_thread(
-            subprocess.run,
-            [
-                "gh", "pr", "create",
-                "--base", "dev",
-                "--fill",
-                "--draft",
-            ],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            url = result.stdout.strip().split("\n")[-1]
-            if url.startswith("http"):
-                return url
-        else:
-            log.warning("gh pr create failed for job %s: %s", job_id, result.stderr)
-    except Exception as exc:
-        log.warning("PR creation failed for job %s: %s", job_id, exc)
+# ── Git helpers ────────────────────────────────────────────────────────────────
+
+async def _run_git(args: list, *, cwd: str, timeout: int = 30) -> subprocess.CompletedProcess:
+    return await asyncio.to_thread(
+        subprocess.run, args,
+        cwd=cwd, capture_output=True, text=True, timeout=timeout,
+        env=_gh_env(),
+    )
+
+
+async def _setup_branch(*, cwd: str, job_id: str) -> str:
+    """
+    Create a fresh feature branch off the current HEAD.
+    Returns the branch name (falls back to current branch on failure).
+    """
+    branch = f"agent/{job_id[:8]}"
+
+    # Ensure we're on dev first
+    await _run_git(["git", "checkout", "dev"], cwd=cwd)
+    await _run_git(["git", "pull", "--ff-only", "origin", "dev"], cwd=cwd)
+
+    result = await _run_git(["git", "checkout", "-b", branch], cwd=cwd)
+    if result.returncode != 0:
+        log.warning("Branch creation failed for job %s: %s — working on dev", job_id, result.stderr)
+        return "dev"
+    return branch
+
+
+async def _commit_and_push(*, cwd: str, job_id: str, branch: str, summary: str) -> Optional[str]:
+    """
+    Stage all changes, commit, push to origin, open a draft PR to dev.
+    Returns PR URL or None.
+    """
+    # Check for changes
+    status = await _run_git(["git", "status", "--porcelain"], cwd=cwd)
+    if not status.stdout.strip():
+        log.info("No changes to commit for job %s", job_id)
+        # If on a feature branch with no changes, just return — nothing to PR
+        return None
+
+    # Stage everything
+    await _run_git(["git", "add", "-A"], cwd=cwd)
+
+    # Build commit message
+    short_summary = summary.strip().split("\n")[0][:72]
+    commit_msg = f"agent({job_id[:8]}): {short_summary}"
+
+    commit = await _run_git(["git", "commit", "-m", commit_msg], cwd=cwd)
+    if commit.returncode != 0:
+        log.warning("Commit failed for job %s: %s", job_id, commit.stderr)
+        return None
+
+    log.info("Job %s committed: %s", job_id, commit_msg)
+
+    # Push
+    push = await _run_git(["git", "push", "origin", branch], cwd=cwd, timeout=60)
+    if push.returncode != 0:
+        log.warning("Push failed for job %s: %s", job_id, push.stderr)
+        return None
+
+    log.info("Job %s pushed branch %s", job_id, branch)
+
+    # Open PR (only for feature branches, not direct dev commits)
+    if branch == "dev":
+        return None
+
+    pr_body = (
+        f"## Agent Job `{job_id[:8]}`\n\n"
+        f"{summary[:800]}\n\n"
+        f"---\n*Auto-generated by TARS Evolutionarist agent*"
+    )
+
+    pr = await _run_git(
+        ["gh", "pr", "create",
+         "--base", "dev",
+         "--head", branch,
+         "--title", commit_msg,
+         "--body", pr_body,
+         "--draft"],
+        cwd=cwd, timeout=30,
+    )
+
+    if pr.returncode == 0:
+        url = pr.stdout.strip().split("\n")[-1]
+        if url.startswith("http"):
+            log.info("Job %s PR created: %s", job_id, url)
+            return url
+        # gh sometimes prints "Creating pull request..." before the URL
+        for line in pr.stdout.strip().split("\n"):
+            if line.startswith("http"):
+                return line
+
+    log.warning("PR creation failed for job %s: %s", job_id, pr.stderr)
     return None
