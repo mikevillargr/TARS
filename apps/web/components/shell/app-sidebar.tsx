@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
-  Mail, Clock, Plug, Database, Settings, Archive,
+  Mail, Clock, Plug, Database, Settings, Archive, Sun, Moon,
 } from "lucide-react"
 import {
   Sidebar,
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { navItems } from "./nav-items"
+import { useTheme } from "@/components/ThemeProvider"
 
 const iconMap = {
   MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
@@ -56,6 +57,7 @@ function TarsLogo() {
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const { theme, toggle: toggleTheme } = useTheme()
 
   return (
     <Sidebar>
@@ -103,6 +105,27 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="px-3 py-3 border-t border-sidebar-border">
+        {/* Dark mode toggle */}
+        <div
+          className="flex items-center justify-between px-3 py-2 rounded-lg"
+          style={{ color: "var(--c-ink-muted)" }}
+        >
+          <span className="text-sm font-medium">Dark Mode</span>
+          <button
+            onClick={toggleTheme}
+            className="p-1.5 rounded-lg transition-colors hover:bg-[var(--c-surface-raised)]"
+            style={{ color: "var(--c-ink-muted)" }}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? (
+              <Sun className="w-4 h-4" />
+            ) : (
+              <Moon className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
         <div className="flex items-center gap-3 px-2">
           <Avatar className="size-8">
             <AvatarFallback className="text-xs bg-sidebar-accent text-sidebar-accent-foreground">MV</AvatarFallback>

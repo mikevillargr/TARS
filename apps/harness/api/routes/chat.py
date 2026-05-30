@@ -24,6 +24,7 @@ from core.model_client import (
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
     CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
     SEARCH_PLACES_TOOL, SAVE_PLACE_TOOL, GET_SAVED_PLACES_TOOL,
+    CREATE_AGENT_JOB_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -571,6 +572,7 @@ async def send_message(
         SEARCH_PLACES_TOOL,
         SAVE_PLACE_TOOL,
         GET_SAVED_PLACES_TOOL,
+        CREATE_AGENT_JOB_TOOL,
     ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -1602,6 +1604,43 @@ async def send_message(
                         except Exception as exc:
                             log.warning("get_saved_places tool failed: %s", exc)
                             return f"Failed to retrieve saved places: {exc}"
+
+                    if name == "create_agent_job":
+                        try:
+                            from db.models import AgentJob
+                            agent_type = tool_input.get("agent_type", "evolutionarist")
+                            instruction = tool_input.get("instruction", "")
+                            from core.config import settings as _settings
+                            job = AgentJob(
+                                user_id=user_id,
+                                agent_type=agent_type,
+                                type="agent",
+                                instruction=instruction,
+                                repo_path=_settings.tars_repo_path,
+                                branch="dev",
+                                status="pending",
+                                conversation_id=conversation_id,
+                            )
+                            bg_db.add(job)
+                            await bg_db.commit()
+                            await bg_db.refresh(job)
+                            # Start the agent in background
+                            from agents.job_manager import start_job as _start_job
+                            from db.session import AsyncSessionLocal as _ASL
+                            import asyncio as _asyncio
+                            _asyncio.create_task(_start_job(job.id, _ASL))
+                            # Emit card event so frontend can show a link to the job
+                            await _emit_card({
+                                "type": "agent_job_created",
+                                "job_id": job.id,
+                                "agent_type": agent_type,
+                                "instruction": instruction,
+                            })
+                            job_url = f"{_settings.tars_app_url}/agent-jobs"
+                            return f"Agent job created (ID: {job.id}, type: {agent_type}). View the live stream at: {job_url}"
+                        except Exception as exc:
+                            log.warning("create_agent_job tool failed: %s", exc)
+                            return f"Failed to create agent job: {exc}"
 
                     return "Action completed."
 

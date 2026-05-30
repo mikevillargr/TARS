@@ -36,3 +36,8 @@ def require_auth(credentials: HTTPAuthorizationCredentials = Depends(bearer_sche
     if not sub:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     return sub
+
+
+def verify_ws_token(token: str) -> Optional[str]:
+    """Validate a JWT passed as a query param on WebSocket upgrade. Returns user_id or None."""
+    return decode_token(token)

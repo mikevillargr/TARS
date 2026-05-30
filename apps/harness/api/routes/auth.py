@@ -1,7 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from core.auth import verify_password, create_token
+from core.auth import verify_password, create_token, require_auth
 from core.config import settings
 
 router = APIRouter()
@@ -26,3 +26,9 @@ async def login(body: LoginRequest):
 
     token = create_token(body.username)
     return LoginResponse(token=token)
+
+
+@router.get("/token")
+async def get_raw_token(user_id: str = Depends(require_auth)) -> dict:
+    """Return a fresh JWT — used by frontend to auth WebSocket connections."""
+    return {"token": create_token(user_id)}

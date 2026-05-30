@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
+import AgentJobStream from "@/components/agent-jobs/AgentJobStream"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
@@ -39,6 +40,15 @@ interface StreamingMsg {
   role: "assistant"
   content: string
   streaming: true
+}
+
+interface AgentStreamMessage {
+  id: string
+  role: "agent_stream"
+  job_id: string
+  agent_type: string
+  instruction: string
+  created_at: string
 }
 
 interface TaskSuggestion {
@@ -799,11 +809,28 @@ function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
   return null
 }
 
+// ─── Agent stream bubble — inline in message thread ──────────────
+function AgentStreamBubble({ msg }: { msg: AgentStreamMessage }) {
+  return (
+    <div className="group flex gap-3 min-w-0 max-w-3xl mx-auto">
+      <div className="w-8 h-8 rounded-full shrink-0 overflow-hidden" style={{ border: "2px solid var(--c-moss)" }}>
+        <img src="/tars-avatar.svg" alt="TARS" style={{ width: "100%", height: "100%", display: "block" }} />
+      </div>
+      <div className="flex flex-col min-w-0 flex-1">
+        <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>TARS</span>
+        <div className="rounded-2xl overflow-hidden border" style={{ borderColor: "var(--c-border)" }}>
+          <AgentJobStream jobId={msg.job_id} inline />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Message area ────────────────────────────────────────────────
 // memo: allMessages is stable during typing (useMemo on [messages,streaming]),
 // so this entire section is skipped on every keystroke → no O(n) reconcile cost.
 interface MessageAreaProps {
-  allMessages: (Message | StreamingMsg)[]
+  allMessages: (Message | StreamingMsg | AgentStreamMessage)[]
   calendarSuggestions: CalendarSuggestion[]
   taskSuggestions: TaskSuggestion[]
   artifactNotifications: ArtifactNotification[]
@@ -836,8 +863,7 @@ const MessageArea = memo(function MessageArea({
   messagesEndRef,
 }: MessageAreaProps) {
   const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
-    || artifactNotifications.length > 0 || contactResults.length > 0
-    || placeResults.length > 0
+    || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
       {allMessages.length === 0 ? (
@@ -849,19 +875,26 @@ const MessageArea = memo(function MessageArea({
         </div>
       ) : allMessages.map((msg, i) => (
         <React.Fragment key={"id" in msg ? msg.id : `stream-${i}`}>
-          <MessageBubble msg={msg} />
-          {/* Inline cards anchored to this saved assistant message */}
-          {"tool_results" in msg &&
-            (msg as Message).tool_results != null &&
-            (msg as Message).tool_results!.length > 0 &&
-            msg.role === "assistant" &&
-            !("streaming" in msg) && (
-            <InlineMessageCards
-              toolResults={(msg as Message).tool_results!}
-              msgId={(msg as Message).id}
-              onAsk={onAsk}
-            />
-          )}
+          {msg.role === "agent_stream"
+            ? <AgentStreamBubble msg={msg as AgentStreamMessage} />
+            : (
+              <>
+                <MessageBubble msg={msg as Message | StreamingMsg} />
+                {/* Inline cards anchored to this saved assistant message */}
+                {"tool_results" in msg &&
+                  (msg as Message).tool_results != null &&
+                  (msg as Message).tool_results!.length > 0 &&
+                  msg.role === "assistant" &&
+                  !("streaming" in msg) && (
+                  <InlineMessageCards
+                    toolResults={(msg as Message).tool_results!}
+                    msgId={(msg as Message).id}
+                    onAsk={onAsk}
+                  />
+                )}
+              </>
+            )
+          }
         </React.Fragment>
       ))}
       {/* Global card section — live preview during streaming only */}
@@ -935,6 +968,7 @@ export default function ChatPage() {
   const [calendarSuggestions, setCalendarSuggestions]     = useState<CalendarSuggestion[]>([])
   const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
+  const [agentStreamMessages, setAgentStreamMessages]     = useState<AgentStreamMessage[]>([])
   const [contactResults, setContactResults]               = useState<ContactResultSet[]>([])
   const [placeResults, setPlaceResults]                   = useState<PlaceResultSet[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
@@ -1005,6 +1039,7 @@ export default function ChatPage() {
     setCalendarSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
+    setAgentStreamMessages([])
     setContactResults([])
     setPlaceResults([])
   }, [activeChatId])
@@ -1336,6 +1371,17 @@ export default function ChatPage() {
                   places: evt.places,
                 } as PlaceResultSet])
               }
+            } else if (evt.type === "agent_job_created") {
+              if (chatId === activeChatIdRef.current) {
+                setAgentStreamMessages(prev => [...prev, {
+                  id: evt.job_id as string,
+                  role: "agent_stream" as const,
+                  job_id: evt.job_id as string,
+                  agent_type: evt.agent_type as string,
+                  instruction: evt.instruction as string,
+                  created_at: new Date().toISOString(),
+                }])
+              }
             } else if (evt.type === "done") {
               const finalMsg: Message = {
                 id: `done-${Date.now()}`,
@@ -1411,8 +1457,12 @@ export default function ChatPage() {
   }, [])
 
   const allMessages = useMemo(
-    () => (streaming ? [...messages, streaming] : messages),
-    [messages, streaming],
+    () => {
+      const base: (Message | StreamingMsg | AgentStreamMessage)[] = [...messages, ...agentStreamMessages]
+      if (streaming) base.push(streaming)
+      return base
+    },
+    [messages, streaming, agentStreamMessages],
   )
 
   return (

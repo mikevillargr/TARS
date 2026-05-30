@@ -2,7 +2,7 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Sun, Moon, Mic, Loader2 } from "lucide-react"
+import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2 } from "lucide-react"
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -170,24 +170,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 Agent Active
               </div>
             )}
-
-            {/* Dark mode toggle */}
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg transition-colors"
-              style={{ color: "var(--c-ink-muted)" }}
-              title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-
-            <button className="p-2 relative" style={{ color: "var(--c-ink-muted)" }}>
-              <Bell size={20} />
-              <span
-                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full border-2"
-                style={{ backgroundColor: "var(--c-amber)", borderColor: "var(--c-surface)" }}
-              />
-            </button>
 
             {/* Mobile-only voice new-chat button */}
             <button

@@ -14,6 +14,8 @@ interface Conversation {
   created_at: string
 }
 
+const PAGE_SIZE = 15
+
 export function ConversationList({
   onSelect,
 }: {
@@ -25,6 +27,7 @@ export function ConversationList({
 
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   useEffect(() => {
     apiGet<Conversation[]>("/chat/conversations")
@@ -32,6 +35,10 @@ export function ConversationList({
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [conversations.length])
 
   async function handleNew() {
     const conv = await apiPost<Conversation>("/chat/conversations")
@@ -70,7 +77,7 @@ export function ConversationList({
           <div className="p-4 text-sm text-muted-foreground">No conversations yet.</div>
         ) : (
           <ul className="p-2 space-y-0.5">
-            {conversations.map((conv) => (
+            {conversations.slice(0, visibleCount).map((conv) => (
               <li key={conv.id}>
                 <button
                   onClick={() => {
@@ -98,6 +105,16 @@ export function ConversationList({
                 </button>
               </li>
             ))}
+            {visibleCount < conversations.length && (
+              <li>
+                <button
+                  onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                  className="w-full px-2 py-2 rounded-md text-left text-sm transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                >
+                  Load more
+                </button>
+              </li>
+            )}
           </ul>
         )}
       </ScrollArea>

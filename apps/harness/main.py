@@ -101,6 +101,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.warning("Embedding model preload failed: %s", e)
 
+    # Reset any agent jobs left in running/awaiting_approval state from before
+    # this process started (harness restart wipes in-memory state).
+    try:
+        from db.session import AsyncSessionLocal
+        from db.models import AgentJob
+        from sqlalchemy import update
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                update(AgentJob)
+                .where(AgentJob.status.in_(["running", "awaiting_approval"]))
+                .values(status="failed", output="Harness restarted — job interrupted.")
+            )
+            if result.rowcount:
+                log.info("Reset %d stale running agent job(s) to failed", result.rowcount)
+            await db.commit()
+    except Exception as e:
+        log.warning("Stale job cleanup failed: %s", e)
+
     # Start Ollama keepalive — warms model on startup, recovers backoff after restarts
     keepalive_task = asyncio.create_task(_ollama_keepalive())
 

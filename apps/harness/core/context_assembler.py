@@ -158,6 +158,17 @@ Use Mermaid code blocks (```mermaid) to render diagrams directly in chat. Suppor
 • mindmap — topic breakdowns, brainstorming
 Diagrams render visually in the chat. Use proactively when a visual would be clearer than text.
 
+AGENT JOBS (Evolutionarist):
+TARS has a self-evolving coding agent system. Spawn agents that work on the TARS codebase.
+• create_agent_job — spawn an agent job. Use when Mike asks to:
+  - build, add, fix, improve, refactor, or change something in TARS itself
+  - "add X feature", "fix the Y bug", "improve Z", "evolve TARS to...", "update the codebase"
+  - "release" or "deploy" — use agent_type "release" for production deploys
+  Agent types: "evolutionarist" (default, auto-routes), "frontend", "backend", "sa", "release"
+  All agents work on the dev branch only.
+  The TARS app URL is https://tarsmv.duckdns.org — always use this domain for any links.
+  After creating a job, share: https://tarsmv.duckdns.org/agent-jobs?id={job_id} so Mike can watch it live. Replace {job_id} with the actual job ID returned by create_agent_job.
+
 WHEN TO STORE MEMORY VS SECOND BRAIN:
 - Personal facts, preferences, one-time events → save_memory
 - Reference knowledge, how-to notes, research, analysis → save_to_second_brain
@@ -414,23 +425,22 @@ async def assemble(
         except Exception:
             pass
 
-        async def _fetch_memory():
-            nonlocal mnemon_context, second_brain_context
+        async def _fetch_memory() -> tuple:
+            _mnemon = "No relevant memories."
+            _second_brain = "No relevant knowledge."
             try:
                 from memory import mnemon, second_brain
                 if is_lightweight:
-                    # Tier 1 (Haiku): top 3 memories only — enough for personalization,
-                    # low token cost. Skip second brain (document search not needed for Q&A).
                     memories = await mnemon.search(db, user_id, query, limit=3)
-                    mnemon_context = mnemon.format_for_context(memories)
+                    _mnemon = mnemon.format_for_context(memories)
                 else:
-                    # Tier 2/3: full context
                     memories = await mnemon.search(db, user_id, query, limit=6)
-                    mnemon_context = mnemon.format_for_context(memories)
+                    _mnemon = mnemon.format_for_context(memories)
                     sb_results = await second_brain.search(db, user_id, query, limit=4)
-                    second_brain_context = second_brain.format_for_context(sb_results)
+                    _second_brain = second_brain.format_for_context(sb_results)
             except Exception:
                 pass
+            return (_mnemon, _second_brain)
 
         if is_lightweight:
             # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings + contacts count
@@ -443,6 +453,8 @@ async def assemble(
                 _fetch_contacts_context(db, user_id),
                 return_exceptions=True,
             )
+            if len(results) > 0 and isinstance(results[0], tuple):
+                mnemon_context, second_brain_context = results[0]
             if len(results) > 1 and isinstance(results[1], str):
                 tasks_section = results[1]
             if len(results) > 2 and isinstance(results[2], str):
@@ -464,6 +476,8 @@ async def assemble(
                 _fetch_contacts_context(db, user_id),
                 return_exceptions=True,
             )
+            if len(results) > 0 and isinstance(results[0], tuple):
+                mnemon_context, second_brain_context = results[0]
             if len(results) > 1 and isinstance(results[1], str):
                 tasks_section = results[1]
             if len(results) > 2 and isinstance(results[2], str):
