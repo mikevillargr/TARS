@@ -326,54 +326,66 @@ function ArtifactModal({
     <Dialog open={artifactId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent
         showCloseButton={false}
-        className="w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
-        style={{
-          backgroundColor: "var(--c-surface)",
-          border: "1px solid var(--c-border)",
-          borderRadius: "0.75rem",
-        }}
+        className="w-full h-[100dvh] rounded-none border-0 p-0 gap-0 overflow-hidden flex flex-col sm:w-[80vw] sm:max-w-[80vw] sm:h-[90vh] sm:rounded-xl sm:border"
+        style={{ backgroundColor: "var(--c-surface)", border: undefined }}
       >
         {/* ── Header ── */}
+        {/* Mobile: two rows — (icon + filename + close) then (tabs + actions) */}
+        {/* Desktop: single row                                                 */}
         <div
-          className="flex items-center gap-3 px-5 py-3.5 border-b shrink-0"
+          className="flex flex-col gap-1.5 px-4 py-3 border-b shrink-0 sm:flex-row sm:items-center sm:gap-3 sm:px-5 sm:py-3.5"
           style={{ borderColor: "var(--c-border)" }}
         >
-          {detail && <TypeIcon type={detail.type} size="sm" />}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate" style={{ color: "var(--c-ink)" }}>
-              {detail?.filename ?? "…"}
-            </p>
-            {detail && (
-              <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
-                {meta.label} · {sourceLabel(detail.source)} · {formatSize(detail.size_bytes)}
-                {detail.version > 1 && ` · v${detail.version}`}
+          {/* Row 1: icon + filename/subtitle + mobile-close */}
+          <div className="flex items-center gap-2 min-w-0">
+            {detail && <TypeIcon type={detail.type} size="sm" />}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ color: "var(--c-ink)" }}>
+                {detail?.filename ?? "…"}
               </p>
-            )}
+              {detail && (
+                <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
+                  {meta.label} · {sourceLabel(detail.source)} · {formatSize(detail.size_bytes)}
+                  {detail.version > 1 && ` · v${detail.version}`}
+                </p>
+              )}
+            </div>
+            {/* Close — mobile only (desktop close is in the actions row) */}
+            <button
+              onClick={onClose}
+              className="sm:hidden p-1.5 rounded-lg shrink-0 transition-colors"
+              style={{ color: "var(--c-ink-faint)" }}
+              title="Close"
+            >
+              <X size={16} />
+            </button>
           </div>
 
-          {/* Tab switcher */}
-          <div
-            className="flex items-center gap-0.5 rounded-lg p-0.5 text-xs"
-            style={{ backgroundColor: "var(--c-surface-2)" }}
-          >
-            {(["preview", "info"] as PreviewTab[]).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className="px-3 py-1 rounded-md font-medium capitalize transition-colors"
-                style={{
-                  backgroundColor: activeTab === tab ? "var(--c-surface)" : "transparent",
-                  color: activeTab === tab ? "var(--c-ink)" : "var(--c-ink-faint)",
-                  boxShadow: activeTab === tab ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
-                }}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+          {/* Row 2 on mobile / continuation on desktop: tabs + action buttons */}
+          <div className="flex items-center gap-1 sm:gap-2 sm:ml-auto shrink-0">
+            {/* Tab switcher */}
+            <div
+              className="flex items-center gap-0.5 rounded-lg p-0.5 text-xs flex-1 sm:flex-none"
+              style={{ backgroundColor: "var(--c-surface-2)" }}
+            >
+              {(["preview", "info"] as PreviewTab[]).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className="flex-1 sm:flex-none px-3 py-1 rounded-md font-medium capitalize transition-colors"
+                  style={{
+                    backgroundColor: activeTab === tab ? "var(--c-surface)" : "transparent",
+                    color: activeTab === tab ? "var(--c-ink)" : "var(--c-ink-faint)",
+                    boxShadow: activeTab === tab ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-1 shrink-0">
+            {/* Action buttons */}
+            <div className="flex items-center gap-1 shrink-0">
             {/* Save to Second Brain */}
             <button
               onClick={handleSaveToBrain}
@@ -429,7 +441,7 @@ function ArtifactModal({
             </button>
             <button
               onClick={onClose}
-              className="p-2 rounded-lg transition-colors"
+              className="hidden sm:flex p-2 rounded-lg transition-colors"
               style={{ color: "var(--c-ink-faint)", backgroundColor: "transparent" }}
               title="Close"
               onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
@@ -437,8 +449,9 @@ function ArtifactModal({
             >
               <X size={15} />
             </button>
-          </div>
-        </div>
+            </div>{/* end action buttons */}
+          </div>{/* end row-2 */}
+        </div>{/* end header */}
 
         {/* ── Body ── */}
         <div className="flex-1 overflow-y-auto min-h-0">

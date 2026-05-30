@@ -506,7 +506,7 @@ function PlaceCard({
           <div
             key={i}
             className="rounded-xl overflow-hidden w-full"
-            style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)" }}
+            style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)", isolation: "isolate" }}
           >
             {/* Map — tapping opens Google Maps for full navigation experience */}
             <a
