@@ -414,23 +414,22 @@ async def assemble(
         except Exception:
             pass
 
-        async def _fetch_memory():
-            nonlocal mnemon_context, second_brain_context
+        async def _fetch_memory() -> tuple:
+            _mnemon = "No relevant memories."
+            _second_brain = "No relevant knowledge."
             try:
                 from memory import mnemon, second_brain
                 if is_lightweight:
-                    # Tier 1 (Haiku): top 3 memories only — enough for personalization,
-                    # low token cost. Skip second brain (document search not needed for Q&A).
                     memories = await mnemon.search(db, user_id, query, limit=3)
-                    mnemon_context = mnemon.format_for_context(memories)
+                    _mnemon = mnemon.format_for_context(memories)
                 else:
-                    # Tier 2/3: full context
                     memories = await mnemon.search(db, user_id, query, limit=6)
-                    mnemon_context = mnemon.format_for_context(memories)
+                    _mnemon = mnemon.format_for_context(memories)
                     sb_results = await second_brain.search(db, user_id, query, limit=4)
-                    second_brain_context = second_brain.format_for_context(sb_results)
+                    _second_brain = second_brain.format_for_context(sb_results)
             except Exception:
                 pass
+            return (_mnemon, _second_brain)
 
         if is_lightweight:
             # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings + contacts count
@@ -443,6 +442,8 @@ async def assemble(
                 _fetch_contacts_context(db, user_id),
                 return_exceptions=True,
             )
+            if len(results) > 0 and isinstance(results[0], tuple):
+                mnemon_context, second_brain_context = results[0]
             if len(results) > 1 and isinstance(results[1], str):
                 tasks_section = results[1]
             if len(results) > 2 and isinstance(results[2], str):
@@ -464,6 +465,8 @@ async def assemble(
                 _fetch_contacts_context(db, user_id),
                 return_exceptions=True,
             )
+            if len(results) > 0 and isinstance(results[0], tuple):
+                mnemon_context, second_brain_context = results[0]
             if len(results) > 1 and isinstance(results[1], str):
                 tasks_section = results[1]
             if len(results) > 2 and isinstance(results[2], str):

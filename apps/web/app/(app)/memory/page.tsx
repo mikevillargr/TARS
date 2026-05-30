@@ -178,9 +178,10 @@ export default function MemoryPage() {
                   </div>
                   <button
                     onClick={() => handleDelete(mem.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded text-ink-muted"
+                    className="p-1 rounded transition-colors"
+                    style={{ color: "var(--c-ink-faint)" }}
                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)"; (e.currentTarget as HTMLElement).style.color = "var(--c-rose)" }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.color = "" }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)" }}
                   >
                     <Trash2 size={14} />
                   </button>
