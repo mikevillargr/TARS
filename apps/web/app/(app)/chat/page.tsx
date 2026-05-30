@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
+import React, { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -617,6 +617,52 @@ function formatModelName(model?: string): string | null {
   return null
 }
 
+// ─── Inline cards anchored to a saved assistant message ───────────
+// Rendered as a sibling immediately after its MessageBubble. Uses local
+// state for dismissals so each message's cards are independent.
+function InlineMessageCards({
+  toolResults,
+  msgId,
+  onAsk,
+}: {
+  toolResults: Array<{ type: string; [k: string]: unknown }>
+  msgId: string
+  onAsk: (q: string) => void
+}) {
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const dismiss = (key: string) => setDismissed(prev => new Set([...prev, key]))
+
+  const entries = toolResults
+    .map((evt, i) => ({ evt, key: `${msgId}-tr-${i}` }))
+    .filter(({ key }) => !dismissed.has(key))
+
+  if (entries.length === 0) return null
+
+  return (
+    <div className="max-w-3xl mx-auto pl-0 sm:pl-11 flex flex-col gap-2">
+      {entries.map(({ evt, key }) => {
+        const e = evt as Record<string, unknown>
+        if (evt.type === "place_card" && Array.isArray(e.places)) {
+          return <PlaceCard key={key} set={{ tool_use_id: key, places: e.places as PlaceResult[] }} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "contact_card" && Array.isArray(e.contacts)) {
+          return <ContactCard key={key} set={{ tool_use_id: key, contacts: e.contacts as ContactResult[] }} onDismiss={() => dismiss(key)} onAsk={onAsk} />
+        }
+        if (evt.type === "calendar_suggest") {
+          return <CalendarSuggestChip key={key} suggestion={evt as unknown as CalendarSuggestion} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "task_suggest") {
+          return <TaskSuggestChip key={key} suggestion={evt as unknown as TaskSuggestion} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "artifact_created") {
+          return <ArtifactCard key={key} n={{ artifact_id: e.artifact_id as string, filename: e.filename as string, filetype: e.filetype as ArtifactNotification["filetype"] }} onDismiss={() => dismiss(key)} />
+        }
+        return null
+      })}
+    </div>
+  )
+}
+
 // ─── Single message bubble ────────────────────────────────────────
 // memo: skips re-render when msg reference is stable (i.e. on inputValue keystrokes)
 const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
@@ -802,8 +848,23 @@ const MessageArea = memo(function MessageArea({
           </p>
         </div>
       ) : allMessages.map((msg, i) => (
-        <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
+        <React.Fragment key={"id" in msg ? msg.id : `stream-${i}`}>
+          <MessageBubble msg={msg} />
+          {/* Inline cards anchored to this saved assistant message */}
+          {"tool_results" in msg &&
+            (msg as Message).tool_results != null &&
+            (msg as Message).tool_results!.length > 0 &&
+            msg.role === "assistant" &&
+            !("streaming" in msg) && (
+            <InlineMessageCards
+              toolResults={(msg as Message).tool_results!}
+              msgId={(msg as Message).id}
+              onAsk={onAsk}
+            />
+          )}
+        </React.Fragment>
       ))}
+      {/* Global card section — live preview during streaming only */}
       {hasCards && (
         <div className="max-w-3xl mx-auto pl-0 sm:pl-11 flex flex-col gap-2">
           {calendarSuggestions.map((s) => (
@@ -966,46 +1027,15 @@ export default function ChatPage() {
       .catch(console.error)
   }, [])
 
-  // Load messages when active conversation changes.
-  // Replay persisted tool_results from the most recent assistant message back
-  // into the bottom-of-thread card state so reload restores Place/Contact/etc.
-  const rehydrateCards = useCallback((msgs: Message[]) => {
+  // Clear the live streaming card section. Saved messages now render their own
+  // cards inline via InlineMessageCards (from msg.tool_results), so we no longer
+  // need to repopulate global state — just wipe the streaming preview.
+  const rehydrateCards = useCallback((_msgs: Message[]) => {
     setCalendarSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
     setContactResults([])
     setPlaceResults([])
-
-    // Find the most recent assistant message that carries tool_results
-    let latest: Message | undefined
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const m = msgs[i]
-      if (m.role === "assistant" && m.tool_results && m.tool_results.length > 0) {
-        latest = m
-        break
-      }
-    }
-    if (!latest?.tool_results) return
-
-    latest.tool_results.forEach((evt, i) => {
-      const key = `${latest!.id}-${i}`
-      const e = evt as unknown as Record<string, unknown>
-      if (evt.type === "place_card" && Array.isArray(e.places)) {
-        setPlaceResults(prev => [...prev, { tool_use_id: `place-${key}`, places: e.places as PlaceResult[] }])
-      } else if (evt.type === "contact_card" && Array.isArray(e.contacts)) {
-        setContactResults(prev => [...prev, { tool_use_id: `contact-${key}`, contacts: e.contacts as ContactResult[] }])
-      } else if (evt.type === "calendar_suggest") {
-        setCalendarSuggestions(prev => [...prev, evt as unknown as CalendarSuggestion])
-      } else if (evt.type === "task_suggest") {
-        setTaskSuggestions(prev => [...prev, evt as unknown as TaskSuggestion])
-      } else if (evt.type === "artifact_created") {
-        setArtifactNotifications(prev => [...prev, {
-          artifact_id: e.artifact_id as string,
-          filename: e.filename as string,
-          filetype: e.filetype as ArtifactNotification["filetype"],
-        }])
-      }
-    })
   }, [])
 
   // If the last message is from the user and recent, the server is still generating —
