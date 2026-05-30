@@ -2,10 +2,11 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Sun, Moon } from "lucide-react"
-import { useState, useEffect } from "react"
+import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Sun, Moon, Mic, Loader2 } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
 import { useTheme } from "@/components/ThemeProvider"
@@ -79,6 +80,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [captureOpen, setCaptureOpen] = useState(false)
   const [cmdOpen, setCmdOpen] = useState(false)
   const { theme, toggle: toggleTheme } = useTheme()
+  const router = useRouter()
+  const voice = useVoiceInput()
+
+  // Mobile header mic: records, then navigates to /chat?ask=<text> which AskLoader auto-sends
+  const handleHeaderMicTap = useCallback(() => {
+    if (voice.state === "recording") {
+      voice.stop()
+      return
+    }
+    if (voice.state !== "idle" && voice.state !== "error") return
+    voice.start((text) => {
+      if (!text) return
+      router.push(`/chat?ask=${encodeURIComponent(text)}`)
+    })
+  }, [voice, router])
 
   // Global Cmd+K / Ctrl+K listener
   useEffect(() => {
@@ -169,6 +185,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full border-2"
                 style={{ backgroundColor: "var(--c-amber)", borderColor: "var(--c-surface)" }}
               />
+            </button>
+
+            {/* Mobile-only voice new-chat button */}
+            <button
+              onClick={handleHeaderMicTap}
+              disabled={voice.state === "transcribing"}
+              className="sm:hidden p-2 rounded-lg relative"
+              style={{
+                color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-muted)",
+                opacity: voice.state === "transcribing" ? 0.5 : 1,
+              }}
+              title={voice.state === "recording" ? "Tap to stop" : "New voice chat"}
+            >
+              {voice.state === "transcribing"
+                ? <Loader2 size={18} className="animate-spin" />
+                : <Mic size={18} className={voice.state === "recording" ? "animate-pulse" : ""} />
+              }
+              {voice.state === "recording" && (
+                <span className="absolute inset-0 rounded-lg animate-ping"
+                  style={{ backgroundColor: "var(--c-rose)", opacity: 0.15 }} />
+              )}
             </button>
 
             <button

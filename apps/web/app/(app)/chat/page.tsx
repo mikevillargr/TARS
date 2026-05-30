@@ -14,7 +14,6 @@ import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
-import { CaptureModal } from "@/components/second-brain/CaptureModal"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -491,7 +490,6 @@ export default function ChatPage() {
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
-  const [showCapture, setShowCapture]               = useState(false)
   const [inputValue, setInputValue]                 = useState("")
   const [attachments, setAttachments]               = useState<File[]>([])
   // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
@@ -682,29 +680,6 @@ export default function ChatPage() {
       if (!text) return
       setInputValue(text)
       setPendingVoiceSend(text)   // auto-send via the useEffect below
-    })
-  }, [voice])
-
-  // Mobile top-bar mic: start recording, creates new chat + auto-sends on silence.
-  // Click while recording to stop manually.
-  const handleMobileVoiceTap = useCallback(() => {
-    if (voice.state === "recording") {
-      voice.stop()
-      return
-    }
-    if (voice.state !== "idle" && voice.state !== "error") return
-    voice.start(async (text) => {
-      if (!text) return
-      try {
-        const conv = await apiPost<Conversation>("/chat/conversations")
-        setConversations((prev) => [conv, ...prev])
-        setActiveChatId(conv.id)
-        setMobileConvOpen(false)
-        setInputValue(text)
-        setPendingVoiceSend(text)  // auto-send via the useEffect below
-      } catch {
-        setInputValue(text)
-      }
     })
   }, [voice])
 
@@ -1099,37 +1074,6 @@ export default function ChatPage() {
             </h1>
           </div>
 
-          {/* Mobile right cluster: voice new-chat + Quick Capture */}
-          <div className="lg:hidden flex items-center gap-0.5 shrink-0">
-            <button
-              onClick={handleMobileVoiceTap}
-              disabled={voice.state === "transcribing" || busy}
-              className="p-1.5 rounded-md relative"
-              title={voice.state === "recording" ? "Tap to stop" : "New voice chat"}
-              style={{
-                color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-faint)",
-                opacity: voice.state === "transcribing" ? 0.5 : 1,
-              }}
-            >
-              {voice.state === "transcribing"
-                ? <Loader2 size={17} className="animate-spin" />
-                : <Mic size={17} className={voice.state === "recording" ? "animate-pulse" : ""} />
-              }
-              {voice.state === "recording" && (
-                <span className="absolute inset-0 rounded-md animate-ping"
-                  style={{ backgroundColor: "var(--c-rose)", opacity: 0.15 }} />
-              )}
-            </button>
-            <button
-              onClick={() => setShowCapture(true)}
-              className="p-1.5 rounded-md"
-              style={{ color: "var(--c-ink-faint)" }}
-              title="Quick Capture"
-            >
-              <Plus size={18} />
-            </button>
-          </div>
-
           <button
             onClick={toggleFocus}
             className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0"
@@ -1304,8 +1248,6 @@ export default function ChatPage() {
       </div>
     </div>
 
-    {/* Mobile Quick Capture */}
-    <CaptureModal open={showCapture} onClose={() => setShowCapture(false)} />
     </>
   )
 }
