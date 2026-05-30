@@ -18,6 +18,7 @@ from db.models import AgentJob
 from db.session import get_db, AsyncSessionLocal
 import agents.job_manager as job_manager
 import agents.approval as approval
+import agents.approval as question_gate  # same module, aliased for clarity
 
 log = logging.getLogger(__name__)
 
@@ -202,6 +203,9 @@ async def stream_agent_job(
                     approved=data.get("approved", False),
                     modified_command=data.get("modified_command"),
                 )
+
+            elif msg_type == "question_response":
+                question_gate.resolve_question(job_id, data.get("answer", ""))
 
             elif msg_type == "stop":
                 job_manager.cancel_job(job_id)

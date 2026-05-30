@@ -1,10 +1,10 @@
 "use client"
 
-import React, { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   AlertCircle, Check, ChevronDown, ChevronRight, ExternalLink,
   FileText, Terminal, Loader2, CheckCircle, XCircle, GitPullRequest,
-  Cpu, Rocket,
+  Cpu, MessageSquare,
 } from "lucide-react"
 import { TarsWebSocket, getWsToken } from "@/lib/websocket"
 
@@ -14,28 +14,63 @@ export type AgentEvent =
   | { type: "text_chunk"; text: string }
   | { type: "thinking"; text: string }
   | { type: "tool_start"; tool: string; input: Record<string, unknown>; sub_agent_type?: string }
-  | { type: "tool_end"; tool: string; output: string }
+  | { type: "tool_end"; tool: string; output: string; is_error?: boolean }
   | { type: "approval_required"; command: string; reason: string }
   | { type: "approval_granted"; command: string }
   | { type: "approval_rejected" }
   | { type: "release_approval"; version: string; notes: string[]; commits: string; diff_stat: string }
   | { type: "deploy_started"; target: string }
   | { type: "deploy_completed"; target: string; success: boolean; output: string }
+  | { type: "question"; id: string; text: string }
+  | { type: "question_answered"; id: string }
   | { type: "completed"; summary: string; pr_url?: string; version?: string }
   | { type: "error"; message: string }
   | { type: "agent_stopped"; reason: string }
   | { type: "unknown" }
+
+interface ToolReceipt {
+  id: number
+  tool: string
+  label: string
+  input: Record<string, unknown>
+  output?: string
+  status: "running" | "done" | "error"
+  expanded: boolean
+}
+
+interface HistoryEntry {
+  text: string
+  detail?: string
+}
+
+type ActiveGate =
+  | { type: "approval"; command: string; reason: string }
+  | { type: "question"; id: string; text: string }
+  | { type: "release"; version: string; notes: string[]; commits: string; diffStat: string }
+  | null
+
+interface StreamState {
+  currentThought: string | null
+  toolReceipts: ToolReceipt[]
+  outputText: string
+  activeGate: ActiveGate
+  history: HistoryEntry[]
+  terminal:
+    | { type: "completed"; summary: string; prUrl?: string; version?: string }
+    | { type: "error"; message: string }
+    | { type: "stopped"; reason: string }
+    | null
+}
 
 interface Props {
   jobId: string
   /** Override harness base URL. Defaults to current window origin (prod) or
    *  http://localhost:8000 when running on localhost. */
   harnessUrl?: string
-  /** Called when an approval_required / release_approval event fires */
+  /** Called when an approval_required / release_approval / question event fires */
   onApprovalNeeded?: () => void
 }
 
-/** Resolve harness base URL at runtime — works in both dev and prod. */
 function resolveHarnessUrl(override?: string): string {
   if (override) return override
   if (typeof window === "undefined") return "http://localhost:8000"
@@ -48,15 +83,23 @@ function resolveHarnessUrl(override?: string): string {
 
 export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onApprovalNeeded }: Props) {
   const harnessUrl = resolveHarnessUrl(harnessUrlProp)
-  const [events, setEvents] = useState<AgentEvent[]>([])
+
+  const [stream, setStream] = useState<StreamState>({
+    currentThought: null,
+    toolReceipts: [],
+    outputText: "",
+    activeGate: null,
+    history: [],
+    terminal: null,
+  })
   const [connected, setConnected] = useState(false)
-  const [pendingApproval, setPendingApproval] = useState<AgentEvent | null>(null)
-  const [collapsedTools, setCollapsedTools] = useState<Set<number>>(new Set())
+  const [questionAnswer, setQuestionAnswer] = useState("")
   const bottomRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<TarsWebSocket | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    let receiptCounter = 0
 
     async function connect() {
       try {
@@ -69,33 +112,120 @@ export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onAp
         )
         wsRef.current = ws
 
-        const addEvent = (e: AgentEvent) => {
+        function handle(e: AgentEvent) {
           if (cancelled) return
-          setEvents(prev => [...prev, e])
-          if (e.type === "approval_required" || e.type === "release_approval") {
-            setPendingApproval(e)
+
+          if (e.type === "approval_required" || e.type === "release_approval" || e.type === "question") {
             onApprovalNeeded?.()
           }
-          if (e.type === "approval_granted" || e.type === "approval_rejected" || e.type === "completed" || e.type === "error") {
-            setPendingApproval(null)
-          }
+
+          setStream(prev => {
+            switch (e.type) {
+              case "thinking":
+                return { ...prev, currentThought: e.text }
+
+              case "tool_start": {
+                const id = receiptCounter++
+                return {
+                  ...prev,
+                  toolReceipts: [...prev.toolReceipts, {
+                    id,
+                    tool: e.tool,
+                    label: formatToolLabel(e.tool, e.input),
+                    input: e.input,
+                    status: "running" as const,
+                    expanded: false,
+                  }],
+                }
+              }
+
+              case "tool_end": {
+                const receipts = [...prev.toolReceipts]
+                for (let i = receipts.length - 1; i >= 0; i--) {
+                  if (receipts[i].status === "running") {
+                    receipts[i] = {
+                      ...receipts[i],
+                      status: e.is_error ? "error" as const : "done" as const,
+                      output: e.output,
+                    }
+                    break
+                  }
+                }
+                return { ...prev, toolReceipts: receipts }
+              }
+
+              case "text_chunk":
+                return { ...prev, outputText: prev.outputText + e.text }
+
+              case "approval_required":
+                return { ...prev, activeGate: { type: "approval", command: e.command, reason: e.reason } }
+
+              case "approval_granted":
+                return { ...prev, activeGate: null, history: [...prev.history, { text: "✓ Command approved" }] }
+
+              case "approval_rejected":
+                return { ...prev, activeGate: null }
+
+              case "release_approval":
+                return {
+                  ...prev,
+                  activeGate: { type: "release", version: e.version, notes: e.notes, commits: e.commits, diffStat: e.diff_stat },
+                }
+
+              case "question":
+                return { ...prev, activeGate: { type: "question", id: e.id, text: e.text } }
+
+              case "question_answered":
+                return { ...prev, activeGate: null, history: [...prev.history, { text: "✓ Question answered" }] }
+
+              case "deploy_started":
+                return { ...prev, history: [...prev.history, { text: `⟳ Deploying ${e.target}…` }] }
+
+              case "deploy_completed": {
+                const history = [...prev.history]
+                const last = history.length - 1
+                if (last >= 0) {
+                  history[last] = e.success
+                    ? { text: `✓ Deployed ${e.target}` }
+                    : { text: `✗ Deploy failed (${e.target})`, detail: e.output }
+                }
+                return { ...prev, history }
+              }
+
+              case "completed":
+                return {
+                  ...prev,
+                  currentThought: null,
+                  activeGate: null,
+                  terminal: { type: "completed", summary: e.summary, prUrl: e.pr_url, version: e.version },
+                }
+
+              case "error":
+                return { ...prev, currentThought: null, terminal: { type: "error", message: e.message } }
+
+              case "agent_stopped":
+                return { ...prev, currentThought: null, terminal: { type: "stopped", reason: e.reason } }
+
+              default:
+                return prev
+            }
+          })
         }
 
         const eventTypes = [
           "text_chunk", "thinking", "tool_start", "tool_end",
           "approval_required", "approval_granted", "approval_rejected",
           "release_approval", "deploy_started", "deploy_completed",
+          "question", "question_answered",
           "completed", "error", "agent_stopped",
         ]
-        // The WS class dispatches msg.data if present, else the whole msg.
-        // For agent events the server sends the full event object (no nesting).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        eventTypes.forEach(t => ws.on(t, (data) => addEvent(data as any)))
+        eventTypes.forEach(t => ws.on(t, (data) => handle(data as any)))
 
         ws.connect()
         setConnected(true)
       } catch {
-        // token fetch failed — will retry
+        // token fetch failed — WS auto-retries
       }
     }
 
@@ -109,267 +239,332 @@ export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onAp
     }
   }, [jobId, harnessUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [events])
+  }, [stream.toolReceipts.length, stream.outputText, stream.terminal])
 
   function sendApproval(approved: boolean, modifiedCommand?: string) {
     wsRef.current?.sendRaw({ type: "approval_response", approved, modified_command: modifiedCommand ?? null })
-    setPendingApproval(null)
+  }
+
+  function sendQuestionResponse() {
+    const answer = questionAnswer.trim()
+    if (!answer || stream.activeGate?.type !== "question") return
+    wsRef.current?.sendRaw({ type: "question_response", id: stream.activeGate.id, answer })
+    setStream(s => ({ ...s, activeGate: null }))
+    setQuestionAnswer("")
   }
 
   function sendCancel() {
     wsRef.current?.sendRaw({ type: "stop" })
   }
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* Connection indicator */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 border-b shrink-0"
-        style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface-2)" }}>
-        <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-400" : "bg-gray-400"}`} />
-        <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
-          {connected ? "Live" : "Connecting…"}
-        </span>
-      </div>
+  function toggleReceipt(idx: number) {
+    setStream(prev => {
+      const receipts = [...prev.toolReceipts]
+      receipts[idx] = { ...receipts[idx], expanded: !receipts[idx].expanded }
+      return { ...prev, toolReceipts: receipts }
+    })
+  }
 
-      {/* Event feed */}
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5 font-mono text-[12px]"
-        style={{ backgroundColor: "#1a1714", color: "#e3ede9" }}>
-        {events.length === 0 && (
-          <div className="flex items-center gap-2 opacity-50">
-            <Loader2 size={12} className="animate-spin" />
-            <span>Waiting for agent…</span>
+  const isRunning = connected && !stream.terminal
+  const hasContent = stream.toolReceipts.length > 0 || stream.outputText || stream.history.length > 0 || stream.terminal
+
+  return (
+    <div className="flex flex-col h-full" style={{ backgroundColor: "var(--c-surface)" }}>
+
+      {/* ── Ephemeral thought zone ── */}
+      {isRunning && (
+        <div className="flex items-center gap-2.5 px-4 py-3 border-b shrink-0"
+          style={{ borderColor: "var(--c-border)" }}>
+          <Loader2 size={13} className="animate-spin shrink-0" style={{ color: "var(--c-moss)" }} />
+          <span className="text-sm truncate flex-1" style={{ color: "var(--c-ink-faint)" }}>
+            {stream.currentThought ?? (connected ? "Agent running…" : "Connecting…")}
+          </span>
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${connected ? "bg-green-400" : "bg-gray-400"}`} />
+        </div>
+      )}
+
+      {/* ── Receipt + output zone ── */}
+      <div className="flex-1 overflow-y-auto">
+
+        {!hasContent && (
+          <div className="flex items-center justify-center h-full">
+            <div className="flex items-center gap-2 text-sm" style={{ color: "var(--c-ink-faint)" }}>
+              <Loader2 size={14} className="animate-spin" />
+              Waiting for agent…
+            </div>
           </div>
         )}
 
-        {events.map((ev, i) => (
-          <EventRow
-            key={i}
-            index={i}
-            event={ev}
-            collapsed={collapsedTools.has(i)}
-            onToggleCollapse={() => setCollapsedTools(prev => {
-              const next = new Set(prev)
-              next.has(i) ? next.delete(i) : next.add(i)
-              return next
-            })}
-            onApprove={() => sendApproval(true)}
-            onReject={() => sendApproval(false)}
-            onRelApprove={(v) => wsRef.current && wsRef.current.sendRaw({ type: "approval_response", approved: true })}
-            onRelCancel={() => sendApproval(false)}
-          />
-        ))}
+        {stream.toolReceipts.length > 0 && (
+          <div className="px-4 pt-4 pb-2 flex flex-col gap-0.5">
+            {stream.toolReceipts.map((receipt, i) => (
+              <ToolReceiptRow key={receipt.id} receipt={receipt} onToggle={() => toggleReceipt(i)} />
+            ))}
+          </div>
+        )}
+
+        {stream.outputText && (
+          <div
+            className="px-4 py-3 text-sm leading-relaxed"
+            style={{
+              color: "var(--c-ink)",
+              whiteSpace: "pre-wrap",
+              borderTop: stream.toolReceipts.length > 0 ? "1px solid var(--c-border)" : undefined,
+            }}
+          >
+            {stream.outputText}
+          </div>
+        )}
+
+        {stream.history.length > 0 && (
+          <div className="px-4 py-2 flex flex-col gap-1.5">
+            {stream.history.map((entry, i) => (
+              <HistoryRow key={i} entry={entry} />
+            ))}
+          </div>
+        )}
+
+        {stream.terminal && (
+          <div className="px-4 py-3">
+            <TerminalCard terminal={stream.terminal} />
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
-      {/* Cancel button when running */}
-      {connected && !pendingApproval && (
-        <div className="px-3 py-2 border-t shrink-0" style={{ borderColor: "var(--c-border)" }}>
-          <button
-            onClick={sendCancel}
-            className="text-[11px] px-2 py-1 rounded"
-            style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }}
+      {/* ── Gate zone + stop button (always at bottom) ── */}
+      <div className="shrink-0">
+        {stream.activeGate && (
+          <div className="border-t p-3" style={{ borderColor: "var(--c-border)" }}>
+            {stream.activeGate.type === "approval" && (
+              <ApprovalGateCard
+                gate={stream.activeGate}
+                onApprove={() => sendApproval(true)}
+                onReject={() => sendApproval(false)}
+              />
+            )}
+            {stream.activeGate.type === "question" && (
+              <QuestionGateCard
+                gate={stream.activeGate}
+                answer={questionAnswer}
+                onAnswerChange={setQuestionAnswer}
+                onSend={sendQuestionResponse}
+              />
+            )}
+            {stream.activeGate.type === "release" && (
+              <ReleaseGateCard
+                gate={stream.activeGate}
+                onApprove={() => wsRef.current?.sendRaw({ type: "approval_response", approved: true })}
+                onCancel={() => sendApproval(false)}
+              />
+            )}
+          </div>
+        )}
+
+        {isRunning && !stream.activeGate && (
+          <div className="px-4 py-2 border-t flex justify-end" style={{ borderColor: "var(--c-border)" }}>
+            <button
+              onClick={sendCancel}
+              className="text-xs px-3 py-1 rounded"
+              style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }}
+            >
+              Stop agent
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Tool receipt row ───────────────────────────────────────────────────────────
+
+function ToolReceiptRow({ receipt, onToggle }: { receipt: ToolReceipt; onToggle: () => void }) {
+  const isBash = receipt.tool.toLowerCase() === "bash"
+  const isRunning = receipt.status === "running"
+
+  const statusIcon = isRunning
+    ? <Loader2 size={11} className="animate-spin" style={{ color: "var(--c-moss)" }} />
+    : receipt.status === "done"
+      ? <Check size={11} style={{ color: "var(--c-moss)" }} />
+      : <XCircle size={11} style={{ color: "var(--c-rose)" }} />
+
+  const toolIcon = isBash
+    ? <Terminal size={11} style={{ color: "var(--c-ink-faint)" }} />
+    : <FileText size={11} style={{ color: "var(--c-ink-faint)" }} />
+
+  return (
+    <div>
+      <button
+        onClick={isRunning ? undefined : onToggle}
+        className="w-full flex items-center gap-2 py-0.5 text-left hover:opacity-80 transition-opacity"
+        style={{ cursor: isRunning ? "default" : "pointer" }}
+      >
+        <span className="shrink-0 w-3 flex items-center">{statusIcon}</span>
+        <span className="shrink-0">{toolIcon}</span>
+        <span className="font-mono text-xs truncate flex-1 min-w-0" style={{ color: "var(--c-ink-2)" }}>
+          {receipt.label}
+        </span>
+        {!isRunning && (
+          <span className="shrink-0" style={{ color: "var(--c-ink-faint)" }}>
+            {receipt.expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          </span>
+        )}
+      </button>
+
+      {receipt.expanded && (
+        <div className="ml-8 mb-1 mt-0.5">
+          <pre
+            className="text-xs p-2 rounded overflow-x-auto"
+            style={{
+              backgroundColor: "var(--c-surface-2)",
+              color: "var(--c-ink-faint)",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all",
+              maxHeight: "12rem",
+              overflowY: "auto",
+            }}
           >
-            Stop agent
-          </button>
+            {receipt.output
+              ? receipt.output.slice(0, 1000) + (receipt.output.length > 1000 ? "\n…" : "")
+              : JSON.stringify(receipt.input, null, 2).slice(0, 500)
+            }
+          </pre>
         </div>
       )}
     </div>
   )
 }
 
-// ── Event row renderer ─────────────────────────────────────────────────────────
+// ── History row ────────────────────────────────────────────────────────────────
 
-function EventRow({
-  event, index, collapsed, onToggleCollapse, onApprove, onReject, onRelApprove, onRelCancel,
-}: {
-  event: AgentEvent
-  index: number
-  collapsed: boolean
-  onToggleCollapse: () => void
-  onApprove: () => void
-  onReject: () => void
-  onRelApprove: (version: string) => void
-  onRelCancel: () => void
-}) {
-  switch (event.type) {
-    case "text_chunk":
-      return (
-        <span style={{ color: "#e3ede9", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-          {event.text}
-        </span>
-      )
+function HistoryRow({ entry }: { entry: HistoryEntry }) {
+  const [expanded, setExpanded] = useState(false)
 
-    case "thinking":
-      return (
-        <span className="italic opacity-50" style={{ whiteSpace: "pre-wrap" }}>
-          {event.text}
-        </span>
-      )
-
-    case "tool_start": {
-      const label = formatToolLabel(event.tool, event.input)
-      const icon = event.tool.toLowerCase().includes("bash")
-        ? <Terminal size={11} />
-        : <FileText size={11} />
-      return (
-        <div className="flex flex-col gap-0.5">
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{entry.text}</span>
+        {entry.detail && (
           <button
-            onClick={onToggleCollapse}
-            className="flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left"
-            style={{ color: "#a3b899" }}
+            onClick={() => setExpanded(v => !v)}
+            className="text-xs hover:underline shrink-0"
+            style={{ color: "var(--c-ink-faint)" }}
           >
-            {icon}
-            <span className="truncate">{label}</span>
-            {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+            {expanded ? "hide" : "details"}
           </button>
-          {!collapsed && event.input && (
-            <pre className="pl-4 text-[11px] opacity-60" style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-              {JSON.stringify(event.input, null, 2)}
-            </pre>
-          )}
-        </div>
-      )
-    }
-
-    case "tool_end":
-      return (
-        <div className="pl-3 border-l opacity-50 text-[11px]" style={{ borderColor: "#3a3530" }}>
-          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-            {event.output?.slice(0, 500)}{event.output?.length > 500 ? "…" : ""}
-          </pre>
-        </div>
-      )
-
-    case "approval_required":
-      return (
-        <ApprovalCard
-          title="Approval required"
-          body={<>
-            <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ backgroundColor: "rgba(0,0,0,0.3)" }}>
-              {event.command}
-            </div>
-            <div className="text-[11px] opacity-70">{event.reason}</div>
-          </>}
-          onApprove={onApprove}
-          onReject={onReject}
-        />
-      )
-
-    case "release_approval":
-      return (
-        <ReleaseApprovalCard
-          version={event.version}
-          notes={event.notes}
-          commits={event.commits}
-          onApprove={() => onRelApprove(event.version)}
-          onCancel={onRelCancel}
-        />
-      )
-
-    case "approval_granted":
-      return (
-        <div className="flex items-center gap-1.5" style={{ color: "#6db890" }}>
-          <Check size={11} />
-          <span>Approved — continuing</span>
-        </div>
-      )
-
-    case "approval_rejected":
-      return (
-        <div className="flex items-center gap-1.5" style={{ color: "#e07070" }}>
-          <XCircle size={11} />
-          <span>Rejected — agent stopped</span>
-        </div>
-      )
-
-    case "deploy_started":
-      return (
-        <div className="flex items-center gap-1.5 mt-1" style={{ color: "#d4a050" }}>
-          <Loader2 size={11} className="animate-spin" />
-          <span>Deploying <code className="text-[11px]">{event.target}</code>…</span>
-        </div>
-      )
-
-    case "deploy_completed":
-      return <DeployCompletedRow event={event} />
-
-    case "completed":
-      return (
-        <div className="flex flex-col gap-1 mt-1 pt-2 border-t" style={{ borderColor: "#3a3530" }}>
-          <div className="flex items-center gap-1.5" style={{ color: "#6db890" }}>
-            <CheckCircle size={12} />
-            <span className="font-semibold">
-              {event.version ? `v${event.version} released` : "Completed"}
-            </span>
-          </div>
-          {event.summary && (
-            <div className="text-[11px] opacity-70" style={{ whiteSpace: "pre-wrap" }}>
-              {event.summary.slice(0, 300)}
-            </div>
-          )}
-          {event.pr_url && (
-            <a
-              href={event.pr_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[11px] hover:underline"
-              style={{ color: "#6db890" }}
-            >
-              <GitPullRequest size={11} />
-              View PR
-              <ExternalLink size={10} />
-            </a>
-          )}
-        </div>
-      )
-
-    case "error":
-    case "agent_stopped":
-      return (
-        <div className="flex items-start gap-1.5 mt-1" style={{ color: "#e07070" }}>
-          <AlertCircle size={11} style={{ marginTop: 1, flexShrink: 0 }} />
-          <span style={{ whiteSpace: "pre-wrap" }}>
-            {event.type === "error" ? (event as { message: string }).message : (event as { reason: string }).reason}
-          </span>
-        </div>
-      )
-
-    default:
-      return null
-  }
+        )}
+      </div>
+      {expanded && entry.detail && (
+        <pre
+          className="mt-1 ml-2 text-xs p-2 rounded overflow-x-auto"
+          style={{
+            backgroundColor: "var(--c-surface-2)",
+            color: "var(--c-rose)",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
+            maxHeight: "8rem",
+            overflowY: "auto",
+          }}
+        >
+          {entry.detail.slice(0, 1000)}
+        </pre>
+      )}
+    </div>
+  )
 }
 
-// ── Approval card ──────────────────────────────────────────────────────────────
+// ── Terminal card ──────────────────────────────────────────────────────────────
 
-function ApprovalCard({ title, body, onApprove, onReject }: {
-  title: string
-  body: React.ReactNode
+function TerminalCard({ terminal }: { terminal: NonNullable<StreamState["terminal"]> }) {
+  if (terminal.type === "completed") {
+    return (
+      <div className="flex flex-col gap-2 pt-3 border-t" style={{ borderColor: "var(--c-border)" }}>
+        <div className="flex items-center gap-2" style={{ color: "var(--c-moss)" }}>
+          <CheckCircle size={14} />
+          <span className="text-sm font-semibold">
+            {terminal.version ? `v${terminal.version} released` : "Completed"}
+          </span>
+        </div>
+        {terminal.summary && (
+          <p className="text-xs leading-relaxed" style={{ color: "var(--c-ink-faint)", whiteSpace: "pre-wrap" }}>
+            {terminal.summary.slice(0, 300)}
+          </p>
+        )}
+        {terminal.prUrl && (
+          <a
+            href={terminal.prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs hover:underline"
+            style={{ color: "var(--c-moss)" }}
+          >
+            <GitPullRequest size={12} />
+            View PR
+            <ExternalLink size={10} />
+          </a>
+        )}
+      </div>
+    )
+  }
+
+  if (terminal.type === "error") {
+    return (
+      <div className="flex items-start gap-2 pt-3 border-t" style={{ borderColor: "var(--c-border)" }}>
+        <AlertCircle size={14} className="shrink-0 mt-0.5" style={{ color: "var(--c-rose)" }} />
+        <span className="text-sm" style={{ color: "var(--c-rose)", whiteSpace: "pre-wrap" }}>
+          {terminal.message}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 pt-3 border-t" style={{ borderColor: "var(--c-border)" }}>
+      <XCircle size={14} style={{ color: "var(--c-ink-faint)" }} />
+      <span className="text-sm" style={{ color: "var(--c-ink-faint)" }}>{terminal.reason}</span>
+    </div>
+  )
+}
+
+// ── Gate cards ─────────────────────────────────────────────────────────────────
+
+function ApprovalGateCard({ gate, onApprove, onReject }: {
+  gate: { command: string; reason: string }
   onApprove: () => void
   onReject: () => void
 }) {
   return (
-    <div className="rounded-lg p-3 flex flex-col gap-2 my-1 font-sans"
-      style={{ backgroundColor: "rgba(200,140,50,0.15)", border: "1px solid rgba(200,140,50,0.3)" }}>
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "#d4a050" }}>
-        <AlertCircle size={12} />
-        {title}
+    <div
+      className="rounded-xl p-3 flex flex-col gap-2"
+      style={{ backgroundColor: "rgba(200,140,50,0.12)", border: "1px solid rgba(200,140,50,0.3)" }}
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "#d4a050" }}>
+        <AlertCircle size={13} />
+        Approval required
       </div>
-      <div className="flex flex-col gap-1">{body}</div>
-      <div className="flex gap-2 mt-1">
+      <pre
+        className="text-xs px-2 py-1.5 rounded font-mono"
+        style={{ backgroundColor: "rgba(0,0,0,0.2)", color: "var(--c-ink-2)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}
+      >
+        {gate.command}
+      </pre>
+      <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{gate.reason}</p>
+      <div className="flex gap-2 pt-1">
         <button
           onClick={onApprove}
-          className="flex-1 flex items-center justify-center gap-1 rounded py-1.5 text-[12px] font-medium"
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-medium"
           style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
         >
-          <Check size={11} /> Approve
+          <Check size={12} /> Approve
         </button>
         <button
           onClick={onReject}
-          className="flex-1 rounded py-1.5 text-[12px] font-medium"
-          style={{ backgroundColor: "rgba(200,70,70,0.2)", color: "#e07070" }}
+          className="flex-1 rounded-lg py-2 text-sm font-medium"
+          style={{ backgroundColor: "rgba(200,70,70,0.15)", color: "var(--c-rose)" }}
         >
           Reject
         </button>
@@ -378,60 +573,113 @@ function ApprovalCard({ title, body, onApprove, onReject }: {
   )
 }
 
-// ── Release approval card ──────────────────────────────────────────────────────
+function QuestionGateCard({ gate, answer, onAnswerChange, onSend }: {
+  gate: { id: string; text: string }
+  answer: string
+  onAnswerChange: (v: string) => void
+  onSend: () => void
+}) {
+  return (
+    <div
+      className="rounded-xl p-3 flex flex-col gap-2"
+      style={{ backgroundColor: "rgba(100,160,220,0.1)", border: "1px solid rgba(100,160,220,0.25)" }}
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "#7aade0" }}>
+        <MessageSquare size={13} />
+        Agent needs your input
+      </div>
+      <p className="text-sm" style={{ color: "var(--c-ink)" }}>{gate.text}</p>
+      <textarea
+        className="w-full text-sm rounded-lg px-3 py-2 resize-none outline-none"
+        style={{
+          backgroundColor: "var(--c-surface-2)",
+          color: "var(--c-ink)",
+          border: "1px solid var(--c-border)",
+          minHeight: "3.5rem",
+        }}
+        placeholder="Type your answer… (Enter to send, Shift+Enter for newline)"
+        value={answer}
+        onChange={e => onAnswerChange(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === "Enter" && !e.shiftKey && answer.trim()) {
+            e.preventDefault()
+            onSend()
+          }
+        }}
+        autoFocus
+      />
+      <div className="flex justify-end">
+        <button
+          disabled={!answer.trim()}
+          onClick={onSend}
+          className="px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 transition-opacity"
+          style={{ backgroundColor: "#7aade0", color: "var(--c-surface)" }}
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  )
+}
 
-function ReleaseApprovalCard({ version, notes, commits, onApprove, onCancel }: {
-  version: string
-  notes: string[]
-  commits: string
+function ReleaseGateCard({ gate, onApprove, onCancel }: {
+  gate: { version: string; notes: string[]; commits: string; diffStat: string }
   onApprove: () => void
   onCancel: () => void
 }) {
   const [showCommits, setShowCommits] = useState(false)
+
   return (
-    <div className="rounded-lg p-4 flex flex-col gap-3 my-2 font-sans"
-      style={{ backgroundColor: "rgba(100,160,220,0.12)", border: "1px solid rgba(100,160,220,0.3)" }}>
+    <div
+      className="rounded-xl p-4 flex flex-col gap-3"
+      style={{ backgroundColor: "rgba(100,160,220,0.1)", border: "1px solid rgba(100,160,220,0.3)" }}
+    >
       <div className="flex items-center gap-2">
         <Cpu size={14} style={{ color: "#7aade0" }} />
-        <span className="text-[13px] font-semibold" style={{ color: "#7aade0" }}>
-          Release v{version}
+        <span className="text-sm font-semibold" style={{ color: "#7aade0" }}>
+          Release v{gate.version}
         </span>
       </div>
-      <ul className="flex flex-col gap-1">
-        {notes.map((note, i) => (
-          <li key={i} className="flex items-start gap-1.5 text-[12px]" style={{ color: "#e3ede9" }}>
-            <span style={{ color: "#7aade0", marginTop: 1 }}>•</span>
+      <ul className="flex flex-col gap-1.5">
+        {gate.notes.map((note, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm" style={{ color: "var(--c-ink)" }}>
+            <span style={{ color: "#7aade0" }}>•</span>
             {note}
           </li>
         ))}
       </ul>
-      {commits && (
-        <button
-          onClick={() => setShowCommits(v => !v)}
-          className="flex items-center gap-1 text-[11px] opacity-60 hover:opacity-100"
-          style={{ color: "#e3ede9" }}
-        >
-          {showCommits ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-          {showCommits ? "Hide commits" : "Show commits"}
-        </button>
+      {gate.commits && (
+        <>
+          <button
+            onClick={() => setShowCommits(v => !v)}
+            className="flex items-center gap-1 text-xs hover:underline self-start"
+            style={{ color: "var(--c-ink-faint)" }}
+          >
+            {showCommits ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+            {showCommits ? "Hide commits" : "Show commits"}
+          </button>
+          {showCommits && (
+            <pre
+              className="text-xs overflow-x-auto"
+              style={{ color: "var(--c-ink-faint)", whiteSpace: "pre-wrap", maxHeight: "8rem", overflowY: "auto" }}
+            >
+              {gate.commits}
+            </pre>
+          )}
+        </>
       )}
-      {showCommits && (
-        <pre className="text-[10px] opacity-50 overflow-x-auto" style={{ whiteSpace: "pre-wrap" }}>
-          {commits}
-        </pre>
-      )}
-      <div className="flex gap-2">
+      <div className="flex gap-2 pt-1">
         <button
           onClick={onApprove}
-          className="flex-1 flex items-center justify-center gap-1.5 rounded py-2 text-[13px] font-semibold"
+          className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold"
           style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
         >
           <Check size={13} /> Approve &amp; Deploy
         </button>
         <button
           onClick={onCancel}
-          className="px-4 rounded py-2 text-[12px]"
-          style={{ backgroundColor: "rgba(200,70,70,0.15)", color: "#e07070" }}
+          className="px-4 rounded-lg py-2 text-sm"
+          style={{ backgroundColor: "rgba(200,70,70,0.15)", color: "var(--c-rose)" }}
         >
           Cancel
         </button>
@@ -440,49 +688,15 @@ function ReleaseApprovalCard({ version, notes, commits, onApprove, onCancel }: {
   )
 }
 
-// ── Deploy completed row ───────────────────────────────────────────────────────
-
-function DeployCompletedRow({ event }: { event: Extract<AgentEvent, { type: "deploy_completed" }> }) {
-  const [showOutput, setShowOutput] = useState(false)
-  return (
-    <div className="flex flex-col gap-0.5 mt-1">
-      <div className="flex items-center gap-1.5" style={{ color: event.success ? "#6db890" : "#e07070" }}>
-        {event.success ? <Rocket size={11} /> : <XCircle size={11} />}
-        <span className="font-medium">
-          {event.success ? "Deployed ✓" : "Deploy failed"}{" "}
-          <code className="text-[11px] opacity-80">({event.target})</code>
-        </span>
-      </div>
-      {!event.success && event.output && (
-        <div className="pl-4">
-          <button
-            onClick={() => setShowOutput(v => !v)}
-            className="flex items-center gap-1 text-[11px] opacity-60 hover:opacity-100"
-            style={{ color: "#e07070" }}
-          >
-            {showOutput ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-            {showOutput ? "Hide output" : "Show output"}
-          </button>
-          {showOutput && (
-            <pre className="text-[10px] opacity-60 mt-1 overflow-x-auto" style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
-              {event.output}
-            </pre>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatToolLabel(tool: string, input: Record<string, unknown>): string {
   const t = tool.toLowerCase()
-  if (t === "bash") return `$ ${String(input.command ?? "").slice(0, 80)}`
-  if (t === "read") return `Read ${input.file_path ?? input.path ?? ""}`
+  if (t === "bash")  return `$ ${String(input.command ?? "").slice(0, 80)}`
+  if (t === "read")  return `Read  ${input.file_path ?? input.path ?? ""}`
   if (t === "write") return `Write ${input.file_path ?? input.path ?? ""}`
-  if (t === "edit") return `Edit ${input.file_path ?? input.path ?? ""}`
-  if (t === "glob") return `Glob ${input.pattern ?? ""}`
-  if (t === "grep") return `Grep "${input.pattern ?? ""}"`
+  if (t === "edit")  return `Edit  ${input.file_path ?? input.path ?? ""}`
+  if (t === "glob")  return `Glob  ${input.pattern ?? ""}`
+  if (t === "grep")  return `Grep  "${input.pattern ?? ""}"`
   return tool
 }

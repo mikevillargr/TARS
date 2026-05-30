@@ -1,10 +1,12 @@
 """
-Per-job approval gate. Backend pauses the executor stream and waits for
-the frontend to respond via WebSocket.
+Per-job gates that pause the executor stream and wait for frontend response
+via WebSocket. Two gate types:
+
+  ApprovalGate — destructive command approval (approve/reject + optional command edit)
+  QuestionGate — agent asks the user a question mid-job and waits for a text answer
 
 State is in-memory — intentionally ephemeral. If the harness restarts while
-a job is awaiting approval the gate is lost and the job must be retried.
-That's acceptable for Phase 1.
+a job is gated the gate is lost and the job must be retried. Acceptable for Phase 1.
 """
 import asyncio
 from dataclasses import dataclass, field
@@ -17,9 +19,20 @@ class ApprovalGate:
     result: dict = field(default_factory=lambda: {"approved": False, "modified_command": None})
 
 
+@dataclass
+class QuestionGate:
+    event: asyncio.Event = field(default_factory=asyncio.Event)
+    answer: str = ""
+
+
 # job_id -> ApprovalGate
 _gates: dict[str, ApprovalGate] = {}
 
+# job_id -> QuestionGate
+_question_gates: dict[str, QuestionGate] = {}
+
+
+# ── Approval gate ──────────────────────────────────────────────────────────────
 
 def get_or_create(job_id: str) -> ApprovalGate:
     if job_id not in _gates:
@@ -44,3 +57,30 @@ def reset(job_id: str) -> None:
 
 def cleanup(job_id: str) -> None:
     _gates.pop(job_id, None)
+
+
+# ── Question gate ──────────────────────────────────────────────────────────────
+
+def get_or_create_question(job_id: str) -> QuestionGate:
+    if job_id not in _question_gates:
+        _question_gates[job_id] = QuestionGate()
+    return _question_gates[job_id]
+
+
+def resolve_question(job_id: str, answer: str) -> None:
+    gate = _question_gates.get(job_id)
+    if gate:
+        gate.answer = answer
+        gate.event.set()
+
+
+def reset_question(job_id: str) -> None:
+    """Reset so the gate can be reused for the next question in the same job."""
+    gate = _question_gates.get(job_id)
+    if gate:
+        gate.event.clear()
+        gate.answer = ""
+
+
+def cleanup_question(job_id: str) -> None:
+    _question_gates.pop(job_id, None)

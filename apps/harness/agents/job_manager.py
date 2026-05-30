@@ -195,6 +195,7 @@ async def _run_job(job_id: str, db_session_factory: Any) -> None:
 
     finally:
         _approval.cleanup(job_id)
+        _approval.cleanup_question(job_id)
         # Schedule buffer cleanup in 5 min
         asyncio.create_task(_cleanup_buffer_later(job_id, delay=300))
 
@@ -422,6 +423,7 @@ async def _run_evolutionarist(
                     await _notify_chat(sub_job_id, sub_notify, db_session_factory)
 
             _approval.cleanup(sub_job_id)
+            _approval.cleanup_question(sub_job_id)
 
             tool_results.append({
                 "type": "tool_result",
