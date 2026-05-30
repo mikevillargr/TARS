@@ -9,7 +9,7 @@ import {
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
   Mail, Phone, PhoneCall, BriefcaseBusiness, MessageSquare, Search, UserPlus,
-  Copy, Check, Bot,
+  Copy, Check,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
@@ -40,6 +40,15 @@ interface StreamingMsg {
   role: "assistant"
   content: string
   streaming: true
+}
+
+interface AgentStreamMessage {
+  id: string
+  role: "agent_stream"
+  job_id: string
+  agent_type: string
+  instruction: string
+  created_at: string
 }
 
 interface TaskSuggestion {
@@ -800,43 +809,18 @@ function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
   return null
 }
 
-function AgentJobLoader({ onJobId }: { onJobId: (id: string | null) => void }) {
-  const searchParams = useSearchParams()
-  useEffect(() => {
-    onJobId(searchParams.get("job_id"))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
-  return null
-}
-
-// ─── Agent job notification card ─────────────────────────────────
-interface AgentJobNotification {
-  job_id: string
-  agent_type: string
-  instruction: string
-}
-
-function AgentJobCard({ n, onDismiss, onWatch }: { n: AgentJobNotification; onDismiss: () => void; onWatch: (id: string) => void }) {
+// ─── Agent stream bubble — inline in message thread ──────────────
+function AgentStreamBubble({ msg }: { msg: AgentStreamMessage }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 max-w-sm" style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-surface)" }}>
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}>
-        <Bot size={16} />
+    <div className="group flex gap-3 min-w-0 max-w-3xl mx-auto">
+      <div className="w-8 h-8 rounded-full shrink-0 overflow-hidden" style={{ border: "2px solid var(--c-moss)" }}>
+        <img src="/tars-avatar.svg" alt="TARS" style={{ width: "100%", height: "100%", display: "block" }} />
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: "var(--c-ink)" }}>
-          {n.agent_type === "release" ? "Release job started" : `Agent job started`}
-        </p>
-        <p className="text-[11px] truncate" style={{ color: "var(--c-ink-faint)" }}>{n.instruction.slice(0, 60)}{n.instruction.length > 60 ? "…" : ""}</p>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <button
-          onClick={() => onWatch(n.job_id)}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-          style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
-        >
-          Watch live
-        </button>
-        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+      <div className="flex flex-col min-w-0 flex-1">
+        <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>TARS</span>
+        <div className="rounded-2xl overflow-hidden border" style={{ borderColor: "var(--c-border)" }}>
+          <AgentJobStream jobId={msg.job_id} inline />
+        </div>
       </div>
     </div>
   )
@@ -846,21 +830,18 @@ function AgentJobCard({ n, onDismiss, onWatch }: { n: AgentJobNotification; onDi
 // memo: allMessages is stable during typing (useMemo on [messages,streaming]),
 // so this entire section is skipped on every keystroke → no O(n) reconcile cost.
 interface MessageAreaProps {
-  allMessages: (Message | StreamingMsg)[]
+  allMessages: (Message | StreamingMsg | AgentStreamMessage)[]
   calendarSuggestions: CalendarSuggestion[]
   taskSuggestions: TaskSuggestion[]
   artifactNotifications: ArtifactNotification[]
-  agentJobNotifications: AgentJobNotification[]
   contactResults: ContactResultSet[]
   placeResults: PlaceResultSet[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
-  setAgentJobNotifications: React.Dispatch<React.SetStateAction<AgentJobNotification[]>>
   setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
   setPlaceResults: React.Dispatch<React.SetStateAction<PlaceResultSet[]>>
   onAsk: (q: string) => void
-  onWatchJob: (id: string) => void
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
 }
@@ -870,23 +851,19 @@ const MessageArea = memo(function MessageArea({
   calendarSuggestions,
   taskSuggestions,
   artifactNotifications,
-  agentJobNotifications,
   contactResults,
   placeResults,
   setCalendarSuggestions,
   setTaskSuggestions,
   setArtifactNotifications,
-  setAgentJobNotifications,
   setContactResults,
   setPlaceResults,
   onAsk,
-  onWatchJob,
   quoteIndex,
   messagesEndRef,
 }: MessageAreaProps) {
   const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
-    || artifactNotifications.length > 0 || agentJobNotifications.length > 0
-    || contactResults.length > 0 || placeResults.length > 0
+    || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
       {allMessages.length === 0 ? (
@@ -898,19 +875,26 @@ const MessageArea = memo(function MessageArea({
         </div>
       ) : allMessages.map((msg, i) => (
         <React.Fragment key={"id" in msg ? msg.id : `stream-${i}`}>
-          <MessageBubble msg={msg} />
-          {/* Inline cards anchored to this saved assistant message */}
-          {"tool_results" in msg &&
-            (msg as Message).tool_results != null &&
-            (msg as Message).tool_results!.length > 0 &&
-            msg.role === "assistant" &&
-            !("streaming" in msg) && (
-            <InlineMessageCards
-              toolResults={(msg as Message).tool_results!}
-              msgId={(msg as Message).id}
-              onAsk={onAsk}
-            />
-          )}
+          {msg.role === "agent_stream"
+            ? <AgentStreamBubble msg={msg as AgentStreamMessage} />
+            : (
+              <>
+                <MessageBubble msg={msg as Message | StreamingMsg} />
+                {/* Inline cards anchored to this saved assistant message */}
+                {"tool_results" in msg &&
+                  (msg as Message).tool_results != null &&
+                  (msg as Message).tool_results!.length > 0 &&
+                  msg.role === "assistant" &&
+                  !("streaming" in msg) && (
+                  <InlineMessageCards
+                    toolResults={(msg as Message).tool_results!}
+                    msgId={(msg as Message).id}
+                    onAsk={onAsk}
+                  />
+                )}
+              </>
+            )
+          }
         </React.Fragment>
       ))}
       {/* Global card section — live preview during streaming only */}
@@ -935,14 +919,6 @@ const MessageArea = memo(function MessageArea({
               key={n.artifact_id}
               n={n}
               onDismiss={() => setArtifactNotifications(prev => prev.filter(x => x.artifact_id !== n.artifact_id))}
-            />
-          ))}
-          {agentJobNotifications.map((n) => (
-            <AgentJobCard
-              key={n.job_id}
-              n={n}
-              onDismiss={() => setAgentJobNotifications(prev => prev.filter(x => x.job_id !== n.job_id))}
-              onWatch={onWatchJob}
             />
           ))}
           {contactResults.map((set) => (
@@ -992,7 +968,7 @@ export default function ChatPage() {
   const [calendarSuggestions, setCalendarSuggestions]     = useState<CalendarSuggestion[]>([])
   const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
-  const [agentJobNotifications, setAgentJobNotifications] = useState<AgentJobNotification[]>([])
+  const [agentStreamMessages, setAgentStreamMessages]     = useState<AgentStreamMessage[]>([])
   const [contactResults, setContactResults]               = useState<ContactResultSet[]>([])
   const [placeResults, setPlaceResults]                   = useState<PlaceResultSet[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
@@ -1001,7 +977,6 @@ export default function ChatPage() {
   const [attachments, setAttachments]               = useState<File[]>([])
   // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
   const [pendingVoiceSend, setPendingVoiceSend]     = useState<string | null>(null)
-  const [activeJobId, setActiveJobId]               = useState<string | null>(null)
   const voice = useVoiceInput()
   const confirm = useConfirm()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -1064,6 +1039,7 @@ export default function ChatPage() {
     setCalendarSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
+    setAgentStreamMessages([])
     setContactResults([])
     setPlaceResults([])
   }, [activeChatId])
@@ -1397,10 +1373,13 @@ export default function ChatPage() {
               }
             } else if (evt.type === "agent_job_created") {
               if (chatId === activeChatIdRef.current) {
-                setAgentJobNotifications(prev => [...prev, {
+                setAgentStreamMessages(prev => [...prev, {
+                  id: evt.job_id as string,
+                  role: "agent_stream" as const,
                   job_id: evt.job_id as string,
                   agent_type: evt.agent_type as string,
                   instruction: evt.instruction as string,
+                  created_at: new Date().toISOString(),
                 }])
               }
             } else if (evt.type === "done") {
@@ -1478,8 +1457,12 @@ export default function ChatPage() {
   }, [])
 
   const allMessages = useMemo(
-    () => (streaming ? [...messages, streaming] : messages),
-    [messages, streaming],
+    () => {
+      const base: (Message | StreamingMsg | AgentStreamMessage)[] = [...messages, ...agentStreamMessages]
+      if (streaming) base.push(streaming)
+      return base
+    },
+    [messages, streaming, agentStreamMessages],
   )
 
   return (
@@ -1502,7 +1485,6 @@ export default function ChatPage() {
           setInputValue(q)
           autoSendPendingRef.current = true
         }} />
-        <AgentJobLoader onJobId={setActiveJobId} />
       </Suspense>
 
       {/* ── Mobile conversation drawer ────────────────────────── */}
@@ -1709,53 +1691,17 @@ export default function ChatPage() {
           calendarSuggestions={calendarSuggestions}
           taskSuggestions={taskSuggestions}
           artifactNotifications={artifactNotifications}
-          agentJobNotifications={agentJobNotifications}
           contactResults={contactResults}
           placeResults={placeResults}
           setCalendarSuggestions={setCalendarSuggestions}
           setTaskSuggestions={setTaskSuggestions}
           setArtifactNotifications={setArtifactNotifications}
-          setAgentJobNotifications={setAgentJobNotifications}
           setContactResults={setContactResults}
           setPlaceResults={setPlaceResults}
           onAsk={handleAsk}
-          onWatchJob={(id) => setActiveJobId(id)}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
         />
-
-        {/* ── Agent stream panel ─────────────────────────────────── */}
-        {activeJobId && (
-          <div className="shrink-0 mx-3 mb-2 rounded-xl overflow-hidden border"
-            style={{ borderColor: "var(--c-border)", height: 380, display: "flex", flexDirection: "column" }}>
-            <div className="flex items-center justify-between px-3 py-2 shrink-0"
-              style={{ backgroundColor: "var(--c-surface-2)", borderBottom: "1px solid var(--c-border)" }}>
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-[11px] font-semibold" style={{ color: "var(--c-ink)" }}>
-                  Evolutionarist — live
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <a
-                  href={`/agent-jobs?id=${activeJobId}`}
-                  className="text-[11px] hover:underline flex items-center gap-1"
-                  style={{ color: "var(--c-moss)" }}
-                >
-                  Full view <ExternalLink size={10} />
-                </a>
-                <button
-                  onClick={() => setActiveJobId(null)}
-                  className="p-0.5 rounded hover:opacity-70"
-                  style={{ color: "var(--c-ink-faint)" }}
-                >
-                  <X size={13} />
-                </button>
-              </div>
-            </div>
-            <AgentJobStream jobId={activeJobId} />
-          </div>
-        )}
 
         {/* ── Floating input ─────────────────────────────────────── */}
         {/* Gradient fade creates a soft visual lift from the message stream */}
