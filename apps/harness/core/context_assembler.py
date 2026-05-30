@@ -75,9 +75,35 @@ When Mike asks you to "create", "write", "draft", "generate", "make", "prepare",
 Write complete, detailed content inside the tool call — never abbreviate or summarise. All files are saved to Artifacts.
 
 CONTACTS:
-• lookup_contact — look up a single person by name or email. Returns name, org, title, email, phone, and any TARS-saved context. Use whenever Mike asks "who is X?", "what's X's email?", "what's X's title?", or refers to a person whose details he might want.
-• search_contacts — search and return multiple matching contacts. Use for broad queries like "find everyone from Acme Corp" or "who do I know at that company?".
-When a contact is found, a contact card is rendered automatically in the UI — you don't need to repeat all their details. Give a brief conversational summary instead.
+Your contacts database is a local mirror of Mike's Google Contacts, kept in sync every 5 minutes.
+It includes both saved contacts AND "other contacts" — people Mike has emailed but never saved.
+
+• lookup_contact — look up ONE person by name, partial name, or email.
+  Use proactively whenever a person is mentioned in conversation, found in an email, or appears in a meeting:
+  — "who is X?" / "what company is X at?" / "what's X's number?" / "find X's email"
+  — When you see a name in email or meeting context and Mike might want their details
+  Falls back to a live Google search if no local match is found.
+
+• search_contacts — search for MULTIPLE contacts, or browse/count the full database.
+  — "who do I know at Acme?" / "list contacts from NCH" / "everyone in product"
+  — "how many contacts do I have?" → call with empty query; response always includes total unique count
+  — Browse mode: omit query entirely to list all contacts (paginated via offset param)
+  — The response header always states the total e.g. "Found 12 matching (total unique contacts: 847)"
+  — Use limit (default 25) and offset to page through large results
+
+CONTACT CARD UI — what renders automatically:
+When you return contact results, a card appears in the UI with:
+  • Email button (opens compose) + Copy email chip
+  • Call button (opens mobile dialer via tel:) + Copy number chip  — only if phone exists
+  • Schedule meeting / Create task / Find emails / Meeting history — action chips that auto-send as follow-up queries
+  • "Add to contacts" chip (moss-accented) — shown for unsaved "other contacts" and live search results
+Because the card renders full details visually, do NOT repeat name/email/phone in your text reply.
+Give a brief 1-2 sentence conversational summary instead (e.g. "Found her — she's a designer at Acme.").
+
+PROACTIVE CONTACT BEHAVIOR:
+— When Mike mentions a person by name in a new context, silently call lookup_contact. If found, the card renders.
+— When a contact has is_other_contact=true (emailed but unsaved), note it and suggest: "Want me to add them to your Google Contacts?"
+— When Mike asks to "add someone to contacts" or you detect a new person worth saving, call lookup_contact first to check if they already exist, then guide Mike via the "Add to contacts" chip on the card.
 
 CHARTS & DIAGRAMS:
 Use Mermaid code blocks (```mermaid) to render diagrams directly in chat. Supports:
@@ -115,7 +141,7 @@ and Entire Travel Group. He is a randonneur and cyclist. He manages his health a
 
 [RELEVANT KNOWLEDGE]
 {second_brain_context}
-{gmail_section}{gcal_section}{tasks_section}{meetings_section}
+{gmail_section}{gcal_section}{tasks_section}{meetings_section}{contacts_section}
 [ACTIVE CONTEXT]
 Timezone: {user_timezone}
 {active_tasks_count} open tasks
@@ -272,6 +298,31 @@ async def _fetch_gcal_context(db: AsyncSession, user_id: str, tz_name: str = "As
         return ""
 
 
+async def _fetch_contacts_context(db: AsyncSession, user_id: str) -> str:
+    """Inject a brief contact database summary so the agent knows the scale at a glance."""
+    try:
+        from sqlalchemy import select, func, Integer, cast
+        from db.models import Contact
+        result = await db.execute(
+            select(
+                func.count(func.distinct(Contact.primary_email)).label("unique"),
+                func.sum(
+                    cast(Contact.is_other_contact == False, Integer)  # noqa: E712
+                ).label("saved"),
+            ).where(Contact.user_id == user_id)
+        )
+        row = result.one_or_none()
+        if not row or not row.unique:
+            return ""
+        unique = row.unique or 0
+        saved  = int(row.saved or 0)
+        other  = unique - saved
+        return f"\n[CONTACTS]\n{unique} unique contacts ({saved} saved, {other} other/unsaved).\n"
+    except Exception as exc:
+        log.warning("Contacts context fetch failed: %s", exc)
+        return ""
+
+
 async def assemble(
     user_id: str,
     query: str,
@@ -303,6 +354,7 @@ async def assemble(
     gcal_section = ""
     tasks_section = ""
     meetings_section = ""
+    contacts_section = ""
     user_tz = user_timezone
 
     if db is not None:
@@ -336,13 +388,14 @@ async def assemble(
                 pass
 
         if is_lightweight:
-            # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings list
+            # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings + contacts count
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
                 _fetch_gcal_context(db, user_id, user_tz),
                 _fetch_gmail_context(db, user_id),
                 _fetch_meetings_context(db, user_id, limit=5),
+                _fetch_contacts_context(db, user_id),
                 return_exceptions=True,
             )
             if len(results) > 1 and isinstance(results[1], str):
@@ -353,14 +406,17 @@ async def assemble(
                 gmail_section = results[3]
             if len(results) > 4 and isinstance(results[4], str):
                 meetings_section = results[4]
+            if len(results) > 5 and isinstance(results[5], str):
+                contacts_section = results[5]
         else:
-            # Tier 2/3: full context — tasks, email, calendar, memory, meetings
+            # Tier 2/3: full context — tasks, email, calendar, memory, meetings, contacts count
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
                 _fetch_gmail_context(db, user_id),
                 _fetch_gcal_context(db, user_id, user_tz),
                 _fetch_meetings_context(db, user_id, limit=7),
+                _fetch_contacts_context(db, user_id),
                 return_exceptions=True,
             )
             if len(results) > 1 and isinstance(results[1], str):
@@ -371,6 +427,8 @@ async def assemble(
                 gcal_section = results[3]
             if len(results) > 4 and isinstance(results[4], str):
                 meetings_section = results[4]
+            if len(results) > 5 and isinstance(results[5], str):
+                contacts_section = results[5]
 
     return SYSTEM_TEMPLATE.format(
         capabilities_section=capabilities_section,
@@ -380,6 +438,7 @@ async def assemble(
         gcal_section=gcal_section,
         tasks_section=tasks_section,
         meetings_section=meetings_section,
+        contacts_section=contacts_section,
         user_timezone=user_tz,
         active_tasks_count=active_tasks_count,
         last_seen=last_seen,
