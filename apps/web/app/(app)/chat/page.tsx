@@ -31,6 +31,7 @@ interface Message {
   content: string
   model_used?: string
   tool_calls?: string[]
+  tool_results?: Array<{ type: string; [k: string]: unknown }>
   created_at: string
 }
 
@@ -966,6 +967,47 @@ export default function ChatPage() {
   }, [])
 
   // Load messages when active conversation changes.
+  // Replay persisted tool_results from the most recent assistant message back
+  // into the bottom-of-thread card state so reload restores Place/Contact/etc.
+  const rehydrateCards = useCallback((msgs: Message[]) => {
+    setCalendarSuggestions([])
+    setTaskSuggestions([])
+    setArtifactNotifications([])
+    setContactResults([])
+    setPlaceResults([])
+
+    // Find the most recent assistant message that carries tool_results
+    let latest: Message | undefined
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i]
+      if (m.role === "assistant" && m.tool_results && m.tool_results.length > 0) {
+        latest = m
+        break
+      }
+    }
+    if (!latest?.tool_results) return
+
+    latest.tool_results.forEach((evt, i) => {
+      const key = `${latest!.id}-${i}`
+      const e = evt as unknown as Record<string, unknown>
+      if (evt.type === "place_card" && Array.isArray(e.places)) {
+        setPlaceResults(prev => [...prev, { tool_use_id: `place-${key}`, places: e.places as PlaceResult[] }])
+      } else if (evt.type === "contact_card" && Array.isArray(e.contacts)) {
+        setContactResults(prev => [...prev, { tool_use_id: `contact-${key}`, contacts: e.contacts as ContactResult[] }])
+      } else if (evt.type === "calendar_suggest") {
+        setCalendarSuggestions(prev => [...prev, evt as unknown as CalendarSuggestion])
+      } else if (evt.type === "task_suggest") {
+        setTaskSuggestions(prev => [...prev, evt as unknown as TaskSuggestion])
+      } else if (evt.type === "artifact_created") {
+        setArtifactNotifications(prev => [...prev, {
+          artifact_id: e.artifact_id as string,
+          filename: e.filename as string,
+          filetype: e.filetype as ArtifactNotification["filetype"],
+        }])
+      }
+    })
+  }, [])
+
   // If the last message is from the user and recent, the server is still generating —
   // show a loading indicator and poll until the assistant response lands.
   useEffect(() => {
@@ -977,6 +1019,7 @@ export default function ChatPage() {
       .then((d) => {
         if (chatId !== activeChatIdRef.current) return
         setMessages(d.messages)
+        rehydrateCards(d.messages)
         if (d.title) {
           setConversations((prev) => prev.map((c) =>
             c.id === chatId ? { ...c, title: d.title } : c
@@ -1014,6 +1057,7 @@ export default function ChatPage() {
                 clearInterval(pollTimerRef.current!)
                 if (chatId === activeChatIdRef.current) {
                   setMessages(fresh.messages)
+                  rehydrateCards(fresh.messages)
                   setStreaming(null)
                   setBusy(false)
                   if (fresh.title) {

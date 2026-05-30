@@ -58,6 +58,7 @@ class MessageOut(BaseModel):
     content: str
     model_used: Optional[str]
     tokens_used: int
+    tool_results: List[dict] = []
     created_at: datetime
 
     class Config:
@@ -575,6 +576,9 @@ async def send_message(
 
     async def background_generate() -> None:
         full_response: list[str] = []
+        # Card payloads emitted during streaming, persisted on the message so
+        # they re-hydrate on conversation reload.
+        tool_results: list[dict] = []
         model_used: str = ""
         tokens_used: int = 0
 
@@ -1580,7 +1584,8 @@ async def send_message(
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
-                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card"):
+                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created"):
+                        tool_results.append(event)
                         await queue.put(sse_event(event))
                     elif event["type"] == "done":
                         model_used = event.get("model", "")
@@ -1589,6 +1594,20 @@ async def send_message(
                         await queue.put(sse_event(event))
 
             assistant_content = "".join(full_response)
+
+            # If the model only emitted tool calls (no text) but did produce
+            # cards, give the message a tiny placeholder so the bubble isn't
+            # blank on reload. Cards re-render from tool_results.
+            if not assistant_content.strip() and tool_results:
+                kinds = {r.get("type") for r in tool_results}
+                if "place_card" in kinds:
+                    assistant_content = "Here's what I found:"
+                elif "contact_card" in kinds:
+                    assistant_content = "Here's who I found:"
+                elif "artifact_created" in kinds:
+                    assistant_content = "Done — see the file above."
+                else:
+                    assistant_content = "Done."
 
             # ── Phase 2: signal completion to client immediately ─────────────
             # Do NOT wait for DB saves / title gen / memory — client gets the
@@ -1604,6 +1623,7 @@ async def send_message(
                     content=assistant_content,
                     model_used=model_used or tier.value,
                     tokens_used=tokens_used,
+                    tool_results=tool_results,
                 )
                 bg_db.add(assistant_msg)
                 await bg_db.commit()
