@@ -276,7 +276,7 @@ export function MessageContent({ content }: { content: string }) {
   const urls = extractUrls(content)
 
   return (
-    <div className="message-content space-y-0.5 min-w-0 max-w-full" data-selectable>
+    <div className="message-content space-y-0.5 min-w-0 max-w-full w-full overflow-hidden" data-selectable>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -378,14 +378,14 @@ export function MessageContent({ content }: { content: string }) {
             <hr className="my-3" style={{ borderColor: "var(--c-border)" }} />
           ),
 
-          // Links — open in new tab
+          // Links — open in new tab. Long URLs must break inside the bubble.
           a: ({ href, children }) => (
             <a
               href={href}
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-2 hover:opacity-80 transition-opacity"
-              style={{ color: "var(--c-moss)" }}
+              style={{ color: "var(--c-moss)", wordBreak: "break-all", overflowWrap: "anywhere" }}
             >
               {children}
             </a>

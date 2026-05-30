@@ -424,3 +424,62 @@
 }
 /* Dark mode: editor background */
 .dark .ProseMirror { color: var(--c-ink); }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * App-wide overflow safety net
+ * ──────────────────────────────────────────────────────────────────────
+ * Mobile browsers happily blow past viewport width when long words, URLs,
+ * code blocks, or wide flex children get involved. These rules clamp the
+ * common offenders so no page ever requires horizontal page-scroll.
+ */
+
+/* Root containers should never push horizontally past the viewport */
+html, body, #__next, main {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Long URLs / unbreakable tokens inside prose, badges, tables, list items, etc.
+ * `overflow-wrap: anywhere` allows the browser to break mid-word as a last resort. */
+.message-content,
+.message-content p,
+.message-content li,
+.message-content td,
+.message-content blockquote,
+.prose,
+.prose p,
+.prose li {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Any preformatted block (raw <pre>, code fences) gets safe horizontal scroll
+ * rather than spilling out of its parent. */
+.message-content pre,
+.prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Inline code inside text — long tokens (paths, hashes) must break. */
+.message-content code,
+.prose code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Images and SVGs should never exceed their container width. */
+.message-content img,
+.message-content svg:not(.lucide) {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Tables in messages: horizontal scroll, never push parent wider. */
+.message-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

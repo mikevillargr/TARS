@@ -941,18 +941,22 @@ export default function ChatPage() {
               {conversations.length === 0 ? (
                 <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
               ) : conversations.map((conv) => (
-                <div key={conv.id} className="group relative flex items-center min-w-0 overflow-hidden">
+                <div key={conv.id} className="group relative flex items-center min-w-0 overflow-hidden w-full">
                   <button
                     onClick={() => { setActiveChatId(conv.id); setMobileConvOpen(false) }}
-                    className={`flex-1 min-w-0 text-left px-3 py-2.5 rounded-md text-sm truncate transition-colors pr-9 ${
+                    className={`flex-1 min-w-0 text-left px-3 py-2.5 rounded-md text-sm transition-colors pr-9 ${
                       activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted"
                     }`}
-                    style={activeChatId === conv.id
-                      ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
-                      : {}
-                    }
+                    style={{
+                      ...(activeChatId === conv.id
+                        ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
+                        : {}),
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
                   >
-                    {(conv.title ?? "New conversation").slice(0, 60)}
+                    {conv.title ?? "New conversation"}
                   </button>
                   {/* Always visible on mobile (no hover state on touch) */}
                   <button
@@ -1006,19 +1010,23 @@ export default function ChatPage() {
           ) : conversations.map((conv) => (
             <div
               key={conv.id}
-              className="group relative flex items-center min-w-0 overflow-hidden"
+              className="group relative flex items-center min-w-0 overflow-hidden w-full"
             >
               <button
                 onClick={() => setActiveChatId(conv.id)}
-                className={`flex-1 min-w-0 text-left px-3 py-2 rounded-md text-sm truncate transition-colors pr-8 ${
+                className={`flex-1 min-w-0 text-left px-3 py-2 rounded-md text-sm transition-colors pr-8 ${
                   activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted hover:bg-surface-2"
                 }`}
-                style={activeChatId === conv.id
-                  ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
-                  : {}
-                }
+                style={{
+                  ...(activeChatId === conv.id
+                    ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
+                    : {}),
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
               >
-                {(conv.title ?? "New conversation").slice(0, 60)}
+                {conv.title ?? "New conversation"}
               </button>
               <button
                 onClick={(e) => handleDeleteConversation(conv.id, e)}
@@ -1036,7 +1044,8 @@ export default function ChatPage() {
       </div>
 
       {/* ── Chat area ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col relative" style={{ backgroundColor: "var(--c-surface)" }}>
+      {/* min-w-0 prevents code blocks / long messages from pushing this flex item wider than viewport */}
+      <div className="flex-1 flex flex-col relative min-w-0 overflow-hidden" style={{ backgroundColor: "var(--c-surface)" }}>
         {/* Chat toolbar */}
         <div
           className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0 overflow-hidden"
@@ -1067,10 +1076,16 @@ export default function ChatPage() {
             )}
 
             <h1
-              className="text-sm font-medium truncate min-w-0 flex-1"
-              style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}
+              className="text-sm font-medium truncate min-w-0 flex-1 block"
+              style={{
+                fontFamily: "var(--font-heading), serif",
+                color: "var(--c-ink)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
             >
-              {(activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")).slice(0, 60)}
+              {activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")}
             </h1>
           </div>
 

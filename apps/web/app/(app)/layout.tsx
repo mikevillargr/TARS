@@ -220,7 +220,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page content — safe-area-aware bottom padding so content clears the tab bar + home indicator */}
-        <div className="flex-1 overflow-hidden flex flex-col pb-safe-tab lg:pb-0">{children}</div>
+        {/* min-w-0 + overflow-x-hidden enforce a hard horizontal boundary for every (app) page */}
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col pb-safe-tab lg:pb-0" style={{ maxWidth: "100%" }}>{children}</div>
       </main>
 
       {/* Bottom tab bar — sits outside <main> so it overlays correctly */}
