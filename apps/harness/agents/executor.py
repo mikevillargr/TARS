@@ -85,9 +85,18 @@ async def run(
     )
 
     summary_text = ""
+    # Track whether we should stop processing (set when we yield a terminal event
+    # but still need to drain the SDK generator cleanly).
+    _stop = False
+
+    # Get a reference to the generator so we can explicitly close it in the
+    # finally block.  Explicit aclose() from the SAME asyncio task avoids the
+    # anyio "cancel scope in a different task" RuntimeError that occurs when
+    # Python's GC finalizer tries to close the generator from a background task.
+    _gen = query(prompt=instruction, options=options)
 
     try:
-        async for message in query(prompt=instruction, options=options):
+        async for message in _gen:
 
             # ── AssistantMessage: text, thinking, tool calls ───────────────
             if isinstance(message, AssistantMessage):
@@ -120,7 +129,8 @@ async def run(
 
                                 if not approval_gate.result.get("approved"):
                                     yield {"type": "approval_rejected"}
-                                    return
+                                    _stop = True
+                                    break
 
                                 # Use modified command if provided
                                 modified = approval_gate.result.get("modified_command")
@@ -161,13 +171,30 @@ async def run(
                 if message.is_error:
                     err_text = message.result or "Agent run failed with unknown error."
                     yield {"type": "error", "message": err_text}
-                    return
+                    _stop = True
+                    break
                 if message.result:
                     summary_text = message.result
+
+            if _stop:
+                break
 
     except Exception as exc:
         log.exception("Agent executor error for job %s", job_id)
         yield {"type": "error", "message": str(exc)}
+        _stop = True
+
+    finally:
+        # Explicitly close the SDK generator from THIS asyncio task.
+        # Without this, Python's GC finalizer closes it from a background task,
+        # which triggers: RuntimeError("Attempted to exit cancel scope in a
+        # different task than it was entered in") from anyio's cleanup code.
+        try:
+            await _gen.aclose()
+        except Exception:
+            pass
+
+    if _stop:
         return
 
     # Attempt to create a PR after successful completion
