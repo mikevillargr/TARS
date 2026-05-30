@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Database, Search, Trash2, Zap, Plus, X } from "lucide-react"
+import { Database, Search, Trash2, Zap, Plus, X, ChevronDown } from "lucide-react"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 
@@ -15,13 +15,24 @@ interface Memory {
   updated_at: string
 }
 
+interface MemoryListResponse {
+  items: Memory[]
+  total: number
+  limit: number
+  offset: number
+}
+
 const DOMAINS = ["All", "work", "personal", "cycling", "client", "health"]
 const SOURCES = ["All", "conversation", "meeting", "email", "manual"]
+const PAGE_SIZE = 100
 
 export default function MemoryPage() {
   const confirm = useConfirm()
   const [memories, setMemories]           = useState<Memory[]>([])
+  const [total, setTotal]                 = useState(0)
+  const [offset, setOffset]               = useState(0)
   const [loading, setLoading]             = useState(true)
+  const [loadingMore, setLoadingMore]     = useState(false)
   const [domainFilter, setDomainFilter]   = useState("All")
   const [sourceFilter, setSourceFilter]   = useState("All")
   const [sortBy, setSortBy]               = useState<"date" | "importance">("date")
@@ -33,17 +44,44 @@ export default function MemoryPage() {
   const [addImportance, setAddImportance] = useState(3)
   const [saving, setSaving]               = useState(false)
 
+  const buildUrl = useCallback((off: number) => {
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      offset: String(off),
+    })
+    if (domainFilter !== "All") params.set("domain", domainFilter)
+    if (sourceFilter !== "All") params.set("source", sourceFilter)
+    return `/memory/memories?${params}`
+  }, [domainFilter, sourceFilter])
+
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await apiGet<Memory[]>("/memory/memories")
-      setMemories(data)
+      const data = await apiGet<MemoryListResponse>(buildUrl(0))
+      setMemories(data.items)
+      setTotal(data.total)
+      setOffset(0)
     } catch (e) {
       console.error(e)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [buildUrl])
+
+  const loadMore = async () => {
+    const nextOffset = offset + PAGE_SIZE
+    setLoadingMore(true)
+    try {
+      const data = await apiGet<MemoryListResponse>(buildUrl(nextOffset))
+      setMemories(prev => [...prev, ...data.items])
+      setTotal(data.total)
+      setOffset(nextOffset)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -53,8 +91,10 @@ export default function MemoryPage() {
     const t = setTimeout(async () => {
       setSearching(true)
       try {
-        const data = await apiPost<Memory[]>("/memory/search", { query: query.trim(), limit: 20 })
+        const data = await apiPost<Memory[]>("/memory/memories/search", { query: query.trim(), limit: 50 })
         setMemories(data)
+        setTotal(data.length)
+        setOffset(0)
       } catch (e) {
         console.error(e)
       } finally {
@@ -77,6 +117,7 @@ export default function MemoryPage() {
     if (!ok) return
     await apiDelete(`/memory/memories/${id}`)
     setMemories((prev) => prev.filter((m) => m.id !== id))
+    setTotal(prev => prev - 1)
   }
 
   const handleAdd = async () => {
@@ -90,6 +131,7 @@ export default function MemoryPage() {
         importance: addImportance,
       })
       setMemories((prev) => [mem, ...prev])
+      setTotal(prev => prev + 1)
       setAddContent("")
       setShowAdd(false)
     } catch (e) {
@@ -101,8 +143,12 @@ export default function MemoryPage() {
 
   const filtered = memories
     .filter((m) => {
-      if (domainFilter !== "All" && m.domain !== domainFilter) return false
-      if (sourceFilter !== "All" && m.source !== sourceFilter) return false
+      // When not searching, domain/source filters are applied server-side.
+      // When searching, apply client-side since search returns flat array.
+      if (query.trim()) {
+        if (domainFilter !== "All" && m.domain !== domainFilter) return false
+        if (sourceFilter !== "All" && m.source !== sourceFilter) return false
+      }
       return true
     })
     .sort((a, b) =>
@@ -111,15 +157,27 @@ export default function MemoryPage() {
         : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )
 
+  const hasMore = !query.trim() && memories.length < total
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-canvas">
       {/* Header */}
       <div className="px-6 py-5 border-b bg-surface shrink-0" style={{ borderColor: "var(--c-border)" }}>
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="font-semibold text-2xl flex items-center gap-2" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>
-              <Database size={22} className="text-moss" /> Memory Browser
-            </h1>
+            <div>
+              <h1 className="font-semibold text-2xl flex items-center gap-2" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>
+                <Database size={22} className="text-moss" /> Memory Browser
+              </h1>
+              {!loading && (
+                <p className="text-xs mt-1" style={{ color: "var(--c-ink-faint)" }}>
+                  {query.trim()
+                    ? `${filtered.length} result${filtered.length !== 1 ? "s" : ""} for "${query.trim()}"`
+                    : `${total.toLocaleString()} memor${total !== 1 ? "ies" : "y"} total${memories.length < total ? ` · showing ${memories.length}` : ""}`
+                  }
+                </p>
+              )}
+            </div>
             <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2 text-sm">
               <Plus size={16} /> Add Memory
             </button>
@@ -138,10 +196,18 @@ export default function MemoryPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <select className="input-field py-1.5 text-xs bg-canvas" value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)}>
+            <select
+              className="input-field py-1.5 text-xs bg-canvas"
+              value={domainFilter}
+              onChange={(e) => { setDomainFilter(e.target.value); setOffset(0) }}
+            >
               {DOMAINS.map((d) => <option key={d} value={d}>{d === "All" ? "Domain: All" : d}</option>)}
             </select>
-            <select className="input-field py-1.5 text-xs bg-canvas" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+            <select
+              className="input-field py-1.5 text-xs bg-canvas"
+              value={sourceFilter}
+              onChange={(e) => { setSourceFilter(e.target.value); setOffset(0) }}
+            >
               {SOURCES.map((s) => <option key={s} value={s}>{s === "All" ? "Source: All" : s}</option>)}
             </select>
             <button
@@ -163,36 +229,60 @@ export default function MemoryPage() {
             <p className="text-center py-12 text-ink-muted text-sm">
               {query ? "No memories matched that search." : "No memories yet. TARS will build this up from your conversations."}
             </p>
-          ) : filtered.map((mem) => (
-            <div key={mem.id} className="card group">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex gap-2">
-                  <span className="badge badge-neutral bg-surface-2">{mem.domain}</span>
-                  <span className="text-[10px] text-ink-faint uppercase tracking-wider font-medium pt-0.5">
-                    {mem.source}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "var(--c-amber)" }}>
-                    <Zap size={12} style={{ fill: "var(--c-amber)" }} /> {mem.importance}/5
+          ) : (
+            <>
+              {filtered.map((mem) => (
+                <div key={mem.id} className="card group">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex gap-2">
+                      <span className="badge badge-neutral bg-surface-2">{mem.domain}</span>
+                      <span className="text-[10px] text-ink-faint uppercase tracking-wider font-medium pt-0.5">
+                        {mem.source}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "var(--c-amber)" }}>
+                        <Zap size={12} style={{ fill: "var(--c-amber)" }} /> {mem.importance}/5
+                      </div>
+                      <button
+                        onClick={() => handleDelete(mem.id)}
+                        className="p-1 rounded transition-colors"
+                        style={{ color: "var(--c-ink-faint)" }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)"; (e.currentTarget as HTMLElement).style.color = "var(--c-rose)" }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)" }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
+                  <p className="text-sm leading-relaxed text-ink">{mem.content}</p>
+                  <div className="mt-3 text-[10px] text-ink-faint">
+                    {new Date(mem.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+              ))}
+
+              {/* Load more */}
+              {hasMore && (
+                <div className="text-center pt-2 pb-6">
                   <button
-                    onClick={() => handleDelete(mem.id)}
-                    className="p-1 rounded transition-colors"
-                    style={{ color: "var(--c-ink-faint)" }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-rose-soft)"; (e.currentTarget as HTMLElement).style.color = "var(--c-rose)" }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = ""; (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)" }}
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="btn-ghost text-sm flex items-center gap-2 mx-auto border border-border px-4 py-2 disabled:opacity-40"
                   >
-                    <Trash2 size={14} />
+                    {loadingMore ? (
+                      "Loading…"
+                    ) : (
+                      <>
+                        <ChevronDown size={15} />
+                        Load more ({total - memories.length} remaining)
+                      </>
+                    )}
                   </button>
                 </div>
-              </div>
-              <p className="text-sm leading-relaxed text-ink">{mem.content}</p>
-              <div className="mt-3 text-[10px] text-ink-faint">
-                {new Date(mem.created_at).toLocaleDateString()}
-              </div>
-            </div>
-          ))}
+              )}
+            </>
+          )}
         </div>
       </div>
 
