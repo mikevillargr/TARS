@@ -1077,26 +1077,6 @@ export default function ChatPage() {
             >
               <Menu size={18} />
             </button>
-            {/* Mobile: voice new-chat */}
-            <button
-              onClick={handleMobileVoiceTap}
-              disabled={voice.state === "transcribing" || busy}
-              className="lg:hidden p-1.5 rounded-md shrink-0 relative"
-              title={voice.state === "recording" ? "Tap to stop" : "New voice chat"}
-              style={{
-                color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-faint)",
-                opacity: voice.state === "transcribing" ? 0.5 : 1,
-              }}
-            >
-              {voice.state === "transcribing"
-                ? <Loader2 size={17} className="animate-spin" />
-                : <Mic size={17} className={voice.state === "recording" ? "animate-pulse" : ""} />
-              }
-              {voice.state === "recording" && (
-                <span className="absolute inset-0 rounded-md animate-ping"
-                  style={{ backgroundColor: "var(--c-rose)", opacity: 0.15 }} />
-              )}
-            </button>
             {isConvListCollapsed && (
               <button
                 onClick={() => setConvListCollapsed(false)}
@@ -1119,15 +1099,36 @@ export default function ChatPage() {
             </h1>
           </div>
 
-          {/* Mobile: Quick Capture button */}
-          <button
-            onClick={() => setShowCapture(true)}
-            className="lg:hidden p-1.5 rounded-md shrink-0"
-            style={{ color: "var(--c-ink-faint)" }}
-            title="Quick Capture"
-          >
-            <Plus size={18} />
-          </button>
+          {/* Mobile right cluster: voice new-chat + Quick Capture */}
+          <div className="lg:hidden flex items-center gap-0.5 shrink-0">
+            <button
+              onClick={handleMobileVoiceTap}
+              disabled={voice.state === "transcribing" || busy}
+              className="p-1.5 rounded-md relative"
+              title={voice.state === "recording" ? "Tap to stop" : "New voice chat"}
+              style={{
+                color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-faint)",
+                opacity: voice.state === "transcribing" ? 0.5 : 1,
+              }}
+            >
+              {voice.state === "transcribing"
+                ? <Loader2 size={17} className="animate-spin" />
+                : <Mic size={17} className={voice.state === "recording" ? "animate-pulse" : ""} />
+              }
+              {voice.state === "recording" && (
+                <span className="absolute inset-0 rounded-md animate-ping"
+                  style={{ backgroundColor: "var(--c-rose)", opacity: 0.15 }} />
+              )}
+            </button>
+            <button
+              onClick={() => setShowCapture(true)}
+              className="p-1.5 rounded-md"
+              style={{ color: "var(--c-ink-faint)" }}
+              title="Quick Capture"
+            >
+              <Plus size={18} />
+            </button>
+          </div>
 
           <button
             onClick={toggleFocus}
