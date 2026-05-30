@@ -1,0 +1,1776 @@
+INFO:     Started server process [211520]
+INFO:     Waiting for application startup.
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files: 100%|██████████| 5/5 [00:00<00:00, 101803.50it/s]
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45352 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/tasks HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations HTTP/1.1" 201 Created
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+RunPod Tier2 failed (ReadTimeout: )
+RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/settings HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+RunPod Tier2 failed (ReadTimeout: )
+RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/a62e233f-9427-4b65-95c9-8bb693c13ada HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/settings HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/calendar/events?start=2026-05-24T16%3A00%3A00.000Z&end=2026-05-31T16%3A00%3A00.000Z HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/tasks HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/settings HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+Ollama classifier marked unavailable — keepalive will restore
+Classifier unavailable () — using heuristic for 120s
+INFO:     136.158.7.90:0 - "POST /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed/messages HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/second-brain/items HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     136.158.7.90:0 - "GET /api/chat/conversations/88d498da-527f-4fc9-afd9-11d2d4ba9fed HTTP/1.1" 200 OK
+INFO:     Started server process [871896]
+INFO:     Waiting for application startup.
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files: 100%|██████████| 5/5 [00:00<00:00, 111550.64it/s]
+INFO: [main] Embedding model loaded
+INFO: [jobs.scheduler] Cron job 'fireflies_sync' scheduled every 14400s
+INFO: [jobs.scheduler] Cron job 'google_people_sync' scheduled every 300s
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #1)
+INFO: [httpx] HTTP Request: POST https://api.fireflies.ai/graphql "HTTP/1.1 200 OK"
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KSP5YA8RS0Y3CN2FTDQHA09W already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KSSFHBFHGAE4SRKMZAPAV2TZ already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KSKV6E39QVDACWBZH055PXWN already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KS2YCHGJ0WHMF20KRBKTZ2MQ already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KS4RW6A28NXCVTHEFECJW7WZ already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRZN5WBN5WV4B3MDZ84Q02GC already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KS4HYAPH11H37RM4SPBGQBF2 already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRXYH5T5ETPMGVNXM8XN0G3F already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KS1QRMRATN7W0HGCRC6C0ZQP already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRZD9ABH73YBC0RYQ4YX1TQS already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRQR19PPN6YWGFWTSDT2WA6T already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRFSMD5P16V9WZN5JDQ6YJFV already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRJSZ04NJB6N3PQZZXZ2JV0T already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRDMCRWYBCG2869HXS5G5R45 already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRFP6RCSZ08MSDVMPCBZVQ88 already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KRAHSX84CW3VM1S0CP2GQH13 already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KR2AVDBP66R1SM0GJAY6VS9C already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KR0QBY31BB72GDP8VGYA3HCS already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KQVKKT654P5EC8ZMF8AZTNZ4 already exists, skipping
+INFO: [jobs.meeting_processor] Meeting with connector_ref 01KQTHVDS6TA2V1E7AWJTESJNT already exists, skipping
+INFO: [jobs.scheduler] Fireflies sync: 0 new meeting(s) ingested
+INFO: [jobs.scheduler] Cron job 'fireflies_sync' completed OK (run #1)
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.608672&lon=121.0788449&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6086065&lon=121.0789231&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6081022&lon=121.0788386&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6081022&lon=121.0788386&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #2)
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6080973&lon=121.0788344&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job b972bfcf-d0de-4169-9f25-577fd294ceca
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+ERROR: [agents.executor] Agent executor error for job 16d38553-5f2e-4b0e-acd3-cd237e95b35c
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job f4ec847f-4716-43db-84ee-84bb4ff1c46b
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6080905&lon=121.0788312&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/second-brain/items HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6080976&lon=121.0788255&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6080976&lon=121.0788255&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job b0eec837-ad9f-4b9a-a55e-32126ef8ac16
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 7cd721b3-2cc5-478c-9027-c02a38b5f120
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job c3d26e77-f39d-4b90-9148-93ce5f0664cd
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #3)
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 755e75c7-537e-465b-a6df-0dd409395b7e
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job ed9ab37e-8e19-41e5-ae0e-7e5192d4a465
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 0861146c-cdf4-4852-b116-9ed9224fa52e
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 8629572f-162f-43a5-b00d-39b134d14fa3
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 4f4af6ba-05ae-4bd0-a895-ce7321ad9dd6
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 06c18119-6f73-4c63-8388-bc8be44951a2
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 02a80af8-7e1f-45b6-ba2d-8aa8319830be
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job e7447159-e0ef-4105-b9b7-05f41cef4921
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/artifacts HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/artifacts/abe02d1d-6b17-44c5-bbd5-142fdd39f588 HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/artifacts/abe02d1d-6b17-44c5-bbd5-142fdd39f588/preview HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6080951&lon=121.0788274&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #4)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #5)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #6)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6056424&lon=121.0789225&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #7)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #8)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #9)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.6056424&lon=121.0789225&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929299&lon=121.0809824&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929299&lon=121.0809824&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929299&lon=121.0809824&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929299&lon=121.0809824&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929299&lon=121.0809824&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929299&lon=121.0809824&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929533&lon=121.0803012&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be HTTP/1.1" 200 OK
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #10)
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929532&lon=121.0803031&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929532&lon=121.0803031&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929532&lon=121.0803031&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/fcd96c39-b83a-4aaf-bfdd-ea6983f9e3be/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations HTTP/1.1" 201 Created
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929299&lon=121.0809824&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job b881f99f-9655-4176-ab22-15e0662b70de
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929299&lon=121.0809824&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 0f864c22-5156-4a33-8b33-dc9b7ae0230a
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 3aed79fc-ab0f-4231-8e66-aedd2ebf6698
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34764 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job ec90e1ed-a48d-4020-aadf-6ea260b5a68c
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 8d6efaa0-c2e2-4f06-ba61-879db82a6d6e
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #11)
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+WARNING:  Invalid HTTP request received.
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #12)
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5930921&lon=121.0812682&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5930921&lon=121.0812682&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #13)
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [api.routes.chat] read_email: queued 1 new contact(s) for review
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5930901&lon=121.0812823&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5930901&lon=121.0812823&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 0ab8f0d0-ba37-4eec-86e1-4c1f953d3ff7
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job c9f65e9d-b3db-4cbb-8f09-fa0997a9ebcd
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job eee77b87-4af2-4cb1-ba48-a81b0aea531a
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 504044f6-b510-41ca-98bb-44af2f4ac705
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job bfe7f9a1-60e4-4e28-b472-2904366e9c10
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 31992c3d-690d-4b97-82ea-cc5c3c0a94d8
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 1c034c54-ffcb-445b-9a5a-99c9aa791576
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.592945&lon=121.0814279&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job a2888f65-3732-4696-833b-874bc9442e8b
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.592945&lon=121.0814279&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+ERROR: [agents.executor] Agent executor error for job 29b3005f-168d-40ef-b943-8f6439498be6
+Traceback (most recent call last):
+  File "/opt/tars/apps/harness/agents/executor.py", line 77, in run
+    async for event in query(prompt=instruction, options=options):
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/query.py", line 123, in query
+    async for message in client.process_query(
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/client.py", line 73, in process_query
+    chosen_transport = SubprocessCLITransport(
+                       ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 39, in __init__
+    self._cli_path = str(cli_path) if cli_path else self._find_cli()
+                                                    ^^^^^^^^^^^^^^^^
+  File "/opt/tars/apps/harness/.venv/lib/python3.12/site-packages/claude_code_sdk/_internal/transport/subprocess_cli.py", line 73, in _find_cli
+    raise CLINotFoundError(
+claude_code_sdk._errors.CLINotFoundError: Claude Code not found. Install with:
+  npm install -g @anthropic-ai/claude-code
+
+If already installed locally, try:
+  export PATH="$HOME/node_modules/.bin:$PATH"
+
+Or specify the path when creating transport:
+  SubprocessCLITransport(..., cli_path='/path/to/claude')
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/auth/token HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #14)
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/second-brain/items HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/second-brain/items/60a9c0f8-c5d9-42aa-9d15-fd28e7f6cc94 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5930065&lon=121.0813585&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #15)
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929984&lon=121.0813776&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929984&lon=121.0813776&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929803&lon=121.0813842&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929803&lon=121.0813842&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929803&lon=121.0813842&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO: [core.model_client] RunPod ModelTier.TIER2 request: model=qwen3:32b timeout=40s
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+WARNING: [core.model_client] RunPod ModelTier.TIER2 failed (ReadTimeout: ) — falling back
+WARNING: [core.model_client] RunPod ModelTier.TIER2 marked cold — falling back for 120s
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [api.routes.chat] RunPod Tier2 cold — upgrading to Tier3 for full tool support
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.5929803&lon=121.0813842&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "POST /api/memory/search HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [httpx] HTTP Request: GET https://nominatim.openstreetmap.org/reverse?lat=14.593091&lon=121.0812904&format=json&addressdetails=1&namedetails=1 "HTTP/1.1 200 OK"
+WARNING: [connectors.places] Nominatim reverse geocode failed: 'NoneType' object has no attribute 'get'
+INFO:     175.158.203.34:0 - "POST /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83/messages HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #16)
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     175.158.203.34:0 - "POST /api/memory/search HTTP/1.1" 200 OK
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #17)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #18)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #19)
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/memory/memories HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/second-brain/items HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/agent-jobs HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations HTTP/1.1" 200 OK
+INFO:     175.158.203.34:0 - "GET /api/chat/conversations/ccb9d7cf-6af1-403c-9497-d352a28dfc83 HTTP/1.1" 200 OK
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #20)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #21)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #22)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #23)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #24)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #25)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+WARNING:  Invalid HTTP request received.
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #26)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #27)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     121.66.150.210:53404 - "GET / HTTP/1.0" 404 Not Found
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #28)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #29)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #30)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #31)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #32)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #33)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #34)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #35)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #36)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #37)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #38)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #39)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+WARNING:  Invalid HTTP request received.
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #40)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #41)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #42)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO: [google_auth_httplib2] Refreshing credentials due to a 401 response. Attempt 1/2.
+INFO: [jobs.people_sync] people_sync user=mike changed=0 other=0 full=False
+INFO: [jobs.scheduler] Cron job 'google_people_sync' completed OK (run #43)
+INFO: [httpx] HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
+INFO:     127.0.0.1:57574 - "GET /api/health HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [871896]

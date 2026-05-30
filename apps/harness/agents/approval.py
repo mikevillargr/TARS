@@ -1,3 +1,4 @@
+# Approval gate for agent jobs — version-controlled by Evolutionarist
 """
 Per-job approval gate. Backend pauses the executor stream and waits for
 the frontend to respond via WebSocket.
