@@ -14,6 +14,7 @@ import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
+import { CaptureModal } from "@/components/second-brain/CaptureModal"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -490,6 +491,7 @@ export default function ChatPage() {
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
+  const [showCapture, setShowCapture]               = useState(false)
   const [inputValue, setInputValue]                 = useState("")
   const [attachments, setAttachments]               = useState<File[]>([])
   // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
@@ -668,41 +670,42 @@ export default function ChatPage() {
 
   // ── Voice input handlers ──────────────────────────────────────────
 
-  // In-chat mic: toggle recording, fill textarea with transcript
-  const handleMicClick = useCallback(async () => {
+  // In-chat mic: start recording, auto-sends in current chat on silence.
+  // Click again to stop manually.
+  const handleMicClick = useCallback(() => {
     if (voice.state === "recording") {
-      const text = await voice.stopAndTranscribe()
-      if (text) {
-        setInputValue((prev) => prev ? `${prev} ${text}` : text)
-        requestAnimationFrame(() => {
-          const el = textareaRef.current
-          if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 180) + "px" }
-        })
+      voice.stop()
+      return
+    }
+    if (voice.state !== "idle" && voice.state !== "error") return
+    voice.start((text) => {
+      if (!text) return
+      setInputValue(text)
+      setPendingVoiceSend(text)   // auto-send via the useEffect below
+    })
+  }, [voice])
+
+  // Mobile top-bar mic: start recording, creates new chat + auto-sends on silence.
+  // Click while recording to stop manually.
+  const handleMobileVoiceTap = useCallback(() => {
+    if (voice.state === "recording") {
+      voice.stop()
+      return
+    }
+    if (voice.state !== "idle" && voice.state !== "error") return
+    voice.start(async (text) => {
+      if (!text) return
+      try {
+        const conv = await apiPost<Conversation>("/chat/conversations")
+        setConversations((prev) => [conv, ...prev])
+        setActiveChatId(conv.id)
+        setMobileConvOpen(false)
+        setInputValue(text)
+        setPendingVoiceSend(text)  // auto-send via the useEffect below
+      } catch {
+        setInputValue(text)
       }
-    } else if (voice.state === "idle" || voice.state === "error") {
-      await voice.startRecording()
-    }
-  }, [voice])
-
-  // Mobile: tap mic to record a new chat session via voice
-  const handleMobileVoiceStart = useCallback(async () => {
-    await voice.startRecording()
-  }, [voice])
-
-  const handleMobileVoiceStop = useCallback(async () => {
-    const text = await voice.stopAndTranscribe()
-    if (!text) return
-    try {
-      const conv = await apiPost<Conversation>("/chat/conversations")
-      setConversations((prev) => [conv, ...prev])
-      setActiveChatId(conv.id)
-      setMobileConvOpen(false)
-      // pendingVoiceSend is watched by a useEffect that fires handleSend
-      setInputValue(text)
-      setPendingVoiceSend(text)
-    } catch {
-      setInputValue(text)
-    }
+    })
   }, [voice])
 
   // Auto-send when pendingVoiceSend is ready and activeChatId is set
@@ -908,6 +911,7 @@ export default function ChatPage() {
   )
 
   return (
+    <>
     <div className="flex h-full overflow-hidden">
       <Suspense fallback={null}>
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
@@ -1073,12 +1077,12 @@ export default function ChatPage() {
             >
               <Menu size={18} />
             </button>
-            {/* Mobile: voice new-chat — tap mic, speak, sends as new conversation */}
+            {/* Mobile: voice new-chat */}
             <button
-              onClick={voice.state === "recording" ? handleMobileVoiceStop : handleMobileVoiceStart}
+              onClick={handleMobileVoiceTap}
               disabled={voice.state === "transcribing" || busy}
               className="lg:hidden p-1.5 rounded-md shrink-0 relative"
-              title={voice.state === "recording" ? "Tap to send" : "New voice chat"}
+              title={voice.state === "recording" ? "Tap to stop" : "New voice chat"}
               style={{
                 color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-faint)",
                 opacity: voice.state === "transcribing" ? 0.5 : 1,
@@ -1114,6 +1118,16 @@ export default function ChatPage() {
               {(activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")).slice(0, 60)}
             </h1>
           </div>
+
+          {/* Mobile: Quick Capture button */}
+          <button
+            onClick={() => setShowCapture(true)}
+            className="lg:hidden p-1.5 rounded-md shrink-0"
+            style={{ color: "var(--c-ink-faint)" }}
+            title="Quick Capture"
+          >
+            <Plus size={18} />
+          </button>
 
           <button
             onClick={toggleFocus}
@@ -1288,5 +1302,9 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+
+    {/* Mobile Quick Capture */}
+    <CaptureModal open={showCapture} onClose={() => setShowCapture(false)} />
+    </>
   )
 }
