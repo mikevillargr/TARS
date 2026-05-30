@@ -21,6 +21,9 @@ from core.model_client import (
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
+    LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
+    CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
+    SEARCH_PLACES_TOOL, SAVE_PLACE_TOOL, GET_SAVED_PLACES_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -55,6 +58,7 @@ class MessageOut(BaseModel):
     content: str
     model_used: Optional[str]
     tokens_used: int
+    tool_results: List[dict] = []
     created_at: datetime
 
     class Config:
@@ -403,6 +407,8 @@ async def send_message(
     files: List[UploadFile] = File(default=[]),
     artifact_id: Optional[str] = Form(default=None),
     tier_override: Optional[str] = Form(default=None),
+    location_lat: Optional[float] = Form(default=None),
+    location_lng: Optional[float] = Form(default=None),
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -533,7 +539,10 @@ async def send_message(
         effective_tier = ModelTier.TIER3
         log.info("RunPod Tier2 cold — upgrading to Tier3 for full tool support")
 
-    system_prompt = await assemble(user_id, content or "attachment", db=db, tier=effective_tier)
+    system_prompt = await assemble(
+        user_id, content or "attachment", db=db, tier=effective_tier,
+        user_lat=location_lat, user_lng=location_lng,
+    )
 
     # Tools available for TIER2 and TIER3.
     # TIER2 (RunPod) ignores them in the payload but the Sonnet fallback path
@@ -555,17 +564,36 @@ async def send_message(
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
+        LOOKUP_CONTACT_TOOL,
+        SEARCH_CONTACTS_TOOL,
+        CREATE_CONTACT_TOOL,
+        UPDATE_CONTACT_TOOL,
+        SEARCH_PLACES_TOOL,
+        SAVE_PLACE_TOOL,
+        GET_SAVED_PLACES_TOOL,
     ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:
         full_response: list[str] = []
+        # Card payloads emitted during streaming, persisted on the message so
+        # they re-hydrate on conversation reload.
+        tool_results: list[dict] = []
         model_used: str = ""
         tokens_used: int = 0
 
         try:
             # ── Phase 1: stream the model response ──────────────────────────
             async with AsyncSessionLocal() as bg_db:
+
+                # Capture location for tool executor (search_places default near)
+                _user_lat = location_lat
+                _user_lng = location_lng
+
+                async def _emit_card(event: dict) -> None:
+                    """Emit a card event to the SSE queue AND record it for persistence."""
+                    tool_results.append(event)
+                    await queue.put(sse_event(event))
 
                 async def _tool_executor(name: str, tool_input: dict) -> str:
                     if name == "create_task":
@@ -659,6 +687,333 @@ async def send_message(
                             log.warning("save_to_second_brain tool failed: %s", exc)
                             return f"Failed to save to Second Brain: {exc}"
 
+                    if name in ("lookup_contact", "search_contacts"):
+                        try:
+                            from sqlalchemy import select as _select, or_ as _or, func as _func
+                            from db.models import Contact, Connector
+                            query = (tool_input.get("query") or "").strip()
+                            limit  = int(tool_input.get("limit", 25)) if name == "search_contacts" else 5
+                            offset = int(tool_input.get("offset", 0))
+
+                            # Total unique contacts (by email) the user has
+                            total_stmt = (
+                                _select(_func.count(_func.distinct(Contact.primary_email)))
+                                .where(Contact.user_id == user_id)
+                            )
+                            total_result = await bg_db.execute(total_stmt)
+                            total_unique = total_result.scalar_one() or 0
+
+                            if query:
+                                needle = f"%{query}%"
+                                filter_clause = _or(
+                                    Contact.display_name.ilike(needle),
+                                    Contact.primary_email.ilike(needle),
+                                    Contact.organization.ilike(needle),
+                                    Contact.primary_phone.ilike(needle),
+                                )
+                                stmt = (
+                                    _select(Contact)
+                                    .where(Contact.user_id == user_id, filter_clause)
+                                    .order_by(Contact.is_other_contact, Contact.display_name)
+                                    .offset(offset)
+                                    .limit(limit * 4)  # over-fetch to allow email dedup
+                                )
+                            else:
+                                # Browse mode — no filter, ordered by saved contacts first then name
+                                stmt = (
+                                    _select(Contact)
+                                    .where(Contact.user_id == user_id)
+                                    .order_by(Contact.is_other_contact, Contact.display_name)
+                                    .offset(offset)
+                                    .limit(limit * 4)
+                                )
+
+                            result = await bg_db.execute(stmt)
+                            raw = result.scalars().all()
+
+                            # Deduplicate by primary_email at query time
+                            # (saved contact wins over other_contact for same email)
+                            seen_emails: set[str] = set()
+                            matches: list = []
+                            for c in raw:
+                                key = (c.primary_email or "").lower().strip() or c.id
+                                if key in seen_emails:
+                                    continue
+                                seen_emails.add(key)
+                                matches.append(c)
+                                if len(matches) >= limit:
+                                    break
+
+                            # Fallback for lookup_contact: live Google search if no local hit
+                            live_cards: list[dict] = []
+                            if name == "lookup_contact" and not matches:
+                                conn_result = await bg_db.execute(
+                                    _select(Connector).where(
+                                        Connector.user_id == user_id,
+                                        Connector.name == "Google Contacts",
+                                    )
+                                )
+                                conn = conn_result.scalar_one_or_none()
+                                if conn and conn.auth.get("refresh_token"):
+                                    from connectors.google_people import GooglePeopleClient
+                                    import asyncio as _asyncio
+                                    loop = _asyncio.get_event_loop()
+                                    try:
+                                        gp = GooglePeopleClient(conn.auth)
+                                        live = await loop.run_in_executor(
+                                            None, lambda: gp.search_contacts(query, page_size=5)
+                                        )
+                                        if live:
+                                            lines = []
+                                            for person in live:
+                                                names  = person.get("names", [])
+                                                emails = person.get("emailAddresses", [])
+                                                phones = person.get("phoneNumbers", [])
+                                                orgs   = person.get("organizations", [])
+                                                name_  = (names[0].get("displayName") if names else None) or "Unknown"
+                                                em     = emails[0].get("value") if emails else None
+                                                ph     = phones[0].get("value") if phones else None
+                                                org_   = orgs[0].get("name") if orgs else None
+                                                title_ = orgs[0].get("title") if orgs else None
+                                                parts  = [name_]
+                                                if title_ or org_:
+                                                    parts.append(f"({', '.join(p for p in [title_, org_] if p)})")
+                                                if em:
+                                                    parts.append(f"<{em}>")
+                                                if ph:
+                                                    parts.append(f"📞 {ph}")
+                                                lines.append(" ".join(parts))
+                                                live_cards.append({
+                                                    "id": None,
+                                                    "display_name": name_,
+                                                    "primary_email": em,
+                                                    "primary_phone": ph,
+                                                    "organization": org_,
+                                                    "job_title": title_,
+                                                    "tars_context": None,
+                                                    "source": "google_live",
+                                                })
+                                            if live_cards:
+                                                await _emit_card({
+                                                    "type": "contact_card",
+                                                    "contacts": live_cards,
+                                                })
+                                            return f"Live Google search results for '{query}':\n" + "\n".join(lines)
+                                    except Exception as exc:
+                                        log.warning("Live People API search failed: %s", exc)
+
+                            if not matches:
+                                if query:
+                                    return f"No contacts found matching '{query}'. Total contacts in database: {total_unique}."
+                                return f"No contacts found. Total contacts in database: {total_unique}."
+
+                            lines = []
+                            cards: list[dict] = []
+                            for c in matches:
+                                parts = [c.display_name or "Unknown"]
+                                if c.job_title or c.organization:
+                                    parts.append(f"({', '.join(p for p in [c.job_title, c.organization] if p)})")
+                                if c.primary_email:
+                                    parts.append(f"<{c.primary_email}>")
+                                if c.primary_phone:
+                                    parts.append(f"📞 {c.primary_phone}")
+                                line = " ".join(parts)
+                                if c.tars_context:
+                                    line += f"\n  context: {c.tars_context[:200]}"
+                                lines.append(line)
+                                cards.append({
+                                    "id": c.id,
+                                    "display_name": c.display_name,
+                                    "primary_email": c.primary_email,
+                                    "primary_phone": c.primary_phone,
+                                    "organization": c.organization,
+                                    "job_title": c.job_title,
+                                    "tars_context": c.tars_context,
+                                    "source": "local",
+                                    "is_other_contact": c.is_other_contact,
+                                })
+                            if cards:
+                                await _emit_card({
+                                    "type": "contact_card",
+                                    "contacts": cards,
+                                })
+                            if query:
+                                header = f"Found {len(matches)} contact(s) matching '{query}' (total unique contacts: {total_unique}):"
+                            else:
+                                shown_range = f"{offset + 1}–{offset + len(matches)}"
+                                header = f"Showing {shown_range} of {total_unique} unique contacts (use offset to page):"
+                            return header + "\n" + "\n".join(lines)
+                        except Exception as exc:
+                            log.warning("%s tool failed: %s", name, exc)
+                            return f"Contact lookup failed: {exc}"
+
+                    if name == "create_contact":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Contact, Connector
+                            from connectors.google_people import GooglePeopleClient, to_contact_dict
+                            import asyncio as _asyncio
+
+                            # Get Google Contacts connector
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Google Contacts",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Google Contacts not connected — cannot create contact."
+
+                            gp = GooglePeopleClient(conn.auth)
+                            loop = _asyncio.get_event_loop()
+                            person = await loop.run_in_executor(None, lambda: gp.create_contact(
+                                name=tool_input["name"],
+                                email=tool_input.get("email"),
+                                phone=tool_input.get("phone"),
+                                organization=tool_input.get("organization"),
+                                job_title=tool_input.get("job_title"),
+                                biography=tool_input.get("notes"),
+                            ))
+
+                            # Sync the new contact into the local DB immediately
+                            contact_data = to_contact_dict(person)
+                            contact_data["is_other_contact"] = False
+                            from datetime import datetime as _dt, timezone as _tz
+                            contact_data["last_synced_at"] = _dt.now(_tz.utc)
+                            resource_name = contact_data.get("google_resource_name")
+                            existing = None
+                            if resource_name:
+                                ex_result = await bg_db.execute(
+                                    _select(Contact).where(Contact.google_resource_name == resource_name)
+                                )
+                                existing = ex_result.scalar_one_or_none()
+                            if existing:
+                                for k, v in contact_data.items():
+                                    setattr(existing, k, v)
+                            else:
+                                bg_db.add(Contact(user_id=user_id, **contact_data))
+                            await bg_db.commit()
+
+                            parts = [f"Contact created: {tool_input['name']}"]
+                            if tool_input.get("email"):
+                                parts.append(f"<{tool_input['email']}>")
+                            if tool_input.get("phone"):
+                                parts.append(f"📞 {tool_input['phone']}")
+                            if tool_input.get("organization"):
+                                parts.append(f"@ {tool_input['organization']}")
+                            return " ".join(parts) + ". Saved to Google Contacts and local database."
+                        except Exception as exc:
+                            log.warning("create_contact tool failed: %s", exc)
+                            return f"Failed to create contact: {exc}"
+
+                    if name == "update_contact":
+                        try:
+                            from sqlalchemy import select as _select, or_ as _or
+                            from db.models import Contact, Connector
+                            from connectors.google_people import GooglePeopleClient, to_contact_dict
+                            import asyncio as _asyncio
+
+                            query = (tool_input.get("query") or "").strip()
+                            if not query:
+                                return "Provide a name or email to identify the contact to update."
+
+                            # Find the contact in local DB (saved contacts only — need resource_name + etag)
+                            needle = f"%{query}%"
+                            stmt = (
+                                _select(Contact)
+                                .where(
+                                    Contact.user_id == user_id,
+                                    Contact.is_other_contact == False,  # noqa: E712
+                                    _or(
+                                        Contact.display_name.ilike(needle),
+                                        Contact.primary_email.ilike(needle),
+                                    ),
+                                )
+                                .limit(1)
+                            )
+                            result = await bg_db.execute(stmt)
+                            contact = result.scalar_one_or_none()
+
+                            if not contact or not contact.google_resource_name:
+                                return (
+                                    f"No saved contact found matching '{query}'. "
+                                    "If this is an unsaved 'other contact', create them first with create_contact."
+                                )
+
+                            # Determine which Google fields to update
+                            update_fields: dict = {}
+                            person_fields_list: list[str] = []
+
+                            if tool_input.get("name"):
+                                update_fields["names"] = [{"unstructuredName": tool_input["name"]}]
+                                person_fields_list.append("names")
+                            if tool_input.get("email"):
+                                update_fields["emailAddresses"] = [{"value": tool_input["email"]}]
+                                person_fields_list.append("emailAddresses")
+                            if tool_input.get("phone"):
+                                update_fields["phoneNumbers"] = [{"value": tool_input["phone"]}]
+                                person_fields_list.append("phoneNumbers")
+                            if tool_input.get("organization") or tool_input.get("job_title"):
+                                org_entry: dict = {}
+                                if tool_input.get("organization"):
+                                    org_entry["name"] = tool_input["organization"]
+                                elif contact.organization:
+                                    org_entry["name"] = contact.organization
+                                if tool_input.get("job_title"):
+                                    org_entry["title"] = tool_input["job_title"]
+                                elif contact.job_title:
+                                    org_entry["title"] = contact.job_title
+                                update_fields["organizations"] = [org_entry]
+                                person_fields_list.append("organizations")
+                            if tool_input.get("notes"):
+                                update_fields["biographies"] = [{"value": tool_input["notes"], "contentType": "TEXT_PLAIN"}]
+                                person_fields_list.append("biographies")
+
+                            if not update_fields:
+                                return "No fields provided to update. Specify at least one of: name, email, phone, organization, job_title, notes."
+
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Google Contacts",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Google Contacts not connected — cannot update contact."
+
+                            gp = GooglePeopleClient(conn.auth)
+                            loop = _asyncio.get_event_loop()
+                            updated_person = await loop.run_in_executor(None, lambda: gp.update_contact(
+                                resource_name=contact.google_resource_name,
+                                etag=contact.etag or "*",
+                                fields=update_fields,
+                                update_person_fields=",".join(person_fields_list),
+                            ))
+
+                            # Update local DB row from the returned person
+                            updated_data = to_contact_dict(updated_person)
+                            from datetime import datetime as _dt, timezone as _tz
+                            updated_data["last_synced_at"] = _dt.now(_tz.utc)
+                            for k, v in updated_data.items():
+                                if hasattr(contact, k):
+                                    setattr(contact, k, v)
+                            await bg_db.commit()
+
+                            changed = []
+                            if tool_input.get("name"):     changed.append(f"name → {tool_input['name']}")
+                            if tool_input.get("phone"):    changed.append(f"phone → {tool_input['phone']}")
+                            if tool_input.get("email"):    changed.append(f"email → {tool_input['email']}")
+                            if tool_input.get("organization"): changed.append(f"org → {tool_input['organization']}")
+                            if tool_input.get("job_title"): changed.append(f"title → {tool_input['job_title']}")
+                            if tool_input.get("notes"):    changed.append("notes updated")
+                            display = contact.display_name or query
+                            return f"Updated {display}: {', '.join(changed)}. Synced to Google Contacts."
+                        except Exception as exc:
+                            log.warning("update_contact tool failed: %s", exc)
+                            return f"Failed to update contact: {exc}"
+
                     if name == "read_email":
                         try:
                             from sqlalchemy import select as _select
@@ -708,6 +1063,33 @@ async def send_message(
                             body = extract_thread_text(thread)
                             if not body:
                                 return "Email body is empty or could not be extracted."
+
+                            # Enqueue any unique sender as a PendingContact for review
+                            try:
+                                senders: list[str] = []
+                                subject = ""
+                                for msg in thread.get("messages", []):
+                                    headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+                                    if not subject:
+                                        subject = headers.get("Subject", "")
+                                    s = headers.get("From", "").strip()
+                                    if s and s not in senders:
+                                        senders.append(s)
+                                if senders:
+                                    from jobs.pending_contacts import enqueue_from_strings
+                                    context = f"Emailed about: {subject[:120]}" if subject else "Detected from email thread"
+                                    new_count = await enqueue_from_strings(
+                                        bg_db, user_id, senders,
+                                        source="email",
+                                        source_id=thread_id,
+                                        extracted_context=context,
+                                    )
+                                    if new_count:
+                                        await bg_db.commit()
+                                        log.info("read_email: queued %d new contact(s) for review", new_count)
+                            except Exception as exc:
+                                log.warning("Failed to enqueue email senders: %s", exc)
+
                             # Cap at 4000 chars to stay within token budget
                             if len(body) > 4000:
                                 body = body[:4000] + "\n\n[... email truncated ...]"
@@ -911,7 +1293,7 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "docx"}))
+                            await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "docx"})
                             return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_document failed: %s", exc)
@@ -961,7 +1343,7 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pptx"}))
+                            await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pptx"})
                             return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_presentation failed: %s", exc)
@@ -1012,11 +1394,214 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pdf"}))
+                            await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pdf"})
                             return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_pdf failed: %s", exc)
                             return f"Failed to generate PDF: {exc}"
+
+                    # ── Places tools ──────────────────────────────────────────────────
+                    if name == "search_places":
+                        try:
+                            from connectors.places import PlacesClient
+                            import asyncio as _asyncio
+
+                            query    = (tool_input.get("query") or "").strip()
+                            near     = tool_input.get("near")
+                            category = tool_input.get("category")
+                            limit    = int(tool_input.get("limit") or 5)
+
+                            # Fall back to user's current location when no "near" was specified
+                            user_coords_str = (
+                                f"{_user_lat},{_user_lng}"
+                                if _user_lat is not None and _user_lng is not None
+                                else None
+                            )
+                            effective_near = near or user_coords_str
+
+                            client_p = PlacesClient()
+                            loop = _asyncio.get_event_loop()
+
+                            # ── "Where am I?" / reverse-geocode intent ──────────
+                            _location_queries = {
+                                "my location", "current location", "where am i", "where are we",
+                                "my position", "here", "current position",
+                            }
+                            _is_location_query = query.lower().strip("?").strip() in _location_queries
+
+                            if _is_location_query and _user_lat is not None and _user_lng is not None:
+                                geo = await loop.run_in_executor(
+                                    None, lambda: client_p.reverse_geocode(_user_lat, _user_lng)
+                                )
+                                if geo:
+                                    results = [geo]
+                                else:
+                                    results = []
+                            elif category and _user_lat is not None and _user_lng is not None and not near:
+                                # We have exact coords — go straight to Overpass nearby search
+                                results = await loop.run_in_executor(
+                                    None, lambda: client_p.search_nearby(_user_lat, _user_lng, category, limit=limit)
+                                )
+                            elif category and effective_near and effective_near != user_coords_str:
+                                # Named location — geocode it first, then nearby
+                                geo = await loop.run_in_executor(None, lambda: client_p.search(effective_near, limit=1))
+                                if geo:
+                                    results = await loop.run_in_executor(
+                                        None, lambda: client_p.search_nearby(geo[0]["lat"], geo[0]["lng"], category, limit=limit)
+                                    )
+                                else:
+                                    results = await loop.run_in_executor(
+                                        None, lambda: client_p.search(f"{category} {effective_near}", limit=limit)
+                                    )
+                            elif not category and _user_lat is not None and _user_lng is not None and not near:
+                                # No category, no named location, but have GPS — do nearby text search biased by coords
+                                results = await loop.run_in_executor(
+                                    None, lambda: client_p.search(query, near=user_coords_str, limit=limit)
+                                )
+                            else:
+                                results = await loop.run_in_executor(
+                                    None, lambda: client_p.search(query, near=effective_near, limit=limit)
+                                )
+
+                            if not results:
+                                return f"No places found for '{query}'{' near ' + near if near else ''}."
+
+                            # Emit place_card SSE event
+                            cards = [
+                                {
+                                    "name":         p.get("name", ""),
+                                    "address":      p.get("address") or p.get("display_name", ""),
+                                    "lat":          p.get("lat"),
+                                    "lng":          p.get("lng"),
+                                    "category":     p.get("category"),
+                                    "osm_id":       p.get("osm_id"),
+                                    "osm_type":     p.get("osm_type"),
+                                    "source":       "osm",
+                                    "is_saved":     False,
+                                }
+                                for p in results
+                            ]
+                            await _emit_card({"type": "place_card", "places": cards})
+
+                            lines = []
+                            for p in results:
+                                addr = p.get("address") or p.get("display_name", "")
+                                lines.append(f"• {p['name']}" + (f" — {addr}" if addr else ""))
+                            return f"Found {len(results)} place(s):\n" + "\n".join(lines)
+
+                        except Exception as exc:
+                            log.warning("search_places tool failed: %s", exc)
+                            return f"Place search failed: {exc}"
+
+                    if name == "save_place":
+                        try:
+                            from db.models import Place as _Place
+
+                            p = _Place(
+                                user_id=user_id,
+                                name=tool_input["name"],
+                                address=tool_input.get("address"),
+                                lat=float(tool_input["lat"]),
+                                lng=float(tool_input["lng"]),
+                                category=tool_input.get("category"),
+                                tags=tool_input.get("tags") or [],
+                                notes=tool_input.get("notes"),
+                                osm_id=tool_input.get("osm_id"),
+                                osm_type=tool_input.get("osm_type"),
+                                source="manual" if not tool_input.get("osm_id") else "osm",
+                                is_saved=True,
+                            )
+                            bg_db.add(p)
+                            await bg_db.commit()
+
+                            # Emit card for the saved place
+                            await _emit_card({
+                                "type": "place_card",
+                                "places": [{
+                                    "name":     p.name,
+                                    "address":  p.address,
+                                    "lat":      p.lat,
+                                    "lng":      p.lng,
+                                    "category": p.category,
+                                    "osm_id":   p.osm_id,
+                                    "osm_type": p.osm_type,
+                                    "source":   p.source,
+                                    "is_saved": True,
+                                    "notes":    p.notes,
+                                    "tags":     p.tags,
+                                }],
+                            })
+
+                            msg = f"Saved '{p.name}'"
+                            if p.address:
+                                msg += f" ({p.address})"
+                            if p.notes:
+                                msg += f" — {p.notes}"
+                            return msg + " to your places."
+
+                        except Exception as exc:
+                            log.warning("save_place tool failed: %s", exc)
+                            return f"Failed to save place: {exc}"
+
+                    if name == "get_saved_places":
+                        try:
+                            from sqlalchemy import select as _select, or_ as _or
+                            from db.models import Place as _Place
+
+                            query    = (tool_input.get("query") or "").strip()
+                            category = (tool_input.get("category") or "").strip()
+                            limit    = int(tool_input.get("limit") or 20)
+
+                            stmt = _select(_Place).where(
+                                _Place.user_id == user_id,
+                                _Place.is_saved == True,  # noqa: E712
+                            )
+                            if query:
+                                needle = f"%{query}%"
+                                stmt = stmt.where(_or(
+                                    _Place.name.ilike(needle),
+                                    _Place.address.ilike(needle),
+                                    _Place.notes.ilike(needle),
+                                ))
+                            if category:
+                                stmt = stmt.where(_Place.category.ilike(f"%{category}%"))
+
+                            stmt = stmt.order_by(_Place.created_at.desc()).limit(limit)
+                            result = await bg_db.execute(stmt)
+                            places = result.scalars().all()
+
+                            if not places:
+                                msg = "No saved places"
+                                if query:
+                                    msg += f" matching '{query}'"
+                                if category:
+                                    msg += f" in category '{category}'"
+                                return msg + "."
+
+                            cards = [
+                                {
+                                    "name":     pl.name,
+                                    "address":  pl.address,
+                                    "lat":      pl.lat,
+                                    "lng":      pl.lng,
+                                    "category": pl.category,
+                                    "osm_id":   pl.osm_id,
+                                    "osm_type": pl.osm_type,
+                                    "source":   pl.source,
+                                    "is_saved": True,
+                                    "notes":    pl.notes,
+                                    "tags":     pl.tags,
+                                }
+                                for pl in places
+                            ]
+                            await _emit_card({"type": "place_card", "places": cards})
+
+                            lines = [f"• {pl.name}" + (f" — {pl.address}" if pl.address else "") for pl in places]
+                            return f"Your saved places ({len(places)}):\n" + "\n".join(lines)
+
+                        except Exception as exc:
+                            log.warning("get_saved_places tool failed: %s", exc)
+                            return f"Failed to retrieve saved places: {exc}"
 
                     return "Action completed."
 
@@ -1024,7 +1609,8 @@ async def send_message(
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
-                    elif event["type"] in ("calendar_suggest", "task_suggest"):
+                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created"):
+                        tool_results.append(event)
                         await queue.put(sse_event(event))
                     elif event["type"] == "done":
                         model_used = event.get("model", "")
@@ -1033,6 +1619,20 @@ async def send_message(
                         await queue.put(sse_event(event))
 
             assistant_content = "".join(full_response)
+
+            # If the model only emitted tool calls (no text) but did produce
+            # cards, give the message a tiny placeholder so the bubble isn't
+            # blank on reload. Cards re-render from tool_results.
+            if not assistant_content.strip() and tool_results:
+                kinds = {r.get("type") for r in tool_results}
+                if "place_card" in kinds:
+                    assistant_content = "Here's what I found:"
+                elif "contact_card" in kinds:
+                    assistant_content = "Here's who I found:"
+                elif "artifact_created" in kinds:
+                    assistant_content = "Done — see the file above."
+                else:
+                    assistant_content = "Done."
 
             # ── Phase 2: signal completion to client immediately ─────────────
             # Do NOT wait for DB saves / title gen / memory — client gets the
@@ -1048,6 +1648,7 @@ async def send_message(
                     content=assistant_content,
                     model_used=model_used or tier.value,
                     tokens_used=tokens_used,
+                    tool_results=tool_results,
                 )
                 bg_db.add(assistant_msg)
                 await bg_db.commit()

@@ -1,9 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Video, Clock, Users, FileText, CheckSquare, Search,
-  Sparkles, Calendar, RefreshCw, Loader2,
+  Sparkles, Calendar, RefreshCw, Loader2, BriefcaseBusiness,
 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
 
@@ -43,6 +43,64 @@ const STATUS_LABEL: Record<string, string> = {
 
 function initials(name: string) {
   return name.split(" ").slice(0, 2).map(p => p[0]).join("").toUpperCase()
+}
+
+// ── Enriched attendee chip ───────────────────────────────────────────────────
+interface AttendeeContact {
+  display_name: string | null
+  organization: string | null
+  job_title: string | null
+  primary_email: string | null
+}
+
+function AttendeeChip({ attendee }: { attendee: string }) {
+  const [contact, setContact] = useState<AttendeeContact | null>(null)
+  const [showTooltip, setShowTooltip] = useState(false)
+  const fetchedRef = useRef(false)
+
+  function handleMouseEnter() {
+    setShowTooltip(true)
+    if (fetchedRef.current) return
+    fetchedRef.current = true
+    // Derive the email: attendees are stored as emails or "Name <email>"
+    const emailMatch = attendee.match(/<([^>]+)>/) || attendee.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)
+    const email = emailMatch ? emailMatch[1] ?? emailMatch[0] : attendee
+    apiGet<AttendeeContact[]>(`/contacts/search?q=${encodeURIComponent(email)}&limit=1`)
+      .then(results => { if (results.length > 0) setContact(results[0]) })
+      .catch(() => {})
+  }
+
+  const ini = initials(attendee)
+  const label = contact?.display_name ?? attendee
+
+  return (
+    <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={() => setShowTooltip(false)}>
+      <div
+        className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-medium cursor-default"
+        style={{ backgroundColor: "var(--c-surface-2)", borderColor: "var(--c-surface)", color: "var(--c-ink-muted)" }}
+        title={label}
+      >
+        {ini}
+      </div>
+      {showTooltip && contact && (contact.job_title || contact.organization) && (
+        <div
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 rounded-lg px-2.5 py-1.5 text-xs shadow-md whitespace-nowrap pointer-events-none"
+          style={{ backgroundColor: "var(--c-ink)", color: "var(--c-canvas)" }}
+        >
+          <div className="font-medium">{contact.display_name ?? attendee}</div>
+          {(contact.job_title || contact.organization) && (
+            <div className="flex items-center gap-1 mt-0.5 opacity-75">
+              <BriefcaseBusiness size={9} />
+              {[contact.job_title, contact.organization].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          {/* Triangle pointer */}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0"
+            style={{ borderLeft: "5px solid transparent", borderRight: "5px solid transparent", borderTop: "5px solid var(--c-ink)" }} />
+        </div>
+      )}
+    </div>
+  )
 }
 
 function relativeDay(iso: string) {
@@ -224,8 +282,7 @@ export default function MeetingsPage() {
                     <div className="flex items-center gap-3 mt-3">
                       <div className="flex -space-x-2">
                         {selected.attendees.slice(0, 4).map(a => (
-                          <div key={a} title={a} className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-[10px] font-medium"
-                            style={{ backgroundColor: "var(--c-surface-2)", borderColor: "var(--c-surface)", color: "var(--c-ink-muted)" }}>{initials(a)}</div>
+                          <AttendeeChip key={a} attendee={a} />
                         ))}
                       </div>
                       <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>{selected.attendees.join(", ")}</span>

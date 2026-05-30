@@ -175,24 +175,24 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) handleClose() }}>
       <DialogContent
-        className="w-[80vw] max-w-[80vw] sm:max-w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
+        className="w-[96vw] max-w-[96vw] sm:w-[80vw] sm:max-w-[80vw] h-[90vh] p-0 gap-0 overflow-hidden flex flex-col"
         showCloseButton={false}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b shrink-0" style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}>
-          <div className="flex items-center gap-3">
-            <span className="font-serif text-base font-medium" style={{ color: "var(--c-ink)" }}>Quick Capture</span>
+        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0" style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-serif text-base font-medium shrink-0" style={{ color: "var(--c-ink)" }}>Capture</span>
             {/* Tab switcher */}
             <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: "var(--c-surface-2)" }}>
               {([
                 { id: "url", label: "URL", icon: LinkIcon },
-                { id: "document", label: "Document", icon: FileText },
+                { id: "document", label: "Doc", icon: FileText },
                 { id: "file", label: "File", icon: Upload },
               ] as const).map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
                   onClick={() => setTab(id)}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-all"
                   style={tab === id
                     ? { background: "var(--c-surface)", color: "var(--c-ink)", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
                     : { color: "var(--c-ink-faint)" }
@@ -396,28 +396,30 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
 
         {/* Footer */}
         <div
-          className="flex items-center justify-between px-5 py-3 border-t shrink-0"
+          className="px-4 py-3 border-t shrink-0"
           style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}
         >
-          <div>
-            {ingestError && (
-              <p className="text-xs" style={{ color: "var(--c-rose)" }}>{ingestError}</p>
-            )}
-            {tab === "file" && ingesting && (
-              <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>
-                Processing file — this may take a moment…
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handleClose} className="btn-ghost text-sm">Cancel</button>
+          {/* Status messages */}
+          {(ingestError || (tab === "file" && ingesting)) && (
+            <p className="text-xs mb-2" style={{ color: ingestError ? "var(--c-rose)" : "var(--c-ink-faint)" }}>
+              {ingestError || "Processing file — this may take a moment…"}
+            </p>
+          )}
+          {/* Buttons — row on sm+, full-width stacked on mobile */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+            <button
+              onClick={handleClose}
+              className="btn-ghost text-sm w-full sm:w-auto"
+            >
+              Cancel
+            </button>
             <button
               onClick={handleSave}
               disabled={!canSave || ingesting}
-              className="flex items-center gap-1.5 text-sm disabled:opacity-50"
+              className="flex items-center justify-center gap-1.5 text-sm disabled:opacity-50 w-full sm:w-auto"
               style={{
                 background: "var(--c-moss)", color: "var(--c-surface)",
-                padding: "0.375rem 1rem", borderRadius: "0.5rem",
+                padding: "0.5rem 1.25rem", borderRadius: "0.5rem",
                 fontWeight: 500,
               }}
             >

@@ -6,6 +6,7 @@ import {
   Brain, Trash2, GripVertical, ExternalLink, Archive,
 } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useRouter } from "next/navigation"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -152,7 +153,7 @@ function TaskModal({
   const [status, setStatus]         = useState(task.status)
   const [dueAt, setDueAt]           = useState(task.due_at ? task.due_at.slice(0, 10) : "")
   const [saving, setSaving]         = useState(false)
-  const [confirmDelete, setConfDel] = useState(false)
+  const confirm                     = useConfirm()
   const [artMetas, setArtMetas]     = useState<ArtifactMeta[]>([])
   const [kbMetas, setKbMetas]       = useState<KnowledgeMeta[]>([])
   const [linkedArts, setLinkedArts] = useState<string[]>(task.linked_artifacts ?? [])
@@ -192,6 +193,13 @@ function TaskModal({
   }
 
   async function handleDelete() {
+    const ok = await confirm({
+      title: "Delete task?",
+      description: `"${task.title}" will be permanently removed.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     await apiDelete(`/tasks/${task.id}`)
     onDelete(task.id)
   }
@@ -495,23 +503,15 @@ function TaskModal({
 
           {/* Delete */}
           <div className="pt-2 border-t" style={{ borderColor: "var(--c-border-faint)" }}>
-            {!confirmDelete ? (
-              <button
-                onClick={() => setConfDel(true)}
-                className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors"
-                style={{ color: "var(--c-ink-faint)" }}
-                onMouseEnter={e => { e.currentTarget.style.color = "var(--c-rose)"; e.currentTarget.style.backgroundColor = "var(--c-rose-soft)" }}
-                onMouseLeave={e => { e.currentTarget.style.color = "var(--c-ink-faint)"; e.currentTarget.style.backgroundColor = "transparent" }}
-              >
-                <Trash2 size={12} /> Delete task
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>Delete permanently?</span>
-                <button onClick={handleDelete} className="text-xs px-2.5 py-1 rounded-md font-medium" style={{ backgroundColor: "var(--c-rose)", color: "var(--c-surface)" }}>Yes</button>
-                <button onClick={() => setConfDel(false)} className="text-xs px-2.5 py-1 rounded-md" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}>No</button>
-              </div>
-            )}
+            <button
+              onClick={handleDelete}
+              className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md transition-colors"
+              style={{ color: "var(--c-ink-faint)" }}
+              onMouseEnter={e => { e.currentTarget.style.color = "var(--c-rose)"; e.currentTarget.style.backgroundColor = "var(--c-rose-soft)" }}
+              onMouseLeave={e => { e.currentTarget.style.color = "var(--c-ink-faint)"; e.currentTarget.style.backgroundColor = "transparent" }}
+            >
+              <Trash2 size={12} /> Delete task
+            </button>
           </div>
         </div>
 

@@ -58,6 +58,7 @@ class Message(Base):
     model_used: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     tool_calls: Mapped[list] = mapped_column(JSON, default=list)
+    tool_results: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")
 
@@ -233,3 +234,77 @@ class Artifact(Base):
     tags: Mapped[list] = mapped_column(JSON, default=list)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+# ── Google People API ────────────────────────────────────────────────────────
+class Contact(Base):
+    """Local mirror of a Google Contact (people/* resource)."""
+    __tablename__ = "contacts"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+    google_resource_name: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    etag: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    primary_email: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    primary_phone: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    organization: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    job_title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    biography: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tars_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    emails: Mapped[list] = mapped_column(JSON, default=list)
+    phones: Mapped[list] = mapped_column(JSON, default=list)
+    sources: Mapped[list] = mapped_column(JSON, default=list)
+    events_json: Mapped[list] = mapped_column(JSON, default=list)
+    is_directory: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_other_contact: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+
+class PendingContact(Base):
+    """Person detected from meeting / email / chat awaiting user approval."""
+    __tablename__ = "pending_contacts"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    detected_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    detected_email: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    detected_phone: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    source: Mapped[str] = mapped_column(String, nullable=False)        # "meeting" | "email" | "chat"
+    source_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    extracted_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="pending")     # pending | approved | rejected | existing
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ContactSyncState(Base):
+    """Per-user sync token from Google People API for incremental sync."""
+    __tablename__ = "contact_sync_state"
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), primary_key=True)
+    sync_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+# ── Places ───────────────────────────────────────────────────────────────────
+class Place(Base):
+    """Personal places — saved locations with coordinates and metadata."""
+    __tablename__ = "places"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    address: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lng: Mapped[float] = mapped_column(Float, nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    osm_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    osm_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "node" | "way" | "relation"
+    google_place_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    source: Mapped[str] = mapped_column(String, default="osm")              # "osm" | "google" | "manual"
+    visited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_saved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)

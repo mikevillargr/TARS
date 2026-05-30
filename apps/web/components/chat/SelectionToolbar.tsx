@@ -135,12 +135,16 @@ function analyzeSelection(text: string): SelectionContext {
 
 interface Pos { x: number; y: number; yBottom: number }
 
+const TOOLBAR_HALF_W = 150
+
 function getSelectionPos(range: Range): Pos {
   const rect = range.getBoundingClientRect()
+  const vw   = window.innerWidth
+  const cx   = rect.left + rect.width / 2
   return {
-    x:       rect.left + rect.width / 2 + window.scrollX,
-    y:       rect.top  + window.scrollY - 8,
-    yBottom: rect.bottom + window.scrollY + 8,
+    x:       Math.max(TOOLBAR_HALF_W, Math.min(vw - TOOLBAR_HALF_W, cx)),
+    y:       rect.top    - 8,
+    yBottom: rect.bottom + 8,
   }
 }
 
@@ -233,15 +237,6 @@ function CalendarForm({
   const [saved,    setSaved]    = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Viewport clamp
-  useEffect(() => {
-    if (!ref.current) return
-    const el  = ref.current
-    const rect = el.getBoundingClientRect()
-    const vw   = window.innerWidth
-    if (rect.right > vw - 12) el.style.marginLeft = `${vw - 12 - rect.right}px`
-    if (rect.left  < 12)      el.style.marginLeft = `${12 - rect.left}px`
-  }, [])
 
   const save = async () => {
     if (!date || !time) return
@@ -263,7 +258,7 @@ function CalendarForm({
       ref={ref}
       onMouseDown={(e) => e.preventDefault()}
       style={{
-        position:  "absolute",
+        position:  "fixed",
         left:      pos.x,
         top:       pos.yBottom,
         transform: "translateX(-50%)",
@@ -375,15 +370,6 @@ function Toolbar({
   const [calOpen, setCalOpen] = useState(false)
   const ctx = analyzeSelection(text)
 
-  // Viewport clamp horizontally
-  useEffect(() => {
-    if (!ref.current) return
-    const el   = ref.current
-    const rect = el.getBoundingClientRect()
-    const vw   = window.innerWidth
-    if (rect.right > vw - 12) el.style.transform = `translate(calc(-50% + ${vw - 12 - rect.right}px), -100%)`
-    if (rect.left  < 12)      el.style.transform = `translate(calc(-50% + ${12 - rect.left}px), -100%)`
-  }, [pos])
 
   const copy = useCallback(async () => {
     await navigator.clipboard.writeText(text)
@@ -427,7 +413,7 @@ function Toolbar({
         ref={ref}
         onMouseDown={(e) => e.preventDefault()}
         style={{
-          position:  "absolute",
+          position:  "fixed",
           left:      pos.x,
           top:       pos.y,
           transform: "translate(-50%, -100%)",

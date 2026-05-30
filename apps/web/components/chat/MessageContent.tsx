@@ -196,7 +196,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   }, [code, language])
 
   return (
-    <div className="my-3 rounded-xl overflow-hidden max-w-full w-full" style={{ border: "1px solid #2a2a2a" }}>
+    <div className="my-3 rounded-xl max-w-full" style={{ border: "1px solid #2a2a2a", overflow: "hidden" }}>
       {/* Header bar */}
       <div
         className="flex items-center justify-between px-3 py-1.5"
@@ -229,8 +229,8 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
         </div>
       </div>
 
-      {/* Scroll wrapper: the pre inside SyntaxHighlighter scrolls, not the page */}
-      <div style={{ overflowX: "auto" }}>
+      {/* Horizontally scrollable code — never pushes out of the message bubble */}
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as React.CSSProperties["WebkitOverflowScrolling"] }}>
         <SyntaxHighlighter
           language={language || "text"}
           style={oneDark}
@@ -241,8 +241,10 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
             lineHeight: "1.5",
             padding: "1rem",
             background: "#1a1a1a",
-            overflowX: "auto",
+            overflowX: "visible",
+            minWidth: "100%",
           }}
+          wrapLongLines={false}
         >
           {code}
         </SyntaxHighlighter>
@@ -256,7 +258,13 @@ function InlineCode({ children }: { children: React.ReactNode }) {
   return (
     <code
       className="px-1.5 py-0.5 rounded text-[0.8em] font-mono"
-      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)", border: "1px solid var(--c-border)" }}
+      style={{
+        backgroundColor: "var(--c-surface-2)",
+        color: "var(--c-amber)",
+        border: "1px solid var(--c-border)",
+        wordBreak: "break-word",
+        overflowWrap: "anywhere",
+      }}
     >
       {children}
     </code>
@@ -268,7 +276,7 @@ export function MessageContent({ content }: { content: string }) {
   const urls = extractUrls(content)
 
   return (
-    <div className="message-content space-y-0.5 min-w-0 max-w-full" data-selectable>
+    <div className="message-content space-y-0.5 min-w-0 max-w-full w-full overflow-hidden" data-selectable>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -370,14 +378,14 @@ export function MessageContent({ content }: { content: string }) {
             <hr className="my-3" style={{ borderColor: "var(--c-border)" }} />
           ),
 
-          // Links — open in new tab
+          // Links — open in new tab. Long URLs must break inside the bubble.
           a: ({ href, children }) => (
             <a
               href={href}
               target="_blank"
               rel="noopener noreferrer"
               className="underline underline-offset-2 hover:opacity-80 transition-opacity"
-              style={{ color: "var(--c-moss)" }}
+              style={{ color: "var(--c-moss)", wordBreak: "break-all", overflowWrap: "anywhere" }}
             >
               {children}
             </a>

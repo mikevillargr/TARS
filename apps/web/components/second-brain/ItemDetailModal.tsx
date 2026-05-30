@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { apiGet, apiPatch, apiDelete } from "@/lib/api-client"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 import { TiptapEditor } from "./TiptapEditor"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ export function ItemDetailModal({
   const lastSavedContent              = useRef("")
   const lastSavedTitle                = useRef("")
   const [showFull, setShowFull]       = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const confirm                       = useConfirm()
 
   const isDocument = item?.type === "document" || item?.type === "note"
 
@@ -91,7 +92,6 @@ export function ItemDetailModal({
     setItem(null)
     setEditing(false)
     setShowFull(false)
-    setConfirmDelete(false)
     setDocMarkdown("")
     setTaskAdded(false)
     apiGet<KnowledgeItemDetail>(`/second-brain/items/${itemId}`)
@@ -199,6 +199,15 @@ export function ItemDetailModal({
 
   async function deleteItem() {
     if (!item) return
+    const ok = await confirm({
+      title: "Delete item?",
+      description: item.source_title
+        ? `"${item.source_title}" will be permanently removed from your Second Brain.`
+        : "This item will be permanently removed from your Second Brain.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     await apiDelete(`/second-brain/items/${item.id}`)
     onDeleted(item.id)
     onClose()
@@ -506,17 +515,9 @@ export function ItemDetailModal({
 
           <div className="flex-1" />
 
-          {!confirmDelete ? (
-            <button onClick={() => setConfirmDelete(true)} className="p-1.5 rounded-md" style={{ color: "var(--c-ink-faint)" }} title="Delete">
-              <Trash2 size={14} />
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>Delete?</span>
-              <button onClick={deleteItem} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-rose)", color: "#fff" }}>Yes</button>
-              <button onClick={() => setConfirmDelete(false)} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}>No</button>
-            </div>
-          )}
+          <button onClick={deleteItem} className="p-1.5 rounded-md" style={{ color: "var(--c-ink-faint)" }} title="Delete">
+            <Trash2 size={14} />
+          </button>
         </div>
       </DialogContent>
     </Dialog>

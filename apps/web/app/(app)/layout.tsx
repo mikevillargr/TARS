@@ -2,14 +2,16 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Sun, Moon } from "lucide-react"
-import { useState, useEffect } from "react"
+import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Sun, Moon, Mic, Loader2 } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
 import { useTheme } from "@/components/ThemeProvider"
 import { CommandPalette } from "@/components/shell/CommandPalette"
+import { ConfirmProvider } from "@/components/ui/confirm-dialog"
 
 // Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
 function BottomTabBar() {
@@ -79,6 +81,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [captureOpen, setCaptureOpen] = useState(false)
   const [cmdOpen, setCmdOpen] = useState(false)
   const { theme, toggle: toggleTheme } = useTheme()
+  const router = useRouter()
+  const voice = useVoiceInput()
+
+  // Mobile header mic: records, then navigates to /chat?ask=<text> which AskLoader auto-sends
+  const handleHeaderMicTap = useCallback(() => {
+    if (voice.state === "recording") {
+      voice.stop()
+      return
+    }
+    if (voice.state !== "idle" && voice.state !== "error") return
+    voice.start((text) => {
+      if (!text) return
+      router.push(`/chat?ask=${encodeURIComponent(text)}`)
+    })
+  }, [voice, router])
 
   // Global Cmd+K / Ctrl+K listener
   useEffect(() => {
@@ -93,6 +110,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
+    <ConfirmProvider>
     <SidebarProvider>
       <AppSidebar />
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
@@ -171,6 +189,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               />
             </button>
 
+            {/* Mobile-only voice new-chat button */}
+            <button
+              onClick={handleHeaderMicTap}
+              disabled={voice.state === "transcribing"}
+              className="sm:hidden p-2 rounded-lg relative"
+              style={{
+                color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-muted)",
+                opacity: voice.state === "transcribing" ? 0.5 : 1,
+              }}
+              title={voice.state === "recording" ? "Tap to stop" : "New voice chat"}
+            >
+              {voice.state === "transcribing"
+                ? <Loader2 size={18} className="animate-spin" />
+                : <Mic size={18} className={voice.state === "recording" ? "animate-pulse" : ""} />
+              }
+              {voice.state === "recording" && (
+                <span className="absolute inset-0 rounded-lg animate-ping"
+                  style={{ backgroundColor: "var(--c-rose)", opacity: 0.15 }} />
+              )}
+            </button>
+
             <button
               onClick={() => setCaptureOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer hover:opacity-80"
@@ -183,7 +222,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page content — safe-area-aware bottom padding so content clears the tab bar + home indicator */}
-        <div className="flex-1 overflow-hidden flex flex-col pb-safe-tab lg:pb-0">{children}</div>
+        {/* min-w-0 + overflow-x-hidden enforce a hard horizontal boundary for every (app) page */}
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col pb-safe-tab lg:pb-0" style={{ maxWidth: "100%" }}>{children}</div>
       </main>
 
       {/* Bottom tab bar — sits outside <main> so it overlays correctly */}
@@ -202,5 +242,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Global Command Palette */}
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
     </SidebarProvider>
+    </ConfirmProvider>
   )
 }

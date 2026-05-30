@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
+import React, { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -8,11 +8,15 @@ import {
   Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
+  Mail, Phone, PhoneCall, BriefcaseBusiness, MessageSquare, Search, UserPlus,
+  Copy, Check,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
+import { useVoiceInput } from "@/hooks/useVoiceInput"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -27,6 +31,7 @@ interface Message {
   content: string
   model_used?: string
   tool_calls?: string[]
+  tool_results?: Array<{ type: string; [k: string]: unknown }>
   created_at: string
 }
 
@@ -243,6 +248,360 @@ function ArtifactCard({ n, onDismiss }: { n: ArtifactNotification; onDismiss: ()
   )
 }
 
+// ─── Contact card ─────────────────────────────────────────────────
+interface ContactResult {
+  id: string | null
+  display_name: string | null
+  primary_email: string | null
+  primary_phone: string | null
+  organization: string | null
+  job_title: string | null
+  tars_context: string | null
+  source: "local" | "google_live"
+  is_other_contact?: boolean
+}
+
+interface ContactResultSet {
+  tool_use_id: string
+  contacts: ContactResult[]
+}
+
+function ContactActionChip({
+  icon: Icon, label, href, onClick, accent,
+}: {
+  icon: React.ElementType; label: string
+  href?: string; onClick?: () => void; accent?: boolean
+}) {
+  const cls = "inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
+  const style = accent
+    ? { backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }
+    : { backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }
+  const hoverStyle = accent
+    ? { backgroundColor: "color-mix(in srgb, var(--c-moss) 20%, transparent)", color: "var(--c-moss)" }
+    : { backgroundColor: "var(--c-surface-3)", color: "var(--c-ink)" }
+  if (href) {
+    return (
+      <a href={href} target={href.startsWith("mailto:") || href.startsWith("tel:") ? undefined : "_self"}
+        className={cls} style={style}
+        onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, hoverStyle)}
+        onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, style)}
+      >
+        <Icon size={10} />{label}
+      </a>
+    )
+  }
+  return (
+    <button onClick={onClick} className={cls} style={style}
+      onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, hoverStyle)}
+      onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, style)}
+    >
+      <Icon size={10} />{label}
+    </button>
+  )
+}
+
+function CopyChip({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard blocked — silently ignore */ }
+  }
+  return (
+    <ContactActionChip
+      icon={copied ? Check : Copy}
+      label={copied ? "Copied" : label}
+      onClick={handleCopy}
+    />
+  )
+}
+
+function ContactCard({ set, onDismiss, onAsk }: {
+  set: ContactResultSet
+  onDismiss: () => void
+  onAsk: (q: string) => void
+}) {
+  return (
+    <div className="flex flex-col gap-2 max-w-lg">
+      {set.contacts.map((c, i) => {
+        const initials = (c.display_name ?? c.primary_email ?? "?")
+          .split(" ").slice(0, 2).map((p: string) => p[0] ?? "").join("").toUpperCase() || "?"
+        const name = c.display_name ?? c.primary_email ?? "this person"
+
+        return (
+          <div
+            key={i}
+            className="rounded-xl p-3.5 flex flex-col gap-2.5"
+            style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)" }}
+          >
+            {/* Top row: avatar + details + dismiss */}
+            <div className="flex items-start gap-3">
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+                style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
+              >
+                {initials}
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm leading-snug" style={{ color: "var(--c-ink)" }}>
+                  {c.display_name ?? c.primary_email ?? "Unknown"}
+                </div>
+                {(c.job_title || c.organization) && (
+                  <div className="flex items-center gap-1 mt-0.5 text-xs" style={{ color: "var(--c-ink-muted)" }}>
+                    <BriefcaseBusiness size={10} style={{ flexShrink: 0 }} />
+                    <span className="truncate">{[c.job_title, c.organization].filter(Boolean).join(" · ")}</span>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                  {c.primary_email && (
+                    <a href={`mailto:${c.primary_email}`}
+                      className="flex items-center gap-1 text-[11px] transition-opacity hover:opacity-75"
+                      style={{ color: "var(--c-moss)" }}
+                    >
+                      <Mail size={10} style={{ flexShrink: 0 }} />{c.primary_email}
+                    </a>
+                  )}
+                  {c.primary_phone && (
+                    <a href={`tel:${c.primary_phone}`}
+                      className="flex items-center gap-1 text-[11px] transition-opacity hover:opacity-75"
+                      style={{ color: "var(--c-ink-muted)" }}
+                    >
+                      <Phone size={10} style={{ flexShrink: 0 }} />{c.primary_phone}
+                    </a>
+                  )}
+                </div>
+                {c.tars_context && (
+                  <div className="mt-1.5 text-[11px] italic leading-relaxed" style={{ color: "var(--c-ink-faint)" }}>
+                    {c.tars_context.slice(0, 160)}{c.tars_context.length > 160 ? "…" : ""}
+                  </div>
+                )}
+              </div>
+
+              {i === 0 && (
+                <button onClick={onDismiss} className="shrink-0 mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Action chips */}
+            <div className="flex flex-wrap gap-1.5 pl-12">
+              {/* Email chips */}
+              {c.primary_email && (
+                <>
+                  <ContactActionChip icon={Mail} label="Email" href={`mailto:${c.primary_email}`} />
+                  <CopyChip value={c.primary_email} label="Copy email" />
+                </>
+              )}
+
+              {/* Phone chips */}
+              {c.primary_phone && (
+                <>
+                  <ContactActionChip icon={PhoneCall} label="Call" href={`tel:${c.primary_phone}`} />
+                  <CopyChip value={c.primary_phone} label="Copy number" />
+                </>
+              )}
+
+              {/* TARS actions */}
+              <ContactActionChip
+                icon={Calendar}
+                label="Schedule"
+                onClick={() => onAsk(`Schedule a meeting with ${name}`)}
+              />
+              <ContactActionChip
+                icon={CheckSquare}
+                label="Create task"
+                onClick={() => onAsk(`Create a task related to ${name}`)}
+              />
+              {c.primary_email && (
+                <ContactActionChip
+                  icon={Search}
+                  label="Find emails"
+                  onClick={() => onAsk(`Show me recent emails from ${c.primary_email}`)}
+                />
+              )}
+              <ContactActionChip
+                icon={MessageSquare}
+                label="Meeting history"
+                onClick={() => onAsk(`What meetings have I had with ${name}?`)}
+              />
+
+              {/* Add to contacts — for live search results and unsaved other-contacts */}
+              {(c.source === "google_live" || c.is_other_contact) && (
+                <ContactActionChip
+                  icon={UserPlus}
+                  label="Add to contacts"
+                  accent
+                  onClick={() => onAsk(
+                    c.primary_email
+                      ? `Add ${name} (${c.primary_email}) to my Google Contacts`
+                      : `Add ${name} to my Google Contacts`
+                  )}
+                />
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Place card ───────────────────────────────────────────────────
+interface PlaceResult {
+  name: string
+  address: string | null
+  lat: number
+  lng: number
+  category: string | null
+  osm_id: string | null
+  osm_type: string | null
+  source: string
+  is_saved: boolean
+  notes?: string | null
+  tags?: string[]
+}
+
+interface PlaceResultSet {
+  tool_use_id: string
+  places: PlaceResult[]
+}
+
+import dynamic from "next/dynamic"
+
+const PlaceMap = dynamic(
+  () => import("@/components/chat/PlaceMap"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full animate-pulse rounded-t-xl" style={{ height: 200, backgroundColor: "#e8e0d0" }} />
+    ),
+  }
+)
+
+function osmUrl(p: PlaceResult) {
+  if (p.osm_type && p.osm_id) {
+    return `https://www.openstreetmap.org/${p.osm_type}/${p.osm_id}`
+  }
+  return `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=17/${p.lat}/${p.lng}`
+}
+
+function PlaceCard({
+  set, onDismiss,
+}: {
+  set: PlaceResultSet
+  onDismiss: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-3 w-full max-w-lg">
+      {set.places.map((p, i) => {
+        const catLabel = p.category
+          ? p.category.charAt(0).toUpperCase() + p.category.slice(1).replace(/_/g, " ")
+          : null
+
+        return (
+          <div
+            key={i}
+            className="rounded-xl overflow-hidden w-full"
+            style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)", isolation: "isolate" }}
+          >
+            {/* Map — tapping opens Google Maps for full navigation experience */}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+              style={{ height: 200, position: "relative" }}
+            >
+              <PlaceMap lat={p.lat} lng={p.lng} />
+            </a>
+
+            {/* Info */}
+            <div className="p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm leading-snug" style={{ color: "var(--c-ink)" }}>
+                    {p.name}
+                  </p>
+                  {catLabel && (
+                    <span
+                      className="inline-block mt-0.5 mr-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
+                    >
+                      {catLabel}
+                    </span>
+                  )}
+                </div>
+                {i === 0 && (
+                  <button
+                    onClick={onDismiss}
+                    className="shrink-0 p-0.5 rounded"
+                    style={{ color: "var(--c-ink-faint)" }}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {p.address && (
+                <p className="mt-1.5 text-xs leading-snug" style={{ color: "var(--c-ink-muted)" }}>
+                  📍 {p.address.length > 120 ? p.address.slice(0, 120) + "…" : p.address}
+                </p>
+              )}
+              {p.notes && (
+                <p className="mt-1 text-[11px] italic" style={{ color: "var(--c-ink-faint)" }}>
+                  {p.notes.slice(0, 120)}{p.notes.length > 120 ? "…" : ""}
+                </p>
+              )}
+
+              {/* Action row */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-85"
+                  style={{ backgroundColor: "#4285F4", color: "#fff" }}
+                >
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                  </svg>
+                  Google Maps
+                </a>
+                <a
+                  href={`https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-opacity hover:opacity-85"
+                  style={{ backgroundColor: "#05c8f7", color: "#1a1a1a" }}
+                >
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+                    <path d="M20.54 6.63C19.35 4.43 17.28 2.8 14.82 2.2A9.01 9.01 0 0 0 3.46 9.93c-.22 1.8.12 3.57.93 5.13l-1.3 4.78 4.94-1.27c1.44.77 3.07 1.2 4.8 1.2 4.97 0 9-4.03 9-9 0-1.5-.37-2.92-1.29-4.14zm-8.7 13.87c-1.51 0-2.97-.4-4.24-1.12l-.3-.18-3.12.8.83-3.02-.2-.32A7.51 7.51 0 0 1 3.3 9.93a7.48 7.48 0 0 1 9.6-6.39 7.49 7.49 0 0 1 5.37 7.34c0 4.14-3.37 7.51-7.51 7.51z"/>
+                  </svg>
+                  Waze
+                </a>
+                <a
+                  href={osmUrl(p)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-xs font-medium transition-opacity hover:opacity-80"
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
+                >
+                  <ExternalLink size={11} />
+                  OSM
+                </a>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // MessageContent is now in components/chat/MessageContent.tsx
 
 // ─── Model name formatter ─────────────────────────────────────────
@@ -256,6 +615,52 @@ function formatModelName(model?: string): string | null {
   if (m.includes("qwen") && m.includes("8"))  return "qwen 8b"
   if (m.startsWith("tier")) return null   // don't surface raw tier names
   return null
+}
+
+// ─── Inline cards anchored to a saved assistant message ───────────
+// Rendered as a sibling immediately after its MessageBubble. Uses local
+// state for dismissals so each message's cards are independent.
+function InlineMessageCards({
+  toolResults,
+  msgId,
+  onAsk,
+}: {
+  toolResults: Array<{ type: string; [k: string]: unknown }>
+  msgId: string
+  onAsk: (q: string) => void
+}) {
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const dismiss = (key: string) => setDismissed(prev => new Set([...prev, key]))
+
+  const entries = toolResults
+    .map((evt, i) => ({ evt, key: `${msgId}-tr-${i}` }))
+    .filter(({ key }) => !dismissed.has(key))
+
+  if (entries.length === 0) return null
+
+  return (
+    <div className="max-w-3xl mx-auto pl-0 sm:pl-11 flex flex-col gap-2">
+      {entries.map(({ evt, key }) => {
+        const e = evt as Record<string, unknown>
+        if (evt.type === "place_card" && Array.isArray(e.places)) {
+          return <PlaceCard key={key} set={{ tool_use_id: key, places: e.places as PlaceResult[] }} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "contact_card" && Array.isArray(e.contacts)) {
+          return <ContactCard key={key} set={{ tool_use_id: key, contacts: e.contacts as ContactResult[] }} onDismiss={() => dismiss(key)} onAsk={onAsk} />
+        }
+        if (evt.type === "calendar_suggest") {
+          return <CalendarSuggestChip key={key} suggestion={evt as unknown as CalendarSuggestion} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "task_suggest") {
+          return <TaskSuggestChip key={key} suggestion={evt as unknown as TaskSuggestion} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "artifact_created") {
+          return <ArtifactCard key={key} n={{ artifact_id: e.artifact_id as string, filename: e.filename as string, filetype: e.filetype as ArtifactNotification["filetype"] }} onDismiss={() => dismiss(key)} />
+        }
+        return null
+      })}
+    </div>
+  )
 }
 
 // ─── Single message bubble ────────────────────────────────────────
@@ -305,10 +710,10 @@ const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message | Stre
         )}
 
         <div
-          className={`p-4 rounded-2xl ${isUser ? "" : "w-full"}`}
+          className={`p-4 rounded-2xl min-w-0 ${isUser ? "" : "w-full"}`}
           style={isUser
-            ? { backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
-            : { color: "var(--c-ink)" }
+            ? { backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)", overflowWrap: "break-word" }
+            : { color: "var(--c-ink)", overflowWrap: "break-word" }
           }
         >
           <MessageContent content={msg.content} />
@@ -402,9 +807,14 @@ interface MessageAreaProps {
   calendarSuggestions: CalendarSuggestion[]
   taskSuggestions: TaskSuggestion[]
   artifactNotifications: ArtifactNotification[]
+  contactResults: ContactResultSet[]
+  placeResults: PlaceResultSet[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
+  setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
+  setPlaceResults: React.Dispatch<React.SetStateAction<PlaceResultSet[]>>
+  onAsk: (q: string) => void
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
 }
@@ -414,12 +824,20 @@ const MessageArea = memo(function MessageArea({
   calendarSuggestions,
   taskSuggestions,
   artifactNotifications,
+  contactResults,
+  placeResults,
   setCalendarSuggestions,
   setTaskSuggestions,
   setArtifactNotifications,
+  setContactResults,
+  setPlaceResults,
+  onAsk,
   quoteIndex,
   messagesEndRef,
 }: MessageAreaProps) {
+  const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
+    || artifactNotifications.length > 0 || contactResults.length > 0
+    || placeResults.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
       {allMessages.length === 0 ? (
@@ -430,10 +848,25 @@ const MessageArea = memo(function MessageArea({
           </p>
         </div>
       ) : allMessages.map((msg, i) => (
-        <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
+        <React.Fragment key={"id" in msg ? msg.id : `stream-${i}`}>
+          <MessageBubble msg={msg} />
+          {/* Inline cards anchored to this saved assistant message */}
+          {"tool_results" in msg &&
+            (msg as Message).tool_results != null &&
+            (msg as Message).tool_results!.length > 0 &&
+            msg.role === "assistant" &&
+            !("streaming" in msg) && (
+            <InlineMessageCards
+              toolResults={(msg as Message).tool_results!}
+              msgId={(msg as Message).id}
+              onAsk={onAsk}
+            />
+          )}
+        </React.Fragment>
       ))}
-      {(calendarSuggestions.length > 0 || taskSuggestions.length > 0 || artifactNotifications.length > 0) && (
-        <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
+      {/* Global card section — live preview during streaming only */}
+      {hasCards && (
+        <div className="max-w-3xl mx-auto pl-0 sm:pl-11 flex flex-col gap-2">
           {calendarSuggestions.map((s) => (
             <CalendarSuggestChip
               key={s.tool_use_id}
@@ -453,6 +886,21 @@ const MessageArea = memo(function MessageArea({
               key={n.artifact_id}
               n={n}
               onDismiss={() => setArtifactNotifications(prev => prev.filter(x => x.artifact_id !== n.artifact_id))}
+            />
+          ))}
+          {contactResults.map((set) => (
+            <ContactCard
+              key={set.tool_use_id}
+              set={set}
+              onDismiss={() => setContactResults(prev => prev.filter(x => x.tool_use_id !== set.tool_use_id))}
+              onAsk={onAsk}
+            />
+          ))}
+          {placeResults.map((set) => (
+            <PlaceCard
+              key={set.tool_use_id}
+              set={set}
+              onDismiss={() => setPlaceResults(prev => prev.filter(x => x.tool_use_id !== set.tool_use_id))}
             />
           ))}
         </div>
@@ -487,10 +935,17 @@ export default function ChatPage() {
   const [calendarSuggestions, setCalendarSuggestions]     = useState<CalendarSuggestion[]>([])
   const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
+  const [contactResults, setContactResults]               = useState<ContactResultSet[]>([])
+  const [placeResults, setPlaceResults]                   = useState<PlaceResultSet[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   const [inputValue, setInputValue]                 = useState("")
   const [attachments, setAttachments]               = useState<File[]>([])
+  // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
+  const [pendingVoiceSend, setPendingVoiceSend]     = useState<string | null>(null)
+  const voice = useVoiceInput()
+  const confirm = useConfirm()
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
   const fileInputRef                                = useRef<HTMLInputElement>(null)
   const cameraInputRef                              = useRef<HTMLInputElement>(null)
@@ -501,6 +956,28 @@ export default function ChatPage() {
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
   const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
+  const userLocationRef                             = useRef<{ lat: number; lng: number } | null>(null)
+
+  // ── Per-send geolocation helper ───────────────────────────────────
+  // Called at message send time — high-accuracy fix, cached for 60 s so consecutive
+  // sends feel instant. Races with a 2 s timeout so the send never blocks.
+  // No background GPS drain; no UI indicator.
+  function getLocationForSend(): Promise<{ lat: number; lng: number } | null> {
+    if (!navigator.geolocation) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(userLocationRef.current), 2_000)
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(timer)
+          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+          userLocationRef.current = loc
+          resolve(loc)
+        },
+        () => { clearTimeout(timer); resolve(userLocationRef.current) },
+        { enableHighAccuracy: true, maximumAge: 60_000, timeout: 4_000 },
+      )
+    })
+  }
 
   // Pre-fill input when navigating from Second Brain "Open in Chat" — handled via SecondBrainLoader below
 
@@ -528,6 +1005,8 @@ export default function ChatPage() {
     setCalendarSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
+    setContactResults([])
+    setPlaceResults([])
   }, [activeChatId])
 
   // Scroll to bottom on new messages
@@ -548,7 +1027,17 @@ export default function ChatPage() {
       .catch(console.error)
   }, [])
 
-  // Load messages when active conversation changes.
+  // Clear the live streaming card section. Saved messages now render their own
+  // cards inline via InlineMessageCards (from msg.tool_results), so we no longer
+  // need to repopulate global state — just wipe the streaming preview.
+  const rehydrateCards = useCallback((_msgs: Message[]) => {
+    setCalendarSuggestions([])
+    setTaskSuggestions([])
+    setArtifactNotifications([])
+    setContactResults([])
+    setPlaceResults([])
+  }, [])
+
   // If the last message is from the user and recent, the server is still generating —
   // show a loading indicator and poll until the assistant response lands.
   useEffect(() => {
@@ -560,6 +1049,7 @@ export default function ChatPage() {
       .then((d) => {
         if (chatId !== activeChatIdRef.current) return
         setMessages(d.messages)
+        rehydrateCards(d.messages)
         if (d.title) {
           setConversations((prev) => prev.map((c) =>
             c.id === chatId ? { ...c, title: d.title } : c
@@ -597,6 +1087,7 @@ export default function ChatPage() {
                 clearInterval(pollTimerRef.current!)
                 if (chatId === activeChatIdRef.current) {
                   setMessages(fresh.messages)
+                  rehydrateCards(fresh.messages)
                   setStreaming(null)
                   setBusy(false)
                   if (fresh.title) {
@@ -661,8 +1152,44 @@ export default function ChatPage() {
     setBusy(false)
   }
 
+  // ── Voice input handlers ──────────────────────────────────────────
+
+  // In-chat mic: start recording, auto-sends in current chat on silence.
+  // Click again to stop manually.
+  const handleMicClick = useCallback(() => {
+    if (voice.state === "recording") {
+      voice.stop()
+      return
+    }
+    if (voice.state !== "idle" && voice.state !== "error") return
+    voice.start((text) => {
+      if (!text) return
+      setInputValue(text)
+      setPendingVoiceSend(text)   // auto-send via the useEffect below
+    })
+  }, [voice])
+
+  // Auto-send when pendingVoiceSend is ready and activeChatId is set
+  useEffect(() => {
+    if (!pendingVoiceSend || !activeChatId || busy) return
+    setPendingVoiceSend(null)
+    // handleSend reads inputValue from closure — ensure it's set first
+    setTimeout(() => handleSend(), 0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingVoiceSend, activeChatId])
+
   async function handleDeleteConversation(convId: string, e: React.MouseEvent) {
     e.stopPropagation()  // don't select the conversation when clicking delete
+    const conv = conversations.find(c => c.id === convId)
+    const ok = await confirm({
+      title: "Delete conversation?",
+      description: conv?.title
+        ? `"${conv.title.slice(0, 80)}" will be permanently removed.`
+        : "This conversation will be permanently removed.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     try {
       await apiDelete(`/chat/conversations/${convId}`)
       setConversations(prev => {
@@ -684,26 +1211,15 @@ export default function ChatPage() {
     const content = inputValue.trim()
     if (busy || (!content && attachments.length === 0)) return
 
-    // If no active conversation, create one first
-    let chatId = activeChatId
-    if (!chatId) {
-      try {
-        const conv = await apiPost<Conversation>("/chat/conversations")
-        setConversations((prev) => [conv, ...prev])
-        setActiveChatId(conv.id)
-        chatId = conv.id
-      } catch (err) {
-        console.error(err)
-        return
-      }
-    }
-
+    // Show user message + loading state IMMEDIATELY — before async conversation creation
     stopInitiatedRef.current = false
     setBusy(true)
     setInputValue("")
     setCalendarSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
+    setContactResults([])
+    setPlaceResults([])
     const pendingAttachments = attachments
     setAttachments([])
 
@@ -716,12 +1232,37 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, tempUser])
     setStreaming({ role: "assistant", content: "", streaming: true })
 
+    // Create conversation if needed (UI already shows loading state)
+    let chatId = activeChatId
+    if (!chatId) {
+      try {
+        const conv = await apiPost<Conversation>("/chat/conversations")
+        setConversations((prev) => [conv, ...prev])
+        setActiveChatId(conv.id)
+        chatId = conv.id
+      } catch (err) {
+        console.error(err)
+        // Rollback UI state on failure
+        setBusy(false)
+        setStreaming(null)
+        setMessages((prev) => prev.filter((m) => m.id !== tempUser.id))
+        return
+      }
+    }
+
     try {
+      // Grab location at send time — high-accuracy, races with 2 s timeout
+      const loc = await getLocationForSend()
+
       const fd = new FormData()
       fd.append("content", content)
       if (pendingArtifactIdRef.current) {
         fd.append("artifact_id", pendingArtifactIdRef.current)
         pendingArtifactIdRef.current = null
+      }
+      if (loc) {
+        fd.append("location_lat", String(loc.lat))
+        fd.append("location_lng", String(loc.lng))
       }
       for (const f of pendingAttachments) fd.append("files", f)
 
@@ -780,6 +1321,20 @@ export default function ChatPage() {
                   filename: evt.filename,
                   filetype: evt.filetype,
                 } as ArtifactNotification])
+              }
+            } else if (evt.type === "contact_card") {
+              if (chatId === activeChatIdRef.current && Array.isArray(evt.contacts) && evt.contacts.length > 0) {
+                setContactResults(prev => [...prev, {
+                  tool_use_id: `contact-${Date.now()}-${Math.random()}`,
+                  contacts: evt.contacts,
+                } as ContactResultSet])
+              }
+            } else if (evt.type === "place_card") {
+              if (chatId === activeChatIdRef.current && Array.isArray(evt.places) && evt.places.length > 0) {
+                setPlaceResults(prev => [...prev, {
+                  tool_use_id: `place-${Date.now()}-${Math.random()}`,
+                  places: evt.places,
+                } as PlaceResultSet])
               }
             } else if (evt.type === "done") {
               const finalMsg: Message = {
@@ -849,12 +1404,19 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputValue, busy, handleSend])
 
+  // Send a follow-up query in the current conversation (used by contact action chips)
+  const handleAsk = useCallback((q: string) => {
+    setInputValue(q)
+    autoSendPendingRef.current = true
+  }, [])
+
   const allMessages = useMemo(
     () => (streaming ? [...messages, streaming] : messages),
     [messages, streaming],
   )
 
   return (
+    <>
     <div className="flex h-full overflow-hidden">
       <Suspense fallback={null}>
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
@@ -909,18 +1471,22 @@ export default function ChatPage() {
               {conversations.length === 0 ? (
                 <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
               ) : conversations.map((conv) => (
-                <div key={conv.id} className="group relative flex items-center min-w-0 overflow-hidden">
+                <div key={conv.id} className="group relative flex items-center min-w-0 overflow-hidden w-full">
                   <button
                     onClick={() => { setActiveChatId(conv.id); setMobileConvOpen(false) }}
-                    className={`flex-1 min-w-0 text-left px-3 py-2.5 rounded-md text-sm truncate transition-colors pr-9 ${
+                    className={`flex-1 min-w-0 text-left px-3 py-2.5 rounded-md text-sm transition-colors pr-9 ${
                       activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted"
                     }`}
-                    style={activeChatId === conv.id
-                      ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
-                      : {}
-                    }
+                    style={{
+                      ...(activeChatId === conv.id
+                        ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
+                        : {}),
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
                   >
-                    {(conv.title ?? "New conversation").slice(0, 60)}
+                    {conv.title ?? "New conversation"}
                   </button>
                   {/* Always visible on mobile (no hover state on touch) */}
                   <button
@@ -974,19 +1540,23 @@ export default function ChatPage() {
           ) : conversations.map((conv) => (
             <div
               key={conv.id}
-              className="group relative flex items-center min-w-0 overflow-hidden"
+              className="group relative flex items-center min-w-0 overflow-hidden w-full"
             >
               <button
                 onClick={() => setActiveChatId(conv.id)}
-                className={`flex-1 min-w-0 text-left px-3 py-2 rounded-md text-sm truncate transition-colors pr-8 ${
+                className={`flex-1 min-w-0 text-left px-3 py-2 rounded-md text-sm transition-colors pr-8 ${
                   activeChatId === conv.id ? "font-medium shadow-sm" : "text-ink-muted hover:bg-surface-2"
                 }`}
-                style={activeChatId === conv.id
-                  ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
-                  : {}
-                }
+                style={{
+                  ...(activeChatId === conv.id
+                    ? { backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
+                    : {}),
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
               >
-                {(conv.title ?? "New conversation").slice(0, 60)}
+                {conv.title ?? "New conversation"}
               </button>
               <button
                 onClick={(e) => handleDeleteConversation(conv.id, e)}
@@ -1004,14 +1574,15 @@ export default function ChatPage() {
       </div>
 
       {/* ── Chat area ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col relative" style={{ backgroundColor: "var(--c-surface)" }}>
+      {/* min-w-0 prevents code blocks / long messages from pushing this flex item wider than viewport */}
+      <div className="flex-1 flex flex-col relative min-w-0 overflow-hidden" style={{ backgroundColor: "var(--c-surface)" }}>
         {/* Chat toolbar */}
         <div
           className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0 overflow-hidden"
           style={{ borderColor: "var(--c-border)", backgroundColor: "color-mix(in srgb, var(--c-surface) 95%, transparent)", backdropFilter: "blur(4px)" }}
         >
-          {/* min-w-0 + overflow-hidden are both required for truncate to work in flex */}
-          <div className="flex-1 flex items-center gap-1 min-w-0 overflow-hidden">
+          {/* min-w-0 + overflow-hidden both required for truncate to work in flex */}
+          <div className="flex-1 flex items-center gap-1 min-w-0 overflow-hidden max-w-full">
             {/* Mobile: open conversation drawer */}
             <button
               onClick={() => setMobileConvOpen(true)}
@@ -1035,10 +1606,16 @@ export default function ChatPage() {
             )}
 
             <h1
-              className="text-sm font-medium truncate min-w-0 flex-1"
-              style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}
+              className="text-sm font-medium truncate min-w-0 flex-1 block"
+              style={{
+                fontFamily: "var(--font-heading), serif",
+                color: "var(--c-ink)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
             >
-              {(activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")).slice(0, 60)}
+              {activeChat?.title ?? (activeChatId ? "New conversation" : "TARS")}
             </h1>
           </div>
 
@@ -1064,9 +1641,14 @@ export default function ChatPage() {
           calendarSuggestions={calendarSuggestions}
           taskSuggestions={taskSuggestions}
           artifactNotifications={artifactNotifications}
+          contactResults={contactResults}
+          placeResults={placeResults}
           setCalendarSuggestions={setCalendarSuggestions}
           setTaskSuggestions={setTaskSuggestions}
           setArtifactNotifications={setArtifactNotifications}
+          setContactResults={setContactResults}
+          setPlaceResults={setPlaceResults}
+          onAsk={handleAsk}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
         />
@@ -1113,6 +1695,7 @@ export default function ChatPage() {
               }}
             >
               <textarea
+                ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => {
                   setInputValue(e.target.value)
@@ -1154,12 +1737,26 @@ export default function ChatPage() {
                     <Camera size={16} />
                   </label>
                   <button
-                    title="Voice memo"
-                    className="p-1.5 rounded-lg transition-colors"
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                    title={voice.state === "recording" ? "Stop recording" : voice.state === "transcribing" ? "Transcribing…" : "Voice input"}
+                    onClick={handleMicClick}
+                    disabled={voice.state === "transcribing" || busy}
+                    className="p-1.5 rounded-lg transition-colors relative"
+                    style={{
+                      color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-faint)",
+                      opacity: voice.state === "transcribing" || busy ? 0.4 : 1,
+                    }}
+                    onMouseEnter={e => { if (voice.state !== "recording") (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
                   >
-                    <Mic size={16} />
+                    {voice.state === "transcribing"
+                      ? <Loader2 size={16} className="animate-spin" />
+                      : <Mic size={16} className={voice.state === "recording" ? "animate-pulse" : ""} />
+                    }
+                    {/* Pulsing ring when recording */}
+                    {voice.state === "recording" && (
+                      <span className="absolute inset-0 rounded-lg animate-ping"
+                        style={{ backgroundColor: "var(--c-rose)", opacity: 0.2 }} />
+                    )}
                   </button>
                 </div>
 
@@ -1200,5 +1797,7 @@ export default function ChatPage() {
         </div>
       </div>
     </div>
+
+    </>
   )
 }

@@ -48,3 +48,6 @@ env/
 
 # Alembic (keep migrations, ignore cache)
 __pycache__/
+---
+.claude/
+*.tmp

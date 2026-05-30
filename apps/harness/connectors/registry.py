@@ -26,4 +26,11 @@ def list_connectors() -> List[ConnectorStatus]:
             capabilities=["read", "write"],
             metadata={"description": "Calendar events", "auth_type": "oauth2"},
         ),
+        ConnectorStatus(
+            id="google_people",
+            name="Google Contacts",
+            status="disconnected",  # upgraded to "connected" in route if DB token exists
+            capabilities=["read", "write"],
+            metadata={"description": "Contact graph + auto-enrichment", "auth_type": "oauth2"},
+        ),
     ]

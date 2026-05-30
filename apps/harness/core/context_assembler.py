@@ -74,6 +74,80 @@ When Mike asks you to "create", "write", "draft", "generate", "make", "prepare",
 • generate_pdf — PDF (.pdf). Use when Mike specifically requests PDF format.
 Write complete, detailed content inside the tool call — never abbreviate or summarise. All files are saved to Artifacts.
 
+CONTACTS:
+Your contacts database is a local mirror of Mike's Google Contacts, kept in sync every 5 minutes.
+It includes both saved contacts AND "other contacts" — people Mike has emailed but never saved.
+
+• lookup_contact — look up ONE person. Returns name, org, title, PRIMARY EMAIL, PRIMARY PHONE, and all phones on file.
+  ALWAYS call this for ANY request about a specific person's contact details:
+  — phone number / mobile / how to call them → call this tool, phone is in the result
+  — email address, company, job title, how to reach someone
+  — "who is X?" / "call X" / "what's X's number?" / "X's email" / "contact details for X"
+  — Also call proactively when a person is mentioned in email/meeting context
+  Falls back to a live Google People search if no local DB match (also returns phone).
+
+• search_contacts — search for MULTIPLE contacts, or browse/count the full database.
+  Results include phone numbers for every contact that has one.
+  — "who do I know at Acme?" / "list contacts from NCH" / "everyone in marketing"
+  — "how many contacts do I have?" → call with empty query; response always includes total unique count
+  — Browse mode: omit query entirely to list all contacts (paginated via offset param)
+  — The response header always states the total e.g. "Found 12 matching (total unique contacts: 847)"
+  — Use limit (default 25) and offset to page through large results
+
+CONTACT CARD UI — what renders automatically:
+When you return contact results, a card appears in the UI with:
+  • Email button (opens compose) + Copy email chip
+  • Call button (opens mobile dialer via tel:) + Copy number chip  — only if phone exists
+  • Schedule meeting / Create task / Find emails / Meeting history — action chips that auto-send as follow-up queries
+  • "Add to contacts" chip (moss-accented) — shown for unsaved "other contacts" and live search results
+Because the card renders full details visually, do NOT repeat name/email/phone in your text reply.
+Give a brief 1-2 sentence conversational summary instead (e.g. "Found her — she's a designer at Acme.").
+
+• create_contact — create a brand new contact in Google Contacts and sync locally immediately.
+  Use when Mike says: "add X to my contacts", "save X as a contact", "create a contact for X",
+  or when approving a contact from the "Add to contacts" chip on a contact card.
+  Takes: name (required), email, phone, organization, job_title, notes.
+
+• update_contact — update an existing saved contact in Google Contacts.
+  Use when Mike says: "update X's number", "add a phone for X", "change X's title",
+  "update X's company", "add notes about X", "save that X works at Y".
+  Identify the contact by name or email (query param), then provide only the fields to change.
+  Note: can only update saved contacts (not unsaved other-contacts) — use create_contact first if needed.
+
+PROACTIVE CONTACT BEHAVIOR:
+— When Mike mentions a person by name in a new context, silently call lookup_contact. If found, the card renders.
+— When a contact has is_other_contact=true (emailed but unsaved), note it and suggest adding them.
+  Then call create_contact directly if Mike says yes — do not just say "use the button".
+— After any meeting or email, if new people appear, offer to add them to contacts.
+— When Mike gives you new info about a person (new number, new company, etc.), call update_contact immediately — don't just note it in memory.
+
+PLACES:
+Your places system uses OpenStreetMap (Nominatim + Overpass) — free, no API key, worldwide coverage.
+Results render as map cards with OSM tile thumbnails and navigation deep links (Google Maps, Waze).
+
+• search_places — find restaurants, hotels, landmarks, businesses, etc.
+  Trigger phrases:
+  — Named search: "find a Japanese restaurant in BGC", "where is Ayala Museum?", "parking near NAIA"
+  — Nearby (GPS): "any malls nearby", "cafes near me", "what's around here?", "nearest pharmacy",
+    "restaurants near me", "any X near me / around here / in the area" — set category, OMIT near param
+  — Location reveal: "where am I?", "what's my location?", "where are we?" — call this tool so a
+    map card renders; also summarise the [MIKE'S CURRENT LOCATION] section in your text reply
+  — query: place name, type, or description (required — use category name if no other text)
+  — near: OMIT when Mike's GPS coordinates are in context (tool uses them automatically).
+    Only provide near when Mike explicitly names a different place: "restaurants in Makati" (≠ current loc)
+  — category: restaurant, cafe, bar, hotel, grocery, pharmacy, hospital, bank, atm, gas_station,
+    parking, gym, park, museum, mall, cinema, spa, salon, dentist, school, church
+  Results render as map cards with navigation chips — keep your text reply brief (1-2 sentences).
+
+• save_place — bookmark a place with optional notes/tags.
+  Use when Mike says: "save this", "remember this restaurant", "add to my places", "bookmark this".
+  Requires name + lat + lng (from a prior search_places result). Adds optional notes and tags.
+
+• get_saved_places — retrieve bookmarked places.
+  Use for: "what places have I saved?", "my saved restaurants", "favourite cafes I've bookmarked",
+  "where do I usually have client lunches?", "show my places".
+  Supports optional query/category filter.
+
 CHARTS & DIAGRAMS:
 Use Mermaid code blocks (```mermaid) to render diagrams directly in chat. Supports:
 • flowchart TD/LR — process flows, decision trees, pipelines
@@ -110,10 +184,10 @@ and Entire Travel Group. He is a randonneur and cyclist. He manages his health a
 
 [RELEVANT KNOWLEDGE]
 {second_brain_context}
-{gmail_section}{gcal_section}{tasks_section}{meetings_section}
+{gmail_section}{gcal_section}{tasks_section}{meetings_section}{contacts_section}
 [ACTIVE CONTEXT]
 Timezone: {user_timezone}
-{active_tasks_count} open tasks
+{location_section}{active_tasks_count} open tasks
 Last interaction: {last_seen}
 
 Always express dates and times in the user's timezone ({user_timezone}) unless explicitly asked otherwise.
@@ -267,6 +341,31 @@ async def _fetch_gcal_context(db: AsyncSession, user_id: str, tz_name: str = "As
         return ""
 
 
+async def _fetch_contacts_context(db: AsyncSession, user_id: str) -> str:
+    """Inject a brief contact database summary so the agent knows the scale at a glance."""
+    try:
+        from sqlalchemy import select, func, Integer, cast
+        from db.models import Contact
+        result = await db.execute(
+            select(
+                func.count(func.distinct(Contact.primary_email)).label("unique"),
+                func.sum(
+                    cast(Contact.is_other_contact == False, Integer)  # noqa: E712
+                ).label("saved"),
+            ).where(Contact.user_id == user_id)
+        )
+        row = result.one_or_none()
+        if not row or not row.unique:
+            return ""
+        unique = row.unique or 0
+        saved  = int(row.saved or 0)
+        other  = unique - saved
+        return f"\n[CONTACTS]\n{unique} unique contacts ({saved} saved, {other} other/unsaved).\n"
+    except Exception as exc:
+        log.warning("Contacts context fetch failed: %s", exc)
+        return ""
+
+
 async def assemble(
     user_id: str,
     query: str,
@@ -276,6 +375,8 @@ async def assemble(
     active_tasks_count: int = 0,
     last_seen: str = "First interaction",
     user_timezone: str = "Asia/Manila",
+    user_lat: Optional[float] = None,
+    user_lng: Optional[float] = None,
 ) -> str:
     """
     Build the system prompt for a conversation turn.
@@ -298,6 +399,7 @@ async def assemble(
     gcal_section = ""
     tasks_section = ""
     meetings_section = ""
+    contacts_section = ""
     user_tz = user_timezone
 
     if db is not None:
@@ -331,13 +433,14 @@ async def assemble(
                 pass
 
         if is_lightweight:
-            # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings list
+            # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings + contacts count
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
                 _fetch_gcal_context(db, user_id, user_tz),
                 _fetch_gmail_context(db, user_id),
                 _fetch_meetings_context(db, user_id, limit=5),
+                _fetch_contacts_context(db, user_id),
                 return_exceptions=True,
             )
             if len(results) > 1 and isinstance(results[1], str):
@@ -348,14 +451,17 @@ async def assemble(
                 gmail_section = results[3]
             if len(results) > 4 and isinstance(results[4], str):
                 meetings_section = results[4]
+            if len(results) > 5 and isinstance(results[5], str):
+                contacts_section = results[5]
         else:
-            # Tier 2/3: full context — tasks, email, calendar, memory, meetings
+            # Tier 2/3: full context — tasks, email, calendar, memory, meetings, contacts count
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
                 _fetch_gmail_context(db, user_id),
                 _fetch_gcal_context(db, user_id, user_tz),
                 _fetch_meetings_context(db, user_id, limit=7),
+                _fetch_contacts_context(db, user_id),
                 return_exceptions=True,
             )
             if len(results) > 1 and isinstance(results[1], str):
@@ -366,6 +472,35 @@ async def assemble(
                 gcal_section = results[3]
             if len(results) > 4 and isinstance(results[4], str):
                 meetings_section = results[4]
+            if len(results) > 5 and isinstance(results[5], str):
+                contacts_section = results[5]
+
+    # Build location section — reverse-geocode to human-readable when possible
+    location_section = ""
+    if user_lat is not None and user_lng is not None:
+        human_location = ""
+        try:
+            from connectors.places import PlacesClient as _PC
+            import asyncio as _asyncio
+            loop = _asyncio.get_event_loop()
+            geo = await loop.run_in_executor(
+                None, lambda: _PC().reverse_geocode(user_lat, user_lng)
+            )
+            if geo:
+                addr = geo.get("address") or geo.get("display_name", "")
+                human_location = f" — {addr}" if addr else ""
+        except Exception:
+            pass
+
+        location_section = (
+            f"[MIKE'S CURRENT LOCATION]\n"
+            f"GPS: {user_lat:.5f}, {user_lng:.5f}{human_location}\n"
+            f"• To answer 'where am I?' / 'what's my location?': call search_places so a map card renders. "
+            f"Also summarise the location above in plain text.\n"
+            f"• To answer 'any X nearby' / 'X near me' / 'X around here': call search_places with the "
+            f"matching category and OMIT the 'near' param — the tool auto-uses these GPS coordinates.\n"
+            f"• Never ask 'where are you?' — coordinates are already provided above.\n"
+        )
 
     return SYSTEM_TEMPLATE.format(
         capabilities_section=capabilities_section,
@@ -375,6 +510,8 @@ async def assemble(
         gcal_section=gcal_section,
         tasks_section=tasks_section,
         meetings_section=meetings_section,
+        contacts_section=contacts_section,
+        location_section=location_section,
         user_timezone=user_tz,
         active_tasks_count=active_tasks_count,
         last_seen=last_seen,

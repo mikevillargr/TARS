@@ -432,6 +432,288 @@ GENERATE_PDF_TOOL = {
 }
 
 
+LOOKUP_CONTACT_TOOL = {
+    "name": "lookup_contact",
+    "description": (
+        "Look up a single person in Mike's Google Contacts. "
+        "ALWAYS call this tool when Mike asks for ANY of the following about a person: "
+        "phone number, mobile number, email address, company, job title, or any other contact detail. "
+        "Trigger phrases: 'what's X's number', 'call X', 'X's phone', 'X's email', 'who is X', "
+        "'what company is X at', 'what's X's title', 'how do I reach X', 'contact details for X'. "
+        "Searches the local Google Contacts mirror (628+ contacts with phone numbers for most). "
+        "Falls back to a live Google search if no local match. "
+        "Returns: display name, organization, job title, primary email, primary phone number, "
+        "all phone numbers on file, and any TARS-saved context notes."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": (
+                    "Name, partial name, email address, or phone number of the person to look up. "
+                    "Examples: 'Sarah', 'ken@growth-rocket.com', '+639171234567', 'Tim from NCH'."
+                ),
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+
+SEARCH_CONTACTS_TOOL = {
+    "name": "search_contacts",
+    "description": (
+        "Search Mike's Google Contacts and return multiple matches — including phone numbers, "
+        "emails, organizations, and job titles for each result. "
+        "Use for: 'who works at Acme?', 'list contacts from NCH', 'how many contacts do I have?', "
+        "'everyone in marketing', 'who do I know at that company?', 'find all contacts with a phone number'. "
+        "Always returns the total unique contact count in the response header. "
+        "Leave query empty to browse all contacts. Use offset to paginate."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": (
+                    "Search term matched against name, email, organization, and phone number. "
+                    "Leave empty to list all contacts."
+                ),
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results to return. Default 25.",
+            },
+            "offset": {
+                "type": "integer",
+                "description": "Pagination offset for browsing large result sets. Default 0.",
+            },
+        },
+        "required": [],
+    },
+}
+
+
+CREATE_CONTACT_TOOL = {
+    "name": "create_contact",
+    "description": (
+        "Create a new contact in Mike's Google Contacts and sync it locally. "
+        "Use when Mike says 'add X to my contacts', 'save X as a contact', "
+        "'create a contact for X', or when approving a pending/discovered contact. "
+        "After creation the contact is immediately searchable via lookup_contact."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "Full name of the contact (required).",
+            },
+            "email": {
+                "type": "string",
+                "description": "Primary email address.",
+            },
+            "phone": {
+                "type": "string",
+                "description": "Primary phone number (include country code where known, e.g. +63917...).",
+            },
+            "organization": {
+                "type": "string",
+                "description": "Company or organization name.",
+            },
+            "job_title": {
+                "type": "string",
+                "description": "Job title or role.",
+            },
+            "notes": {
+                "type": "string",
+                "description": "Any notes about this person (saved to Google Contacts biography field).",
+            },
+        },
+        "required": ["name"],
+    },
+}
+
+
+UPDATE_CONTACT_TOOL = {
+    "name": "update_contact",
+    "description": (
+        "Update an existing contact in Mike's Google Contacts. "
+        "Use when Mike says 'update X's number', 'add a phone for X', 'change X's company', "
+        "'update X's details', or 'add notes about X'. "
+        "Identify the contact by name or email (query), then provide only the fields to change. "
+        "Unchanged fields are left as-is. Changes sync to Google Contacts immediately."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Name or email to identify which contact to update.",
+            },
+            "name": {
+                "type": "string",
+                "description": "New display name (only if renaming).",
+            },
+            "email": {
+                "type": "string",
+                "description": "New primary email address.",
+            },
+            "phone": {
+                "type": "string",
+                "description": "New primary phone number.",
+            },
+            "organization": {
+                "type": "string",
+                "description": "New company or organization.",
+            },
+            "job_title": {
+                "type": "string",
+                "description": "New job title.",
+            },
+            "notes": {
+                "type": "string",
+                "description": "Notes to set (replaces existing biography/notes field).",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+
+SEARCH_PLACES_TOOL = {
+    "name": "search_places",
+    "description": (
+        "Search for places, restaurants, hotels, landmarks, and businesses using OpenStreetMap. "
+        "Use when Mike asks: 'find a restaurant near X', 'where is Y?', 'good cafes in BGC', "
+        "'hotels near the airport', 'any malls nearby', 'restaurants near me', 'where am I?', "
+        "or any place/location search. Returns a map card with navigation links (Google Maps, Waze). "
+        "IMPORTANT: When Mike's GPS coordinates are available in context (MIKE'S CURRENT LOCATION), "
+        "OMIT the 'near' parameter — the tool uses his GPS automatically and gives accurate nearby results. "
+        "Only set 'near' when Mike explicitly names a DIFFERENT location from where he is."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": (
+                    "Place name, type, or description. "
+                    "For 'where am I?' use 'my location'. "
+                    "For nearby searches use the category name, e.g. 'mall', 'cafe', 'restaurant'. "
+                    "Examples: 'Japanese restaurant', 'Ayala Museum', 'McDonalds BGC', 'mall'."
+                ),
+            },
+            "near": {
+                "type": "string",
+                "description": (
+                    "Location bias — ONLY use when Mike names a specific DIFFERENT place, "
+                    "e.g. 'restaurants in Makati' (when he is not in Makati). "
+                    "OMIT entirely when Mike says 'near me', 'nearby', 'around here', or when "
+                    "GPS coordinates are already in the system context."
+                ),
+            },
+            "category": {
+                "type": "string",
+                "description": (
+                    "Optional category filter for nearby POI search. "
+                    "Valid values: restaurant, cafe, bar, hotel, grocery, pharmacy, hospital, "
+                    "bank, atm, gas_station, parking, gym, park, museum, mall, cinema, spa, "
+                    "salon, dentist, school, university, church."
+                ),
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results to return. Default 5.",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+SAVE_PLACE_TOOL = {
+    "name": "save_place",
+    "description": (
+        "Save a place to Mike's personal places list for quick retrieval later. "
+        "Use when Mike says 'save this place', 'bookmark this restaurant', 'remember this location', "
+        "or 'add this to my places'. Can also add notes and tags. "
+        "Saved places appear when Mike asks 'what places have I saved?' or 'my saved restaurants'."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "Name of the place.",
+            },
+            "address": {
+                "type": "string",
+                "description": "Street address or location description.",
+            },
+            "lat": {
+                "type": "number",
+                "description": "Latitude coordinate.",
+            },
+            "lng": {
+                "type": "number",
+                "description": "Longitude coordinate.",
+            },
+            "category": {
+                "type": "string",
+                "description": "Category (restaurant, cafe, hotel, etc.).",
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Tags for organisation, e.g. ['favourite', 'client-lunch', 'bgc'].",
+            },
+            "notes": {
+                "type": "string",
+                "description": "Optional notes about the place (e.g. 'great for client lunches', 'valet parking available').",
+            },
+            "osm_id": {
+                "type": "string",
+                "description": "OpenStreetMap ID (from a previous search_places result).",
+            },
+            "osm_type": {
+                "type": "string",
+                "description": "OSM element type: node, way, or relation.",
+            },
+        },
+        "required": ["name", "lat", "lng"],
+    },
+}
+
+GET_SAVED_PLACES_TOOL = {
+    "name": "get_saved_places",
+    "description": (
+        "Retrieve Mike's saved/bookmarked places. "
+        "Use when Mike asks: 'what places have I saved?', 'show my saved restaurants', "
+        "'my favourite cafes', 'places I bookmarked', or 'where do I usually eat?'. "
+        "Returns a map card for each saved place with navigation links."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Optional search term to filter saved places by name, address, or notes.",
+            },
+            "category": {
+                "type": "string",
+                "description": "Optional category to filter by (restaurant, cafe, hotel, etc.).",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results to return. Default 20.",
+            },
+        },
+        "required": [],
+    },
+}
+
+
 # ─── Tier routing tables ─────────────────────────────────────────────────────
 
 # Tier 2 display label derived from the model name (strip org prefix for brevity)

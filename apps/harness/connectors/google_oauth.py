@@ -1,5 +1,5 @@
 """
-Shared Google OAuth2 helpers for Gmail and Google Calendar.
+Shared Google OAuth2 helpers for Gmail, Google Calendar, and Google People.
 Uses direct HTTP calls to avoid google_auth_oauthlib auto-adding PKCE,
 which breaks when auth URL and token exchange happen in separate requests.
 """
@@ -24,6 +24,11 @@ GCAL_SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/calendar.events",
 ]
+PEOPLE_SCOPES = [
+    "https://www.googleapis.com/auth/contacts",                # full read/write
+    "https://www.googleapis.com/auth/contacts.other.readonly", # otherContacts.list (people you've emailed)
+    # directory.readonly omitted — requires Google Workspace; breaks OAuth for personal accounts
+]
 
 _REDIRECT_BASE = "https://tarsmv.duckdns.org"
 _REDIRECT_BASE_LOCAL = "http://localhost:8000"
@@ -31,12 +36,28 @@ _TOKEN_URI = "https://oauth2.googleapis.com/token"
 _AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
 
 
+def _scopes(connector: str) -> list[str]:
+    if connector == "gmail":
+        return GMAIL_SCOPES
+    if connector == "google_people":
+        return PEOPLE_SCOPES
+    return GCAL_SCOPES
+
+
 def _client_id(connector: str) -> str:
-    return settings.gmail_client_id if connector == "gmail" else settings.gcal_client_id
+    if connector == "gmail":
+        return settings.gmail_client_id
+    if connector == "google_people":
+        return settings.google_people_client_id
+    return settings.gcal_client_id
 
 
 def _client_secret(connector: str) -> str:
-    return settings.gmail_client_secret if connector == "gmail" else settings.gcal_client_secret
+    if connector == "gmail":
+        return settings.gmail_client_secret
+    if connector == "google_people":
+        return settings.google_people_client_secret
+    return settings.gcal_client_secret
 
 
 def _redirect_uri(connector: str, via_production: bool) -> str:
@@ -46,12 +67,11 @@ def _redirect_uri(connector: str, via_production: bool) -> str:
 
 def get_auth_url(connector: str, via_production: bool = True) -> str:
     """Build Google auth URL without PKCE so token exchange works across requests."""
-    scopes = GMAIL_SCOPES if connector == "gmail" else GCAL_SCOPES
     params = {
         "response_type": "code",
         "client_id": _client_id(connector),
         "redirect_uri": _redirect_uri(connector, via_production),
-        "scope": " ".join(scopes),
+        "scope": " ".join(_scopes(connector)),
         "access_type": "offline",
         "prompt": "consent",
     }
@@ -71,14 +91,13 @@ async def exchange_code(connector: str, code: str, via_production: bool = True) 
         resp.raise_for_status()
         data = resp.json()
 
-    scopes = GMAIL_SCOPES if connector == "gmail" else GCAL_SCOPES
     return {
         "token": data.get("access_token"),
         "refresh_token": data.get("refresh_token"),
         "token_uri": _TOKEN_URI,
         "client_id": _client_id(connector),
         "client_secret": _client_secret(connector),
-        "scopes": scopes,
+        "scopes": _scopes(connector),
     }
 
 
