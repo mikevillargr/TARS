@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import json as _json
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select, desc, update as sa_update, delete as sa_delete, func
@@ -51,6 +51,14 @@ class ConversationOut(BaseModel):
         # Cap title at 60 chars regardless of what's stored in DB
         if self.title and len(self.title) > 60:
             object.__setattr__(self, "title", self.title[:60])
+
+
+class ConversationListOut(BaseModel):
+    chats: List[ConversationOut]
+    total: int
+    page: int
+    page_size: int
+    has_more: bool
 
 
 class MessageOut(BaseModel):
@@ -307,11 +315,14 @@ async def _get_conversation(conv_id: str, user_id: str, db: AsyncSession) -> Con
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.get("/conversations", response_model=List[ConversationOut])
+@router.get("/conversations", response_model=ConversationListOut)
 async def list_conversations(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
+    page: int = Query(default=1, ge=1, description="Page number, 1-based"),
+    page_size: int = Query(default=50, ge=1, le=200, description="Results per page (max 200)"),
 ):
+    """List conversations ordered by most recent activity, with page/page_size pagination."""
     # Sort by most recent activity: join to messages and order by max(message.created_at),
     # falling back to conversation.created_at for new conversations with no messages yet.
     latest_msg = (
@@ -319,14 +330,27 @@ async def list_conversations(
         .group_by(Message.conversation_id)
         .subquery()
     )
-    result = await db.execute(
+    base_query = (
         select(Conversation)
         .outerjoin(latest_msg, Conversation.id == latest_msg.c.conversation_id)
         .where(Conversation.user_id == user_id)
         .order_by(desc(func.coalesce(latest_msg.c.last_at, Conversation.created_at)))
-        .limit(50)
     )
-    return result.scalars().all()
+    total_result = await db.execute(
+        select(func.count()).select_from(base_query.subquery())
+    )
+    total = total_result.scalar_one()
+    result = await db.execute(
+        base_query.offset((page - 1) * page_size).limit(page_size)
+    )
+    chats = result.scalars().all()
+    return ConversationListOut(
+        chats=chats,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_more=(page * page_size) < total,
+    )
 
 
 @router.post("/conversations", response_model=ConversationOut, status_code=201)
