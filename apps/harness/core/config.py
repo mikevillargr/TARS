@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     gcal_client_id: str = ""
     gcal_client_secret: str = ""
 
+    # Whisper voice transcription (faster-whisper, CPU)
+    # Options: tiny, tiny.en, small, small.en, medium, medium.en, large-v3
+    whisper_model: str = "small"
+
     claude_code_path: str = "/usr/local/bin/claude"
     repos_base_path: str = "/home/tars/repos"
 

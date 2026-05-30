@@ -16,6 +16,7 @@ from api.routes import cron, connectors, memory
 from api.routes import settings as settings_route
 from api.routes import preview as preview_route
 from api.routes import search as search_route
+from api.routes import transcribe as transcribe_route
 from core.config import settings
 
 log = logging.getLogger(__name__)
@@ -151,3 +152,4 @@ app.include_router(memory.router, prefix="/api/memory")
 app.include_router(settings_route.router, prefix="/api/settings")
 app.include_router(preview_route.router, prefix="/api")
 app.include_router(search_route.router, prefix="/api/search")
+app.include_router(transcribe_route.router, prefix="/api")

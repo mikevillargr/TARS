@@ -13,6 +13,7 @@ import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
+import { useVoiceInput } from "@/hooks/useVoiceInput"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -491,6 +492,10 @@ export default function ChatPage() {
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   const [inputValue, setInputValue]                 = useState("")
   const [attachments, setAttachments]               = useState<File[]>([])
+  // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
+  const [pendingVoiceSend, setPendingVoiceSend]     = useState<string | null>(null)
+  const voice = useVoiceInput()
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
   const fileInputRef                                = useRef<HTMLInputElement>(null)
   const cameraInputRef                              = useRef<HTMLInputElement>(null)
@@ -660,6 +665,54 @@ export default function ChatPage() {
     setStreaming(null)
     setBusy(false)
   }
+
+  // ── Voice input handlers ──────────────────────────────────────────
+
+  // In-chat mic: toggle recording, fill textarea with transcript
+  const handleMicClick = useCallback(async () => {
+    if (voice.state === "recording") {
+      const text = await voice.stopAndTranscribe()
+      if (text) {
+        setInputValue((prev) => prev ? `${prev} ${text}` : text)
+        requestAnimationFrame(() => {
+          const el = textareaRef.current
+          if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, 180) + "px" }
+        })
+      }
+    } else if (voice.state === "idle" || voice.state === "error") {
+      await voice.startRecording()
+    }
+  }, [voice])
+
+  // Mobile: tap mic to record a new chat session via voice
+  const handleMobileVoiceStart = useCallback(async () => {
+    await voice.startRecording()
+  }, [voice])
+
+  const handleMobileVoiceStop = useCallback(async () => {
+    const text = await voice.stopAndTranscribe()
+    if (!text) return
+    try {
+      const conv = await apiPost<Conversation>("/chat/conversations")
+      setConversations((prev) => [conv, ...prev])
+      setActiveChatId(conv.id)
+      setMobileConvOpen(false)
+      // pendingVoiceSend is watched by a useEffect that fires handleSend
+      setInputValue(text)
+      setPendingVoiceSend(text)
+    } catch {
+      setInputValue(text)
+    }
+  }, [voice])
+
+  // Auto-send when pendingVoiceSend is ready and activeChatId is set
+  useEffect(() => {
+    if (!pendingVoiceSend || !activeChatId || busy) return
+    setPendingVoiceSend(null)
+    // handleSend reads inputValue from closure — ensure it's set first
+    setTimeout(() => handleSend(), 0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingVoiceSend, activeChatId])
 
   async function handleDeleteConversation(convId: string, e: React.MouseEvent) {
     e.stopPropagation()  // don't select the conversation when clicking delete
@@ -1020,6 +1073,26 @@ export default function ChatPage() {
             >
               <Menu size={18} />
             </button>
+            {/* Mobile: voice new-chat — tap mic, speak, sends as new conversation */}
+            <button
+              onClick={voice.state === "recording" ? handleMobileVoiceStop : handleMobileVoiceStart}
+              disabled={voice.state === "transcribing" || busy}
+              className="lg:hidden p-1.5 rounded-md shrink-0 relative"
+              title={voice.state === "recording" ? "Tap to send" : "New voice chat"}
+              style={{
+                color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-faint)",
+                opacity: voice.state === "transcribing" ? 0.5 : 1,
+              }}
+            >
+              {voice.state === "transcribing"
+                ? <Loader2 size={17} className="animate-spin" />
+                : <Mic size={17} className={voice.state === "recording" ? "animate-pulse" : ""} />
+              }
+              {voice.state === "recording" && (
+                <span className="absolute inset-0 rounded-md animate-ping"
+                  style={{ backgroundColor: "var(--c-rose)", opacity: 0.15 }} />
+              )}
+            </button>
             {isConvListCollapsed && (
               <button
                 onClick={() => setConvListCollapsed(false)}
@@ -1113,6 +1186,7 @@ export default function ChatPage() {
               }}
             >
               <textarea
+                ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => {
                   setInputValue(e.target.value)
@@ -1154,12 +1228,26 @@ export default function ChatPage() {
                     <Camera size={16} />
                   </label>
                   <button
-                    title="Voice memo"
-                    className="p-1.5 rounded-lg transition-colors"
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                    title={voice.state === "recording" ? "Stop recording" : voice.state === "transcribing" ? "Transcribing…" : "Voice input"}
+                    onClick={handleMicClick}
+                    disabled={voice.state === "transcribing" || busy}
+                    className="p-1.5 rounded-lg transition-colors relative"
+                    style={{
+                      color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-faint)",
+                      opacity: voice.state === "transcribing" || busy ? 0.4 : 1,
+                    }}
+                    onMouseEnter={e => { if (voice.state !== "recording") (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
                   >
-                    <Mic size={16} />
+                    {voice.state === "transcribing"
+                      ? <Loader2 size={16} className="animate-spin" />
+                      : <Mic size={16} className={voice.state === "recording" ? "animate-pulse" : ""} />
+                    }
+                    {/* Pulsing ring when recording */}
+                    {voice.state === "recording" && (
+                      <span className="absolute inset-0 rounded-lg animate-ping"
+                        style={{ backgroundColor: "var(--c-rose)", opacity: 0.2 }} />
+                    )}
                   </button>
                 </div>
 
