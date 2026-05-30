@@ -33,10 +33,6 @@ if [[ "$CHANGED" == "web" || "$CHANGED" == "both" ]]; then
   cp -r .next/static .next/standalone/apps/web/.next/static
   cp -r public       .next/standalone/apps/web/public
 
-  # Sync static assets to nginx's host-disk alias path
-  # (nginx serves /_next/static/ directly from disk for performance; must stay in sync)
-  cp -r .next/static /opt/tars/apps/web/.next/static
-
   echo "==> Restarting web"
   pm2 restart tars-web
 fi
