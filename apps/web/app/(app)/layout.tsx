@@ -11,6 +11,7 @@ import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
 import { useTheme } from "@/components/ThemeProvider"
 import { CommandPalette } from "@/components/shell/CommandPalette"
+import { ConfirmProvider } from "@/components/ui/confirm-dialog"
 
 // Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
 function BottomTabBar() {
@@ -109,6 +110,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
+    <ConfirmProvider>
     <SidebarProvider>
       <AppSidebar />
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
@@ -240,5 +242,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Global Command Palette */}
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
     </SidebarProvider>
+    </ConfirmProvider>
   )
 }

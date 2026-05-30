@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { Database, Search, Trash2, Zap, Plus, X } from "lucide-react"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 interface Memory {
   id: string
@@ -18,6 +19,7 @@ const DOMAINS = ["All", "work", "personal", "cycling", "client", "health"]
 const SOURCES = ["All", "conversation", "meeting", "email", "manual"]
 
 export default function MemoryPage() {
+  const confirm = useConfirm()
   const [memories, setMemories]           = useState<Memory[]>([])
   const [loading, setLoading]             = useState(true)
   const [domainFilter, setDomainFilter]   = useState("All")
@@ -63,6 +65,16 @@ export default function MemoryPage() {
   }, [query, loadAll])
 
   const handleDelete = async (id: string) => {
+    const mem = memories.find((m) => m.id === id)
+    const ok = await confirm({
+      title: "Delete memory?",
+      description: mem?.content
+        ? `"${mem.content.slice(0, 100)}${mem.content.length > 100 ? "…" : ""}" will be permanently removed.`
+        : "This memory will be permanently removed.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     await apiDelete(`/memory/memories/${id}`)
     setMemories((prev) => prev.filter((m) => m.id !== id))
   }

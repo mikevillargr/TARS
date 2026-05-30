@@ -10,6 +10,7 @@ import {
   ChevronDown, Loader2, Trash2, Eye, Brain, ListTodo, Check,
 } from "lucide-react"
 import { apiGet, apiDelete } from "@/lib/api-client"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -110,12 +111,18 @@ function GridCard({
   onDelete: (id: string) => void
 }) {
   const [hovered, setHovered] = useState(false)
-  const [confirmDel, setConfirmDel] = useState(false)
   const router = useRouter()
+  const confirm = useConfirm()
 
   async function handleDelete(e: React.MouseEvent) {
     e.stopPropagation()
-    if (!confirmDel) { setConfirmDel(true); return }
+    const ok = await confirm({
+      title: "Delete artifact?",
+      description: `"${artifact.filename}" will be permanently removed.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     try {
       await apiDelete(`/artifacts/${artifact.id}`)
       onDelete(artifact.id)
@@ -126,7 +133,7 @@ function GridCard({
     <button
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setConfirmDel(false) }}
+      onMouseLeave={() => setHovered(false)}
       className="card text-left flex flex-col cursor-pointer transition-shadow hover:shadow-md relative overflow-hidden"
       style={{ padding: "0.875rem", height: "10rem", outline: selected ? "2px solid var(--c-moss)" : "none", outlineOffset: "1px" }}
     >
@@ -163,10 +170,10 @@ function GridCard({
           </button>
           <button
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            style={{ backgroundColor: confirmDel ? "var(--c-rose)" : "var(--c-rose-soft)", color: confirmDel ? "#fff" : "var(--c-rose)" }}
+            style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }}
             onClick={handleDelete}
           >
-            <Trash2 size={12} /> {confirmDel ? "Confirm" : "Delete"}
+            <Trash2 size={12} /> Delete
           </button>
         </div>
       )}
@@ -188,9 +195,9 @@ function ArtifactModal({
   onDeleted: (id: string) => void
 }) {
   const router = useRouter()
+  const confirm = useConfirm()
   const [detail, setDetail]           = useState<ArtifactDetail | null>(null)
   const [loading, setLoading]         = useState(false)
-  const [confirmDelete, setConfirm]   = useState(false)
   const [activeTab, setActiveTab]     = useState<PreviewTab>("preview")
   const [preview, setPreview]         = useState<PreviewResult | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -260,7 +267,6 @@ function ArtifactModal({
     setLoading(true)
     setDetail(null)
     setPreview(null)
-    setConfirm(false)
     setActiveTab("preview")
 
     apiGet<ArtifactDetail>(`/artifacts/${artifactId}`)
@@ -296,6 +302,15 @@ function ArtifactModal({
 
   async function handleDelete() {
     if (!artifactId) return
+    const ok = await confirm({
+      title: "Delete artifact?",
+      description: detail?.filename
+        ? `"${detail.filename}" will be permanently removed.`
+        : "This artifact will be permanently removed.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     await apiDelete(`/artifacts/${artifactId}`)
     onDeleted(artifactId)
     onClose()
@@ -598,23 +613,15 @@ function ArtifactModal({
 
               {/* Delete */}
               <div className="pt-3 border-t" style={{ borderColor: "var(--c-border-faint)" }}>
-                {!confirmDelete ? (
-                  <button
-                    onClick={() => setConfirm(true)}
-                    className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md"
-                    style={{ color: "var(--c-ink-faint)" }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-rose)" }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)" }}
-                  >
-                    <Trash2 size={12} /> Delete artifact
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>Delete permanently?</span>
-                    <button onClick={handleDelete} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-rose)", color: "#fff" }}>Yes</button>
-                    <button onClick={() => setConfirm(false)} className="text-xs px-2 py-1 rounded-md" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}>No</button>
-                  </div>
-                )}
+                <button
+                  onClick={handleDelete}
+                  className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md"
+                  style={{ color: "var(--c-ink-faint)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-rose)" }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)" }}
+                >
+                  <Trash2 size={12} /> Delete artifact
+                </button>
               </div>
             </div>
           )}

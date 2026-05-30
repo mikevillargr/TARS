@@ -14,6 +14,7 @@ import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -495,6 +496,7 @@ export default function ChatPage() {
   // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
   const [pendingVoiceSend, setPendingVoiceSend]     = useState<string | null>(null)
   const voice = useVoiceInput()
+  const confirm = useConfirm()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
   const fileInputRef                                = useRef<HTMLInputElement>(null)
@@ -694,6 +696,16 @@ export default function ChatPage() {
 
   async function handleDeleteConversation(convId: string, e: React.MouseEvent) {
     e.stopPropagation()  // don't select the conversation when clicking delete
+    const conv = conversations.find(c => c.id === convId)
+    const ok = await confirm({
+      title: "Delete conversation?",
+      description: conv?.title
+        ? `"${conv.title.slice(0, 80)}" will be permanently removed.`
+        : "This conversation will be permanently removed.",
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     try {
       await apiDelete(`/chat/conversations/${convId}`)
       setConversations(prev => {
