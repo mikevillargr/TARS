@@ -590,6 +590,11 @@ async def send_message(
                 _user_lat = location_lat
                 _user_lng = location_lng
 
+                async def _emit_card(event: dict) -> None:
+                    """Emit a card event to the SSE queue AND record it for persistence."""
+                    tool_results.append(event)
+                    await queue.put(sse_event(event))
+
                 async def _tool_executor(name: str, tool_input: dict) -> str:
                     if name == "create_task":
                         task = Task(
@@ -789,10 +794,10 @@ async def send_message(
                                                     "source": "google_live",
                                                 })
                                             if live_cards:
-                                                await queue.put(sse_event({
+                                                await _emit_card({
                                                     "type": "contact_card",
                                                     "contacts": live_cards,
-                                                }))
+                                                })
                                             return f"Live Google search results for '{query}':\n" + "\n".join(lines)
                                     except Exception as exc:
                                         log.warning("Live People API search failed: %s", exc)
@@ -828,10 +833,10 @@ async def send_message(
                                     "is_other_contact": c.is_other_contact,
                                 })
                             if cards:
-                                await queue.put(sse_event({
+                                await _emit_card({
                                     "type": "contact_card",
                                     "contacts": cards,
-                                }))
+                                })
                             if query:
                                 header = f"Found {len(matches)} contact(s) matching '{query}' (total unique contacts: {total_unique}):"
                             else:
@@ -1288,7 +1293,7 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "docx"}))
+                            await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "docx"})
                             return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_document failed: %s", exc)
@@ -1338,7 +1343,7 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pptx"}))
+                            await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pptx"})
                             return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_presentation failed: %s", exc)
@@ -1389,7 +1394,7 @@ async def send_message(
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
-                            await queue.put(sse_event({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pdf"}))
+                            await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pdf"})
                             return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
                         except Exception as exc:
                             log.warning("generate_pdf failed: %s", exc)
@@ -1456,7 +1461,7 @@ async def send_message(
                                 }
                                 for p in results
                             ]
-                            await queue.put(sse_event({"type": "place_card", "places": cards}))
+                            await _emit_card({"type": "place_card", "places": cards})
 
                             lines = []
                             for p in results:
@@ -1490,7 +1495,7 @@ async def send_message(
                             await bg_db.commit()
 
                             # Emit card for the saved place
-                            await queue.put(sse_event({
+                            await _emit_card({
                                 "type": "place_card",
                                 "places": [{
                                     "name":     p.name,
@@ -1505,7 +1510,7 @@ async def send_message(
                                     "notes":    p.notes,
                                     "tags":     p.tags,
                                 }],
-                            }))
+                            })
 
                             msg = f"Saved '{p.name}'"
                             if p.address:
@@ -1569,7 +1574,7 @@ async def send_message(
                                 }
                                 for pl in places
                             ]
-                            await queue.put(sse_event({"type": "place_card", "places": cards}))
+                            await _emit_card({"type": "place_card", "places": cards})
 
                             lines = [f"• {pl.name}" + (f" — {pl.address}" if pl.address else "") for pl in places]
                             return f"Your saved places ({len(places)}):\n" + "\n".join(lines)
