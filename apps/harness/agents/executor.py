@@ -10,6 +10,8 @@ Git workflow per job:
   3. git add -A && git commit
   4. git push origin agent/<job_id[:8]>
   5. gh pr create --base dev  →  PR URL stored in DB + shown in UI
+  6. gh pr merge → auto-merge to dev
+  7. deploy.sh web|harness|both dev  →  live site updated
 
 Typed event schema (all dicts with a "type" field):
   text_chunk        — Claude's streamed text
@@ -19,6 +21,8 @@ Typed event schema (all dicts with a "type" field):
   approval_required — destructive cmd detected   {"command": str, "reason": str}
   approval_granted  — user approved              {"command": str}
   approval_rejected — user rejected
+  deploy_started    — deploy kicked off          {"target": "web"|"harness"|"both"}
+  deploy_completed  — deploy finished            {"target": str, "success": bool, "output": str}
   completed         — done                       {"summary": str, "pr_url": str|None}
   error             — agent failed               {"message": str}
 """
@@ -220,11 +224,84 @@ async def run(
     pr_url = await _commit_and_push(cwd=cwd, job_id=job_id, branch=branch,
                                     summary=summary_text or instruction[:120])
 
+    # ── 4. Merge PR → detect changes → auto-deploy ────────────────────────────
+    async for deploy_event in _auto_deploy(cwd=cwd, job_id=job_id, pr_url=pr_url):
+        yield deploy_event
+
     yield {
         "type": "completed",
         "summary": summary_text[:500] if summary_text else "Agent completed.",
         "pr_url": pr_url,
         "branch": branch,
+    }
+
+
+# ── Auto-deploy helper ────────────────────────────────────────────────────────
+
+async def _auto_deploy(*, cwd: str, job_id: str, pr_url: Optional[str]):
+    """
+    After a sub-agent job completes:
+      1. Merge the PR to dev (if one was created)
+      2. Detect which parts of the codebase changed
+      3. Run deploy.sh <target> dev
+      4. Yield deploy_started / deploy_completed events
+
+    Yields nothing if there are no relevant changes.
+    """
+    # Merge PR if one was created, then pull the merge commit
+    if pr_url:
+        yield {"type": "text_chunk", "text": "\nMerging PR to dev…\n"}
+        merge = await _run_git(
+            ["gh", "pr", "merge", pr_url, "--merge", "--delete-branch", "--yes"],
+            cwd=cwd, timeout=30,
+        )
+        if merge.returncode != 0:
+            log.warning("Job %s: PR merge failed (%s) — continuing with deploy anyway",
+                        job_id, merge.stderr.strip())
+
+    # Always ensure we're on dev with latest
+    await _run_git(["git", "checkout", "dev"], cwd=cwd)
+    await _run_git(["git", "pull", "--ff-only", "origin", "dev"], cwd=cwd)
+
+    # Detect what changed in the last commit
+    diff = await _run_git(["git", "diff", "HEAD~1..HEAD", "--name-only"], cwd=cwd)
+    changed = [p for p in diff.stdout.strip().splitlines() if p]
+
+    if not changed:
+        log.info("Job %s: no changed files detected — skipping deploy", job_id)
+        return
+
+    has_web     = any(p.startswith("apps/web/") for p in changed)
+    has_harness = any(p.startswith("apps/harness/") for p in changed)
+
+    if not has_web and not has_harness:
+        log.info("Job %s: changes only outside web/harness — skipping deploy", job_id)
+        return
+
+    target = "both" if (has_web and has_harness) else ("web" if has_web else "harness")
+    yield {"type": "deploy_started", "target": target}
+
+    # Run deploy script (handles git pull, build, static copy, pm2 restart)
+    deploy = await asyncio.to_thread(
+        subprocess.run,
+        ["bash", f"{cwd}/infrastructure/scripts/deploy.sh", target, "dev"],
+        cwd=cwd, capture_output=True, text=True, timeout=300,
+        env=_gh_env(),
+    )
+    success = deploy.returncode == 0
+    raw_output = (deploy.stdout + deploy.stderr).strip()
+    output = raw_output[-1000:] if len(raw_output) > 1000 else raw_output
+
+    if success:
+        log.info("Job %s: deploy (%s) succeeded", job_id, target)
+    else:
+        log.warning("Job %s: deploy (%s) failed:\n%s", job_id, target, output)
+
+    yield {
+        "type": "deploy_completed",
+        "target": target,
+        "success": success,
+        "output": output,
     }
 
 

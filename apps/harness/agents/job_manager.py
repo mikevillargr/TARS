@@ -199,6 +199,28 @@ async def _run_job(job_id: str, db_session_factory: Any) -> None:
         asyncio.create_task(_cleanup_buffer_later(job_id, delay=300))
 
 
+async def _notify_chat(job_id: str, message: str, db_session_factory: Any) -> None:
+    """Insert a TARS assistant message into the originating conversation."""
+    try:
+        async with db_session_factory() as db:
+            from sqlalchemy import select
+            from db.models import AgentJob, Message
+            job = (await db.execute(select(AgentJob).where(AgentJob.id == job_id))).scalar_one_or_none()
+            if not job or not job.conversation_id:
+                return
+            msg = Message(
+                conversation_id=job.conversation_id,
+                role="assistant",
+                content=message,
+                model_used="system",
+            )
+            db.add(msg)
+            await db.commit()
+            log.info("Job %s: notified chat conversation %s", job_id, job.conversation_id)
+    except Exception as exc:
+        log.warning("Job %s: failed to notify chat: %s", job_id, exc)
+
+
 async def _run_subagent(
     job_id: str,
     instruction: str,
@@ -208,6 +230,8 @@ async def _run_subagent(
 ) -> None:
     from agents import approval as _approval, executor as _executor
     gate = _approval.get_or_create(job_id)
+
+    _deploy_result: Optional[dict] = None  # track deploy outcome for chat notification
 
     async for event in _executor.run(
         job_id=job_id,
@@ -235,6 +259,9 @@ async def _run_subagent(
                     row.status = "running" if event["type"] == "approval_granted" else "failed"
                     await db.commit()
 
+        elif event["type"] == "deploy_completed":
+            _deploy_result = event
+
         elif event["type"] == "completed":
             async with db_session_factory() as db:
                 from sqlalchemy import select
@@ -247,6 +274,24 @@ async def _run_subagent(
                         row.branch = event["branch"]
                     row.output = event.get("summary", "")
                     await db.commit()
+
+            # Notify the originating chat conversation
+            pr_url = event.get("pr_url")
+            if _deploy_result:
+                if _deploy_result.get("success"):
+                    notify_msg = f"✅ Agent job deployed ({_deploy_result['target']})."
+                    if pr_url:
+                        notify_msg += f" PR: {pr_url}"
+                else:
+                    notify_msg = (
+                        f"⚠️ Agent job finished but deploy failed ({_deploy_result['target']}). "
+                        "Check Agent Jobs for details."
+                    )
+            else:
+                notify_msg = "✅ Agent job completed."
+                if pr_url:
+                    notify_msg += f" PR: {pr_url}"
+            await _notify_chat(job_id, notify_msg, db_session_factory)
 
         await broadcast(job_id, event)
 
@@ -328,6 +373,7 @@ async def _run_evolutionarist(
             gate = _approval.get_or_create(sub_job_id)
 
             sub_result = "Sub-agent completed."
+            sub_deploy_result: Optional[dict] = None
             async for event in _executor.run(
                 job_id=sub_job_id,
                 instruction=sub_instruction,
@@ -337,7 +383,11 @@ async def _run_evolutionarist(
                 enriched = {**event, "sub_job_id": sub_job_id, "sub_agent_type": sub_type}
                 await broadcast(sub_job_id, event)
                 await broadcast(job_id, enriched)
-                if event["type"] == "completed":
+
+                if event["type"] == "deploy_completed":
+                    sub_deploy_result = event
+
+                elif event["type"] == "completed":
                     sub_result = event.get("summary", "Sub-agent completed.")
                     async with db_session_factory() as db:
                         from sqlalchemy import select
@@ -352,6 +402,24 @@ async def _run_evolutionarist(
                             row.status = "completed"
                             row.completed_at = datetime.now(timezone.utc)
                             await db.commit()
+
+                    # Notify originating chat for the sub-job
+                    pr_url = event.get("pr_url")
+                    if sub_deploy_result:
+                        if sub_deploy_result.get("success"):
+                            sub_notify = f"✅ Agent job deployed ({sub_deploy_result['target']})."
+                            if pr_url:
+                                sub_notify += f" PR: {pr_url}"
+                        else:
+                            sub_notify = (
+                                f"⚠️ Agent job finished but deploy failed ({sub_deploy_result['target']}). "
+                                "Check Agent Jobs for details."
+                            )
+                    else:
+                        sub_notify = "✅ Agent job completed."
+                        if pr_url:
+                            sub_notify += f" PR: {pr_url}"
+                    await _notify_chat(sub_job_id, sub_notify, db_session_factory)
 
             _approval.cleanup(sub_job_id)
 

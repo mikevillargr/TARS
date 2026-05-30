@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import {
   AlertCircle, Check, ChevronDown, ChevronRight, ExternalLink,
   FileText, Terminal, Loader2, CheckCircle, XCircle, GitPullRequest,
-  Cpu,
+  Cpu, Rocket,
 } from "lucide-react"
 import { TarsWebSocket, getWsToken } from "@/lib/websocket"
 
@@ -19,6 +19,8 @@ export type AgentEvent =
   | { type: "approval_granted"; command: string }
   | { type: "approval_rejected" }
   | { type: "release_approval"; version: string; notes: string[]; commits: string; diff_stat: string }
+  | { type: "deploy_started"; target: string }
+  | { type: "deploy_completed"; target: string; success: boolean; output: string }
   | { type: "completed"; summary: string; pr_url?: string; version?: string }
   | { type: "error"; message: string }
   | { type: "agent_stopped"; reason: string }
@@ -82,7 +84,8 @@ export default function AgentJobStream({ jobId, harnessUrl: harnessUrlProp, onAp
         const eventTypes = [
           "text_chunk", "thinking", "tool_start", "tool_end",
           "approval_required", "approval_granted", "approval_rejected",
-          "release_approval", "completed", "error", "agent_stopped",
+          "release_approval", "deploy_started", "deploy_completed",
+          "completed", "error", "agent_stopped",
         ]
         // The WS class dispatches msg.data if present, else the whole msg.
         // For agent events the server sends the full event object (no nesting).
@@ -282,6 +285,17 @@ function EventRow({
         </div>
       )
 
+    case "deploy_started":
+      return (
+        <div className="flex items-center gap-1.5 mt-1" style={{ color: "#d4a050" }}>
+          <Loader2 size={11} className="animate-spin" />
+          <span>Deploying <code className="text-[11px]">{event.target}</code>…</span>
+        </div>
+      )
+
+    case "deploy_completed":
+      return <DeployCompletedRow event={event} />
+
     case "completed":
       return (
         <div className="flex flex-col gap-1 mt-1 pt-2 border-t" style={{ borderColor: "#3a3530" }}>
@@ -422,6 +436,40 @@ function ReleaseApprovalCard({ version, notes, commits, onApprove, onCancel }: {
           Cancel
         </button>
       </div>
+    </div>
+  )
+}
+
+// ── Deploy completed row ───────────────────────────────────────────────────────
+
+function DeployCompletedRow({ event }: { event: Extract<AgentEvent, { type: "deploy_completed" }> }) {
+  const [showOutput, setShowOutput] = useState(false)
+  return (
+    <div className="flex flex-col gap-0.5 mt-1">
+      <div className="flex items-center gap-1.5" style={{ color: event.success ? "#6db890" : "#e07070" }}>
+        {event.success ? <Rocket size={11} /> : <XCircle size={11} />}
+        <span className="font-medium">
+          {event.success ? "Deployed ✓" : "Deploy failed"}{" "}
+          <code className="text-[11px] opacity-80">({event.target})</code>
+        </span>
+      </div>
+      {!event.success && event.output && (
+        <div className="pl-4">
+          <button
+            onClick={() => setShowOutput(v => !v)}
+            className="flex items-center gap-1 text-[11px] opacity-60 hover:opacity-100"
+            style={{ color: "#e07070" }}
+          >
+            {showOutput ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
+            {showOutput ? "Hide output" : "Show output"}
+          </button>
+          {showOutput && (
+            <pre className="text-[10px] opacity-60 mt-1 overflow-x-auto" style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+              {event.output}
+            </pre>
+          )}
+        </div>
+      )}
     </div>
   )
 }
