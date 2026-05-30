@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     repos_base_path: str = "/home/tars/repos"
     # Path to the TARS repo root — differs between local dev and VPS
     tars_repo_path: str = "/opt/tars"
+    # Public URL of the TARS app — used in tool responses / system prompt
+    tars_app_url: str = "http://localhost:3000"
 
 
 settings = Settings()
