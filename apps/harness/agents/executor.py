@@ -49,8 +49,39 @@ _DESTRUCTIVE_PATTERNS = [
     re.compile(r"\bTRUNCATE\b", re.IGNORECASE),
 ]
 
+# Git/gh write operations that the harness owns — agent must NOT run these.
+# (Read-only ops like status/log/diff/show/branch -l are allowed.)
+_FORBIDDEN_GIT_PATTERNS = [
+    re.compile(r"\bgit\s+(commit|push|checkout|switch|merge|rebase|reset|tag|stash|cherry-pick|add|rm|mv|restore|clean|fetch|pull|apply|am|revert|init)\b"),
+    re.compile(r"\bgh\s+pr\s+(create|merge|edit|close|review|ready|reopen)\b"),
+    re.compile(r"\bgh\s+repo\s+(clone|create|delete|sync|fork|edit)\b"),
+]
+
+# Pre-baked directive prepended to every sub-agent instruction.
+# Tells Claude explicitly NOT to do git — the harness handles it.
+_HARNESS_DIRECTIVE = """\
+================================================================
+TARS HARNESS RULES (mandatory):
+- Do NOT run git commit / push / checkout / merge / pull / fetch / add / restore.
+- Do NOT run gh pr create / merge / ready / close.
+- The harness AUTOMATICALLY commits, pushes, creates the PR, merges to dev,
+  and deploys to production after your work finishes.
+- Your only job: edit files. Then stop.
+- Read-only git is fine (git status / log / diff / show).
+================================================================
+
+"""
+
 # Claude signals a question by running: tars-ask "question text here"
 _QUESTION_PATTERN = re.compile(r'^tars-ask\s+"(.+)"$', re.DOTALL)
+
+
+def _is_forbidden_git(command: str) -> bool:
+    """Return True if the bash command tries to do a git/gh write operation."""
+    for pat in _FORBIDDEN_GIT_PATTERNS:
+        if pat.search(command):
+            return True
+    return False
 
 
 def _is_destructive(command: str) -> Optional[str]:
@@ -98,6 +129,12 @@ async def run(
         yield {"type": "error", "message": "claude-code-sdk not installed. Run: pip install claude-code-sdk"}
         return
 
+    # ── 0. Capture starting dev SHA (safety net for change detection) ─────────
+    # If the agent goes rogue and pushes to dev directly (bypassing our PR
+    # flow), we can still detect the changes by comparing this SHA against
+    # dev at deploy time.
+    start_dev_sha = await _capture_dev_sha(cwd=cwd)
+
     # ── 1. Create feature branch ───────────────────────────────────────────────
     branch = await _setup_branch(cwd=cwd, job_id=job_id)
     yield {"type": "text_chunk", "text": f"Working on branch `{branch}`…\n"}
@@ -119,9 +156,12 @@ async def run(
     summary_text = ""
     _stop = False
 
+    # Prepend harness rules so the agent doesn't try to do git itself.
+    full_instruction = _HARNESS_DIRECTIVE + instruction
+
     # Hold an explicit reference to the generator so we can aclose() it from
     # THIS asyncio task (avoids anyio "cancel scope in different task" error).
-    _gen = query(prompt=instruction, options=options)
+    _gen = query(prompt=full_instruction, options=options)
 
     try:
         async for message in _gen:
@@ -144,6 +184,22 @@ async def run(
 
                         if tool_name.lower() == "bash":
                             command = tool_input.get("command", "")
+
+                            # Forbidden git/gh write ops: swap with a clear refusal
+                            # so Claude sees the rejection and won't retry.
+                            if _is_forbidden_git(command):
+                                log.warning("Job %s: blocked forbidden git command: %s",
+                                            job_id, command[:120])
+                                refusal = (
+                                    'BLOCKED by TARS harness. The harness handles '
+                                    'all git/gh operations automatically (commit, push, '
+                                    'PR, merge, deploy). You must NOT run git commit, '
+                                    'push, checkout, merge, pull, or gh pr commands. '
+                                    'Just edit files and stop — harness takes over.'
+                                )
+                                tool_input = {**tool_input, "command": f'echo {refusal!r}'}
+                                yield {"type": "tool_start", "tool": tool_name, "input": tool_input}
+                                continue
 
                             # Question gate: tars-ask "question text"
                             q_match = _QUESTION_PATTERN.match(command.strip())
@@ -243,7 +299,10 @@ async def run(
                                     summary=summary_text or instruction[:120])
 
     # ── 4. Merge PR → detect changes → auto-deploy ────────────────────────────
-    async for deploy_event in _auto_deploy(cwd=cwd, job_id=job_id, pr_url=pr_url, branch=branch):
+    async for deploy_event in _auto_deploy(
+        cwd=cwd, job_id=job_id, pr_url=pr_url, branch=branch,
+        start_dev_sha=start_dev_sha,
+    ):
         yield deploy_event
 
     yield {
@@ -256,25 +315,44 @@ async def run(
 
 # ── Auto-deploy helper ────────────────────────────────────────────────────────
 
-async def _auto_deploy(*, cwd: str, job_id: str, pr_url: Optional[str], branch: str):
+async def _auto_deploy(*, cwd: str, job_id: str, pr_url: Optional[str], branch: str,
+                       start_dev_sha: Optional[str] = None):
     """
     After a sub-agent job completes:
-      1. Detect changed files (from feature branch vs dev) while still on branch
+      1. Detect changed files using THREE strategies (whichever finds something):
+         a. Feature branch vs dev (normal flow, before merging)
+         b. Current dev vs starting dev SHA (safety net: agent pushed direct to dev)
+         c. Last dev commit (fallback after merge)
       2. Merge the PR to dev
       3. Run deploy.sh <target> dev
       4. Yield deploy_started / deploy_completed events
 
     Yields nothing if there are no relevant changes.
     """
-    # ── Detect changes BEFORE merging (while still on feature branch) ──────────
-    # This ensures we always know what changed regardless of merge outcome.
-    # Compare feature branch against dev to get the full set of changed files.
+    # ── Strategy A: feature branch vs dev ─────────────────────────────────────
+    changed: list[str] = []
     if branch != "dev":
         diff = await _run_git(["git", "diff", f"dev...{branch}", "--name-only"], cwd=cwd)
-    else:
-        # Already on dev — diff last commit
-        diff = await _run_git(["git", "diff", "HEAD~1..HEAD", "--name-only"], cwd=cwd)
-    changed = [p for p in diff.stdout.strip().splitlines() if p]
+        changed = [p for p in diff.stdout.strip().splitlines() if p]
+
+    # ── Strategy B: current dev vs starting dev SHA (safety net) ──────────────
+    # If the agent went rogue and pushed directly to dev, the feature branch
+    # diff above will be empty. Compare current origin/dev against the SHA we
+    # captured before the agent ran.
+    if not changed and start_dev_sha:
+        # Make sure we have the latest dev for comparison
+        await _run_git(["git", "fetch", "origin", "dev"], cwd=cwd, timeout=30)
+        diff = await _run_git(
+            ["git", "diff", f"{start_dev_sha}..origin/dev", "--name-only"],
+            cwd=cwd,
+        )
+        changed = [p for p in diff.stdout.strip().splitlines() if p]
+        if changed:
+            log.warning(
+                "Job %s: detected %d changed files via SHA safety net "
+                "(agent likely bypassed PR flow and pushed direct to dev)",
+                job_id, len(changed),
+            )
 
     has_web     = any(p.startswith("apps/web/") for p in changed)
     has_harness = any(p.startswith("apps/harness/") for p in changed)
@@ -357,6 +435,18 @@ async def _run_git(args: list, *, cwd: str, timeout: int = 30) -> subprocess.Com
         cwd=cwd, capture_output=True, text=True, timeout=timeout,
         env=_gh_env(),
     )
+
+
+async def _capture_dev_sha(*, cwd: str) -> Optional[str]:
+    """Return the current SHA of origin/dev for safety-net change detection."""
+    try:
+        await _run_git(["git", "fetch", "origin", "dev"], cwd=cwd, timeout=30)
+        result = await _run_git(["git", "rev-parse", "origin/dev"], cwd=cwd)
+        sha = result.stdout.strip()
+        return sha if sha else None
+    except Exception as exc:
+        log.warning("Failed to capture starting dev SHA: %s", exc)
+        return None
 
 
 async def _setup_branch(*, cwd: str, job_id: str) -> str:
