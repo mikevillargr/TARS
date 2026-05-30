@@ -688,6 +688,7 @@ async def send_message(
                             matches = result.scalars().all()
 
                             # Fallback for lookup_contact: live Google search if no local hit
+                            live_cards: list[dict] = []
                             if name == "lookup_contact" and not matches:
                                 conn_result = await bg_db.execute(
                                     _select(Connector).where(
@@ -708,19 +709,34 @@ async def send_message(
                                         if live:
                                             lines = []
                                             for person in live:
-                                                names = person.get("names", [])
+                                                names  = person.get("names", [])
                                                 emails = person.get("emailAddresses", [])
-                                                orgs = person.get("organizations", [])
-                                                name_ = (names[0].get("displayName") if names else None) or "Unknown"
-                                                em    = emails[0].get("value") if emails else None
-                                                org_  = orgs[0].get("name") if orgs else None
-                                                title_= orgs[0].get("title") if orgs else None
-                                                parts = [name_]
+                                                orgs   = person.get("organizations", [])
+                                                name_  = (names[0].get("displayName") if names else None) or "Unknown"
+                                                em     = emails[0].get("value") if emails else None
+                                                org_   = orgs[0].get("name") if orgs else None
+                                                title_ = orgs[0].get("title") if orgs else None
+                                                parts  = [name_]
                                                 if title_ or org_:
                                                     parts.append(f"({', '.join(p for p in [title_, org_] if p)})")
                                                 if em:
                                                     parts.append(f"<{em}>")
                                                 lines.append(" ".join(parts))
+                                                live_cards.append({
+                                                    "id": None,
+                                                    "display_name": name_,
+                                                    "primary_email": em,
+                                                    "primary_phone": None,
+                                                    "organization": org_,
+                                                    "job_title": title_,
+                                                    "tars_context": None,
+                                                    "source": "google_live",
+                                                })
+                                            if live_cards:
+                                                await queue.put(sse_event({
+                                                    "type": "contact_card",
+                                                    "contacts": live_cards,
+                                                }))
                                             return f"Live Google search results for '{query}':\n" + "\n".join(lines)
                                     except Exception as exc:
                                         log.warning("Live People API search failed: %s", exc)
@@ -729,6 +745,7 @@ async def send_message(
                                 return f"No contacts found matching '{query}'."
 
                             lines = []
+                            cards: list[dict] = []
                             for c in matches:
                                 parts = [c.display_name or "Unknown"]
                                 if c.job_title or c.organization:
@@ -741,6 +758,21 @@ async def send_message(
                                 if c.tars_context:
                                     line += f"\n  context: {c.tars_context[:200]}"
                                 lines.append(line)
+                                cards.append({
+                                    "id": c.id,
+                                    "display_name": c.display_name,
+                                    "primary_email": c.primary_email,
+                                    "primary_phone": c.primary_phone,
+                                    "organization": c.organization,
+                                    "job_title": c.job_title,
+                                    "tars_context": c.tars_context,
+                                    "source": "local",
+                                })
+                            if cards:
+                                await queue.put(sse_event({
+                                    "type": "contact_card",
+                                    "contacts": cards,
+                                }))
                             header = f"Found {len(matches)} contact(s) for '{query}':"
                             return header + "\n" + "\n".join(lines)
                         except Exception as exc:
@@ -1139,7 +1171,7 @@ async def send_message(
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
-                    elif event["type"] in ("calendar_suggest", "task_suggest"):
+                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card"):
                         await queue.put(sse_event(event))
                     elif event["type"] == "done":
                         model_used = event.get("model", "")

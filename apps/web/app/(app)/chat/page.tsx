@@ -8,6 +8,7 @@ import {
   Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
+  Mail, Phone, Building2, BriefcaseBusiness,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
@@ -245,6 +246,94 @@ function ArtifactCard({ n, onDismiss }: { n: ArtifactNotification; onDismiss: ()
   )
 }
 
+// ─── Contact card ─────────────────────────────────────────────────
+interface ContactResult {
+  id: string | null
+  display_name: string | null
+  primary_email: string | null
+  primary_phone: string | null
+  organization: string | null
+  job_title: string | null
+  tars_context: string | null
+  source: "local" | "google_live"
+}
+
+interface ContactResultSet {
+  tool_use_id: string
+  contacts: ContactResult[]
+}
+
+function ContactCard({ set, onDismiss }: { set: ContactResultSet; onDismiss: () => void }) {
+  return (
+    <div className="flex flex-col gap-2 max-w-lg">
+      {set.contacts.map((c, i) => {
+        const initials = (c.display_name ?? c.primary_email ?? "?")
+          .split(" ").slice(0, 2).map((p: string) => p[0] ?? "").join("").toUpperCase() || "?"
+        return (
+          <div
+            key={i}
+            className="rounded-xl p-3.5 flex items-start gap-3"
+            style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)" }}
+          >
+            {/* Avatar */}
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+              style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
+            >
+              {initials}
+            </div>
+
+            {/* Details */}
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm leading-snug" style={{ color: "var(--c-ink)" }}>
+                {c.display_name ?? c.primary_email ?? "Unknown"}
+              </div>
+              {(c.job_title || c.organization) && (
+                <div className="flex items-center gap-1 mt-0.5 text-xs" style={{ color: "var(--c-ink-muted)" }}>
+                  <BriefcaseBusiness size={10} style={{ flexShrink: 0 }} />
+                  <span className="truncate">{[c.job_title, c.organization].filter(Boolean).join(" · ")}</span>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                {c.primary_email && (
+                  <a
+                    href={`mailto:${c.primary_email}`}
+                    className="flex items-center gap-1 text-[11px] transition-opacity hover:opacity-75"
+                    style={{ color: "var(--c-moss)" }}
+                  >
+                    <Mail size={10} style={{ flexShrink: 0 }} />{c.primary_email}
+                  </a>
+                )}
+                {c.primary_phone && (
+                  <a
+                    href={`tel:${c.primary_phone}`}
+                    className="flex items-center gap-1 text-[11px] transition-opacity hover:opacity-75"
+                    style={{ color: "var(--c-ink-muted)" }}
+                  >
+                    <Phone size={10} style={{ flexShrink: 0 }} />{c.primary_phone}
+                  </a>
+                )}
+              </div>
+              {c.tars_context && (
+                <div className="mt-1.5 text-[11px] italic leading-relaxed" style={{ color: "var(--c-ink-faint)" }}>
+                  {c.tars_context.slice(0, 160)}{c.tars_context.length > 160 ? "…" : ""}
+                </div>
+              )}
+            </div>
+
+            {/* Dismiss (only on first card to keep UI clean) */}
+            {i === 0 && (
+              <button onClick={onDismiss} className="shrink-0 mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
+                <X size={12} />
+              </button>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // MessageContent is now in components/chat/MessageContent.tsx
 
 // ─── Model name formatter ─────────────────────────────────────────
@@ -404,9 +493,11 @@ interface MessageAreaProps {
   calendarSuggestions: CalendarSuggestion[]
   taskSuggestions: TaskSuggestion[]
   artifactNotifications: ArtifactNotification[]
+  contactResults: ContactResultSet[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
+  setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
 }
@@ -416,12 +507,16 @@ const MessageArea = memo(function MessageArea({
   calendarSuggestions,
   taskSuggestions,
   artifactNotifications,
+  contactResults,
   setCalendarSuggestions,
   setTaskSuggestions,
   setArtifactNotifications,
+  setContactResults,
   quoteIndex,
   messagesEndRef,
 }: MessageAreaProps) {
+  const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
+    || artifactNotifications.length > 0 || contactResults.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
       {allMessages.length === 0 ? (
@@ -434,7 +529,7 @@ const MessageArea = memo(function MessageArea({
       ) : allMessages.map((msg, i) => (
         <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
       ))}
-      {(calendarSuggestions.length > 0 || taskSuggestions.length > 0 || artifactNotifications.length > 0) && (
+      {hasCards && (
         <div className="max-w-3xl mx-auto pl-11 flex flex-col gap-2">
           {calendarSuggestions.map((s) => (
             <CalendarSuggestChip
@@ -455,6 +550,13 @@ const MessageArea = memo(function MessageArea({
               key={n.artifact_id}
               n={n}
               onDismiss={() => setArtifactNotifications(prev => prev.filter(x => x.artifact_id !== n.artifact_id))}
+            />
+          ))}
+          {contactResults.map((set) => (
+            <ContactCard
+              key={set.tool_use_id}
+              set={set}
+              onDismiss={() => setContactResults(prev => prev.filter(x => x.tool_use_id !== set.tool_use_id))}
             />
           ))}
         </div>
@@ -489,6 +591,7 @@ export default function ChatPage() {
   const [calendarSuggestions, setCalendarSuggestions]     = useState<CalendarSuggestion[]>([])
   const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
+  const [contactResults, setContactResults]               = useState<ContactResultSet[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   const [inputValue, setInputValue]                 = useState("")
@@ -535,6 +638,7 @@ export default function ChatPage() {
     setCalendarSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
+    setContactResults([])
   }, [activeChatId])
 
   // Scroll to bottom on new messages
@@ -747,6 +851,7 @@ export default function ChatPage() {
     setCalendarSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
+    setContactResults([])
     const pendingAttachments = attachments
     setAttachments([])
 
@@ -823,6 +928,13 @@ export default function ChatPage() {
                   filename: evt.filename,
                   filetype: evt.filetype,
                 } as ArtifactNotification])
+              }
+            } else if (evt.type === "contact_card") {
+              if (chatId === activeChatIdRef.current && Array.isArray(evt.contacts) && evt.contacts.length > 0) {
+                setContactResults(prev => [...prev, {
+                  tool_use_id: `contact-${Date.now()}-${Math.random()}`,
+                  contacts: evt.contacts,
+                } as ContactResultSet])
               }
             } else if (evt.type === "done") {
               const finalMsg: Message = {
@@ -1123,9 +1235,11 @@ export default function ChatPage() {
           calendarSuggestions={calendarSuggestions}
           taskSuggestions={taskSuggestions}
           artifactNotifications={artifactNotifications}
+          contactResults={contactResults}
           setCalendarSuggestions={setCalendarSuggestions}
           setTaskSuggestions={setTaskSuggestions}
           setArtifactNotifications={setArtifactNotifications}
+          setContactResults={setContactResults}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
         />
