@@ -19,7 +19,7 @@ if [[ "$CHANGED" == "harness" || "$CHANGED" == "both" ]]; then
   source .venv/bin/activate
   pip install -q -r requirements.txt
   alembic upgrade head
-  pm2 restart tars-harness
+  pm2 reload tars-harness
 fi
 
 if [[ "$CHANGED" == "web" || "$CHANGED" == "both" ]]; then
@@ -33,8 +33,8 @@ if [[ "$CHANGED" == "web" || "$CHANGED" == "both" ]]; then
   cp -r .next/static .next/standalone/apps/web/.next/static
   cp -r public       .next/standalone/apps/web/public
 
-  echo "==> Restarting web"
-  pm2 restart tars-web
+  echo "==> Reloading web (graceful zero-downtime)"
+  pm2 reload tars-web
 fi
 
 echo "==> Waiting for health check"
