@@ -284,3 +284,26 @@ class ContactSyncState(Base):
     sync_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+# ── Places ───────────────────────────────────────────────────────────────────
+class Place(Base):
+    """Personal places — saved locations with coordinates and metadata."""
+    __tablename__ = "places"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    address: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lng: Mapped[float] = mapped_column(Float, nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    osm_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    osm_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # "node" | "way" | "relation"
+    google_place_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    source: Mapped[str] = mapped_column(String, default="osm")              # "osm" | "google" | "manual"
+    visited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_saved: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)

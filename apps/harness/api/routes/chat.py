@@ -23,6 +23,7 @@ from core.model_client import (
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
     CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
+    SEARCH_PLACES_TOOL, SAVE_PLACE_TOOL, GET_SAVED_PLACES_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -561,6 +562,9 @@ async def send_message(
         SEARCH_CONTACTS_TOOL,
         CREATE_CONTACT_TOOL,
         UPDATE_CONTACT_TOOL,
+        SEARCH_PLACES_TOOL,
+        SAVE_PLACE_TOOL,
+        GET_SAVED_PLACES_TOOL,
     ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -1378,13 +1382,183 @@ async def send_message(
                             log.warning("generate_pdf failed: %s", exc)
                             return f"Failed to generate PDF: {exc}"
 
+                    # ── Places tools ──────────────────────────────────────────────────
+                    if name == "search_places":
+                        try:
+                            from connectors.places import PlacesClient
+                            import asyncio as _asyncio
+
+                            query    = (tool_input.get("query") or "").strip()
+                            near     = tool_input.get("near")
+                            category = tool_input.get("category")
+                            limit    = int(tool_input.get("limit") or 5)
+
+                            client_p = PlacesClient()
+                            loop = _asyncio.get_event_loop()
+
+                            if category and near:
+                                # Try to geocode "near" first, then search nearby
+                                geo = await loop.run_in_executor(None, lambda: client_p.search(near, limit=1))
+                                if geo:
+                                    results = await loop.run_in_executor(
+                                        None, lambda: client_p.search_nearby(geo[0]["lat"], geo[0]["lng"], category, limit=limit)
+                                    )
+                                else:
+                                    results = await loop.run_in_executor(
+                                        None, lambda: client_p.search(f"{category} {near}", limit=limit)
+                                    )
+                            else:
+                                results = await loop.run_in_executor(
+                                    None, lambda: client_p.search(query, near=near, limit=limit)
+                                )
+
+                            if not results:
+                                return f"No places found for '{query}'{' near ' + near if near else ''}."
+
+                            # Emit place_card SSE event
+                            cards = [
+                                {
+                                    "name":         p.get("name", ""),
+                                    "address":      p.get("address") or p.get("display_name", ""),
+                                    "lat":          p.get("lat"),
+                                    "lng":          p.get("lng"),
+                                    "category":     p.get("category"),
+                                    "osm_id":       p.get("osm_id"),
+                                    "osm_type":     p.get("osm_type"),
+                                    "source":       "osm",
+                                    "is_saved":     False,
+                                }
+                                for p in results
+                            ]
+                            await queue.put(sse_event({"type": "place_card", "places": cards}))
+
+                            lines = []
+                            for p in results:
+                                addr = p.get("address") or p.get("display_name", "")
+                                lines.append(f"• {p['name']}" + (f" — {addr}" if addr else ""))
+                            return f"Found {len(results)} place(s):\n" + "\n".join(lines)
+
+                        except Exception as exc:
+                            log.warning("search_places tool failed: %s", exc)
+                            return f"Place search failed: {exc}"
+
+                    if name == "save_place":
+                        try:
+                            from db.models import Place as _Place
+
+                            p = _Place(
+                                user_id=user_id,
+                                name=tool_input["name"],
+                                address=tool_input.get("address"),
+                                lat=float(tool_input["lat"]),
+                                lng=float(tool_input["lng"]),
+                                category=tool_input.get("category"),
+                                tags=tool_input.get("tags") or [],
+                                notes=tool_input.get("notes"),
+                                osm_id=tool_input.get("osm_id"),
+                                osm_type=tool_input.get("osm_type"),
+                                source="manual" if not tool_input.get("osm_id") else "osm",
+                                is_saved=True,
+                            )
+                            bg_db.add(p)
+                            await bg_db.commit()
+
+                            # Emit card for the saved place
+                            await queue.put(sse_event({
+                                "type": "place_card",
+                                "places": [{
+                                    "name":     p.name,
+                                    "address":  p.address,
+                                    "lat":      p.lat,
+                                    "lng":      p.lng,
+                                    "category": p.category,
+                                    "osm_id":   p.osm_id,
+                                    "osm_type": p.osm_type,
+                                    "source":   p.source,
+                                    "is_saved": True,
+                                    "notes":    p.notes,
+                                    "tags":     p.tags,
+                                }],
+                            }))
+
+                            msg = f"Saved '{p.name}'"
+                            if p.address:
+                                msg += f" ({p.address})"
+                            if p.notes:
+                                msg += f" — {p.notes}"
+                            return msg + " to your places."
+
+                        except Exception as exc:
+                            log.warning("save_place tool failed: %s", exc)
+                            return f"Failed to save place: {exc}"
+
+                    if name == "get_saved_places":
+                        try:
+                            from sqlalchemy import select as _select, or_ as _or
+                            from db.models import Place as _Place
+
+                            query    = (tool_input.get("query") or "").strip()
+                            category = (tool_input.get("category") or "").strip()
+                            limit    = int(tool_input.get("limit") or 20)
+
+                            stmt = _select(_Place).where(
+                                _Place.user_id == user_id,
+                                _Place.is_saved == True,  # noqa: E712
+                            )
+                            if query:
+                                needle = f"%{query}%"
+                                stmt = stmt.where(_or(
+                                    _Place.name.ilike(needle),
+                                    _Place.address.ilike(needle),
+                                    _Place.notes.ilike(needle),
+                                ))
+                            if category:
+                                stmt = stmt.where(_Place.category.ilike(f"%{category}%"))
+
+                            stmt = stmt.order_by(_Place.created_at.desc()).limit(limit)
+                            result = await bg_db.execute(stmt)
+                            places = result.scalars().all()
+
+                            if not places:
+                                msg = "No saved places"
+                                if query:
+                                    msg += f" matching '{query}'"
+                                if category:
+                                    msg += f" in category '{category}'"
+                                return msg + "."
+
+                            cards = [
+                                {
+                                    "name":     pl.name,
+                                    "address":  pl.address,
+                                    "lat":      pl.lat,
+                                    "lng":      pl.lng,
+                                    "category": pl.category,
+                                    "osm_id":   pl.osm_id,
+                                    "osm_type": pl.osm_type,
+                                    "source":   pl.source,
+                                    "is_saved": True,
+                                    "notes":    pl.notes,
+                                    "tags":     pl.tags,
+                                }
+                                for pl in places
+                            ]
+                            await queue.put(sse_event({"type": "place_card", "places": cards}))
+
+                            lines = [f"• {pl.name}" + (f" — {pl.address}" if pl.address else "") for pl in places]
+                            return f"Your saved places ({len(places)}):\n" + "\n".join(lines)
+
+                        except Exception as exc:
+                            log.warning("get_saved_places tool failed: %s", exc)
+                            return f"Failed to retrieve saved places: {exc}"
+
                     return "Action completed."
 
                 async for event in client.stream(messages, effective_tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
-                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card"):
+                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card"):
                         await queue.put(sse_event(event))
                     elif event["type"] == "done":
                         model_used = event.get("model", "")

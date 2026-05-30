@@ -582,6 +582,132 @@ UPDATE_CONTACT_TOOL = {
 }
 
 
+SEARCH_PLACES_TOOL = {
+    "name": "search_places",
+    "description": (
+        "Search for places, restaurants, hotels, landmarks, and businesses using OpenStreetMap (Nominatim). "
+        "Use when Mike asks: 'find a restaurant near X', 'where is Y?', 'good cafes in BGC', "
+        "'hotels near the airport', 'where can I get a haircut in Makati', or any location search. "
+        "Returns a map card with navigation links (Google Maps, Waze, Apple Maps). "
+        "Optionally filter by category (restaurant, cafe, hotel, bar, grocery, pharmacy, etc.)."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": (
+                    "Place name, type, or description to search for. "
+                    "Examples: 'Japanese restaurant', 'Ayala Museum', 'McDonalds BGC', 'coffee shops'."
+                ),
+            },
+            "near": {
+                "type": "string",
+                "description": (
+                    "Optional location to bias the search, e.g. 'Makati, Metro Manila', "
+                    "'BGC Taguig', 'near NAIA Terminal 3'. Omit when query already has a location."
+                ),
+            },
+            "category": {
+                "type": "string",
+                "description": (
+                    "Optional category filter for nearby POI search. "
+                    "Valid values: restaurant, cafe, bar, hotel, grocery, pharmacy, hospital, "
+                    "bank, atm, gas_station, parking, gym, park, museum, mall, cinema, spa, "
+                    "salon, dentist, school, university, church."
+                ),
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results to return. Default 5.",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+SAVE_PLACE_TOOL = {
+    "name": "save_place",
+    "description": (
+        "Save a place to Mike's personal places list for quick retrieval later. "
+        "Use when Mike says 'save this place', 'bookmark this restaurant', 'remember this location', "
+        "or 'add this to my places'. Can also add notes and tags. "
+        "Saved places appear when Mike asks 'what places have I saved?' or 'my saved restaurants'."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "Name of the place.",
+            },
+            "address": {
+                "type": "string",
+                "description": "Street address or location description.",
+            },
+            "lat": {
+                "type": "number",
+                "description": "Latitude coordinate.",
+            },
+            "lng": {
+                "type": "number",
+                "description": "Longitude coordinate.",
+            },
+            "category": {
+                "type": "string",
+                "description": "Category (restaurant, cafe, hotel, etc.).",
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Tags for organisation, e.g. ['favourite', 'client-lunch', 'bgc'].",
+            },
+            "notes": {
+                "type": "string",
+                "description": "Optional notes about the place (e.g. 'great for client lunches', 'valet parking available').",
+            },
+            "osm_id": {
+                "type": "string",
+                "description": "OpenStreetMap ID (from a previous search_places result).",
+            },
+            "osm_type": {
+                "type": "string",
+                "description": "OSM element type: node, way, or relation.",
+            },
+        },
+        "required": ["name", "lat", "lng"],
+    },
+}
+
+GET_SAVED_PLACES_TOOL = {
+    "name": "get_saved_places",
+    "description": (
+        "Retrieve Mike's saved/bookmarked places. "
+        "Use when Mike asks: 'what places have I saved?', 'show my saved restaurants', "
+        "'my favourite cafes', 'places I bookmarked', or 'where do I usually eat?'. "
+        "Returns a map card for each saved place with navigation links."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Optional search term to filter saved places by name, address, or notes.",
+            },
+            "category": {
+                "type": "string",
+                "description": "Optional category to filter by (restaurant, cafe, hotel, etc.).",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results to return. Default 20.",
+            },
+        },
+        "required": [],
+    },
+}
+
+
 # ─── Tier routing tables ─────────────────────────────────────────────────────
 
 # Tier 2 display label derived from the model name (strip org prefix for brevity)

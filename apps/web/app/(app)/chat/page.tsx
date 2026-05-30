@@ -449,6 +449,217 @@ function ContactCard({ set, onDismiss, onAsk }: {
   )
 }
 
+// ─── Place card ───────────────────────────────────────────────────
+interface PlaceResult {
+  name: string
+  address: string | null
+  lat: number
+  lng: number
+  category: string | null
+  osm_id: string | null
+  osm_type: string | null
+  source: string
+  is_saved: boolean
+  notes?: string | null
+  tags?: string[]
+}
+
+interface PlaceResultSet {
+  tool_use_id: string
+  places: PlaceResult[]
+}
+
+/** Convert lat/lng to OSM tile coordinates at a given zoom level. */
+function latLngToTile(lat: number, lng: number, z: number) {
+  const n = Math.pow(2, z)
+  const tileX = Math.floor((lng + 180) / 360 * n)
+  const latRad = lat * Math.PI / 180
+  const mercY = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2
+  const tileY = Math.floor(mercY * n)
+  const pixX  = ((lng + 180) / 360 * n - tileX) * 256
+  const pixY  = (mercY * n - tileY) * 256
+  return { tileX, tileY, pixX, pixY }
+}
+
+const NAV_ACTIONS = [
+  {
+    label: "Google Maps",
+    color: "#4285F4",
+    url: (lat: number, lng: number) =>
+      `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+  },
+  {
+    label: "Waze",
+    color: "#33CCFF",
+    url: (lat: number, lng: number) =>
+      `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`,
+  },
+  {
+    label: "Apple Maps",
+    color: "#555",
+    url: (lat: number, lng: number, name: string) =>
+      `https://maps.apple.com/?q=${encodeURIComponent(name)}&ll=${lat},${lng}`,
+  },
+]
+
+const ZOOM = 15
+const MAP_W = 260
+const MAP_H = 110
+
+function PlaceMapThumbnail({ lat, lng }: { lat: number; lng: number }) {
+  const { tileX, tileY, pixX, pixY } = latLngToTile(lat, lng, ZOOM)
+  const tileUrl = `https://tile.openstreetmap.org/${ZOOM}/${tileX}/${tileY}.png`
+
+  // Centre the map on the point
+  const bgX = Math.round(MAP_W / 2 - pixX)
+  const bgY = Math.round(MAP_H / 2 - pixY)
+
+  return (
+    <div
+      className="relative rounded-lg overflow-hidden shrink-0"
+      style={{
+        width: MAP_W,
+        height: MAP_H,
+        backgroundImage: `url(${tileUrl})`,
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: `${bgX}px ${bgY}px`,
+        backgroundColor: "#e8e0d0",
+      }}
+    >
+      {/* Pin */}
+      <div
+        className="absolute"
+        style={{ left: "50%", top: "50%", transform: "translate(-50%, -100%)" }}
+      >
+        <div
+          className="w-4 h-4 rounded-full border-2 border-white shadow-md"
+          style={{ backgroundColor: "var(--c-moss)" }}
+        />
+      </div>
+      {/* OSM attribution (required by tile usage policy) */}
+      <span
+        className="absolute bottom-0 right-0 text-[8px] px-0.5"
+        style={{ background: "rgba(255,255,255,0.7)", color: "#555" }}
+      >
+        © OpenStreetMap
+      </span>
+    </div>
+  )
+}
+
+function PlaceCard({
+  set, onDismiss, onAsk,
+}: {
+  set: PlaceResultSet
+  onDismiss: () => void
+  onAsk: (q: string) => void
+}) {
+  const [savedIds, setSavedIds] = useState<Set<number>>(new Set())
+
+  return (
+    <div className="flex flex-col gap-2 max-w-xl">
+      {set.places.map((p, i) => {
+        const isSaved = p.is_saved || savedIds.has(i)
+        const catLabel = p.category
+          ? p.category.charAt(0).toUpperCase() + p.category.slice(1).replace(/_/g, " ")
+          : null
+
+        return (
+          <div
+            key={i}
+            className="rounded-xl overflow-hidden"
+            style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)" }}
+          >
+            {/* Map thumbnail row */}
+            <div className="flex gap-0 overflow-hidden">
+              <PlaceMapThumbnail lat={p.lat} lng={p.lng} />
+
+              {/* Info column */}
+              <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-sm leading-tight" style={{ color: "var(--c-ink)" }}>
+                      {p.name}
+                    </p>
+                    {i === 0 && (
+                      <button onClick={onDismiss} className="shrink-0" style={{ color: "var(--c-ink-faint)" }}>
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                  {catLabel && (
+                    <span
+                      className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
+                    >
+                      {catLabel}
+                    </span>
+                  )}
+                  {p.address && (
+                    <p className="mt-1 text-[11px] leading-snug" style={{ color: "var(--c-ink-muted)" }}>
+                      {p.address.length > 80 ? p.address.slice(0, 80) + "…" : p.address}
+                    </p>
+                  )}
+                  {p.notes && (
+                    <p className="mt-1 text-[11px] italic" style={{ color: "var(--c-ink-faint)" }}>
+                      {p.notes.slice(0, 100)}{p.notes.length > 100 ? "…" : ""}
+                    </p>
+                  )}
+                </div>
+
+                {/* Navigation chips */}
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {NAV_ACTIONS.map((nav) => (
+                    <a
+                      key={nav.label}
+                      href={nav.url(p.lat, p.lng, p.name)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-opacity hover:opacity-80"
+                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
+                        style={{ backgroundColor: nav.color }}
+                      />
+                      {nav.label}
+                    </a>
+                  ))}
+
+                  {/* Save chip */}
+                  {!isSaved && (
+                    <button
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-opacity hover:opacity-80"
+                      style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
+                      onClick={() => {
+                        setSavedIds(prev => new Set([...prev, i]))
+                        onAsk(
+                          `Save ${p.name}${p.address ? ` at ${p.address}` : ""} to my places` +
+                          (p.lat && p.lng ? ` (lat: ${p.lat}, lng: ${p.lng}${p.category ? `, category: ${p.category}` : ""}${p.osm_id ? `, osm_id: ${p.osm_id}, osm_type: ${p.osm_type}` : ""})` : "")
+                        )
+                      }}
+                    >
+                      + Save
+                    </button>
+                  )}
+                  {isSaved && (
+                    <span
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium"
+                      style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
+                    >
+                      ✓ Saved
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // MessageContent is now in components/chat/MessageContent.tsx
 
 // ─── Model name formatter ─────────────────────────────────────────
@@ -609,10 +820,12 @@ interface MessageAreaProps {
   taskSuggestions: TaskSuggestion[]
   artifactNotifications: ArtifactNotification[]
   contactResults: ContactResultSet[]
+  placeResults: PlaceResultSet[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
   setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
+  setPlaceResults: React.Dispatch<React.SetStateAction<PlaceResultSet[]>>
   onAsk: (q: string) => void
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
@@ -624,16 +837,19 @@ const MessageArea = memo(function MessageArea({
   taskSuggestions,
   artifactNotifications,
   contactResults,
+  placeResults,
   setCalendarSuggestions,
   setTaskSuggestions,
   setArtifactNotifications,
   setContactResults,
+  setPlaceResults,
   onAsk,
   quoteIndex,
   messagesEndRef,
 }: MessageAreaProps) {
   const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
     || artifactNotifications.length > 0 || contactResults.length > 0
+    || placeResults.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
       {allMessages.length === 0 ? (
@@ -677,6 +893,14 @@ const MessageArea = memo(function MessageArea({
               onAsk={onAsk}
             />
           ))}
+          {placeResults.map((set) => (
+            <PlaceCard
+              key={set.tool_use_id}
+              set={set}
+              onDismiss={() => setPlaceResults(prev => prev.filter(x => x.tool_use_id !== set.tool_use_id))}
+              onAsk={onAsk}
+            />
+          ))}
         </div>
       )}
       <div ref={messagesEndRef} />
@@ -710,6 +934,7 @@ export default function ChatPage() {
   const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
   const [contactResults, setContactResults]               = useState<ContactResultSet[]>([])
+  const [placeResults, setPlaceResults]                   = useState<PlaceResultSet[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   const [inputValue, setInputValue]                 = useState("")
@@ -757,6 +982,7 @@ export default function ChatPage() {
     setTaskSuggestions([])
     setArtifactNotifications([])
     setContactResults([])
+    setPlaceResults([])
   }, [activeChatId])
 
   // Scroll to bottom on new messages
@@ -970,6 +1196,7 @@ export default function ChatPage() {
     setTaskSuggestions([])
     setArtifactNotifications([])
     setContactResults([])
+    setPlaceResults([])
     const pendingAttachments = attachments
     setAttachments([])
 
@@ -1053,6 +1280,13 @@ export default function ChatPage() {
                   tool_use_id: `contact-${Date.now()}-${Math.random()}`,
                   contacts: evt.contacts,
                 } as ContactResultSet])
+              }
+            } else if (evt.type === "place_card") {
+              if (chatId === activeChatIdRef.current && Array.isArray(evt.places) && evt.places.length > 0) {
+                setPlaceResults(prev => [...prev, {
+                  tool_use_id: `place-${Date.now()}-${Math.random()}`,
+                  places: evt.places,
+                } as PlaceResultSet])
               }
             } else if (evt.type === "done") {
               const finalMsg: Message = {
@@ -1360,10 +1594,12 @@ export default function ChatPage() {
           taskSuggestions={taskSuggestions}
           artifactNotifications={artifactNotifications}
           contactResults={contactResults}
+          placeResults={placeResults}
           setCalendarSuggestions={setCalendarSuggestions}
           setTaskSuggestions={setTaskSuggestions}
           setArtifactNotifications={setArtifactNotifications}
           setContactResults={setContactResults}
+          setPlaceResults={setPlaceResults}
           onAsk={handleAsk}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
