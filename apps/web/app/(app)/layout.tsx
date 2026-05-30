@@ -2,7 +2,7 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Bell, Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2 } from "lucide-react"
+import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2 } from "lucide-react"
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -170,14 +170,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 Agent Active
               </div>
             )}
-
-            <button className="p-2 relative" style={{ color: "var(--c-ink-muted)" }}>
-              <Bell size={20} />
-              <span
-                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full border-2"
-                style={{ backgroundColor: "var(--c-amber)", borderColor: "var(--c-surface)" }}
-              />
-            </button>
 
             {/* Mobile-only voice new-chat button */}
             <button
