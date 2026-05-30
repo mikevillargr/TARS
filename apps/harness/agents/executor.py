@@ -9,7 +9,7 @@ Git workflow per job:
   2. Claude does its work (Read / Write / Edit / Bash / Glob / Grep)
   3. git add -A && git commit
   4. git push origin agent/<job_id[:8]>
-  5. gh pr create --base dev  →  PR URL stored in DB + shown in UI
+  5. gh pr create --base dev (non-draft)  →  PR URL stored in DB + shown in UI
   6. gh pr merge → auto-merge to dev
   7. deploy.sh web|harness|both dev  →  live site updated
 
@@ -379,7 +379,7 @@ async def _setup_branch(*, cwd: str, job_id: str) -> str:
 
 async def _commit_and_push(*, cwd: str, job_id: str, branch: str, summary: str) -> Optional[str]:
     """
-    Stage all changes, commit, push to origin, open a draft PR to dev.
+    Stage all changes, commit, push to origin, open a PR to dev.
     Returns PR URL or None.
     """
     # Check for changes
@@ -426,8 +426,7 @@ async def _commit_and_push(*, cwd: str, job_id: str, branch: str, summary: str) 
          "--base", "dev",
          "--head", branch,
          "--title", commit_msg,
-         "--body", pr_body,
-         "--draft"],
+         "--body", pr_body],
         cwd=cwd, timeout=30,
     )
 
