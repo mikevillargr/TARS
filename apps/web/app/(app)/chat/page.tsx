@@ -1727,25 +1727,29 @@ export default function ChatPage() {
         {/* ── Agent stream panel ─────────────────────────────────── */}
         {activeJobId && (
           <div className="shrink-0 mx-3 mb-2 rounded-xl overflow-hidden border"
-            style={{ borderColor: "var(--c-border)", maxHeight: 320, display: "flex", flexDirection: "column" }}>
-            <div className="flex items-center justify-between px-3 py-1.5 shrink-0"
+            style={{ borderColor: "var(--c-border)", height: 380, display: "flex", flexDirection: "column" }}>
+            <div className="flex items-center justify-between px-3 py-2 shrink-0"
               style={{ backgroundColor: "var(--c-surface-2)", borderBottom: "1px solid var(--c-border)" }}>
-              <span className="text-[11px] font-medium" style={{ color: "var(--c-ink-muted)" }}>
-                Agent stream
-              </span>
               <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                <span className="text-[11px] font-semibold" style={{ color: "var(--c-ink)" }}>
+                  Evolutionarist — live
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
                 <a
-                  href={`/agent-jobs`}
-                  className="text-[11px] hover:underline"
+                  href="/agent-jobs"
+                  className="text-[11px] hover:underline flex items-center gap-1"
                   style={{ color: "var(--c-moss)" }}
                 >
-                  Open in Agent Jobs →
+                  Full view <ExternalLink size={10} />
                 </a>
                 <button
                   onClick={() => setActiveJobId(null)}
+                  className="p-0.5 rounded hover:opacity-70"
                   style={{ color: "var(--c-ink-faint)" }}
                 >
-                  <X size={12} />
+                  <X size={13} />
                 </button>
               </div>
             </div>
