@@ -60,9 +60,20 @@ async def run(
     """
     try:
         from claude_code_sdk import query, ClaudeCodeOptions  # type: ignore
+        from claude_code_sdk.types import (  # type: ignore
+            AssistantMessage, UserMessage, ResultMessage,
+            TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock,
+        )
     except ImportError:
         yield {"type": "error", "message": "claude-code-sdk not installed. Run: pip install claude-code-sdk"}
         return
+
+    # Pass ANTHROPIC_API_KEY via options.env so the claude CLI subprocess gets it.
+    # The harness uses TARS_ANTHROPIC_API_KEY (pydantic alias) to avoid collision
+    # with Claude Desktop — but the claude CLI expects the standard name.
+    extra_env: dict = {}
+    if settings.anthropic_api_key:
+        extra_env["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
 
     options = ClaudeCodeOptions(
         model=model,
@@ -70,67 +81,89 @@ async def run(
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permission_mode="acceptEdits",  # never bypassPermissions
         max_turns=50,
+        env=extra_env,
     )
 
-    pr_url: Optional[str] = None
     summary_text = ""
 
     try:
-        async for event in query(prompt=instruction, options=options):
-            etype = getattr(event, "type", None) or type(event).__name__.lower()
+        async for message in query(prompt=instruction, options=options):
 
-            # ── Assistant text / thinking ──────────────────────────────────
-            if etype in ("assistant", "text"):
-                text = getattr(event, "text", None) or ""
-                if text:
-                    yield {"type": "text_chunk", "text": text}
-                    summary_text += text
+            # ── AssistantMessage: text, thinking, tool calls ───────────────
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        if block.text:
+                            summary_text += block.text
+                            yield {"type": "text_chunk", "text": block.text}
 
-            # ── Tool use ──────────────────────────────────────────────────
-            elif etype == "tool_use":
-                tool_name = getattr(event, "name", "")
-                tool_input = getattr(event, "input", {}) or {}
+                    elif isinstance(block, ThinkingBlock):
+                        if block.thinking:
+                            yield {"type": "thinking", "text": block.thinking}
 
-                # Approval gate for bash commands
-                if tool_name.lower() == "bash":
-                    command = tool_input.get("command", "")
-                    reason = _is_destructive(command)
-                    if reason:
-                        yield {
-                            "type": "approval_required",
-                            "command": command,
-                            "reason": reason,
-                        }
-                        # Wait for frontend response (blocks this generator)
-                        await approval_gate.event.wait()
+                    elif isinstance(block, ToolUseBlock):
+                        tool_name = block.name
+                        tool_input = block.input or {}
 
-                        if not approval_gate.result.get("approved"):
-                            yield {"type": "approval_rejected"}
-                            return
+                        # Approval gate for destructive bash commands
+                        if tool_name.lower() == "bash":
+                            command = tool_input.get("command", "")
+                            reason = _is_destructive(command)
+                            if reason:
+                                yield {
+                                    "type": "approval_required",
+                                    "command": command,
+                                    "reason": reason,
+                                }
+                                # Wait for frontend response (blocks this generator)
+                                await approval_gate.event.wait()
 
-                        # Use modified command if provided
-                        modified = approval_gate.result.get("modified_command")
-                        if modified:
-                            tool_input = {**tool_input, "command": modified}
-                        yield {"type": "approval_granted", "command": tool_input.get("command", command)}
+                                if not approval_gate.result.get("approved"):
+                                    yield {"type": "approval_rejected"}
+                                    return
 
-                        # Reset gate for next approval request in this job
-                        from agents import approval as _approval_mod
-                        _approval_mod.reset(job_id)
+                                # Use modified command if provided
+                                modified = approval_gate.result.get("modified_command")
+                                if modified:
+                                    tool_input = {**tool_input, "command": modified}
+                                yield {
+                                    "type": "approval_granted",
+                                    "command": tool_input.get("command", command),
+                                }
 
-                yield {"type": "tool_start", "tool": tool_name, "input": tool_input}
+                                # Reset gate for next approval in this job
+                                from agents import approval as _approval_mod
+                                _approval_mod.reset(job_id)
 
-            # ── Tool result ────────────────────────────────────────────────
-            elif etype == "tool_result":
-                tool_name = getattr(event, "name", "")
-                output = getattr(event, "output", "") or ""
-                yield {"type": "tool_end", "tool": tool_name, "output": str(output)[:2000]}
+                        yield {"type": "tool_start", "tool": tool_name, "input": tool_input}
 
-            # ── Result / completion ───────────────────────────────────────
-            elif etype == "result":
-                output = getattr(event, "output", "") or ""
-                if output:
-                    summary_text = output
+            # ── UserMessage: tool results come back here ───────────────────
+            elif isinstance(message, UserMessage):
+                if isinstance(message.content, list):
+                    for block in message.content:
+                        if isinstance(block, ToolResultBlock):
+                            content = block.content or ""
+                            if isinstance(content, list):
+                                # List of content dicts from tool output
+                                content = "\n".join(
+                                    c.get("text", str(c)) if isinstance(c, dict) else str(c)
+                                    for c in content
+                                )
+                            yield {
+                                "type": "tool_end",
+                                "tool": "",
+                                "output": str(content)[:2000],
+                                "is_error": block.is_error or False,
+                            }
+
+            # ── ResultMessage: final outcome ───────────────────────────────
+            elif isinstance(message, ResultMessage):
+                if message.is_error:
+                    err_text = message.result or "Agent run failed with unknown error."
+                    yield {"type": "error", "message": err_text}
+                    return
+                if message.result:
+                    summary_text = message.result
 
     except Exception as exc:
         log.exception("Agent executor error for job %s", job_id)
