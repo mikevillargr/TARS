@@ -1177,6 +1177,9 @@ export default function ChatPage() {
   function handleStop() {
     stopInitiatedRef.current = true
     abortControllerRef.current?.abort()
+    // Clear any recovery poll that may be running after a stream interruption
+    if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
+    streamPollingRef.current = false
     // Immediately freeze the UI — don't wait for async catch/finally
     const partial = accumulatedRef.current
     if (partial) {
@@ -1255,6 +1258,8 @@ export default function ChatPage() {
 
     // Show user message + loading state IMMEDIATELY — before async conversation creation
     stopInitiatedRef.current = false
+    streamPollingRef.current = false
+    const initialConvLength = messages.length  // snapshot before this send (used by recovery poll)
     setBusy(true)
     setInputValue("")
     setCalendarSuggestions([])
