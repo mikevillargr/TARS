@@ -984,10 +984,17 @@ export default function ChatPage() {
   const fileInputRef                                = useRef<HTMLInputElement>(null)
   const cameraInputRef                              = useRef<HTMLInputElement>(null)
   const activeChatIdRef                             = useRef<string | null>(activeChatId)
+  // NOTE: This AbortController is intentionally NOT connected to any
+  // visibilitychange, blur, or beforeunload event. Chat completion requests
+  // must complete regardless of window focus state. Only abort on:
+  //   1. Explicit user "Stop" action
+  //   2. Component unmount
+  //   3. Conversation switch (activeChatId change)
   const abortControllerRef                          = useRef<AbortController | null>(null)
   const pollTimerRef                                = useRef<ReturnType<typeof setInterval> | null>(null)
   const accumulatedRef                              = useRef<string>("")  // live text during streaming
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
+  const streamPollingRef                            = useRef<boolean>(false)  // true while recovery-polling after stream interruption
   const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
   const userLocationRef                             = useRef<{ lat: number; lng: number } | null>(null)
