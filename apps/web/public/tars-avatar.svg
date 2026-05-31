@@ -1,0 +1,28 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Teal circle background -->
+  <circle cx="16" cy="16" r="16" fill="#2d5a4f"/>
+
+  <!-- TARS monolith body — dark charcoal rectangle, centered -->
+  <rect x="9.5" y="3.5" width="13" height="25" rx="1.5" fill="#1a1a1a"/>
+
+  <!-- Left edge panel (slight 3-D depth) -->
+  <rect x="9.5" y="3.5" width="2.5" height="25" rx="1.5" fill="#252525"/>
+
+  <!-- Right edge panel -->
+  <rect x="20" y="3.5" width="2.5" height="25" rx="1.5" fill="#252525"/>
+
+  <!-- Top horizontal groove -->
+  <rect x="9.5" y="11" width="13" height="0.75" fill="#0d0d0d"/>
+
+  <!-- Bottom horizontal groove -->
+  <rect x="9.5" y="19.5" width="13" height="0.75" fill="#0d0d0d"/>
+
+  <!-- Amber eye slit — TARS's signature feature -->
+  <rect x="10.5" y="14" width="11" height="4" rx="1" fill="#b07820"/>
+  <!-- Mid-layer glow -->
+  <rect x="11" y="14.4" width="10" height="3.2" rx="0.7" fill="#d4982a"/>
+  <!-- Bright core -->
+  <rect x="11.5" y="14.9" width="9" height="2.2" rx="0.4" fill="#f5c040"/>
+  <!-- Hot centre highlight -->
+  <rect x="13" y="15.3" width="6" height="1.4" rx="0.3" fill="#ffe070"/>
+</svg>

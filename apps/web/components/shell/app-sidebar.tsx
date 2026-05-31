@@ -1,0 +1,141 @@
+"use client"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import {
+  MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
+  Mail, Clock, Plug, Database, Settings, Archive, Sun, Moon,
+} from "lucide-react"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { navItems } from "./nav-items"
+import { useTheme } from "@/components/ThemeProvider"
+
+const iconMap = {
+  MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
+  Mail, Clock, Plug, Database, Settings, Archive,
+} as const
+
+function TarsLogo() {
+  return (
+    <svg
+      width="22"
+      height="40"
+      viewBox="0 0 22 40"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="shrink-0"
+    >
+      <rect x="1" y="1" width="20" height="8.5" rx="1" fill="#1a1714" stroke="#3a342d" strokeWidth="0.5" />
+      <rect x="3" y="3" width="2" height="1" fill="#6b6357" opacity="0.6" />
+      <rect x="3" y="5.5" width="3" height="0.5" fill="#6b6357" opacity="0.4" />
+      <rect x="0" y="9.5" width="22" height="1" fill="#f6f3ec" />
+      <rect x="1" y="10.5" width="20" height="8.5" rx="1" fill="#1a1714" stroke="#3a342d" strokeWidth="0.5" />
+      <rect x="3" y="12.5" width="6" height="1" fill="#6b6357" opacity="0.4" />
+      <circle cx="17" cy="13" r="0.6" fill="#b8651a" opacity="0.8" />
+      <rect x="0" y="19" width="22" height="1" fill="#f6f3ec" />
+      <rect x="1" y="20" width="20" height="8.5" rx="1" fill="#1a1714" stroke="#3a342d" strokeWidth="0.5" />
+      <rect x="3" y="22" width="3" height="0.5" fill="#6b6357" opacity="0.4" />
+      <rect x="3" y="24" width="5" height="0.5" fill="#6b6357" opacity="0.4" />
+      <rect x="0" y="28.5" width="22" height="1" fill="#f6f3ec" />
+      <rect x="1" y="29.5" width="20" height="8.5" rx="1" fill="#1a1714" stroke="#3a342d" strokeWidth="0.5" />
+      <rect x="3" y="31.5" width="2" height="1" fill="#6b6357" opacity="0.5" />
+      <rect x="3" y="34" width="4" height="0.5" fill="#6b6357" opacity="0.4" />
+    </svg>
+  )
+}
+
+export function AppSidebar() {
+  const pathname = usePathname()
+  const { theme, toggle: toggleTheme } = useTheme()
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="px-4 py-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-3">
+          <TarsLogo />
+          <span
+            className="font-semibold text-lg tracking-[0.25em] text-sidebar-foreground"
+            style={{ fontFamily: "var(--font-heading), serif" }}
+          >
+            TARS
+          </span>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const Icon = iconMap[item.icon as keyof typeof iconMap]
+                const isActive = pathname.startsWith(item.href)
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      render={<Link href={item.href} />}
+                      className={
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
+                      }
+                    >
+                      <Icon
+                        className={`size-4 ${isActive ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}`}
+                      />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter className="px-3 py-3 border-t border-sidebar-border">
+        {/* Dark mode toggle */}
+        <div
+          className="flex items-center justify-between px-3 py-2 rounded-lg"
+          style={{ color: "var(--c-ink-muted)" }}
+        >
+          <span className="text-sm font-medium">Dark Mode</span>
+          <button
+            onClick={toggleTheme}
+            className="p-1.5 rounded-lg transition-colors hover:bg-[var(--c-surface-raised)]"
+            style={{ color: "var(--c-ink-muted)" }}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? (
+              <Sun className="w-4 h-4" />
+            ) : (
+              <Moon className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 px-2">
+          <Avatar className="size-8">
+            <AvatarFallback className="text-xs bg-sidebar-accent text-sidebar-accent-foreground">MV</AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-medium text-sidebar-foreground truncate">Mike Villar</span>
+            <span className="text-xs text-sidebar-foreground/50 truncate">CEO, Growth Rocket</span>
+          </div>
+        </div>
+      </SidebarFooter>
+    </Sidebar>
+  )
+}

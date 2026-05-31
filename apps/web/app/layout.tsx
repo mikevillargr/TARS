@@ -1,0 +1,71 @@
+import type { Metadata, Viewport } from "next";
+import { Inter, Lora, JetBrains_Mono } from "next/font/google";
+import "./globals.css";
+import "leaflet/dist/leaflet.css";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { ThemeProvider } from "@/components/ThemeProvider";
+
+const inter = Inter({
+  variable: "--font-sans",
+  subsets: ["latin"],
+});
+
+const lora = Lora({
+  variable: "--font-heading",
+  subsets: ["latin"],
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "TARS",
+  description: "Personal AI Operating System",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "TARS",
+  },
+  icons: {
+    icon: [
+      { url: "/tars-avatar.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#f6f3ec",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${lora.variable} ${jetbrainsMono.variable} h-full antialiased`}
+    >
+      {/* Blocking script: applies .dark class before any render to prevent flash */}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('tars-theme')||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();` }} />
+      </head>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <ServiceWorkerRegister />
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+}

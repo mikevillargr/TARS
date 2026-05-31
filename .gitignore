@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker volumes (local dev)
+postgres_data/
+redis_data/
+
+# Secrets / keys
+*.pem
+*.key
+*.p12
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Turbo
+.turbo/
+
+# Python venv
+venv/
+.venv/
+env/
+
+# Alembic (keep migrations, ignore cache)
+__pycache__/
+---
+.claude/
+*.tmp

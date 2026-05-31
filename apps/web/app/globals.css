@@ -1,0 +1,485 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-heading);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+
+  /* Named semantic tokens — use var() so dark mode toggling changes these automatically */
+  --color-canvas: var(--c-canvas);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-ink: var(--c-ink);
+  --color-ink-muted: var(--c-ink-muted);
+  --color-ink-faint: var(--c-ink-faint);
+  --color-border-faint: var(--c-border-faint);
+  --color-moss: var(--c-moss);
+  --color-moss-soft: var(--c-moss-soft);
+  --color-amber: var(--c-amber);
+  --color-amber-warm: var(--c-amber);
+  --color-amber-soft: var(--c-amber-soft);
+  --color-rose: var(--c-rose);
+  --color-rose-warm: var(--c-rose);
+  --color-rose-soft: var(--c-rose-soft);
+}
+
+:root {
+  /* Shadcn variables mapped to warm palette */
+  --background: #f6f3ec;
+  --foreground: #1a1714;
+  --card: #fbfaf6;
+  --card-foreground: #1a1714;
+  --popover: #fbfaf6;
+  --popover-foreground: #1a1714;
+  --primary: #2d5a4f;
+  --primary-foreground: #fbfaf6;
+  --secondary: #efeadf;
+  --secondary-foreground: #1a1714;
+  --muted: #efeadf;
+  --muted-foreground: #6b6357;
+  --accent: #efeadf;
+  --accent-foreground: #1a1714;
+  --destructive: #a04848;
+  --border: #d8d2c4;
+  --input: #d8d2c4;
+  --ring: #2d5a4f;
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar: #fbfaf6;
+  --sidebar-foreground: #1a1714;
+  --sidebar-primary: #2d5a4f;
+  --sidebar-primary-foreground: #fbfaf6;
+  --sidebar-accent: #e3ede9;
+  --sidebar-accent-foreground: #2d5a4f;
+  --sidebar-border: #d8d2c4;
+  --sidebar-ring: #2d5a4f;
+
+  /* Semantic color tokens — use in inline styles via var() */
+  --c-canvas: #f6f3ec;
+  --c-surface: #fbfaf6;
+  --c-surface-2: #efeadf;
+  --c-ink: #1a1714;
+  --c-ink-muted: #6b6357;
+  --c-ink-faint: #948a7b;
+  --c-border: #d8d2c4;
+  --c-border-faint: #e8e2d4;
+  --c-moss: #2d5a4f;
+  --c-moss-soft: #e3ede9;
+  --c-amber: #b8651a;
+  --c-amber-soft: #f5e8d5;
+  --c-rose: #a04848;
+  --c-rose-soft: #f0dcdc;
+}
+
+.dark {
+  --background: #1c1a17;
+  --foreground: #f0ece4;
+  --card: #232018;
+  --card-foreground: #f0ece4;
+  --popover: #232018;
+  --popover-foreground: #f0ece4;
+  --primary: #4a9a87;
+  --primary-foreground: #0e1f1c;
+  --secondary: #2d2a24;
+  --secondary-foreground: #f0ece4;
+  --muted: #2d2a24;
+  --muted-foreground: #a09890;
+  --accent: #2d2a24;
+  --accent-foreground: #f0ece4;
+  --destructive: #c46060;
+  --border: #3d3830;
+  --input: #3d3830;
+  --ring: #4a9a87;
+
+  --sidebar: #1c1a17;
+  --sidebar-foreground: #f0ece4;
+  --sidebar-primary: #4a9a87;
+  --sidebar-primary-foreground: #0e1f1c;
+  --sidebar-accent: #1e3530;
+  --sidebar-accent-foreground: #4a9a87;
+  --sidebar-border: #3d3830;
+  --sidebar-ring: #4a9a87;
+
+  --c-canvas: #1c1a17;
+  --c-surface: #232018;
+  --c-surface-2: #2d2a24;
+  --c-ink: #f0ece4;
+  --c-ink-muted: #c4bdb2;
+  --c-ink-faint: #948a7b;
+  --c-border: #3d3830;
+  --c-border-faint: #2d2a24;
+  --c-moss: #4a9a87;
+  --c-moss-soft: #1e3530;
+  --c-amber: #d4882a;
+  --c-amber-soft: #3a2a14;
+  --c-rose: #c46060;
+  --c-rose-soft: #2e1818;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    /* Use CSS vars directly — bg-background relies on Tailwind resolving --background,
+       but CSS vars work even before Tailwind's hydration pass. */
+    background-color: var(--c-canvas);
+    color: var(--c-ink);
+    overflow-x: hidden; /* prevent body-level horizontal scroll */
+    overflow-wrap: anywhere; /* break pathologically long words/URLs */
+  }
+  html {
+    @apply font-sans;
+    overflow-x: hidden; /* global backstop — no horizontal page scroll ever */
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading), var(--font-sans), serif;
+  }
+}
+
+/* ── Utility classes matching the Magic Patterns design system ── */
+@layer components {
+  .card {
+    background-color: #fbfaf6;
+    border: 1px solid #d8d2c4;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: 0 1px 2px 0 rgba(26, 23, 20, 0.05);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+  }
+
+  .badge-moss {
+    background-color: #e3ede9;
+    color: #2d5a4f;
+  }
+
+  .badge-amber {
+    background-color: #f5e8d5;
+    color: #b8651a;
+  }
+
+  .badge-rose {
+    background-color: #f0dcdc;
+    color: #a04848;
+  }
+
+  .badge-neutral {
+    background-color: #efeadf;
+    color: #6b6357;
+    border: 1px solid #e8e2d4;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background-color: #2d5a4f;
+    color: #fbfaf6;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: opacity 0.15s;
+    cursor: pointer;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background-color: #efeadf;
+    color: #1a1714;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid #d8d2c4;
+    transition: background-color 0.15s;
+    cursor: pointer;
+  }
+  .btn-secondary:hover { background-color: #e8e2d4; }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: #6b6357;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    transition: color 0.15s, background-color 0.15s;
+    cursor: pointer;
+  }
+  .btn-ghost:hover {
+    color: #1a1714;
+    background-color: #efeadf;
+  }
+
+  .input-field {
+    background-color: #fbfaf6;
+    border: 1px solid #d8d2c4;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    color: #1a1714;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .input-field::placeholder { color: #948a7b; }
+  .input-field:focus {
+    border-color: #2d5a4f;
+    box-shadow: 0 0 0 2px rgba(45, 90, 79, 0.15);
+  }
+}
+
+/* ── Dark mode overrides for component classes ── */
+.dark .card {
+  background-color: var(--c-surface);
+  border-color: var(--c-border);
+  color: var(--c-ink);
+}
+.dark .badge-neutral {
+  background-color: var(--c-surface-2);
+  color: var(--c-ink-muted);
+  border-color: var(--c-border);
+}
+.dark .badge-moss {
+  background-color: var(--c-moss-soft);
+  color: var(--c-moss);
+}
+.dark .badge-amber {
+  background-color: var(--c-amber-soft);
+  color: var(--c-amber);
+}
+.dark .badge-rose {
+  background-color: var(--c-rose-soft);
+  color: var(--c-rose);
+}
+.dark .btn-primary {
+  background-color: var(--c-moss);
+  color: #0e1f1c;
+}
+.dark .btn-secondary {
+  background-color: var(--c-surface-2);
+  color: var(--c-ink);
+  border-color: var(--c-border);
+}
+.dark .btn-secondary:hover { background-color: var(--c-border); }
+.dark .btn-ghost { color: var(--c-ink-muted); }
+.dark .btn-ghost:hover { color: var(--c-ink); background-color: var(--c-surface-2); }
+.dark .input-field {
+  background-color: var(--c-surface-2);
+  border-color: var(--c-border);
+  color: var(--c-ink);
+}
+.dark .input-field:focus {
+  border-color: var(--c-moss);
+  box-shadow: 0 0 0 2px rgba(74, 154, 135, 0.2);
+}
+.dark .input-field::placeholder { color: var(--c-ink-faint); }
+.dark ::-webkit-scrollbar-thumb { background: #3d3830; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #5a5448; }
+
+/* ── Safe-area-aware bottom padding for content area on iOS PWA.
+   Tab bar is 56px tall + env(safe-area-inset-bottom) for the home indicator. */
+.pb-safe-tab {
+  padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--c-ink-faint); }
+
+/* ── Code block overflow: definitive fix ───────────────────────────────────
+   SyntaxHighlighter renders <pre> with white-space:pre. Without explicit
+   containment the pre expands to code-line width and blows out the page.
+   overflow-x:hidden on .message-content clips at the bubble boundary;
+   the CodeBlock component wraps its <pre> in overflow-x:auto so it scrolls. */
+.message-content {
+  overflow-x: hidden;
+  max-width: 100%;
+  min-width: 0;
+}
+.message-content pre {
+  max-width: 100% !important;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ── Dark mode: force backgrounds that use inline hex to stay correct ──────
+   Pages not yet tokenised (hardcoded hex inline styles) get overridden here.
+   We can't beat specificity of inline styles with class selectors, so we
+   instead ensure the CSS-var values are correct and apply them on [style]
+   elements via the cascade where possible. The DEFINITIVE fix is to replace
+   the hex values with var(--c-*) in the source — done for chat/page.tsx. */
+.dark body { background-color: var(--c-canvas); color: var(--c-ink); }
+
+/* ── Tiptap / ProseMirror editor styles ────────────────────────────────────── */
+.ProseMirror {
+  outline: none;
+  min-height: 200px;
+  padding: 0.75rem;
+  color: var(--c-ink);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  flex: 1;
+}
+.ProseMirror > * + * { margin-top: 0.5rem; }
+.ProseMirror h1 { font-size: 1.3rem; font-weight: 700; margin: 1rem 0 0.3rem; font-family: var(--font-heading), serif; color: var(--c-ink); }
+.ProseMirror h2 { font-size: 1.1rem; font-weight: 600; margin: 0.85rem 0 0.25rem; font-family: var(--font-heading), serif; color: var(--c-ink); }
+.ProseMirror h3 { font-size: 1rem; font-weight: 600; margin: 0.7rem 0 0.2rem; color: var(--c-ink); }
+.ProseMirror ul, .ProseMirror ol { padding-left: 1.5rem; margin: 0.4rem 0; }
+.ProseMirror li { margin: 0.15rem 0; }
+.ProseMirror li p { margin: 0; }
+.ProseMirror blockquote {
+  border-left: 3px solid var(--c-border);
+  padding-left: 0.85rem;
+  color: var(--c-ink-muted);
+  margin: 0.6rem 0;
+  font-style: italic;
+}
+.ProseMirror pre {
+  background: #1a1714; /* intentionally dark — code blocks stay dark on dark bg */
+  color: #e5e0d8;
+  padding: 0.875rem 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-size: 0.8125rem;
+  font-family: var(--font-mono), monospace;
+  margin: 0.6rem 0;
+}
+.ProseMirror code {
+  background: var(--c-surface-2);
+  color: var(--c-amber);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-family: var(--font-mono), monospace;
+}
+.ProseMirror pre code { background: none; color: inherit; padding: 0; }
+.ProseMirror a { color: var(--c-moss); text-decoration: underline; text-underline-offset: 2px; }
+.ProseMirror a:hover { opacity: 0.8; }
+.ProseMirror hr { border: none; border-top: 1px solid var(--c-border); margin: 1rem 0; }
+.ProseMirror img { max-width: 100%; border-radius: 0.5rem; margin: 0.5rem 0; display: block; }
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--c-ink-faint);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+/* Tiptap selection */
+.ProseMirror .selection, .ProseMirror *::selection {
+  background-color: color-mix(in srgb, var(--c-moss) 20%, transparent);
+}
+/* Dark mode: editor background */
+.dark .ProseMirror { color: var(--c-ink); }
+
+/* ──────────────────────────────────────────────────────────────────────
+ * App-wide overflow safety net
+ * ──────────────────────────────────────────────────────────────────────
+ * Mobile browsers happily blow past viewport width when long words, URLs,
+ * code blocks, or wide flex children get involved. These rules clamp the
+ * common offenders so no page ever requires horizontal page-scroll.
+ */
+
+/* Root containers should never push horizontally past the viewport */
+html, body, #__next, main {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Long URLs / unbreakable tokens inside prose, badges, tables, list items, etc.
+ * `overflow-wrap: anywhere` allows the browser to break mid-word as a last resort. */
+.message-content,
+.message-content p,
+.message-content li,
+.message-content td,
+.message-content blockquote,
+.prose,
+.prose p,
+.prose li {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Any preformatted block (raw <pre>, code fences) gets safe horizontal scroll
+ * rather than spilling out of its parent. */
+.message-content pre,
+.prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Inline code inside text — long tokens (paths, hashes) must break. */
+.message-content code,
+.prose code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Images and SVGs should never exceed their container width. */
+.message-content img,
+.message-content svg:not(.lucide) {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Tables in messages: horizontal scroll, never push parent wider. */
+.message-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
