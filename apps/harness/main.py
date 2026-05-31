@@ -141,7 +141,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     lifespan=lifespan,
     title="TARS Harness",
-    version="0.1.0",
+    version="2.0.0",
     docs_url="/docs" if settings.debug else None,
     redoc_url=None,
 )
