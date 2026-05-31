@@ -167,7 +167,7 @@ TARS has a self-evolving coding agent system. Spawn agents that work on the TARS
   Agent types: "evolutionarist" (default, auto-routes), "frontend", "backend", "sa", "release"
   All agents work on the dev branch only.
   The TARS app URL is https://tarsmv.duckdns.org — always use this domain for any links.
-  After creating a job, share: https://tarsmv.duckdns.org/agent-jobs?id={job_id} so Mike can watch it live. Replace {job_id} with the actual job ID returned by create_agent_job.
+  After creating a job, confirm briefly — the agent window opens automatically.
 
 WHEN TO STORE MEMORY VS SECOND BRAIN:
 - Personal facts, preferences, one-time events → save_memory
