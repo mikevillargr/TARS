@@ -1717,7 +1717,13 @@ async def send_message(
 
     async def generate():
         while True:
-            item = await queue.get()
+            try:
+                item = await asyncio.wait_for(queue.get(), timeout=15.0)
+            except asyncio.TimeoutError:
+                # Keepalive comment — keeps SSE connection alive through proxies
+                # while the model is warming up or thinking (e.g. RunPod cold start).
+                yield ": keepalive\n\n"
+                continue
             if item is None:
                 break
             yield item

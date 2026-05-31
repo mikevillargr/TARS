@@ -109,11 +109,14 @@ def unsubscribe(job_id: str, send_fn: Callable) -> None:
 async def broadcast(job_id: str, event: dict) -> None:
     buf = _buffers.setdefault(job_id, deque(maxlen=200))
     buf.append(event)
+    dead: set = set()
     for send_fn in list(_subscribers.get(job_id, set())):
         try:
             await send_fn(event)
         except Exception:
-            pass
+            dead.add(send_fn)
+    if dead:
+        _subscribers.get(job_id, set()).difference_update(dead)
 
 
 def cancel_job(job_id: str) -> None:
