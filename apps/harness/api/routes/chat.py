@@ -1636,8 +1636,7 @@ async def send_message(
                                 "agent_type": agent_type,
                                 "instruction": instruction,
                             })
-                            job_url = f"{_settings.tars_app_url}/agent-jobs"
-                            return f"Agent job created (ID: {job.id}, type: {agent_type}). View the live stream at: {job_url}"
+                            return f"Agent job spawned (ID: {job.id}, type: {agent_type})."
                         except Exception as exc:
                             log.warning("create_agent_job tool failed: %s", exc)
                             return f"Failed to create agent job: {exc}"
