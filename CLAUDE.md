@@ -571,17 +571,16 @@ Single user. Username + password. No registration flow.
 ### Branch Strategy
 
 ```
-main          production only, protected
-              never commit directly
-              only updated via explicit release instruction
-
-dev           active development branch
+main          active development + production
               all work happens here
-              pushed to GitHub frequently
+              deploy by pushing a version tag
 
 feature/*     optional, for large isolated features
-              merge into dev when complete
+              merge into main when complete
 ```
+
+No dev environment exists yet. If a dev server is provisioned later,
+a dev branch and deploy pipeline can be added at that time.
 
 ---
 
@@ -590,10 +589,10 @@ feature/*     optional, for large isolated features
 ```
 1. All work done locally (Next.js dev server + FastAPI uvicorn + Docker Compose for Postgres/Redis)
 
-2. Commit frequently to dev branch — after every meaningful chunk:
+2. Commit frequently to main — after every meaningful chunk:
    git add .
    git commit -m "feat: add chat streaming endpoint"
-   git push origin dev
+   git push origin main
 
 3. Commit message format:
    feat:     new feature
@@ -602,7 +601,7 @@ feature/*     optional, for large isolated features
    refactor: code restructure, no behavior change
    docs:     documentation only
 
-4. Never touch main unless explicitly told to release
+4. Deploy by pushing a version tag (triggers GitHub Actions deploy pipeline)
 ```
 
 ---
