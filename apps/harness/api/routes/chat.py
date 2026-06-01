@@ -314,10 +314,8 @@ async def _get_conversation(conv_id: str, user_id: str, db: AsyncSession) -> Con
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.get("/conversations", response_model=ConversationListOut)
+@router.get("/conversations", response_model=List[ConversationOut])
 async def list_conversations(
-    skip: int = 0,
-    limit: int = 50,
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -328,26 +326,14 @@ async def list_conversations(
         .group_by(Message.conversation_id)
         .subquery()
     )
-    total_result = await db.execute(
-        select(func.count(Conversation.id)).where(Conversation.user_id == user_id)
-    )
-    total = total_result.scalar() or 0
-
     result = await db.execute(
         select(Conversation)
         .outerjoin(latest_msg, Conversation.id == latest_msg.c.conversation_id)
         .where(Conversation.user_id == user_id)
         .order_by(desc(func.coalesce(latest_msg.c.last_at, Conversation.created_at)))
-        .offset(skip)
-        .limit(limit)
+        .limit(200)
     )
-    conversations = result.scalars().all()
-    return ConversationListOut(
-        conversations=conversations,
-        total=total,
-        has_more=(skip + limit) < total,
-        next_skip=skip + len(conversations),
-    )
+    return result.scalars().all()
 
 
 @router.post("/conversations", response_model=ConversationOut, status_code=201)

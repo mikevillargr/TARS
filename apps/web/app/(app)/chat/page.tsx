@@ -959,6 +959,7 @@ export default function ChatPage() {
   const { setOpen: setSidebarOpen, open: sidebarOpen } = useSidebar()
   const [quoteIndex] = useState(() => Math.floor(Math.random() * TARS_QUOTES.length))
   const [conversations, setConversations]           = useState<Conversation[]>([])
+  const [visibleConvCount, setVisibleConvCount]     = useState(20)
   const [activeChatId, setActiveChatId]             = useState<string | null>(null)
   const [messages, setMessages]                     = useState<Message[]>([])
   const [streaming, setStreaming]                   = useState<StreamingMsg | null>(null)
@@ -1613,7 +1614,7 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5 min-w-[256px]">
           {conversations.length === 0 ? (
             <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
-          ) : conversations.map((conv) => (
+          ) : conversations.slice(0, visibleConvCount).map((conv) => (
             <div
               key={conv.id}
               className="group relative flex items-center min-w-0 overflow-hidden w-full"
@@ -1646,6 +1647,17 @@ export default function ChatPage() {
               </button>
             </div>
           ))}
+          {visibleConvCount < conversations.length && (
+            <button
+              onClick={() => setVisibleConvCount(n => n + 20)}
+              className="w-full text-center px-3 py-2 text-xs rounded-md transition-colors"
+              style={{ color: "var(--c-ink-faint)" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface)" }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+            >
+              Load more
+            </button>
+          )}
         </div>
       </div>
 
