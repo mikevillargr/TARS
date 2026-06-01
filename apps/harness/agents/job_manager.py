@@ -351,6 +351,22 @@ async def _run_evolutionarist(
     Run the Evolutionarist orchestrator using the Anthropic SDK.
     On spawn_agent tool call, create + start a sub-job.
     """
+    # Inject memory context into system prompt
+    system_prompt = EVOLUTIONARIST_SYSTEM
+    try:
+        async with db_session_factory() as _mem_db:
+            from sqlalchemy import select as _sel
+            from db.models import AgentJob as _AgentJob
+            _job = (await _mem_db.execute(_sel(_AgentJob).where(_AgentJob.id == job_id))).scalar_one_or_none()
+            if _job:
+                from memory import mnemon as _mnemon
+                memory_context = await _mnemon.search(_mem_db, _job.user_id, instruction, limit=20)
+                if memory_context:
+                    context_str = "\n".join([m.content for m in memory_context])
+                    system_prompt = f"Relevant memory context:\n{context_str}\n\n{system_prompt}"
+    except Exception:
+        pass  # Memory injection is non-blocking
+
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     messages = [{"role": "user", "content": instruction}]
@@ -370,7 +386,7 @@ async def _run_evolutionarist(
         response = await client.messages.create(
             model=model,
             max_tokens=2048,
-            system=EVOLUTIONARIST_SYSTEM,
+            system=system_prompt,
             tools=[SPAWN_AGENT_TOOL],  # type: ignore[arg-type]
             messages=messages,
         )
