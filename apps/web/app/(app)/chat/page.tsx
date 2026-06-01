@@ -1214,15 +1214,6 @@ export default function ChatPage() {
     })
   }, [voice])
 
-  // Auto-send when pendingVoiceSend is ready and activeChatId is set
-  useEffect(() => {
-    if (!pendingVoiceSend || !activeChatId || busy) return
-    setPendingVoiceSend(null)
-    // handleSend reads inputValue from closure — ensure it's set first
-    setTimeout(() => handleSend(), 0)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingVoiceSend, activeChatId])
-
   async function handleDeleteConversation(convId: string, e: React.MouseEvent) {
     e.stopPropagation()  // don't select the conversation when clicking delete
     const conv = conversations.find(c => c.id === convId)
@@ -1452,6 +1443,15 @@ export default function ChatPage() {
       // If stop was initiated, handleStop already called setBusy(false)
     }
   }, [activeChatId, attachments, busy, inputValue])
+
+  // Auto-send when pendingVoiceSend is ready and activeChatId is set
+  useEffect(() => {
+    if (!pendingVoiceSend || !activeChatId || busy) return
+    setPendingVoiceSend(null)
+    // handleSend reads inputValue from closure — ensure it's set first
+    setTimeout(() => handleSend(), 0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingVoiceSend, activeChatId])
 
   // Auto-send when an artifact has been loaded — fires after handleSend is defined
   useEffect(() => {
