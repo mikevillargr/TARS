@@ -101,23 +101,48 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.warning("Embedding model preload failed: %s", e)
 
-    # Reset any agent jobs left in running/awaiting_approval state from before
-    # this process started (harness restart wipes in-memory state).
+    # On restart: re-queue interrupted root jobs, mark orphaned children as failed.
     try:
         from db.session import AsyncSessionLocal
         from db.models import AgentJob
-        from sqlalchemy import update
+        from agents import job_manager
+        from sqlalchemy import select, update
+
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                update(AgentJob)
-                .where(AgentJob.status.in_(["running", "awaiting_approval"]))
-                .values(status="failed", output="Harness restarted — job interrupted.")
-            )
-            if result.rowcount:
-                log.info("Reset %d stale running agent job(s) to failed", result.rowcount)
+            # Find all interrupted jobs
+            stale = (await db.execute(
+                select(AgentJob).where(AgentJob.status.in_(["running", "awaiting_approval"]))
+            )).scalars().all()
+
+            requeued = 0
+            for job in stale:
+                if job.parent_job_id is None:
+                    # Root job — re-queue it so it runs again
+                    job.status = "pending"
+                    job.output = None
+                    job.started_at = None
+                    job.completed_at = None
+                    requeued += 1
+                else:
+                    # Child job — mark failed, parent will be re-run
+                    job.status = "failed"
+                    job.output = "Harness restarted — parent job will re-run."
+
             await db.commit()
+            log.info("Restart cleanup: %d root jobs re-queued, %d child jobs failed",
+                     requeued, len(stale) - requeued)
+
+        # Start all re-queued root jobs
+        async with AsyncSessionLocal() as db:
+            pending = (await db.execute(
+                select(AgentJob).where(AgentJob.status == "pending")
+            )).scalars().all()
+            for job in pending:
+                await job_manager.start_job(job.id, AsyncSessionLocal)
+                log.info("Re-queued job %s (%s) started", job.id[:8], job.agent_type)
+
     except Exception as e:
-        log.warning("Stale job cleanup failed: %s", e)
+        log.warning("Stale job cleanup/re-queue failed: %s", e)
 
     # Start Ollama keepalive — warms model on startup, recovers backoff after restarts
     keepalive_task = asyncio.create_task(_ollama_keepalive())

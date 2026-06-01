@@ -269,6 +269,7 @@ async def _run_subagent(
             _deploy_result = event
 
         elif event["type"] == "completed":
+            summary = event.get("summary", "")
             async with db_session_factory() as db:
                 from sqlalchemy import select
                 from db.models import AgentJob
@@ -278,8 +279,43 @@ async def _run_subagent(
                         row.pr_url = event["pr_url"]
                     if event.get("branch"):
                         row.branch = event["branch"]
-                    row.output = event.get("summary", "")
+                    row.output = summary
+                    row.status = "completed"
+                    row.completed_at = datetime.now(timezone.utc)
                     await db.commit()
+
+            # SA agents: if this is a root SA job (no parent), auto-escalate to Evolutionarist
+            # so findings get actioned — not just reported.
+            if agent_type == "sa":
+                async with db_session_factory() as db:
+                    from sqlalchemy import select
+                    from db.models import AgentJob
+                    row = (await db.execute(select(AgentJob).where(AgentJob.id == job_id))).scalar_one_or_none()
+                    if row and row.parent_job_id is None and summary:
+                        escalation_instruction = (
+                            f"An SA agent investigated the following task and produced findings. "
+                            f"Now implement all fixes described in the findings.\n\n"
+                            f"Original task: {instruction[:300]}\n\n"
+                            f"SA findings:\n{summary[:1500]}\n\n"
+                            f"Spawn the appropriate frontend and/or backend agents to implement every fix."
+                        )
+                        evo_job_id = await _create_sub_job(
+                            parent_job_id=job_id,
+                            agent_type="evolutionarist",
+                            instruction=escalation_instruction,
+                            db_session_factory=db_session_factory,
+                        )
+                        asyncio.create_task(_run_evolutionarist(
+                            evo_job_id, escalation_instruction,
+                            DEFAULT_MODELS["evolutionarist"], db_session_factory,
+                        ))
+                        await _notify_chat(
+                            job_id,
+                            f"🔍 SA investigation complete — escalating to implementation agents…",
+                            db_session_factory,
+                        )
+                        await broadcast(job_id, event)
+                        return
 
             # Notify the originating chat conversation
             pr_url = event.get("pr_url")
