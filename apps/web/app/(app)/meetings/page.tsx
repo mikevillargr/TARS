@@ -279,13 +279,17 @@ export default function MeetingsPage() {
                   </div>
                   <h2 className="text-2xl font-medium leading-tight" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>{selected.title}</h2>
                   {selected.attendees.length > 0 && (
-                    <div className="flex items-center gap-3 mt-3">
-                      <div className="flex -space-x-2">
-                        {selected.attendees.slice(0, 4).map(a => (
+                    <div className="flex items-center gap-2 mt-3 flex-nowrap" style={{ maxHeight: "48px" }}>
+                      <div className="flex -space-x-2 flex-nowrap">
+                        {selected.attendees.slice(0, 5).map(a => (
                           <AttendeeChip key={a} attendee={a} />
                         ))}
                       </div>
-                      <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>{selected.attendees.join(", ")}</span>
+                      {selected.attendees.length > 5 && (
+                        <span className="text-xs font-medium whitespace-nowrap" style={{ color: "var(--c-ink-muted)" }}>
+                          +{selected.attendees.length - 5} more
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -298,7 +302,7 @@ export default function MeetingsPage() {
                   { id: "actions" as Tab,    label: `Actions${selected.action_items?.length ? ` (${selected.action_items.length})` : ""}`, icon: CheckSquare },
                 ] as const).map(({ id, label, icon: Icon }) => (
                   <button key={id} onClick={() => setTab(id)}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap"
                     style={{
                       borderBottomColor: tab === id ? "var(--c-moss)" : "transparent",
                       color: tab === id ? "var(--c-moss)" : "var(--c-ink-muted)",
