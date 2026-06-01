@@ -11,7 +11,8 @@ BRANCH="${2:-dev}"
 
 echo "==> Pulling latest code (branch: $BRANCH)"
 cd "$DEPLOY_PATH"
-git pull origin "$BRANCH"
+git fetch origin
+git reset --hard origin/"$BRANCH"
 
 if [[ "$CHANGED" == "harness" || "$CHANGED" == "both" ]]; then
   echo "==> Deploying harness"
