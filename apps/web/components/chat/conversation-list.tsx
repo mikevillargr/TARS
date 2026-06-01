@@ -14,7 +14,7 @@ interface Conversation {
   created_at: string
 }
 
-const PAGE_SIZE = 15
+const PAGE_SIZE = 20
 
 export function ConversationList({
   onSelect,
@@ -27,18 +27,36 @@ export function ConversationList({
 
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [offset, setOffset] = useState(0)
 
   useEffect(() => {
-    apiGet<Conversation[]>("/chat/conversations")
-      .then(setConversations)
+    apiGet<Conversation[]>(`/chat/conversations?limit=${PAGE_SIZE}&offset=0`)
+      .then((data) => {
+        setConversations(data)
+        setHasMore(data.length === PAGE_SIZE)
+        setOffset(PAGE_SIZE)
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE)
-  }, [conversations.length])
+  async function handleLoadMore() {
+    setLoadingMore(true)
+    try {
+      const more = await apiGet<Conversation[]>(
+        `/chat/conversations?limit=${PAGE_SIZE}&offset=${offset}`
+      )
+      setConversations((prev) => [...prev, ...more])
+      setHasMore(more.length === PAGE_SIZE)
+      setOffset((prev) => prev + PAGE_SIZE)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   async function handleNew() {
     const conv = await apiPost<Conversation>("/chat/conversations")
@@ -77,7 +95,7 @@ export function ConversationList({
           <div className="p-4 text-sm text-muted-foreground">No conversations yet.</div>
         ) : (
           <ul className="p-2 space-y-0.5">
-            {conversations.slice(0, visibleCount).map((conv) => (
+            {conversations.map((conv) => (
               <li key={conv.id}>
                 <button
                   onClick={() => {
@@ -105,13 +123,14 @@ export function ConversationList({
                 </button>
               </li>
             ))}
-            {visibleCount < conversations.length && (
+            {hasMore && (
               <li>
                 <button
-                  onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
-                  className="w-full px-2 py-2 rounded-md text-left text-sm transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  className="w-full px-2 py-2 rounded-md text-left text-sm transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Load more
+                  {loadingMore ? "Loading..." : "Load more"}
                 </button>
               </li>
             )}
