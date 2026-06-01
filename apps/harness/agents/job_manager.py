@@ -309,23 +309,19 @@ async def _run_subagent(
                             evo_job_id, escalation_instruction,
                             DEFAULT_MODELS["evolutionarist"], db_session_factory,
                         ))
-                        await _notify_chat(
-                            job_id,
-                            "Got the picture. Spinning up implementation agents now.",
-                            db_session_factory,
-                        )
+                        pass  # chip handles live feedback; final message posted on completion
                         await broadcast(job_id, event)
                         return
 
             # Notify the originating chat conversation
             pr_url = event.get("pr_url")
-            one_liner = summary.split("\n")[0].strip()[:200].rstrip(".") if summary else "Done"
+            first_line = summary.split("\n")[0].strip()[:300] if summary else "Done"
             if _deploy_result and not _deploy_result.get("success"):
-                notify_msg = f"{one_liner}. Deploy failed — check Agent Jobs."
+                notify_msg = f"{first_line} Deploy failed — check Agent Jobs."
             elif pr_url:
-                notify_msg = f"{one_liner}. PR: {pr_url}"
+                notify_msg = f"{first_line} PR: {pr_url}"
             else:
-                notify_msg = one_liner
+                notify_msg = first_line
             await _notify_chat(job_id, notify_msg, db_session_factory)
 
         await broadcast(job_id, event)
@@ -364,16 +360,9 @@ async def _run_evolutionarist(
 
     messages = [{"role": "user", "content": instruction}]
 
-    # Notify chat that orchestration is starting — TARS voice, not system alert
-    brief = instruction.strip().rstrip(".")[:100]
-    await _notify_chat(job_id, f"On it. {brief}.", db_session_factory)
+    await broadcast(job_id, {"type": "text_chunk", "text": "Analyzing task…\n"})
 
-    await broadcast(job_id, {
-        "type": "text_chunk",
-        "text": "Analyzing task and determining which specialist(s) to spawn...\n",
-    })
-
-    completed_sub_jobs: list[dict] = []   # track outcomes for release notes
+    completed_sub_jobs: list[dict] = []
 
     while True:
         response = await client.messages.create(
@@ -384,51 +373,45 @@ async def _run_evolutionarist(
             messages=messages,
         )
 
-        # Stream text blocks
         for block in response.content:
             if hasattr(block, "text") and block.text:
                 await broadcast(job_id, {"type": "text_chunk", "text": block.text})
 
-        # No tool call — orchestration complete, trigger auto-release
+        # No tool call — done. Post ONE final message to chat.
         if response.stop_reason != "tool_use":
             final_text = " ".join(
                 b.text for b in response.content if hasattr(b, "text") and b.text
-            )
+            ).strip()
 
-            # Auto-release if any sub-agent made changes
             prs = [j["pr_url"] for j in completed_sub_jobs if j.get("pr_url")]
+
             if completed_sub_jobs:
                 new_version = await _auto_patch_release(job_id, db_session_factory)
-                summary = final_text.strip()[:400] or "All done."
+                # Build a clean single TARS message — summary + version + PRs
+                parts = [final_text[:600]] if final_text else []
                 if new_version:
-                    pr_part = f" PR{'s' if len(prs) > 1 else ''}: {', '.join(prs)}" if prs else ""
-                    await _notify_chat(
-                        job_id,
-                        f"{summary}\n\nDeployed as {new_version}.{pr_part}",
-                        db_session_factory,
-                    )
-                else:
-                    await _notify_chat(job_id, summary, db_session_factory)
+                    parts.append(f"Deployed as {new_version}.")
+                if prs:
+                    parts.append("PR" + ("s" if len(prs) > 1 else "") + ": " + ", ".join(prs))
+                await _notify_chat(job_id, " ".join(parts) or "Done.", db_session_factory)
             else:
                 await _notify_chat(
                     job_id,
-                    final_text.strip()[:400] or "Done — no code changes were needed.",
+                    final_text[:600] or "Done — no code changes needed.",
                     db_session_factory,
                 )
 
             await broadcast(job_id, {
                 "type": "completed",
-                "summary": final_text[:500] or "Orchestration complete.",
+                "summary": final_text[:500] or "Done.",
                 "pr_url": prs[0] if prs else None,
             })
             return
 
-        # Process tool calls
+        # Process spawn_agent tool calls — no chat noise, chip handles live feedback
         tool_results = []
         for block in response.content:
-            if getattr(block, "type", None) != "tool_use":
-                continue
-            if block.name != "spawn_agent":
+            if getattr(block, "type", None) != "tool_use" or block.name != "spawn_agent":
                 continue
 
             sub_type = block.input.get("agent_type", "backend")
@@ -436,15 +419,8 @@ async def _run_evolutionarist(
 
             await broadcast(job_id, {
                 "type": "text_chunk",
-                "text": f"\n→ Spawning **{sub_type}** agent: {sub_instruction[:120]}\n",
+                "text": f"→ {sub_type} agent\n",
             })
-            # Brief, TARS-voiced heads-up — no system-alert formatting
-            agent_label = {"frontend": "Frontend", "backend": "Backend", "sa": "SA"}.get(sub_type, sub_type.title())
-            await _notify_chat(
-                job_id,
-                f"Spinning up {agent_label}. {sub_instruction[:80].rstrip('.')}.",
-                db_session_factory,
-            )
 
             sub_job_id = await _create_sub_job(
                 parent_job_id=job_id,
@@ -453,13 +429,11 @@ async def _run_evolutionarist(
                 db_session_factory=db_session_factory,
             )
 
-            # Run sub-agent inline (sequential) and forward events to parent channel
             sub_model = DEFAULT_MODELS.get(sub_type, "claude-sonnet-4-6")
             from agents import approval as _approval, executor as _executor
             gate = _approval.get_or_create(sub_job_id)
 
             sub_result = "Sub-agent completed."
-            sub_deploy_result: Optional[dict] = None
             pr_url: Optional[str] = None
 
             async for event in _executor.run(
@@ -468,51 +442,29 @@ async def _run_evolutionarist(
                 model=sub_model,
                 approval_gate=gate,
             ):
-                enriched = {**event, "sub_job_id": sub_job_id, "sub_agent_type": sub_type}
                 await broadcast(sub_job_id, event)
-                await broadcast(job_id, enriched)
+                await broadcast(job_id, {**event, "sub_job_id": sub_job_id, "sub_agent_type": sub_type})
 
-                if event["type"] == "deploy_completed":
-                    sub_deploy_result = event
-
-                elif event["type"] == "completed":
+                if event["type"] == "completed":
                     sub_result = event.get("summary", "Sub-agent completed.")
                     pr_url = event.get("pr_url")
-
                     async with db_session_factory() as db:
                         from sqlalchemy import select
                         from db.models import AgentJob
                         row = (await db.execute(select(AgentJob).where(AgentJob.id == sub_job_id))).scalar_one_or_none()
                         if row:
-                            if pr_url:
-                                row.pr_url = pr_url
-                            if event.get("branch"):
-                                row.branch = event["branch"]
+                            if pr_url: row.pr_url = pr_url
+                            if event.get("branch"): row.branch = event["branch"]
                             row.output = sub_result
                             row.status = "completed"
                             row.completed_at = datetime.now(timezone.utc)
                             await db.commit()
-
                     completed_sub_jobs.append({"type": sub_type, "pr_url": pr_url, "summary": sub_result})
-
-                    # Per-agent milestone — TARS voice, clean summary
-                    one_liner = sub_result.split("\n")[0].strip()[:120].rstrip(".")
-                    if pr_url:
-                        notify = f"{one_liner}. PR: {pr_url}"
-                    else:
-                        notify = one_liner
-                    await _notify_chat(job_id, notify, db_session_factory)
 
             _approval.cleanup(sub_job_id)
             _approval.cleanup_question(sub_job_id)
+            tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": sub_result})
 
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
-                "content": sub_result,
-            })
-
-        # Continue conversation with tool results
         messages.append({"role": "assistant", "content": response.content})  # type: ignore[arg-type]
         messages.append({"role": "user", "content": tool_results})
 

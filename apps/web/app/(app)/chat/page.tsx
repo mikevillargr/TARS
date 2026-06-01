@@ -818,7 +818,7 @@ function AgentStreamBubble({ msg }: { msg: AgentStreamMessage }) {
       </div>
       <div className="flex flex-col min-w-0 flex-1">
         <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>TARS</span>
-        <AgentStatusChip jobId={msg.job_id} instruction={msg.instruction} agentType={msg.agent_type} />
+        <AgentStatusChip jobId={msg.job_id} agentType={msg.agent_type} />
       </div>
     </div>
   )

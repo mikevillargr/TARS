@@ -6,20 +6,66 @@ import { TarsWebSocket, getWsToken } from "@/lib/websocket"
 
 interface Props {
   jobId: string
-  instruction: string
   agentType?: string
 }
 
 type Phase = "working" | "done" | "failed"
 
-export default function AgentStatusChip({ jobId, instruction, agentType }: Props) {
+// Ticker: cycles through recent status lines while working
+function Ticker({ lines }: { lines: string[] }) {
+  const [idx, setIdx] = useState(0)
+  const [visible, setVisible] = useState(true)
+
+  useEffect(() => {
+    if (lines.length <= 1) return
+    // Crossfade every 2.5 s
+    const t = setInterval(() => {
+      setVisible(false)
+      setTimeout(() => {
+        setIdx(i => (i + 1) % lines.length)
+        setVisible(true)
+      }, 200)
+    }, 2500)
+    return () => clearInterval(t)
+  }, [lines.length])
+
+  const text = lines[Math.min(idx, lines.length - 1)] ?? ""
+
+  return (
+    <span
+      style={{
+        color: "var(--c-ink-faint)",
+        opacity: visible ? 1 : 0,
+        transition: "opacity 0.2s ease",
+        display: "inline-block",
+      }}
+    >
+      {text}
+    </span>
+  )
+}
+
+export default function AgentStatusChip({ jobId, agentType }: Props) {
   const [phase, setPhase] = useState<Phase>("working")
-  const [statusText, setStatusText] = useState<string>("Working on it…")
+  const [tickerLines, setTickerLines] = useState<string[]>(["Working on it…"])
   const [prUrl, setPrUrl] = useState<string | null>(null)
   const wsRef = useRef<TarsWebSocket | null>(null)
 
   useEffect(() => {
     let mounted = true
+
+    // Meaningful status lines — filters noise, keeps actions
+    function addLine(raw: string) {
+      const text = raw.replace(/\n+/g, " ").replace(/\*\*/g, "").trim()
+      if (!text || text.length < 12) return
+      // Skip tool call noise
+      if (/^(Running|Executing|bash|```|→|Tool|read_file|write_file)/i.test(text)) return
+      const line = text.length > 80 ? text.slice(0, 79) + "…" : text
+      setTickerLines(prev => {
+        const next = [...prev.filter(l => l !== line), line]
+        return next.slice(-6) // keep last 6 unique lines
+      })
+    }
 
     async function init() {
       try {
@@ -29,15 +75,16 @@ export default function AgentStatusChip({ jobId, instruction, agentType }: Props
 
         ws.on("text_chunk", (msg: unknown) => {
           if (!mounted) return
-          const text = (msg as { text?: string }).text ?? ""
-          // Only surface high-level commentary, skip short/noisy chunks
-          if (text.length > 20 && !text.startsWith("```") && !text.startsWith("Running")) {
-            setStatusText(text.slice(0, 120).replace(/\n/g, " ").trim())
-          }
+          addLine((msg as { text?: string }).text ?? "")
         })
 
         ws.on("deploy_started", () => {
-          if (mounted) setStatusText("Deploying…")
+          if (mounted) addLine("Deploying…")
+        })
+
+        ws.on("deploy_completed", (msg: unknown) => {
+          const m = msg as { success?: boolean; target?: string }
+          if (mounted) addLine(m.success ? `Deployed (${m.target ?? "server"})` : "Deploy failed")
         })
 
         ws.on("completed", (msg: unknown) => {
@@ -45,20 +92,19 @@ export default function AgentStatusChip({ jobId, instruction, agentType }: Props
           const m = msg as { pr_url?: string; summary?: string }
           if (m.pr_url) setPrUrl(m.pr_url)
           setPhase("done")
-          setStatusText("Done")
         })
 
         ws.on("error", () => {
-          if (mounted) { setPhase("failed"); setStatusText("Failed") }
+          if (mounted) setPhase("failed")
         })
 
         ws.on("agent_stopped", () => {
-          if (mounted) { setPhase("failed"); setStatusText("Stopped") }
+          if (mounted) setPhase("failed")
         })
 
         ws.connect()
       } catch {
-        if (mounted) setStatusText("Could not connect to job stream")
+        // silent — chip just stays in working state
       }
     }
 
@@ -69,53 +115,68 @@ export default function AgentStatusChip({ jobId, instruction, agentType }: Props
     }
   }, [jobId])
 
-  const label = agentType
-    ? `${agentType.charAt(0).toUpperCase()}${agentType.slice(1)} agent`
-    : "Agent"
+  const typeLabel =
+    agentType === "evolutionarist" ? "Agent" :
+    agentType ? agentType.charAt(0).toUpperCase() + agentType.slice(1) :
+    "Agent"
 
   return (
     <div
-      className="flex items-start gap-2 rounded-lg px-3 py-2 text-xs max-w-sm"
+      className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs"
       style={{
         backgroundColor: phase === "done"
-          ? "color-mix(in srgb, var(--c-moss) 10%, transparent)"
+          ? "color-mix(in srgb, var(--c-moss) 12%, transparent)"
           : phase === "failed"
-          ? "color-mix(in srgb, var(--c-rose) 10%, transparent)"
-          : "var(--c-surface)",
+          ? "color-mix(in srgb, var(--c-rose) 12%, transparent)"
+          : "color-mix(in srgb, var(--c-ink) 6%, transparent)",
         border: "1px solid var(--c-border-faint)",
+        maxWidth: "420px",
       }}
     >
-      <div className="mt-0.5 shrink-0">
-        {phase === "working" && (
-          <Loader2 size={13} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
-        )}
-        {phase === "done" && (
-          <CheckCircle size={13} style={{ color: "var(--c-moss)" }} />
-        )}
-        {phase === "failed" && (
-          <XCircle size={13} style={{ color: "var(--c-rose)" }} />
-        )}
-      </div>
+      {/* Status icon */}
+      {phase === "working" && (
+        <Loader2 size={11} className="animate-spin shrink-0" style={{ color: "var(--c-ink-faint)" }} />
+      )}
+      {phase === "done" && (
+        <CheckCircle size={11} className="shrink-0" style={{ color: "var(--c-moss)" }} />
+      )}
+      {phase === "failed" && (
+        <XCircle size={11} className="shrink-0" style={{ color: "var(--c-rose)" }} />
+      )}
 
-      <div className="flex-1 min-w-0">
-        <span className="font-medium" style={{ color: "var(--c-ink)" }}>
-          {label}
-        </span>
-        <span style={{ color: "var(--c-ink-faint)" }}> · </span>
-        <span style={{ color: "var(--c-ink-faint)" }} className="truncate">
-          {phase === "working" ? statusText : instruction.slice(0, 60)}
-        </span>
-      </div>
+      {/* Label */}
+      <span className="font-medium shrink-0" style={{ color: "var(--c-ink-faint)", fontSize: "11px" }}>
+        {typeLabel}
+      </span>
 
+      <span style={{ color: "var(--c-border)", fontSize: "11px" }}>·</span>
+
+      {/* Ticker */}
+      <span className="overflow-hidden" style={{ fontSize: "11px" }}>
+        {phase === "working" ? (
+          <Ticker lines={tickerLines} />
+        ) : phase === "done" ? (
+          <span style={{ color: "var(--c-moss)" }}>
+            {prUrl ? (
+              <a href={prUrl} target="_blank" rel="noopener noreferrer"
+                className="hover:underline">
+                Done · PR merged
+              </a>
+            ) : "Done"}
+          </span>
+        ) : (
+          <span style={{ color: "var(--c-rose)" }}>Failed</span>
+        )}
+      </span>
+
+      {/* Details link */}
       <a
-        href={prUrl ?? `/agent-jobs?id=${jobId}`}
-        target={prUrl ? "_blank" : undefined}
-        rel={prUrl ? "noopener noreferrer" : undefined}
-        className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
+        href={`/agent-jobs?id=${jobId}`}
+        className="shrink-0 ml-auto opacity-30 hover:opacity-70 transition-opacity"
         style={{ color: "var(--c-ink-faint)" }}
-        title={prUrl ? "View PR" : "View job details"}
+        title="View details"
       >
-        <ExternalLink size={12} />
+        <ExternalLink size={10} />
       </a>
     </div>
   )
