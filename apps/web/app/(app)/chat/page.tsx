@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
-import AgentJobStream from "@/components/agent-jobs/AgentJobStream"
+import AgentStatusChip from "@/components/agent-jobs/AgentStatusChip"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
@@ -818,9 +818,7 @@ function AgentStreamBubble({ msg }: { msg: AgentStreamMessage }) {
       </div>
       <div className="flex flex-col min-w-0 flex-1">
         <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>TARS</span>
-        <div className="rounded-2xl overflow-hidden border" style={{ borderColor: "var(--c-border)" }}>
-          <AgentJobStream jobId={msg.job_id} inline />
-        </div>
+        <AgentStatusChip jobId={msg.job_id} instruction={msg.instruction} agentType={msg.agent_type} />
       </div>
     </div>
   )
