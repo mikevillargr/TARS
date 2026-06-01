@@ -36,7 +36,7 @@ DEFAULT_MODELS: dict[str, str] = {
 
 EVOLUTIONARIST_SYSTEM = f"""\
 You are Evolutionarist, the TARS orchestration agent. You work exclusively on \
-the TARS codebase at {TARS_REPO} on the dev branch.
+the TARS codebase at {TARS_REPO} on the main branch.
 
 Analyze the task and decide which specialist(s) to spawn:
 - frontend: UI, React components, Next.js pages, CSS/styling
@@ -45,10 +45,12 @@ Analyze the task and decide which specialist(s) to spawn:
 
 Use the spawn_agent tool to delegate. Provide each sub-agent a precise, scoped instruction
 that includes the repo path {TARS_REPO} explicitly.
-You may spawn multiple agents sequentially.
+You may spawn multiple agents sequentially or in parallel batches.
+After ALL sub-agents have completed, summarise what was done — the harness will
+automatically tag a release and deploy.
 
 SAFETY RULES:
-- Never push to main branch. Never --force push. Always work on the dev branch only.
+- Never --force push. Work on feature branches off main only.
 - The codebase is at {TARS_REPO} — always use this exact path.
 """
 
@@ -317,10 +319,16 @@ async def _run_evolutionarist(
 
     messages = [{"role": "user", "content": instruction}]
 
+    # Notify chat that orchestration is starting
+    brief = instruction.strip()[:120]
+    await _notify_chat(job_id, f"🤖 **Agent job started:** {brief}\n\nAnalyzing and spawning specialists…", db_session_factory)
+
     await broadcast(job_id, {
         "type": "text_chunk",
         "text": "Analyzing task and determining which specialist(s) to spawn...\n",
     })
+
+    completed_sub_jobs: list[dict] = []   # track outcomes for release notes
 
     while True:
         response = await client.messages.create(
@@ -336,15 +344,41 @@ async def _run_evolutionarist(
             if hasattr(block, "text") and block.text:
                 await broadcast(job_id, {"type": "text_chunk", "text": block.text})
 
-        # No tool call — we're done
+        # No tool call — orchestration complete, trigger auto-release
         if response.stop_reason != "tool_use":
             final_text = " ".join(
                 b.text for b in response.content if hasattr(b, "text") and b.text
             )
+
+            # Auto-release if any sub-agent made changes
+            prs = [j["pr_url"] for j in completed_sub_jobs if j.get("pr_url")]
+            if completed_sub_jobs:
+                await _notify_chat(job_id, "🏷️ All agents done — tagging release and deploying…", db_session_factory)
+                new_version = await _auto_patch_release(job_id, db_session_factory)
+                if new_version:
+                    pr_links = "\n".join(f"  • {u}" for u in prs) if prs else "  • (no PRs — direct commits)"
+                    await _notify_chat(
+                        job_id,
+                        f"🚀 **{new_version} deployed.**\n\n{final_text[:400]}\n\nPRs merged:\n{pr_links}",
+                        db_session_factory,
+                    )
+                else:
+                    await _notify_chat(
+                        job_id,
+                        f"✅ **Agents complete.** Auto-release tag failed — push manually.\n\n{final_text[:400]}",
+                        db_session_factory,
+                    )
+            else:
+                await _notify_chat(
+                    job_id,
+                    f"✅ **Agent job complete** (no code changes made).\n\n{final_text[:400]}",
+                    db_session_factory,
+                )
+
             await broadcast(job_id, {
                 "type": "completed",
                 "summary": final_text[:500] or "Orchestration complete.",
-                "pr_url": None,
+                "pr_url": prs[0] if prs else None,
             })
             return
 
@@ -363,6 +397,11 @@ async def _run_evolutionarist(
                 "type": "text_chunk",
                 "text": f"\n→ Spawning **{sub_type}** agent: {sub_instruction[:120]}\n",
             })
+            await _notify_chat(
+                job_id,
+                f"🔧 **{sub_type.upper()} agent starting:** {sub_instruction[:120]}",
+                db_session_factory,
+            )
 
             sub_job_id = await _create_sub_job(
                 parent_job_id=job_id,
@@ -378,6 +417,8 @@ async def _run_evolutionarist(
 
             sub_result = "Sub-agent completed."
             sub_deploy_result: Optional[dict] = None
+            pr_url: Optional[str] = None
+
             async for event in _executor.run(
                 job_id=sub_job_id,
                 instruction=sub_instruction,
@@ -393,13 +434,15 @@ async def _run_evolutionarist(
 
                 elif event["type"] == "completed":
                     sub_result = event.get("summary", "Sub-agent completed.")
+                    pr_url = event.get("pr_url")
+
                     async with db_session_factory() as db:
                         from sqlalchemy import select
                         from db.models import AgentJob
                         row = (await db.execute(select(AgentJob).where(AgentJob.id == sub_job_id))).scalar_one_or_none()
                         if row:
-                            if event.get("pr_url"):
-                                row.pr_url = event["pr_url"]
+                            if pr_url:
+                                row.pr_url = pr_url
                             if event.get("branch"):
                                 row.branch = event["branch"]
                             row.output = sub_result
@@ -407,23 +450,16 @@ async def _run_evolutionarist(
                             row.completed_at = datetime.now(timezone.utc)
                             await db.commit()
 
-                    # Notify originating chat for the sub-job
-                    pr_url = event.get("pr_url")
-                    if sub_deploy_result:
-                        if sub_deploy_result.get("success"):
-                            sub_notify = f"✅ Agent job deployed ({sub_deploy_result['target']})."
-                            if pr_url:
-                                sub_notify += f" PR: {pr_url}"
-                        else:
-                            sub_notify = (
-                                f"⚠️ Agent job finished but deploy failed ({sub_deploy_result['target']}). "
-                                "Check Agent Jobs for details."
-                            )
+                    completed_sub_jobs.append({"type": sub_type, "pr_url": pr_url, "summary": sub_result})
+
+                    # Per-agent milestone notification
+                    if pr_url:
+                        notify = f"✅ **{sub_type.upper()} agent done.** PR: {pr_url}"
+                    elif sub_deploy_result and sub_deploy_result.get("success"):
+                        notify = f"✅ **{sub_type.upper()} agent deployed** ({sub_deploy_result['target']})."
                     else:
-                        sub_notify = "✅ Agent job completed."
-                        if pr_url:
-                            sub_notify += f" PR: {pr_url}"
-                    await _notify_chat(sub_job_id, sub_notify, db_session_factory)
+                        notify = f"✅ **{sub_type.upper()} agent done.** {sub_result[:120]}"
+                    await _notify_chat(job_id, notify, db_session_factory)
 
             _approval.cleanup(sub_job_id)
             _approval.cleanup_question(sub_job_id)
@@ -456,7 +492,8 @@ async def _create_sub_job(
             type="agent",
             instruction=instruction,
             repo_path=TARS_REPO,
-            branch="dev",
+            branch="main",
+            conversation_id=parent.conversation_id,  # inherit so sub-jobs notify same chat
             parent_job_id=parent_job_id,
             status="running",
             started_at=datetime.now(timezone.utc),
@@ -466,6 +503,43 @@ async def _create_sub_job(
         await db.commit()
         await db.refresh(sub)
         return sub.id
+
+
+async def _auto_patch_release(job_id: str, db_session_factory: Any) -> Optional[str]:
+    """
+    Increment the latest semver patch tag, push it, and return the new version string.
+    Returns None if tagging fails (non-fatal).
+    """
+    import subprocess as sp
+    try:
+        latest = (await asyncio.to_thread(
+            sp.run, ["git", "describe", "--tags", "--abbrev=0"],
+            cwd=TARS_REPO, capture_output=True, text=True, timeout=15,
+        )).stdout.strip()
+
+        import re
+        m = re.match(r"v?(\d+)\.(\d+)\.(\d+)", latest)
+        if not m:
+            return None
+        major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        new_tag = f"v{major}.{minor}.{patch + 1}"
+
+        for cmd in [
+            ["git", "tag", new_tag],
+            ["git", "push", "origin", new_tag],
+        ]:
+            r = await asyncio.to_thread(
+                sp.run, cmd, cwd=TARS_REPO, capture_output=True, text=True, timeout=30,
+            )
+            if r.returncode != 0:
+                log.warning("Auto-release tag step failed: %s", r.stderr)
+                return None
+
+        log.info("Job %s: auto-released %s", job_id, new_tag)
+        return new_tag
+    except Exception as exc:
+        log.warning("Job %s: auto-release failed: %s", job_id, exc)
+        return None
 
 
 async def _run_release(
