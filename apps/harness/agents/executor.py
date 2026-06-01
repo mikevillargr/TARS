@@ -58,16 +58,33 @@ _FORBIDDEN_GIT_PATTERNS = [
 ]
 
 # Pre-baked directive prepended to every sub-agent instruction.
-# Tells Claude explicitly NOT to do git — the harness handles it.
 _HARNESS_DIRECTIVE = """\
 ================================================================
-TARS HARNESS RULES (mandatory):
-- Do NOT run git commit / push / checkout / merge / pull / fetch / add / restore.
-- Do NOT run gh pr create / merge / ready / close.
-- The harness AUTOMATICALLY commits, pushes, creates the PR, merges to dev,
-  and deploys to production after your work finishes.
-- Your only job: edit files. Then stop.
-- Read-only git is fine (git status / log / diff / show).
+TARS HARNESS RULES — read every line, follow all of them.
+
+GIT: Do NOT run git commit / push / checkout / merge / pull / fetch / add / restore.
+     Do NOT run gh pr create / merge / ready / close.
+     The harness commits, pushes, and deploys automatically when you stop.
+     Read-only git is fine (git status / log / diff / show / grep).
+
+BEFORE YOU IMPLEMENT ANYTHING:
+1. Find where the feature is ACTUALLY USED. Search for imports and usages
+   before editing. A component that exists but is never imported is dead code
+   — editing it changes nothing in the running app.
+   Run: grep -rn "ComponentName\|function-name" /opt/tars/apps/web/app /opt/tars/apps/web/components --include="*.tsx"
+2. Before changing an API endpoint's response shape, find every caller:
+   grep -rn "api/route-path\|/route-path" /opt/tars/apps/web --include="*.ts" --include="*.tsx"
+   Update ALL callers to match the new shape, or don't change the shape.
+3. For the TARS frontend: the main entry points are:
+   - apps/web/app/(app)/chat/page.tsx  ← chat UI (inline conversation list, message thread)
+   - apps/web/app/(app)/tasks/page.tsx
+   - apps/web/app/(app)/meetings/page.tsx
+   Components under apps/web/components/chat/ may or may not be imported — always verify.
+
+BEFORE YOU STOP:
+- Run: cd /opt/tars/apps/web && npx tsc --noEmit 2>&1 | head -30
+- If there are TypeScript errors, fix them. Do not stop with a broken build.
+- You do not need to run the full build — tsc --noEmit is enough.
 ================================================================
 
 """
@@ -298,6 +315,12 @@ async def run(
     pr_url = await _commit_and_push(cwd=cwd, job_id=job_id, branch=branch,
                                     summary=summary_text or instruction[:120])
 
+    # TypeScript check failed — surface error, don't deploy broken code
+    if isinstance(pr_url, str) and pr_url.startswith("__tsc_error__"):
+        errors = pr_url[len("__tsc_error__"):]
+        yield {"type": "error", "message": f"TypeScript errors prevented commit:\n{errors}"}
+        return
+
     # ── 4. Merge PR → detect changes → auto-deploy ────────────────────────────
     async for deploy_event in _auto_deploy(
         cwd=cwd, job_id=job_id, pr_url=pr_url, branch=branch,
@@ -477,8 +500,26 @@ async def _commit_and_push(*, cwd: str, job_id: str, branch: str, summary: str) 
     status = await _run_git(["git", "status", "--porcelain"], cwd=cwd)
     if not status.stdout.strip():
         log.info("No changes to commit for job %s", job_id)
-        # If on a feature branch with no changes, just return — nothing to PR
         return None
+
+    # Pre-commit TypeScript check — abort if the build is broken
+    web_dir = os.path.join(cwd, "apps", "web")
+    if os.path.isdir(web_dir):
+        tsc = await asyncio.to_thread(
+            subprocess.run,
+            ["npx", "tsc", "--noEmit"],
+            cwd=web_dir, capture_output=True, text=True, timeout=120,
+        )
+        if tsc.returncode != 0:
+            errors = (tsc.stdout + tsc.stderr)[:600]
+            log.warning("Job %s: TypeScript errors before commit:\n%s", job_id, errors)
+            # Surface errors in the event stream so the agent can see them
+            from agents.job_manager import broadcast
+            await broadcast(job_id, {
+                "type": "text_chunk",
+                "text": f"\n⚠ TypeScript errors found — not committing until fixed:\n{errors}\n",
+            })
+            return f"__tsc_error__{errors}"  # caller sees this and can retry
 
     # Stage everything
     await _run_git(["git", "add", "-A"], cwd=cwd)
