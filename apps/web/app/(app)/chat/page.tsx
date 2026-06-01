@@ -1462,6 +1462,22 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputValue, busy, handleSend])
 
+  // Visibility recovery: when the user returns to this tab (mobile background →
+  // foreground, alt-tab, etc.) reload messages for the active conversation so
+  // any response that completed while we were away appears immediately.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && activeChatId && !busy) {
+        apiGet<{ messages: Message[] }>(`/chat/conversations/${activeChatId}/messages`)
+          .then(data => setMessages(data.messages ?? []))
+          .catch(() => {/* silent — user is offline or session expired */})
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChatId, busy])
+
   // Send a follow-up query in the current conversation (used by contact action chips)
   const handleAsk = useCallback((q: string) => {
     setInputValue(q)

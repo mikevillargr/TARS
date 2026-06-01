@@ -6,13 +6,8 @@ export class TarsWebSocket {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private url: string
   private _shouldReconnect = true
+  private _visibilityHandler: (() => void) | null = null
 
-  /**
-   * @param path    WebSocket path, e.g. "agent-jobs/abc123/stream?token=xxx"
-   * @param baseUrl Optional base URL override, e.g. "http://localhost:8000".
-   *                Defaults to current window origin. Used for agent job streams
-   *                that connect directly to the FastAPI harness.
-   */
   constructor(path: string, baseUrl?: string) {
     if (baseUrl) {
       const wsBase = baseUrl.replace(/^http/, "ws")
@@ -47,6 +42,26 @@ export class TarsWebSocket {
     this.ws.onerror = () => {
       // onclose will fire after onerror — let reconnect handle it
     }
+
+    // Reconnect immediately when tab becomes visible again (mobile/desktop
+    // background → foreground). Browsers freeze timers in background so the
+    // 3s reconnect timer may never fire until the user comes back anyway —
+    // this ensures we reconnect the instant the tab is foregrounded.
+    if (!this._visibilityHandler) {
+      this._visibilityHandler = () => {
+        if (document.visibilityState === "visible" && this._shouldReconnect) {
+          const state = this.ws?.readyState
+          if (state === WebSocket.CLOSED || state === WebSocket.CLOSING || this.ws === null) {
+            if (this.reconnectTimer) {
+              clearTimeout(this.reconnectTimer)
+              this.reconnectTimer = null
+            }
+            this.connect()
+          }
+        }
+      }
+      document.addEventListener("visibilitychange", this._visibilityHandler)
+    }
   }
 
   on(type: string, handler: MessageHandler) {
@@ -74,6 +89,10 @@ export class TarsWebSocket {
   disconnect() {
     this._shouldReconnect = false
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    if (this._visibilityHandler) {
+      document.removeEventListener("visibilitychange", this._visibilityHandler)
+      this._visibilityHandler = null
+    }
     this.ws?.close()
     this.ws = null
   }

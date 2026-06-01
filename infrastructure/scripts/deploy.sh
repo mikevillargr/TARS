@@ -20,7 +20,9 @@ if [[ "$CHANGED" == "harness" || "$CHANGED" == "both" ]]; then
   source .venv/bin/activate
   pip install -q -r requirements.txt
   alembic upgrade head
-  pm2 reload tars-harness
+  # --kill-timeout 300000 gives running agent jobs up to 5 min to finish
+  # before pm2 force-kills the old process on reload
+  pm2 reload tars-harness --kill-timeout 300000
 fi
 
 if [[ "$CHANGED" == "web" || "$CHANGED" == "both" ]]; then
