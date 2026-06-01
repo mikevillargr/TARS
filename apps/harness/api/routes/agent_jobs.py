@@ -96,7 +96,6 @@ async def create_agent_job(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    # Safety: only dev branch allowed for Phase 1
     valid_types = {"evolutionarist", "frontend", "backend", "sa", "release"}
     if body.agent_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"agent_type must be one of {sorted(valid_types)}")
@@ -107,7 +106,7 @@ async def create_agent_job(
         type="agent",
         instruction=body.instruction,
         repo_path=TARS_REPO,
-        branch="dev",
+        branch="main",
         status="pending",
         conversation_id=body.conversation_id,
         model_config_json=body.model_config_json or {},
