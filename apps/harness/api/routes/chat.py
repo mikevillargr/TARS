@@ -545,6 +545,28 @@ async def send_message(
         user_lat=location_lat, user_lng=location_lng,
     )
 
+    # --- Memory context injection ---
+    try:
+        from memory import mnemon as _mnemon_mod
+        from memory import second_brain as _sb_mod
+        _mnemon_results = await _mnemon_mod.search(db, user_id, content or "attachment", limit=20)
+        _sb_results = await _sb_mod.search(db, user_id, content or "attachment", limit=20)
+        _mem_parts = []
+        for _m in _mnemon_results:
+            if _m.content:
+                _mem_parts.append(_m.content)
+        for _r in _sb_results:
+            _chunk = _r.get("chunk")
+            _item = _r.get("item")
+            _text = _chunk.content if _chunk else (_item.summary or "" if _item else "")
+            if _text:
+                _mem_parts.append(_text)
+        if _mem_parts:
+            _memory_block = "\n".join(_mem_parts)
+            system_prompt = f"Memory context (from Mnemon & Second Brain):\n{_memory_block}\n\n{system_prompt}"
+    except Exception:
+        pass  # Non-blocking
+
     # Tools available for TIER2 and TIER3.
     # TIER2 (RunPod) ignores them in the payload but the Sonnet fallback path
     # uses them — so we must build them here regardless, otherwise a RunPod

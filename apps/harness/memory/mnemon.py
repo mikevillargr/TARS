@@ -83,14 +83,14 @@ async def search(
     db: AsyncSession,
     user_id: str,
     query: str,
-    limit: int = 6,
+    limit: int = 20,
     domain: Optional[str] = None,
-    threshold: float = 0.5,
+    threshold: float = 0.45,
 ) -> List[Memory]:
     """
     Semantic search over memories using pgvector cosine distance.
-    Only returns results with cosine_distance < threshold (i.e. similarity > 0.5).
-    This prevents irrelevant memories from polluting the context window.
+    Only returns results with cosine_distance < threshold (i.e. similarity > 0.45).
+    Falls back to keyword search when no semantic matches are found.
     """
     query_embedding = embed_one(query)
 
@@ -106,7 +106,34 @@ async def search(
         stmt = stmt.where(Memory.domain == domain)
 
     result = await db.execute(stmt)
-    return result.scalars().all()
+    results = result.scalars().all()
+    if not results:
+        results = await _keyword_fallback_search(db, user_id, query, top_n=limit)
+    return results
+
+
+async def _keyword_fallback_search(
+    db: AsyncSession,
+    user_id: str,
+    query: str,
+    top_n: int = 20,
+) -> List[Memory]:
+    """Fallback keyword-based search when semantic similarity finds no results."""
+    keywords = [kw.lower() for kw in query.split() if len(kw) > 2]
+    if not keywords:
+        return []
+    all_result = await db.execute(
+        select(Memory).where(Memory.user_id == user_id).limit(500)
+    )
+    all_memories = all_result.scalars().all()
+    scored = []
+    for mem in all_memories:
+        text = (mem.content or "").lower()
+        hits = sum(1 for kw in keywords if kw in text)
+        if hits > 0:
+            scored.append((hits, mem))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [m for _, m in scored[:top_n]]
 
 
 async def list_memories(

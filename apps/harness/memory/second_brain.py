@@ -212,15 +212,16 @@ async def search(
     db: AsyncSession,
     user_id: str,
     query: str,
-    limit: int = 5,
-    threshold: float = 0.5,
+    limit: int = 20,
+    threshold: float = 0.45,
 ) -> List[dict]:
     """
     Two-stage retrieval:
     1. Find top matching items by item-level embedding (filtered by threshold)
     2. Find top matching chunks within those items (filtered by threshold)
     Returns list of {item, chunk} dicts with the most relevant context.
-    Only results with cosine_distance < threshold are returned (similarity > 0.5).
+    Only results with cosine_distance < threshold are returned (similarity > 0.45).
+    Falls back to keyword search when no semantic matches are found.
     """
     query_embedding = embed_one(query)
 
@@ -235,7 +236,7 @@ async def search(
     )
     top_items = item_result.scalars().all()
     if not top_items:
-        return []
+        return await _keyword_fallback_search(db, user_id, query, top_n=limit)
 
     item_ids = [item.id for item in top_items]
 
@@ -267,6 +268,34 @@ async def search(
             results.append({"item": item, "chunk": None})
 
     return results[:limit]
+
+
+async def _keyword_fallback_search(
+    db: AsyncSession,
+    user_id: str,
+    query: str,
+    top_n: int = 20,
+) -> List[dict]:
+    """Fallback keyword-based search when semantic similarity finds no results."""
+    keywords = [kw.lower() for kw in query.split() if len(kw) > 2]
+    if not keywords:
+        return []
+    all_result = await db.execute(
+        select(KnowledgeItem).where(KnowledgeItem.user_id == user_id).limit(500)
+    )
+    all_items = all_result.scalars().all()
+    scored = []
+    for item in all_items:
+        text = " ".join(filter(None, [
+            item.source_title or "",
+            item.summary or "",
+            (item.clean_content or "")[:500],
+        ])).lower()
+        hits = sum(1 for kw in keywords if kw in text)
+        if hits > 0:
+            scored.append((hits, item))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [{"item": item, "chunk": None} for _, item in scored[:top_n]]
 
 
 async def list_items(
