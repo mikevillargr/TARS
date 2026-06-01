@@ -309,6 +309,8 @@ async def _get_conversation(conv_id: str, user_id: str, db: AsyncSession) -> Con
 
 @router.get("/conversations", response_model=List[ConversationOut])
 async def list_conversations(
+    limit: int = 20,
+    offset: int = 0,
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -324,7 +326,8 @@ async def list_conversations(
         .outerjoin(latest_msg, Conversation.id == latest_msg.c.conversation_id)
         .where(Conversation.user_id == user_id)
         .order_by(desc(func.coalesce(latest_msg.c.last_at, Conversation.created_at)))
-        .limit(50)
+        .offset(offset)
+        .limit(min(limit, 100))
     )
     return result.scalars().all()
 
