@@ -152,8 +152,16 @@ async def run(
     yield {"type": "text_chunk", "text": f"Working on branch `{branch}`…\n"}
 
     # ── 2. Run agent ───────────────────────────────────────────────────────────
+    # Route sub-agent Claude Code calls through the configured tier2 provider
     extra_env: dict = {}
-    if settings.anthropic_api_key:
+    _sub_provider = settings.tier2_provider
+    if _sub_provider == "zai" and settings.zai_api_key:
+        # Point Claude Code SDK at Z.ai's Anthropic-compatible endpoint
+        extra_env["ANTHROPIC_API_KEY"] = settings.zai_api_key
+        extra_env["ANTHROPIC_BASE_URL"] = settings.zai_base_url
+        # Use the tier2 model override or the z.ai default
+        model = settings.tier2_model_override or "glm-4.6"
+    elif settings.anthropic_api_key:
         extra_env["ANTHROPIC_API_KEY"] = settings.anthropic_api_key
 
     options = ClaudeCodeOptions(

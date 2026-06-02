@@ -200,11 +200,15 @@ async def _ai_process(
     """Call Claude to generate enhanced summary and structured action items."""
     import anthropic
 
-    if not settings.anthropic_api_key:
+    from core.model_client import get_model_client as _get_mc_mp
+    _mc_mp = _get_mc_mp()
+    _p_mp = settings.tier3_provider
+    client = _mc_mp.zai if _p_mp == "zai" else _mc_mp.anthropic
+    _mp_model = settings.tier3_model_override or ("glm-4.7" if _p_mp == "zai" else "claude-sonnet-4-6")
+
+    if not (settings.zai_api_key if _p_mp == "zai" else settings.anthropic_api_key):
         summary = ff_overview or "Summary unavailable."
         return summary, _parse_ff_action_items(ff_action_items)
-
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
     context_parts = [f"Meeting title: {title}"]
     if ff_overview:
@@ -230,7 +234,7 @@ Extract two things and return valid JSON only, no commentary:
 Be specific and concrete. If no action items, return an empty array."""
 
     resp = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=_mp_model,
         max_tokens=2048,
         system=system,
         messages=[{"role": "user", "content": prompt}],

@@ -417,7 +417,14 @@ async def _run_evolutionarist(
     except Exception:
         pass  # Memory injection is non-blocking
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    # Use the tier3 provider (Anthropic or Z.ai) — respects Settings page config
+    from core.model_client import get_model_client as _get_mc
+    _mc = _get_mc()
+    _provider = settings.tier3_provider
+    client = _mc.zai if _provider == "zai" else _mc.anthropic
+    # Resolve model: use tier3 override, else provider default
+    if not model or model == "claude-sonnet-4-6":
+        model = settings.tier3_model_override or ("glm-4.7" if _provider == "zai" else "claude-sonnet-4-6")
 
     messages = [{"role": "user", "content": instruction}]
 
@@ -635,8 +642,12 @@ async def _run_release(
         await broadcast(job_id, {"type": "error", "message": f"Failed to read git history: {exc}"})
         return
 
-    # Draft release notes via Sonnet
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    # Draft release notes — use tier3 provider (respects Settings config)
+    from core.model_client import get_model_client as _get_mc2
+    _mc2 = _get_mc2()
+    _p = settings.tier3_provider
+    client = _mc2.zai if _p == "zai" else _mc2.anthropic
+    _release_model = settings.tier3_model_override or ("glm-4.7" if _p == "zai" else "claude-sonnet-4-6")
     draft_prompt = (
         f"Draft release notes for a TARS personal AI system update.\n\n"
         f"Commits:\n{commits}\n\nDiff stat:\n{diff_stat}\n\n"
@@ -647,7 +658,7 @@ async def _run_release(
 
     await broadcast(job_id, {"type": "text_chunk", "text": "Drafting release notes...\n"})
     resp = await client.messages.create(
-        model="claude-sonnet-4-6",
+        model=_release_model,
         max_tokens=512,
         messages=[{"role": "user", "content": draft_prompt}],
     )

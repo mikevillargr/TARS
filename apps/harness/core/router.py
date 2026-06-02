@@ -189,16 +189,23 @@ async def classify(prompt: str) -> ModelTier:
     if _TIER3_RE.search(s) or n > _LONG:
         return ModelTier.TIER3
 
-    # Anthropic not configured — use heuristics (instant)
-    if not settings.anthropic_api_key:
+    # No key for the tier1 provider — use heuristics (instant)
+    provider = settings.tier1_provider
+    key = settings.zai_api_key if provider == "zai" else settings.anthropic_api_key
+    if not key:
         return _heuristic(prompt)
 
-    # Ambiguous — ask Haiku (~200ms, max_tokens=5)
+    # Ambiguous — ask the tier1 model (~200ms, max_tokens=5)
+    # Uses whichever provider is configured for tier1 (Anthropic or Z.ai)
+    model = settings.tier1_model_override or (
+        "glm-4.5-air" if provider == "zai" else settings.tier1_model
+    )
     try:
         import anthropic as _anthropic
-        _aclient = _anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        base_url = settings.zai_base_url if provider == "zai" else None
+        _aclient = _anthropic.AsyncAnthropic(api_key=key, **({"base_url": base_url} if base_url else {}))
         resp = await _aclient.messages.create(
-            model=settings.tier1_model,
+            model=model,
             max_tokens=5,
             system=_CLASSIFY_SYSTEM,
             messages=[{"role": "user", "content": s}],
