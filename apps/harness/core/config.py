@@ -27,6 +27,21 @@ class Settings(BaseSettings):
     # Use TARS_ANTHROPIC_API_KEY to avoid collision with Claude Desktop's env var
     anthropic_api_key: str = Field(default="", alias="tars_anthropic_api_key")
 
+    # Z.ai — Anthropic-compatible API endpoint for GLM models
+    zai_api_key: str = ""
+    zai_base_url: str = "https://api.z.ai/api/anthropic"
+
+    # Per-tier provider selection: "anthropic" | "zai"
+    tier1_provider: str = "anthropic"
+    tier2_provider: str = "anthropic"
+    tier3_provider: str = "anthropic"
+
+    # Per-tier model overrides (blank = use sensible provider default)
+    # Anthropic defaults: haiku / sonnet / sonnet  Z.ai defaults: glm-4.5-air / glm-4.6 / glm-4.7
+    tier1_model_override: str = ""
+    tier2_model_override: str = ""
+    tier3_model_override: str = ""
+
     runpod_api_key: str = ""
     runpod_endpoint_32b: str = ""
     workhorse_model: str = ""   # RunPod model name — set in .env (e.g. meta/llama-3.1-70b-instruct)

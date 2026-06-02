@@ -117,25 +117,53 @@ function AgentJobsPageInner() {
   const [newType, setNewType] = useState("evolutionarist")
   const [creating, setCreating] = useState(false)
   const [needsAttention, setNeedsAttention] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const PAGE_SIZE = 20
 
-  const loadJobs = useCallback(async () => {
+  const loadJobs = useCallback(async (reset = false) => {
+    const currentOffset = reset ? 0 : offset
+    const statusParam = statusFilter !== "all" ? `&status=${statusFilter}` : ""
     try {
-      const res = await fetch("/api/proxy/agent-jobs")
+      const res = await fetch(`/api/proxy/agent-jobs?limit=${PAGE_SIZE + 1}&offset=${currentOffset}${statusParam}`)
       if (res.ok) {
         const data = await res.json()
-        setJobs(data.items ?? [])
+        const items: AgentJob[] = data.items ?? []
+        const more = items.length > PAGE_SIZE
+        const page = items.slice(0, PAGE_SIZE)
+        setHasMore(more)
+        if (reset) {
+          setJobs(page)
+          setOffset(PAGE_SIZE)
+        } else {
+          setJobs(prev => {
+            const ids = new Set(page.map(j => j.id))
+            return [...prev.filter(j => !ids.has(j.id)), ...page]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          })
+        }
       }
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [offset, statusFilter])
 
+  // Reload from scratch when filter changes
   useEffect(() => {
-    loadJobs()
-    // Poll for status updates on running jobs every 5s
-    const interval = setInterval(loadJobs, 5000)
+    setLoading(true)
+    setOffset(0)
+    loadJobs(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter])
+
+  // Poll only when a running job is selected (reduces server chatter)
+  useEffect(() => {
+    const isRunning = selected && ["running", "awaiting_approval", "pending"].includes(selected.status)
+    if (!isRunning) return
+    const interval = setInterval(() => loadJobs(true), 5000)
     return () => clearInterval(interval)
-  }, [loadJobs])
+  }, [selected, loadJobs])
 
   // Auto-select job from ?id= query param (from "Watch live" / "Full view" links)
   useEffect(() => {
@@ -169,6 +197,7 @@ function AgentJobsPageInner() {
     }
   }
 
+  // Backend already filters by status; just remove child jobs from display
   const activeJobs = jobs.filter(j => j.parent_job_id == null)
 
   return (
@@ -198,6 +227,23 @@ function AgentJobsPageInner() {
           </button>
         </div>
 
+        {/* Status filter tabs */}
+        <div className="px-4 pt-3 pb-0 flex items-center gap-1 shrink-0">
+          {(["all", "running", "completed", "failed"] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className="px-3 py-1 text-xs rounded-md font-medium transition-colors capitalize"
+              style={{
+                backgroundColor: statusFilter === f ? "var(--c-moss)" : "transparent",
+                color: statusFilter === f ? "#fff" : "var(--c-ink-faint)",
+              }}
+            >
+              {f === "running" ? "Active" : f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+
         {/* Job list */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
           {loading && (
@@ -208,10 +254,12 @@ function AgentJobsPageInner() {
           {!loading && activeJobs.length === 0 && (
             <div className="flex flex-col items-center gap-3 py-16" style={{ color: "var(--c-ink-faint)" }}>
               <Cpu size={32} style={{ opacity: 0.3 }} />
-              <p className="text-sm">No agent jobs yet.</p>
-              <button className="btn-primary text-sm" onClick={() => setShowNewJob(true)}>
-                <Plus size={14} /> Create your first job
-              </button>
+              <p className="text-sm">{statusFilter === "all" ? "No agent jobs yet." : `No ${statusFilter} jobs.`}</p>
+              {statusFilter === "all" && (
+                <button className="btn-primary text-sm" onClick={() => setShowNewJob(true)}>
+                  <Plus size={14} /> Create your first job
+                </button>
+              )}
             </div>
           )}
           {activeJobs.map(job => (
@@ -244,6 +292,19 @@ function AgentJobsPageInner() {
               <ChevronRight size={15} style={{ color: "var(--c-ink-faint)", flexShrink: 0 }} />
             </button>
           ))}
+
+          {/* Load more */}
+          {hasMore && !loading && (
+            <button
+              onClick={() => loadJobs(false)}
+              className="w-full py-2 text-xs text-center transition-colors"
+              style={{ color: "var(--c-ink-faint)" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-faint)")}
+            >
+              Load more
+            </button>
+          )}
         </div>
       </div>
 

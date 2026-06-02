@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Eye, EyeOff, RotateCw, Trash2, Smartphone, MapPin, Check, Share } from "lucide-react"
-import { apiGet, apiPatch } from "@/lib/api-client"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2 } from "lucide-react"
+import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
 
 // Browsers that support beforeinstallprompt (Chrome, Edge, Android)
 interface BeforeInstallPromptEvent extends Event {
@@ -41,7 +41,33 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void 
   )
 }
 
-const MODEL_OPTIONS = ["Qwen3 8B", "Qwen3 32B", "Claude Sonnet", "Claude Opus"]
+// ─── Model routing types & constants ──────────────────────────────────────
+type Provider = "anthropic" | "zai"
+
+interface TierConfig { provider: Provider; model: string }
+interface ModelRouting { tier1: TierConfig; tier2: TierConfig; tier3: TierConfig }
+
+const ANTHROPIC_MODELS = [
+  { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (fast)" },
+  { value: "claude-sonnet-4-6",         label: "Claude Sonnet 4.6" },
+  { value: "claude-opus-4-5",           label: "Claude Opus 4.5 (frontier)" },
+]
+
+const ZAI_MODELS = [
+  { value: "glm-4.5-air", label: "GLM-4.5 Air (fast)" },
+  { value: "glm-4.5",     label: "GLM-4.5" },
+  { value: "glm-4.6",     label: "GLM-4.6" },
+  { value: "glm-4.7",     label: "GLM-4.7 (frontier)" },
+]
+
+const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
+  anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-4-6", tier3: "claude-sonnet-4-6" },
+  zai:       { tier1: "glm-4.5-air",               tier2: "glm-4.6",           tier3: "glm-4.7" },
+}
+
+// ─── API key types ──────────────────────────────────────────────────────────
+interface ApiKeys { anthropic: string; zai: string; runpod: string }
+interface KeyEntry { id: keyof ApiKeys; provider: string; editValue: string; testState: "idle" | "testing" | "ok" | "error"; testMsg: string }
 
 const INITIAL_NOTIFICATIONS = [
   { id: "chat",   label: "Chat responses",   push: true,  email: false, inApp: true },
@@ -52,10 +78,11 @@ const INITIAL_NOTIFICATIONS = [
   { id: "cron",   label: "Cron failures",     push: true,  email: true,  inApp: true },
 ]
 
-const INITIAL_KEYS = [
-  { id: "anthropic", provider: "Anthropic", key: "sk-ant-•••••••••••••••••••••••Xk2a" },
-  { id: "runpod",    provider: "RunPod",    key: "rpa_•••••••••••••••••••••••••• 7f2" },
-]
+const KEY_LABELS: Record<string, string> = {
+  anthropic: "Anthropic",
+  zai:       "Z.ai (GLM)",
+  runpod:    "RunPod",
+}
 
 // Common timezones sorted by offset
 const COMMON_TIMEZONES = [
@@ -85,9 +112,24 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("Asia/Manila")
   const [tzSaved, setTzSaved]   = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
-  const [models, setModels]     = useState({ tier1: "Qwen3 8B", tier2: "Qwen3 32B", tier3: "Claude Sonnet" })
   const [notifs, setNotifs]     = useState(INITIAL_NOTIFICATIONS)
-  const [keys, setKeys]         = useState(INITIAL_KEYS)
+
+  // Model routing — live from backend
+  const [routing, setRouting]   = useState<ModelRouting>({
+    tier1: { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
+    tier2: { provider: "anthropic", model: "claude-sonnet-4-6" },
+    tier3: { provider: "anthropic", model: "claude-sonnet-4-6" },
+  })
+  const [routingSaving, setRoutingSaving] = useState(false)
+  const [routingSaved,  setRoutingSaved]  = useState(false)
+
+  // API keys — masked values from backend + local edit state
+  const [keyEntries, setKeyEntries] = useState<KeyEntry[]>([
+    { id: "anthropic", provider: "Anthropic", editValue: "", testState: "idle", testMsg: "" },
+    { id: "zai",       provider: "Z.ai (GLM)", editValue: "", testState: "idle", testMsg: "" },
+    { id: "runpod",    provider: "RunPod",     editValue: "", testState: "idle", testMsg: "" },
+  ])
+  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", runpod: "" })
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
 
   // PWA install state
@@ -98,13 +140,18 @@ export default function SettingsPage() {
   const [showIOSInstructions, setShowIOSInstructions] = useState(false)
   const [installDone, setInstallDone]       = useState(false)
 
-  // Load settings from API
+  // Load all settings from API on mount
   useEffect(() => {
     apiGet<{ name: string; timezone: string }>("/settings")
-      .then(d => {
-        setName(d.name)
-        setTimezone(d.timezone)
-      })
+      .then(d => { setName(d.name); setTimezone(d.timezone) })
+      .catch(console.error)
+
+    apiGet<ModelRouting>("/settings/model-routing")
+      .then(d => setRouting(d))
+      .catch(console.error)
+
+    apiGet<ApiKeys>("/settings/api-keys")
+      .then(d => setMaskedKeys(d))
       .catch(console.error)
   }, [])
 
@@ -150,6 +197,65 @@ export default function SettingsPage() {
 
   const toggleKeyVisibility = (id: string) => {
     setVisibleKeys(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  // Model routing handlers
+  const setTierProvider = useCallback((tier: keyof ModelRouting, provider: Provider) => {
+    setRouting(prev => ({
+      ...prev,
+      [tier]: { provider, model: PROVIDER_DEFAULTS[provider][tier] },
+    }))
+  }, [])
+
+  const setTierModel = useCallback((tier: keyof ModelRouting, model: string) => {
+    setRouting(prev => ({ ...prev, [tier]: { ...prev[tier], model } }))
+  }, [])
+
+  async function saveModelRouting() {
+    setRoutingSaving(true)
+    try {
+      const body = {
+        tier1: { provider: routing.tier1.provider, model_override: routing.tier1.model },
+        tier2: { provider: routing.tier2.provider, model_override: routing.tier2.model },
+        tier3: { provider: routing.tier3.provider, model_override: routing.tier3.model },
+      }
+      const updated = await apiPatch<ModelRouting>("/settings/model-routing", body)
+      setRouting(updated)
+      setRoutingSaved(true)
+      setTimeout(() => setRoutingSaved(false), 2000)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setRoutingSaving(false)
+    }
+  }
+
+  // API key handlers
+  async function saveKey(id: keyof ApiKeys) {
+    const entry = keyEntries.find(k => k.id === id)
+    if (!entry?.editValue) return
+    try {
+      await apiPatch("/settings/api-keys", { provider: id, key: entry.editValue })
+      setMaskedKeys(prev => ({ ...prev, [id]: "•".repeat(entry.editValue.length - 6) + entry.editValue.slice(-6) }))
+      setKeyEntries(prev => prev.map(k => k.id === id ? { ...k, editValue: "" } : k))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  async function testKey(id: "anthropic" | "zai") {
+    setKeyEntries(prev => prev.map(k => k.id === id ? { ...k, testState: "testing", testMsg: "" } : k))
+    try {
+      const res = await apiPost<{ ok: boolean; latency_ms?: number; error?: string }>(
+        "/settings/api-keys/test", { provider: id }
+      )
+      setKeyEntries(prev => prev.map(k => k.id === id
+        ? { ...k, testState: res.ok ? "ok" : "error", testMsg: res.ok ? `${res.latency_ms}ms` : (res.error ?? "failed") }
+        : k
+      ))
+    } catch {
+      setKeyEntries(prev => prev.map(k => k.id === id ? { ...k, testState: "error", testMsg: "Request failed" } : k))
+    }
   }
 
   async function saveProfile() {
@@ -270,39 +376,71 @@ export default function SettingsPage() {
 
         {/* ── Model Routing ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
-            Model Routing
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+              Model Routing
+            </h2>
+            <button
+              onClick={saveModelRouting}
+              disabled={routingSaving}
+              className="text-xs px-3 py-1 rounded-md font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              style={{ backgroundColor: routingSaved ? "var(--c-moss)" : "var(--c-surface-2)", color: routingSaved ? "#fff" : "var(--c-ink)" }}
+            >
+              {routingSaving && <Loader2 size={11} className="animate-spin" />}
+              {routingSaved ? "Saved ✓" : "Save"}
+            </button>
+          </div>
+
           <div className="flex flex-col gap-0 rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
-            {[
+            {([
               { label: "Tier 1 — Fast",      key: "tier1" as const, desc: "Simple queries, quick tasks" },
               { label: "Tier 2 — Workhorse", key: "tier2" as const, desc: "Most day-to-day tasks" },
               { label: "Tier 3 — Frontier",  key: "tier3" as const, desc: "Complex reasoning, deliverables" },
-            ].map((tier, i) => (
-              <div
-                key={tier.key}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 gap-2"
-                style={{
-                  borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
-                  backgroundColor: "var(--c-surface)",
-                }}
-              >
-                <div>
-                  <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{tier.label}</div>
-                  <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{tier.desc}</div>
-                </div>
-                <select
-                  className="input-field w-full sm:w-40 text-xs shrink-0"
-                  style={{ padding: "0.3rem 0.6rem" }}
-                  value={models[tier.key]}
-                  onChange={e => setModels(prev => ({ ...prev, [tier.key]: e.target.value }))}
+            ] as const).map((tier, i) => {
+              const cfg = routing[tier.key]
+              const modelList = cfg.provider === "zai" ? ZAI_MODELS : ANTHROPIC_MODELS
+              return (
+                <div
+                  key={tier.key}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 gap-3"
+                  style={{ borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none", backgroundColor: "var(--c-surface)" }}
                 >
-                  {MODEL_OPTIONS.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{tier.label}</div>
+                    <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{tier.desc}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Provider toggle */}
+                    <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
+                      {(["anthropic", "zai"] as Provider[]).map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setTierProvider(tier.key, p)}
+                          className="px-2.5 py-1 font-medium transition-colors"
+                          style={{
+                            backgroundColor: cfg.provider === p ? "var(--c-moss)" : "var(--c-surface-2)",
+                            color: cfg.provider === p ? "#fff" : "var(--c-ink-faint)",
+                          }}
+                        >
+                          {p === "anthropic" ? "Anthropic" : "Z.ai"}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Model dropdown */}
+                    <select
+                      className="input-field text-xs"
+                      style={{ padding: "0.25rem 0.5rem", minWidth: "11rem" }}
+                      value={cfg.model}
+                      onChange={e => setTierModel(tier.key, e.target.value)}
+                    >
+                      {modelList.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </section>
 
@@ -351,51 +489,71 @@ export default function SettingsPage() {
           <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             API Keys
           </h2>
-          <div className="flex flex-col gap-2">
-            {keys.map(k => (
-              <div
-                key={k.id}
-                className="rounded-lg px-3 py-3 flex items-center gap-3"
-                style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border-faint)" }}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold mb-0.5" style={{ color: "var(--c-ink)" }}>{k.provider}</div>
-                  <div className="text-[11px] font-mono truncate" style={{ color: "var(--c-ink-faint)" }}>
-                    {visibleKeys[k.id] ? k.key : k.key.replace(/[^•·]/g, "•").slice(0, 32) + "…"}
+          <div className="flex flex-col gap-3">
+            {keyEntries.map(k => {
+              const masked = maskedKeys[k.id] || "••••••••••••••••"
+              const canTest = k.id === "anthropic" || k.id === "zai"
+              return (
+                <div key={k.id} className="rounded-lg px-3 py-3 flex flex-col gap-2"
+                  style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border-faint)" }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-semibold" style={{ color: "var(--c-ink)" }}>{KEY_LABELS[k.id]}</div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Test button (Anthropic + Z.ai only) */}
+                      {canTest && (
+                        <button
+                          onClick={() => testKey(k.id as "anthropic" | "zai")}
+                          disabled={k.testState === "testing"}
+                          className="text-[11px] px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 disabled:opacity-50"
+                          style={{
+                            backgroundColor: k.testState === "ok" ? "color-mix(in srgb, var(--c-moss) 15%, transparent)"
+                              : k.testState === "error" ? "color-mix(in srgb, var(--c-rose) 15%, transparent)"
+                              : "var(--c-surface-2)",
+                            color: k.testState === "ok" ? "var(--c-moss)"
+                              : k.testState === "error" ? "var(--c-rose)"
+                              : "var(--c-ink-faint)",
+                          }}
+                        >
+                          {k.testState === "testing" && <Loader2 size={10} className="animate-spin" />}
+                          {k.testState === "ok" ? `✓ ${k.testMsg}` : k.testState === "error" ? `✗ ${k.testMsg}` : "Test"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Current key (masked) + show/hide */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 text-[11px] font-mono truncate" style={{ color: "var(--c-ink-faint)" }}>
+                      {visibleKeys[k.id] ? (k.editValue || masked) : masked}
+                    </div>
+                    <button onClick={() => toggleKeyVisibility(k.id)} className="p-1 rounded shrink-0"
+                      style={{ color: "var(--c-ink-faint)" }}>
+                      {visibleKeys[k.id] ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                  </div>
+
+                  {/* New key input + Save */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="password"
+                      placeholder="Paste new key to update…"
+                      value={k.editValue}
+                      onChange={e => setKeyEntries(prev => prev.map(x => x.id === k.id ? { ...x, editValue: e.target.value, testState: "idle", testMsg: "" } : x))}
+                      className="input-field flex-1 text-xs font-mono"
+                      style={{ padding: "0.25rem 0.5rem" }}
+                    />
+                    <button
+                      onClick={() => saveKey(k.id)}
+                      disabled={!k.editValue}
+                      className="text-xs px-3 py-1 rounded-md font-medium transition-colors disabled:opacity-30"
+                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)" }}
+                    >
+                      Save
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => toggleKeyVisibility(k.id)}
-                    className="p-1.5 rounded transition-colors"
-                    style={{ color: "var(--c-ink-faint)" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                    title={visibleKeys[k.id] ? "Hide" : "Show"}
-                  >
-                    {visibleKeys[k.id] ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                  <button
-                    className="p-1.5 rounded transition-colors"
-                    style={{ color: "var(--c-ink-faint)" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                    title="Rotate"
-                  >
-                    <RotateCw size={14} />
-                  </button>
-                  <button
-                    className="p-1.5 rounded transition-colors"
-                    style={{ color: "var(--c-rose)" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-rose-soft)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                    title="Delete"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </section>
 

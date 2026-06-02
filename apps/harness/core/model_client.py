@@ -792,9 +792,28 @@ def _tier2_cold_model(messages: list) -> Optional[str]:
     return settings.tier1_model  # standard → Haiku
 
 
+_ZAI_MODELS = {
+    "glm-4.5-air": "glm-4.5-air",
+    "glm-4.5":     "glm-4.5",
+    "glm-4.6":     "glm-4.6",
+    "glm-4.7":     "glm-4.7",
+}
+
+_PROVIDER_DEFAULTS = {
+    # (provider, tier) → default model name
+    ("anthropic", "tier1"): "claude-haiku-4-5-20251001",
+    ("anthropic", "tier2"): None,              # None → use existing RunPod/fallback logic
+    ("anthropic", "tier3"): "claude-sonnet-4-6",
+    ("zai",       "tier1"): "glm-4.5-air",
+    ("zai",       "tier2"): "glm-4.6",
+    ("zai",       "tier3"): "glm-4.7",
+}
+
+
 class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
+        self._zai: Optional[anthropic.AsyncAnthropic] = None
         self._failed_at: dict[ModelTier, Optional[float]] = {
             ModelTier.TIER2: None,
         }
@@ -804,6 +823,32 @@ class ModelClient:
         if not self._anthropic:
             self._anthropic = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         return self._anthropic
+
+    @property
+    def zai(self) -> anthropic.AsyncAnthropic:
+        """Z.ai Anthropic-compatible client (GLM models)."""
+        if not self._zai:
+            self._zai = anthropic.AsyncAnthropic(
+                api_key=settings.zai_api_key,
+                base_url=settings.zai_base_url,
+            )
+        return self._zai
+
+    def _client_for(self, provider: str) -> anthropic.AsyncAnthropic:
+        return self.zai if provider == "zai" else self.anthropic
+
+    def reset(self) -> None:
+        """Clear cached clients so next call picks up updated API keys/config."""
+        self._anthropic = None
+        self._zai = None
+        logger.info("ModelClient reset — API clients will re-initialise on next request")
+
+    def _resolve_model(self, tier_key: str, provider: str) -> Optional[str]:
+        """Return the effective model name for a tier+provider combination."""
+        override = getattr(settings, f"{tier_key}_model_override", "")
+        if override:
+            return override
+        return _PROVIDER_DEFAULTS.get((provider, tier_key))
 
     def _is_warm(self, tier: ModelTier) -> bool:
         failed_at = self._failed_at.get(tier)
@@ -829,23 +874,41 @@ class ModelClient:
         tools: Optional[List[Dict]] = None,
         tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        # ── Tier 3: Claude Sonnet — frontier, tools, streaming ───────────────
+        # ── Tier 3: frontier model ────────────────────────────────────────────
         if tier == ModelTier.TIER3:
+            provider3 = settings.tier3_provider
+            model3 = self._resolve_model("tier3", provider3)
             async for event in self._stream_anthropic(
-                messages, system, max_tokens, tools=tools, tool_executor=tool_executor
+                messages, system, max_tokens,
+                model=model3, tools=tools, tool_executor=tool_executor,
+                client=self._client_for(provider3),
             ):
                 yield event
             return
 
-        # ── Tier 1: Claude Haiku — always available, no cold start ───────────
+        # ── Tier 1: fast model — always available, no cold start ─────────────
         if tier == ModelTier.TIER1:
+            provider1 = settings.tier1_provider
+            model1 = self._resolve_model("tier1", provider1) or settings.tier1_model
             async for event in self._stream_anthropic(
-                messages, system, min(max_tokens, 1024), model=settings.tier1_model
+                messages, system, min(max_tokens, 1024),
+                model=model1, client=self._client_for(provider1),
             ):
                 yield event
             return
 
-        # ── Tier 2: RunPod 32B → Haiku or Sonnet when cold ───────────────────
+        # ── Tier 2: workhorse — RunPod if provider=anthropic, else Z.ai ───────
+        provider2 = settings.tier2_provider
+        if provider2 == "zai":
+            model2 = self._resolve_model("tier2", "zai") or "glm-4.6"
+            logger.info("Tier2 routed to Z.ai (%s)", model2)
+            async for event in self._stream_anthropic(
+                messages, system, max_tokens,
+                model=model2, client=self.zai, tools=tools, tool_executor=tool_executor,
+            ):
+                yield event
+            return
+
         endpoint_2 = TIER_ENDPOINTS.get(ModelTier.TIER2)
         if endpoint_2 and self._is_warm(ModelTier.TIER2):
             # Pass tools so RunPod-level fallback can hand them to Sonnet if RunPod fails
@@ -870,10 +933,13 @@ class ModelClient:
         model: Optional[str] = None,
         tools: Optional[List[Dict]] = None,
         tool_executor=None,
+        client: Optional[anthropic.AsyncAnthropic] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         # Tools that emit a suggestion chip — user confirms before action
         _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
 
+        # Use provided client (e.g. z.ai) or fall back to the default Anthropic client
+        _client = client if client is not None else self.anthropic
         model = model or "claude-sonnet-4-6"
         current_messages = list(messages)
         total_input = 0
@@ -890,7 +956,7 @@ class ModelClient:
                 if tools:
                     kwargs["tools"] = tools
 
-                async with self.anthropic.messages.stream(**kwargs) as stream:
+                async with _client.messages.stream(**kwargs) as stream:
                     async for text in stream.text_stream:
                         yield {"type": "chunk", "text": text}
 
