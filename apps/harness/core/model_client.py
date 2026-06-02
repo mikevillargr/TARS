@@ -943,6 +943,7 @@ class ModelClient:
 
         # Use provided client (e.g. z.ai) or fall back to the default Anthropic client
         _client = client if client is not None else self.anthropic
+        _is_zai = _client is not self.anthropic  # Z.ai doesn't support cache_control
         model = model or "claude-sonnet-4-6"
         current_messages = list(messages)
         total_input = 0
@@ -950,10 +951,18 @@ class ModelClient:
 
         try:
             for _round in range(8):  # max 8 tool-call rounds before giving up
+                # Prompt caching: mark system prompt as ephemeral on Anthropic path
+                # so turns 2+ pay only 10% of input tokens for the (static) system prompt.
+                # Z.ai / GLM don't support cache_control — omit it there.
+                if system and not _is_zai:
+                    system_param = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+                else:
+                    system_param = system
+
                 kwargs: Dict[str, Any] = dict(
                     model=model,
                     max_tokens=max_tokens,
-                    system=system,
+                    system=system_param,
                     messages=current_messages,
                 )
                 if tools:

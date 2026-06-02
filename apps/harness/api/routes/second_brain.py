@@ -300,9 +300,12 @@ async def ai_enhance(
 
     async def generate():
         try:
-            client = _anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            from core.model_client import get_model_client as _gmc
+            _p1 = settings.tier1_provider
+            client = _gmc().zai if _p1 == "zai" else _gmc().anthropic
+            _m1 = settings.tier1_model_override or ("glm-4.5-air" if _p1 == "zai" else settings.tier1_model)
             async with client.messages.stream(
-                model=settings.tier1_model,
+                model=_m1,
                 max_tokens=1024,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
@@ -365,9 +368,12 @@ async def ai_generate(
 
     async def generate():
         try:
-            client = _anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            from core.model_client import get_model_client as _gmc2
+            _p3 = settings.tier3_provider
+            client = _gmc2().zai if _p3 == "zai" else _gmc2().anthropic
+            _m3 = settings.tier3_model_override or ("glm-4.7" if _p3 == "zai" else "claude-sonnet-4-6")
             async with client.messages.stream(
-                model="claude-sonnet-4-6",
+                model=_m3,
                 max_tokens=2048,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
