@@ -27,6 +27,7 @@ module.exports = {
         "--port", "8000",
         "--timeout-graceful-shutdown", "270",
       ].join(" "),
+      interpreter: "none",     // run uvicorn binary directly, don't pipe through node
       kill_timeout: 300000,    // pm2 waits 5 min before SIGKILL
       wait_ready: false,
       max_memory_restart: "2G",
