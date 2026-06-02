@@ -16,6 +16,15 @@ function extractUrls(text: string): string[] {
   return [...new Set(text.match(URL_REGEX) || [])]
 }
 
+// Convert raw HTML <a href="tel:..."> and <a href="mailto:..."> tags to
+// markdown links so ReactMarkdown can render them (it strips raw HTML by default).
+function preprocessContent(content: string): string {
+  return content.replace(
+    /<a\s+href="((?:tel|mailto):[^"]+)"[^>]*>(.*?)<\/a>/gi,
+    (_match, href, text) => `[${text}](${href})`
+  )
+}
+
 // ─── Mermaid renderer ─────────────────────────────────────────────
 // Lazy-loaded: mermaid.js is browser-only and large (~2MB).
 // Falls back to a styled code block if the diagram fails to render.
@@ -273,7 +282,8 @@ function InlineCode({ children }: { children: React.ReactNode }) {
 
 // ─── Main component ───────────────────────────────────────────────
 export function MessageContent({ content }: { content: string }) {
-  const urls = extractUrls(content)
+  const processed = preprocessContent(content)
+  const urls = extractUrls(processed)
 
   return (
     <div className="message-content space-y-0.5 min-w-0 max-w-full w-full overflow-hidden" data-selectable>
@@ -378,21 +388,24 @@ export function MessageContent({ content }: { content: string }) {
             <hr className="my-3" style={{ borderColor: "var(--c-border)" }} />
           ),
 
-          // Links — open in new tab. Long URLs must break inside the bubble.
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline underline-offset-2 hover:opacity-80 transition-opacity"
-              style={{ color: "var(--c-moss)", wordBreak: "break-all", overflowWrap: "anywhere" }}
-            >
-              {children}
-            </a>
-          ),
+          // Links — tel:/mailto: stay in-page; http/https open in new tab.
+          a: ({ href, children }) => {
+            const isExternal = href?.startsWith("http")
+            return (
+              <a
+                href={href}
+                target={isExternal ? "_blank" : undefined}
+                rel={isExternal ? "noopener noreferrer" : undefined}
+                className="underline underline-offset-2 hover:opacity-80 transition-opacity"
+                style={{ color: "var(--c-moss)", wordBreak: "break-all", overflowWrap: "anywhere" }}
+              >
+                {children}
+              </a>
+            )
+          },
         }}
       >
-        {content}
+        {processed}
       </ReactMarkdown>
 
       {/* URL preview cards — shown below message for any URLs found */}
