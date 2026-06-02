@@ -1035,6 +1035,7 @@ export default function ChatPage() {
   const abortControllerRef                          = useRef<AbortController | null>(null)
   const pollTimerRef                                = useRef<ReturnType<typeof setInterval> | null>(null)
   const accumulatedRef                              = useRef<string>("")  // live text during streaming
+  const streamingCardsRef                           = useRef<Array<{ type: string; [k: string]: unknown }>>([])  // cards for finalMsg.tool_results
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
   const streamPollingRef                            = useRef<boolean>(false)  // true while recovery-polling after stream interruption
   const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
@@ -1337,6 +1338,7 @@ export default function ChatPage() {
     setArtifactNotifications([])
     setContactResults([])
     setPlaceResults([])
+    streamingCardsRef.current = []
     const pendingAttachments = attachments
     setAttachments([])
 
@@ -1425,14 +1427,17 @@ export default function ChatPage() {
               }
             } else if (evt.type === "calendar_suggest") {
               if (chatId === activeChatIdRef.current) {
+                streamingCardsRef.current.push(evt as { type: string; [k: string]: unknown })
                 setCalendarSuggestions(prev => [...prev, evt as CalendarSuggestion])
               }
             } else if (evt.type === "task_suggest") {
               if (chatId === activeChatIdRef.current) {
+                streamingCardsRef.current.push(evt as { type: string; [k: string]: unknown })
                 setTaskSuggestions(prev => [...prev, evt as TaskSuggestion])
               }
             } else if (evt.type === "artifact_created") {
               if (chatId === activeChatIdRef.current) {
+                streamingCardsRef.current.push({ type: "artifact_created", artifact_id: evt.artifact_id, filename: evt.filename, filetype: evt.filetype })
                 setArtifactNotifications(prev => [...prev, {
                   artifact_id: evt.artifact_id,
                   filename: evt.filename,
@@ -1441,6 +1446,7 @@ export default function ChatPage() {
               }
             } else if (evt.type === "contact_card") {
               if (chatId === activeChatIdRef.current && Array.isArray(evt.contacts) && evt.contacts.length > 0) {
+                streamingCardsRef.current.push({ type: "contact_card", contacts: evt.contacts })
                 setContactResults(prev => [...prev, {
                   tool_use_id: `contact-${Date.now()}-${Math.random()}`,
                   contacts: evt.contacts,
@@ -1448,6 +1454,7 @@ export default function ChatPage() {
               }
             } else if (evt.type === "place_card") {
               if (chatId === activeChatIdRef.current && Array.isArray(evt.places) && evt.places.length > 0) {
+                streamingCardsRef.current.push({ type: "place_card", places: evt.places })
                 setPlaceResults(prev => [...prev, {
                   tool_use_id: `place-${Date.now()}-${Math.random()}`,
                   places: evt.places,
@@ -1471,6 +1478,7 @@ export default function ChatPage() {
                 content: accumulated,
                 model_used: evt.model,
                 created_at: new Date().toISOString(),
+                ...(streamingCardsRef.current.length > 0 && { tool_results: [...streamingCardsRef.current] }),
               }
               if (chatId === activeChatIdRef.current) {
                 setMessages((prev) => [...prev.filter((m) => m.id !== tempUser.id), tempUser, finalMsg])
