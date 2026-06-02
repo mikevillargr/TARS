@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Clock, Play, Loader2, CheckCircle2, XCircle, RefreshCw, Circle } from "lucide-react"
-import { apiGet, apiPost } from "@/lib/api-client"
+import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
+
+const INTERVAL_OPTIONS = [
+  { label: "Every 5m",  value: 300 },
+  { label: "Every 15m", value: 900 },
+  { label: "Every 30m", value: 1800 },
+  { label: "Every 1h",  value: 3600 },
+  { label: "Every 4h",  value: 14400 },
+  { label: "Every 12h", value: 43200 },
+  { label: "Every 1d",  value: 86400 },
+  { label: "Every 1w",  value: 604800 },
+]
 
 interface CronJob {
   name:          string
@@ -58,10 +69,11 @@ function StatusChip({ status }: { status: CronJob["last_status"] }) {
 }
 
 export default function CronPage() {
-  const [jobs,     setJobs]     = useState<CronJob[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [running,  setRunning]  = useState<string | null>(null)
-  const [selected, setSelected] = useState<CronJob | null>(null)
+  const [jobs,             setJobs]             = useState<CronJob[]>([])
+  const [loading,          setLoading]          = useState(true)
+  const [running,          setRunning]          = useState<string | null>(null)
+  const [selected,         setSelected]         = useState<CronJob | null>(null)
+  const [updatingCadence,  setUpdatingCadence]  = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -85,6 +97,19 @@ export default function CronPage() {
     const t = setInterval(load, 30_000)
     return () => clearInterval(t)
   }, [load])
+
+  async function updateCadence(job: CronJob, interval_sec: number) {
+    setUpdatingCadence(true)
+    try {
+      const updated = await apiPatch<CronJob>(`/cron/${job.name}`, { interval_sec })
+      setJobs(prev => prev.map(j => j.name === updated.name ? updated : j))
+      setSelected(updated)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setUpdatingCadence(false)
+    }
+  }
 
   async function runNow(job: CronJob) {
     setRunning(job.name)
@@ -225,16 +250,47 @@ export default function CronPage() {
             {/* Stats */}
             <div className="grid grid-cols-2 gap-2">
               {[
-                { label: "Cadence",   value: humanInterval(selected.interval_sec) },
-                { label: "Runs",      value: selected.run_count.toString() },
-                { label: "Last run",  value: relativeTime(selected.last_run_at) },
-                { label: "Next run",  value: relativeTime(selected.next_run_at) },
+                { label: "Runs",     value: selected.run_count.toString() },
+                { label: "Last run", value: relativeTime(selected.last_run_at) },
+                { label: "Next run", value: relativeTime(selected.next_run_at) },
               ].map(({ label, value }) => (
                 <div key={label} className="rounded-lg p-2.5" style={{ backgroundColor: "var(--c-surface-2)" }}>
                   <div className="text-[10px] mb-0.5" style={{ color: "var(--c-ink-faint)" }}>{label}</div>
                   <div className="text-xs font-medium" style={{ color: "var(--c-ink)" }}>{value}</div>
                 </div>
               ))}
+            </div>
+
+            {/* Cadence selector */}
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
+                Cadence
+              </div>
+              <div className="relative">
+                <select
+                  value={INTERVAL_OPTIONS.find(o => o.value === selected.interval_sec)?.value ?? ""}
+                  onChange={e => updateCadence(selected, Number(e.target.value))}
+                  disabled={updatingCadence}
+                  className="w-full text-xs rounded-lg px-3 py-2 appearance-none pr-7 disabled:opacity-50"
+                  style={{
+                    backgroundColor: "var(--c-surface-2)",
+                    color: "var(--c-ink)",
+                    border: "1px solid var(--c-border)",
+                  }}
+                >
+                  {!INTERVAL_OPTIONS.find(o => o.value === selected.interval_sec) && (
+                    <option value="">{humanInterval(selected.interval_sec)}</option>
+                  )}
+                  {INTERVAL_OPTIONS.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                {updatingCadence
+                  ? <Loader2 size={12} className="animate-spin absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
+                  : <span className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[10px]" style={{ color: "var(--c-ink-faint)" }}>▾</span>
+                }
+              </div>
+              <p className="text-[10px] mt-1" style={{ color: "var(--c-ink-faint)" }}>Takes effect after current cycle</p>
             </div>
 
             {/* Status */}

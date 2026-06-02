@@ -1,13 +1,36 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from pydantic import BaseModel
 from core.auth import require_auth
 
 router = APIRouter()
+
+_VALID_INTERVALS = {300, 900, 1800, 3600, 14400, 43200, 86400, 604800}
+
+
+class CronUpdate(BaseModel):
+    interval_sec: int
 
 
 @router.get("")
 async def list_cron(_: str = Depends(require_auth)):
     from jobs.scheduler import get_jobs
     return {"items": get_jobs()}
+
+
+@router.patch("/{job_name}")
+async def update_cron(
+    job_name: str,
+    body: CronUpdate,
+    _: str = Depends(require_auth),
+):
+    if body.interval_sec not in _VALID_INTERVALS:
+        raise HTTPException(status_code=400, detail="Invalid interval")
+    from jobs.scheduler import update_interval
+    try:
+        state = update_interval(job_name, body.interval_sec)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Job '{job_name}' not found")
+    return state.to_dict()
 
 
 @router.post("/{job_name}/run")

@@ -55,6 +55,13 @@ def get_jobs() -> list[dict]:
     return [j.to_dict() for j in _registry.values()]
 
 
+def update_interval(name: str, interval_sec: int) -> JobState:
+    if name not in _registry:
+        raise KeyError(name)
+    _registry[name].interval_sec = interval_sec
+    return _registry[name]
+
+
 # ─── Runner ───────────────────────────────────────────────────────────────────
 
 async def _run_job(
