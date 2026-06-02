@@ -18,7 +18,7 @@ interface Props {
 export default function AgentStatusChip({ jobId, agentType, onComplete, onFail, onSubJobSpawned }: Props) {
   const [statusText, setStatusText] = useState<string>("Working…")
   const wsRef = useRef<TarsWebSocket | null>(null)
-  const lastUpdateRef = useRef<number>(Date.now())
+  const lastUpdateRef = useRef<number>(0)
 
   useEffect(() => {
     let mounted = true
