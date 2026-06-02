@@ -262,6 +262,27 @@ export default function MeetingsPage() {
 
       {/* ── Detail ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Mobile meeting selector — hidden on md+ where the sidebar takes over */}
+        {meetings.length > 0 && (
+          <div className="block md:hidden overflow-x-auto border-b shrink-0" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
+            <div className="flex gap-2 p-3 min-w-max">
+              {meetings.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => { setTab("summary"); loadDetail(m.id) }}
+                  className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors truncate max-w-[160px]"
+                  style={{
+                    backgroundColor: selected?.id === m.id ? "var(--c-ink)" : "var(--c-surface-2)",
+                    color: selected?.id === m.id ? "var(--c-canvas)" : "var(--c-ink-muted)",
+                  }}
+                >
+                  {m.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {!selected ? (
           <div className="flex-1 flex items-center justify-center" style={{ color: "var(--c-ink-faint)" }}>
             <p className="text-sm">{loading ? "Loading…" : "Select a meeting"}</p>
