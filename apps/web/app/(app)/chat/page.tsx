@@ -1578,7 +1578,7 @@ export default function ChatPage() {
             <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
               {conversations.length === 0 ? (
                 <p className="px-3 py-4 text-xs" style={{ color: "var(--c-ink-faint)" }}>No conversations yet.</p>
-              ) : conversations.map((conv) => (
+              ) : conversations.slice(0, visibleConvCount).map((conv) => (
                 <div key={conv.id} className="group relative flex items-center min-w-0 overflow-hidden w-full">
                   <button
                     onClick={() => { setActiveChatId(conv.id); setMobileConvOpen(false) }}
@@ -1609,6 +1609,17 @@ export default function ChatPage() {
                   </button>
                 </div>
               ))}
+              {visibleConvCount < conversations.length && (
+                <button
+                  onClick={() => setVisibleConvCount(n => n + 20)}
+                  className="w-full text-center px-3 py-3 text-xs rounded-md transition-colors min-h-[44px]"
+                  style={{ color: "var(--c-ink-faint)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface)" }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                >
+                  Load more
+                </button>
+              )}
             </div>
           </div>
         </div>
