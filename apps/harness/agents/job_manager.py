@@ -310,6 +310,13 @@ async def _run_subagent(
                         instruction=escalation_instruction,
                         db_session_factory=db_session_factory,
                     )
+                    # Tell SA's chip: a new agent just spun up → render its own chip
+                    await broadcast(job_id, {
+                        "type": "sub_job_started",
+                        "sub_job_id": evo_job_id,
+                        "agent_type": "evolutionarist",
+                        "instruction": "Implementing fixes from SA findings",
+                    })
                     # AWAIT the escalation — keeps it tied to this task's lifecycle
                     try:
                         await _run_evolutionarist(
@@ -445,6 +452,14 @@ async def _run_evolutionarist(
                 instruction=sub_instruction,
                 db_session_factory=db_session_factory,
             )
+
+            # Tell the parent's chip a new agent just started → spawn its own chip in chat
+            await broadcast(job_id, {
+                "type": "sub_job_started",
+                "sub_job_id": sub_job_id,
+                "agent_type": sub_type,
+                "instruction": sub_instruction[:140],
+            })
 
             sub_model = DEFAULT_MODELS.get(sub_type, "claude-sonnet-4-6")
             from agents import approval as _approval, executor as _executor

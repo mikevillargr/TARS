@@ -11,9 +11,11 @@ interface Props {
   onComplete?: () => void
   /** Called when the job fails/errors */
   onFail?: () => void
+  /** Called when this agent spawns a sub-agent — chat renders a sibling chip */
+  onSubJobSpawned?: (subJobId: string, agentType: string) => void
 }
 
-export default function AgentStatusChip({ jobId, agentType, onComplete, onFail }: Props) {
+export default function AgentStatusChip({ jobId, agentType, onComplete, onFail, onSubJobSpawned }: Props) {
   const [statusText, setStatusText] = useState<string>("Working…")
   const wsRef = useRef<TarsWebSocket | null>(null)
   const lastUpdateRef = useRef<number>(Date.now())
@@ -70,6 +72,14 @@ export default function AgentStatusChip({ jobId, agentType, onComplete, onFail }
           if (!mounted) return
           setStatusText("Stopped")
           setTimeout(() => onFail?.(), 1500)
+        })
+
+        ws.on("sub_job_started", (msg: unknown) => {
+          if (!mounted) return
+          const m = msg as { sub_job_id?: string; agent_type?: string }
+          if (m.sub_job_id && m.agent_type) {
+            onSubJobSpawned?.(m.sub_job_id, m.agent_type)
+          }
         })
 
         ws.connect()

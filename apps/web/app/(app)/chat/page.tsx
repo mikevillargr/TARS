@@ -810,7 +810,15 @@ function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
 }
 
 // ─── Agent stream bubble — ephemeral ticker, removed from thread when job ends
-function AgentStreamBubble({ msg, onComplete }: { msg: AgentStreamMessage; onComplete: () => void }) {
+function AgentStreamBubble({
+  msg,
+  onComplete,
+  onSubJobSpawned,
+}: {
+  msg: AgentStreamMessage
+  onComplete: () => void
+  onSubJobSpawned: (subJobId: string, agentType: string) => void
+}) {
   // No avatar, no bubble — just the ticker. Reads as system chrome, not chat.
   return (
     <div className="flex justify-center my-1">
@@ -819,6 +827,7 @@ function AgentStreamBubble({ msg, onComplete }: { msg: AgentStreamMessage; onCom
         agentType={msg.agent_type}
         onComplete={onComplete}
         onFail={onComplete}
+        onSubJobSpawned={onSubJobSpawned}
       />
     </div>
   )
@@ -881,6 +890,20 @@ const MessageArea = memo(function MessageArea({
                 onComplete={() => {
                   const id = (msg as AgentStreamMessage).job_id
                   setAgentStreamMessages(prev => prev.filter(m => m.job_id !== id))
+                }}
+                onSubJobSpawned={(subJobId, agentType) => {
+                  setAgentStreamMessages(prev => {
+                    // Dedupe — sub_job_started can replay from the ring buffer on reconnect
+                    if (prev.some(m => m.job_id === subJobId)) return prev
+                    return [...prev, {
+                      id: subJobId,
+                      role: "agent_stream" as const,
+                      job_id: subJobId,
+                      agent_type: agentType,
+                      instruction: "",
+                      created_at: new Date().toISOString(),
+                    }]
+                  })
                 }}
               />
             : (
