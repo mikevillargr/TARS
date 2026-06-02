@@ -825,16 +825,17 @@ class ModelClient:
         return self._anthropic
 
     @property
-    def zai(self) -> anthropic.AsyncAnthropic:
+    def zai(self):  # -> AsyncAnthropic (string to avoid shadowing the module import)
         """Z.ai Anthropic-compatible client (GLM models)."""
         if not self._zai:
-            self._zai = anthropic.AsyncAnthropic(
+            import anthropic as _anthropic  # re-import in local scope to avoid shadowing
+            self._zai = _anthropic.AsyncAnthropic(
                 api_key=settings.zai_api_key,
                 base_url=settings.zai_base_url,
             )
         return self._zai
 
-    def _client_for(self, provider: str) -> anthropic.AsyncAnthropic:
+    def _client_for(self, provider: str):
         return self.zai if provider == "zai" else self.anthropic
 
     def reset(self) -> None:
