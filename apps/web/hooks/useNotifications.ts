@@ -34,7 +34,10 @@ export function useNotifications(onNotification: Handler) {
     }
     try {
       const token = await getWsToken()
-      const ws = new TarsWebSocket(`notifications/stream?token=${token}`)
+      // baseUrl="" → nginx-direct path (wss://<host>/api/notifications/stream)
+      // Required because the Next.js proxy route is HTTP-only and silently
+      // drops WebSocket upgrade requests.
+      const ws = new TarsWebSocket(`notifications/stream?token=${token}`, "")
       wsRef.current = ws
 
       ws.on("new_message", (msg: unknown) => {

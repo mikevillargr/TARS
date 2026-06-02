@@ -8,8 +8,20 @@ export class TarsWebSocket {
   private _shouldReconnect = true
   private _visibilityHandler: (() => void) | null = null
 
+  /**
+   * @param path     WebSocket path, e.g. "agent-jobs/abc123/stream?token=xxx"
+   * @param baseUrl  Optional harness base URL override (e.g. "http://localhost:8000").
+   *                 Pass the empty string "" to use the nginx-direct path:
+   *                 wss://<host>/api/<path> — required for any endpoint that
+   *                 needs a real WebSocket upgrade (nginx handles it; the
+   *                 Next.js /api/proxy/ws/ route is HTTP-only).
+   */
   constructor(path: string, baseUrl?: string) {
-    if (baseUrl) {
+    if (baseUrl === "") {
+      // Direct nginx path — WebSocket upgrade handled by nginx rule
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+      this.url = `${protocol}//${window.location.host}/api/${path}`
+    } else if (baseUrl) {
       const wsBase = baseUrl.replace(/^http/, "ws")
       this.url = `${wsBase}/api/${path}`
     } else {
