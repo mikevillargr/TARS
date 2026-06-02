@@ -16,8 +16,8 @@ from db.session import get_db
 
 router = APIRouter()
 
-# Path to the .env file the harness reads
-_ENV_PATH = Path(__file__).resolve().parents[3] / ".env"
+# Path to the .env file the harness reads (apps/harness/.env)
+_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 
 def _set_env(key: str, value: str) -> None:
