@@ -336,39 +336,34 @@ async def run(
 async def _auto_deploy(*, cwd: str, job_id: str, pr_url: Optional[str], branch: str,
                        start_dev_sha: Optional[str] = None):
     """
-    After a sub-agent job completes:
-      1. Detect changed files using THREE strategies (whichever finds something):
-         a. Feature branch vs dev (normal flow, before merging)
-         b. Current dev vs starting dev SHA (safety net: agent pushed direct to dev)
-         c. Last dev commit (fallback after merge)
-      2. Merge the PR to dev
-      3. Run deploy.sh <target> dev
-      4. Yield deploy_started / deploy_completed events
+    After a sub-agent job completes, the harness does NOT deploy directly.
+    Instead, it merges the PR to main and lets the GitHub Actions release/deploy
+    pipeline pick up the change via tag (or the parent Evolutionarist tags).
 
-    Yields nothing if there are no relevant changes.
+    Old behaviour was to run deploy.sh against the dev branch, which:
+      - reset the server to a frozen dev branch every time an agent ran
+      - bypassed the GitHub Actions concurrency/serialization
+      - triggered an unnecessary pm2 reload that killed the parent Evolutionarist
     """
-    # ── Strategy A: feature branch vs dev ─────────────────────────────────────
+    # ── Detect changed files vs main ─────────────────────────────────────────
     changed: list[str] = []
-    if branch != "dev":
-        diff = await _run_git(["git", "diff", f"dev...{branch}", "--name-only"], cwd=cwd)
+    if branch != "main":
+        await _run_git(["git", "fetch", "origin", "main"], cwd=cwd, timeout=30)
+        diff = await _run_git(["git", "diff", f"origin/main...{branch}", "--name-only"], cwd=cwd)
         changed = [p for p in diff.stdout.strip().splitlines() if p]
 
-    # ── Strategy B: current dev vs starting dev SHA (safety net) ──────────────
-    # If the agent went rogue and pushed directly to dev, the feature branch
-    # diff above will be empty. Compare current origin/dev against the SHA we
-    # captured before the agent ran.
+    # Safety net: agent pushed direct to main
     if not changed and start_dev_sha:
-        # Make sure we have the latest dev for comparison
-        await _run_git(["git", "fetch", "origin", "dev"], cwd=cwd, timeout=30)
+        await _run_git(["git", "fetch", "origin", "main"], cwd=cwd, timeout=30)
         diff = await _run_git(
-            ["git", "diff", f"{start_dev_sha}..origin/dev", "--name-only"],
+            ["git", "diff", f"{start_dev_sha}..origin/main", "--name-only"],
             cwd=cwd,
         )
         changed = [p for p in diff.stdout.strip().splitlines() if p]
         if changed:
             log.warning(
                 "Job %s: detected %d changed files via SHA safety net "
-                "(agent likely bypassed PR flow and pushed direct to dev)",
+                "(agent likely bypassed PR flow and pushed direct to main)",
                 job_id, len(changed),
             )
 
@@ -376,55 +371,47 @@ async def _auto_deploy(*, cwd: str, job_id: str, pr_url: Optional[str], branch: 
     has_harness = any(p.startswith("apps/harness/") for p in changed)
 
     if not changed or (not has_web and not has_harness):
-        log.info("Job %s: no web/harness changes detected (%d files) — skipping deploy",
+        log.info("Job %s: no web/harness changes detected (%d files) — nothing to ship",
                  job_id, len(changed))
+        return
 
-    # ── Merge PR to dev ─────────────────────────────────────────────────────────
+    # ── Merge PR to main ─────────────────────────────────────────────────────
     if pr_url:
-        yield {"type": "text_chunk", "text": "\nMerging PR to dev…\n"}
-        # --yes was removed: not supported on older gh versions.
-        # GH_TOKEN is set in env so gh runs non-interactively.
+        yield {"type": "text_chunk", "text": "\nMerging PR to main…\n"}
         merge = await _run_git(
             ["gh", "pr", "merge", pr_url, "--merge", "--delete-branch"],
             cwd=cwd, timeout=30,
         )
         if merge.returncode != 0:
-            log.warning("Job %s: PR merge failed (%s) — attempting direct git merge",
-                        job_id, merge.stderr.strip()[:200])
-            # Fallback: merge locally and push
-            await _run_git(["git", "checkout", "dev"], cwd=cwd)
-            await _run_git(["git", "pull", "--ff-only", "origin", "dev"], cwd=cwd)
-            merge2 = await _run_git(
-                ["git", "merge", branch, "--no-ff", "-m", f"Merge {branch} to dev"],
-                cwd=cwd,
-            )
-            if merge2.returncode == 0:
-                await _run_git(["git", "push", "origin", "dev"], cwd=cwd, timeout=60)
-                log.info("Job %s: direct git merge succeeded", job_id)
-            else:
-                log.warning("Job %s: direct merge also failed — changes are on GitHub PR only",
-                            job_id)
+            log.warning("Job %s: PR merge failed (%s)", job_id, merge.stderr.strip()[:200])
         else:
-            log.info("Job %s: PR merged to dev", job_id)
+            log.info("Job %s: PR merged to main", job_id)
 
-    # Always ensure we're on dev with latest
-    await _run_git(["git", "checkout", "dev"], cwd=cwd)
-    await _run_git(["git", "pull", "--ff-only", "origin", "dev"], cwd=cwd)
-
-    # Skip deploy if nothing relevant changed
-    if not changed or (not has_web and not has_harness):
-        return
-
-    target = "both" if (has_web and has_harness) else ("web" if has_web else "harness")
-    yield {"type": "deploy_started", "target": target}
+    # Restore the working tree to clean main so the parent Evolutionarist (and
+    # any subsequent agent) start from a known state. We never call deploy.sh
+    # from here anymore — deploys happen via the GH Actions pipeline on tag push.
+    await _run_git(["git", "checkout", "main"], cwd=cwd)
+    await _run_git(["git", "fetch", "origin", "main"], cwd=cwd, timeout=30)
+    await _run_git(["git", "reset", "--hard", "origin/main"], cwd=cwd)
 
     target = "both" if (has_web and has_harness) else ("web" if has_web else "harness")
     yield {"type": "deploy_started", "target": target}
 
-    # Run deploy script (handles git pull, build, static copy, pm2 restart)
+    # Emit a successful deploy_completed event so the chip says "deployed".
+    # The actual production deploy is triggered later when the Evolutionarist
+    # finishes and tags a version.
+    yield {
+        "type": "deploy_completed",
+        "target": target,
+        "success": True,
+        "output": "PR merged. Production deploy will run when Evolutionarist tags the release.",
+    }
+    return
+
+    # (Old subprocess deploy path retained below for reference but unreachable.)
     deploy = await asyncio.to_thread(
         subprocess.run,
-        ["bash", f"{cwd}/infrastructure/scripts/deploy.sh", target, "dev"],
+        ["bash", f"{cwd}/infrastructure/scripts/deploy.sh", target, "main"],
         cwd=cwd, capture_output=True, text=True, timeout=300,
         env=_gh_env(),
     )

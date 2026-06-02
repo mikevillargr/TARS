@@ -7,12 +7,13 @@ set -euo pipefail
 
 DEPLOY_PATH="${DEPLOY_PATH:-/opt/tars}"
 CHANGED="${1:-both}"
-BRANCH="${2:-dev}"
+BRANCH="${2:-main}"
 
 echo "==> Pulling latest code (branch: $BRANCH)"
 cd "$DEPLOY_PATH"
 git fetch origin
-git reset --hard origin/"$BRANCH"
+git checkout "$BRANCH" 2>/dev/null || true
+git reset --hard "origin/$BRANCH"
 
 if [[ "$CHANGED" == "harness" || "$CHANGED" == "both" ]]; then
   echo "==> Deploying harness"
