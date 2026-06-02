@@ -10,6 +10,8 @@ Tier 3: Claude Sonnet — frontier, tools, streaming, always Claude
 NOTE: Ollama is fully retired. The classifier is a Haiku API call (router.py).
 """
 
+from __future__ import annotations  # makes all annotations lazy — avoids 'anthropic' property shadowing the module
+
 import asyncio
 import json
 import logging
