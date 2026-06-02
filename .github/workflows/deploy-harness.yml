@@ -20,12 +20,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Wait briefly so Deploy Web grabs SSH first and Harness doesn't race.
+      # (concurrency: deploy-production isn't reliably serializing across
+      # separate workflow files when triggered by the same tag push.)
+      - name: Stagger start to avoid SSH race with Deploy Web
+        run: sleep 90
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 120s             # SSH connect timeout (default 30s — too tight under load)
+          command_timeout: 30m      # full deploy can include alembic + pip + pm2 reload
           script: |
             cd /opt/tars
             bash infrastructure/scripts/deploy.sh harness main

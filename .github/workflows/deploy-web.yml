@@ -27,6 +27,8 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 120s             # SSH connect timeout (default 30s — too tight under load)
+          command_timeout: 30m      # full deploy can include npm install + Next.js build
           script: |
             cd /opt/tars
             bash infrastructure/scripts/deploy.sh web main
