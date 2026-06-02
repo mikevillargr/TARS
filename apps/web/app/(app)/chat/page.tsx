@@ -619,9 +619,18 @@ function PlaceCard({
 function formatModelName(model?: string): string | null {
   if (!model) return null
   const m = model.toLowerCase()
+  // Anthropic
   if (m.includes("opus"))   return "opus"
   if (m.includes("sonnet")) return "sonnet"
   if (m.includes("haiku"))  return "haiku"
+  // Z.ai GLM
+  if (m === "glm-4.7")       return "glm-4.7"
+  if (m === "glm-4.6")       return "glm-4.6"
+  if (m === "glm-4.5")       return "glm-4.5"
+  if (m === "glm-4.5-air")   return "glm-4.5-air"
+  if (m === "glm-4.5-flash") return "glm-4.5-flash"
+  if (m.startsWith("glm"))   return m   // any other glm variant
+  // RunPod Qwen
   if (m.includes("qwen") && m.includes("32")) return "qwen 32b"
   if (m.includes("qwen") && m.includes("8"))  return "qwen 8b"
   if (m.startsWith("tier")) return null   // don't surface raw tier names

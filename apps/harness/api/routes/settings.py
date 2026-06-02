@@ -148,8 +148,8 @@ async def update_model_routing(
             _set_env(f"{tier_key}_model_override", update.model_override)
 
     # Reset cached clients so new config is picked up immediately
-    from core.model_client import model_client
-    model_client.reset()
+    from core.model_client import get_model_client
+    get_model_client().reset()
 
     return await get_model_routing(_user_id=_user_id)
 
@@ -201,8 +201,8 @@ async def update_api_key(
 
     _set_env(env_map[body.provider], body.key)
     if body.provider in ("anthropic", "zai"):
-        from core.model_client import model_client
-        model_client.reset()
+        from core.model_client import get_model_client
+        get_model_client().reset()
 
     return {"ok": True}
 
