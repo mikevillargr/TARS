@@ -2,21 +2,70 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2 } from "lucide-react"
-import { useState, useEffect, useCallback } from "react"
+import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, X } from "lucide-react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
-import { useTheme } from "@/components/ThemeProvider"
 import { CommandPalette } from "@/components/shell/CommandPalette"
 import { ConfirmProvider } from "@/components/ui/confirm-dialog"
+import { NotificationProvider, useNotificationContext, type TarsNotification } from "@/context/NotificationContext"
 
-// Bottom tab bar — rendered inside SidebarProvider so it can call useSidebar()
+// ─── Toast ──────────────────────────────────────────────────────────────────
+
+function NotificationToast({ notif, onDismiss }: { notif: TarsNotification; onDismiss: () => void }) {
+  const router = useRouter()
+
+  return (
+    <div
+      role="alert"
+      className="fixed bottom-24 right-4 lg:bottom-6 z-50 flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg max-w-xs w-full animate-in slide-in-from-bottom-4 fade-in duration-200"
+      style={{
+        backgroundColor: "var(--c-surface-raised)",
+        borderColor: "var(--c-border)",
+      }}
+    >
+      <div
+        className="mt-0.5 shrink-0 w-2 h-2 rounded-full"
+        style={{ backgroundColor: "var(--c-moss)", boxShadow: "0 0 0 3px color-mix(in srgb, var(--c-moss) 20%, transparent)" }}
+      />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--c-ink-muted)" }}>TARS</p>
+        <p
+          className="text-sm leading-snug line-clamp-2"
+          style={{ color: "var(--c-ink)" }}
+        >
+          {notif.preview || "New message"}
+        </p>
+        <button
+          onClick={() => { router.push("/chat"); onDismiss() }}
+          className="mt-1.5 text-xs font-medium"
+          style={{ color: "var(--c-moss)" }}
+        >
+          View →
+        </button>
+      </div>
+      <button
+        onClick={onDismiss}
+        className="shrink-0 p-0.5 rounded hover:opacity-60 transition-opacity"
+        style={{ color: "var(--c-ink-faint)" }}
+        aria-label="Dismiss"
+      >
+        <X size={13} />
+      </button>
+    </div>
+  )
+}
+
+// ─── Bottom tab bar ──────────────────────────────────────────────────────────
+
 function BottomTabBar() {
   const pathname = usePathname()
   const { setOpenMobile } = useSidebar()
+  const { hasUnread } = useNotificationContext()
+  const onChat = pathname.startsWith("/chat")
 
   const tabs = [
     { label: "Chat",        href: "/chat",         Icon: MessageSquare },
@@ -37,14 +86,26 @@ function BottomTabBar() {
     >
       {tabs.map(({ label, href, Icon }) => {
         const active = pathname.startsWith(href)
+        const showDot = label === "Chat" && hasUnread && !onChat
         return (
           <Link
             key={href}
             href={href}
-            className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors"
+            className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors relative"
             style={{ color: active ? "var(--c-moss)" : "var(--c-ink-faint)", minHeight: "56px" }}
           >
-            <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+            <div className="relative">
+              <Icon size={22} strokeWidth={active ? 2.2 : 1.8} />
+              {showDot && (
+                <span
+                  className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full border-2"
+                  style={{
+                    backgroundColor: "var(--c-moss)",
+                    borderColor: "var(--c-surface)",
+                  }}
+                />
+              )}
+            </div>
             <span
               className="text-[10px] font-medium leading-none"
               style={{ color: active ? "var(--c-moss)" : "var(--c-ink-faint)" }}
@@ -76,13 +137,39 @@ function BottomTabBar() {
   )
 }
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+// ─── Inner layout (consumes notification context) ───────────────────────────
+
+function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const [agentActive] = useState(true)
   const [captureOpen, setCaptureOpen] = useState(false)
   const [cmdOpen, setCmdOpen] = useState(false)
-  const { theme, toggle: toggleTheme } = useTheme()
   const router = useRouter()
+  const pathname = usePathname()
   const voice = useVoiceInput()
+
+  const { hasUnread, clearUnread, subscribe } = useNotificationContext()
+  const [toast, setToast] = useState<TarsNotification | null>(null)
+  const lastToastIdRef = useRef<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Clear global unread when on chat page
+  useEffect(() => {
+    if (pathname.startsWith("/chat")) clearUnread()
+  }, [pathname, clearUnread])
+
+  // Show toast for new messages only when not on chat and not already shown
+  useEffect(() => {
+    const unsub = subscribe((notif) => {
+      if (notif.type !== "new_message") return
+      if (pathname.startsWith("/chat")) return
+      if (notif.message_id === lastToastIdRef.current) return
+      lastToastIdRef.current = notif.message_id
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      setToast(notif)
+      toastTimerRef.current = setTimeout(() => setToast(null), 5000)
+    })
+    return unsub
+  }, [subscribe, pathname])
 
   // Mobile header mic: records, then navigates to /chat?ask=<text> which AskLoader auto-sends
   const handleHeaderMicTap = useCallback(() => {
@@ -110,7 +197,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <ConfirmProvider>
     <SidebarProvider>
       <AppSidebar />
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
@@ -223,7 +309,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Global Command Palette */}
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+
+      {/* Notification toast — shown when TARS sends a message while not on /chat */}
+      {toast && (
+        <NotificationToast notif={toast} onDismiss={() => setToast(null)} />
+      )}
     </SidebarProvider>
-    </ConfirmProvider>
+  )
+}
+
+// ─── Root layout ─────────────────────────────────────────────────────────────
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <NotificationProvider>
+      <ConfirmProvider>
+        <AppLayoutInner>{children}</AppLayoutInner>
+      </ConfirmProvider>
+    </NotificationProvider>
   )
 }

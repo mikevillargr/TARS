@@ -18,7 +18,7 @@ import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { useConfirm } from "@/components/ui/confirm-dialog"
-import { useNotifications } from "@/hooks/useNotifications"
+import { useNotificationContext } from "@/context/NotificationContext"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -998,6 +998,7 @@ const TARS_QUOTES = [
 
 export default function ChatPage() {
   const { setOpen: setSidebarOpen, open: sidebarOpen } = useSidebar()
+  const { subscribe: subscribeNotif, clearUnread } = useNotificationContext()
   const [quoteIndex] = useState(() => Math.floor(Math.random() * TARS_QUOTES.length))
   const [conversations, setConversations]           = useState<Conversation[]>([])
   const [visibleConvCount, setVisibleConvCount]     = useState(20)
@@ -1100,26 +1101,25 @@ export default function ChatPage() {
         next.delete(activeChatId)
         return next
       })
+      clearUnread()
     }
-  }, [activeChatId])
+  }, [activeChatId, clearUnread])
 
-  // Real-time notifications from agent completions and other async TARS messages
-  useNotifications((notif) => {
-    if (notif.type === "new_message") {
+  // Real-time notifications from agent completions and other async TARS messages.
+  // Subscribes via the shared context WebSocket (single connection for the whole app).
+  useEffect(() => {
+    const unsub = subscribeNotif((notif) => {
+      if (notif.type !== "new_message") return
       const isActive = notif.conversation_id === activeChatIdRef.current
       if (isActive) {
-        // Reload messages for the active conversation immediately
         apiGet<{ messages: Message[] }>(`/chat/conversations/${notif.conversation_id}/messages`)
           .then(data => {
             setMessages(data.messages ?? [])
-            // Scroll to new message after render
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
           })
           .catch(() => {})
       } else {
-        // Mark the conversation as having unread messages
         setUnreadConvIds(prev => new Set([...prev, notif.conversation_id]))
-        // Move it to top of list so it's visible
         setConversations(prev => {
           const idx = prev.findIndex(c => c.id === notif.conversation_id)
           if (idx <= 0) return prev
@@ -1128,8 +1128,9 @@ export default function ChatPage() {
           return [conv, ...updated]
         })
       }
-    }
-  })
+    })
+    return unsub
+  }, [subscribeNotif])
 
   // Scroll to bottom on new messages
   useEffect(() => {

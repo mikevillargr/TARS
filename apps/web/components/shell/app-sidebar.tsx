@@ -20,6 +20,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { navItems } from "./nav-items"
 import { useTheme } from "@/components/ThemeProvider"
+import { useNotificationContext } from "@/context/NotificationContext"
 
 const iconMap = {
   MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
@@ -58,6 +59,8 @@ function TarsLogo() {
 export function AppSidebar() {
   const pathname = usePathname()
   const { theme, toggle: toggleTheme } = useTheme()
+  const { hasUnread } = useNotificationContext()
+  const onChat = pathname.startsWith("/chat")
 
   return (
     <Sidebar>
@@ -91,9 +94,20 @@ export function AppSidebar() {
                           : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
                       }
                     >
-                      <Icon
-                        className={`size-4 ${isActive ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}`}
-                      />
+                      <div className="relative shrink-0">
+                        <Icon
+                          className={`size-4 ${isActive ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}`}
+                        />
+                        {item.label === "Chat" && hasUnread && !onChat && (
+                          <span
+                            className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full border-2"
+                            style={{
+                              backgroundColor: "var(--c-moss)",
+                              borderColor: "var(--c-sidebar, var(--sidebar-background, #1a1714))",
+                            }}
+                          />
+                        )}
+                      </div>
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
