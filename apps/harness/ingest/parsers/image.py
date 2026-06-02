@@ -22,15 +22,18 @@ async def extract(content_bytes: bytes, mime_type: str, filename: str = "") -> s
         mime_type = "image/jpeg"
 
     try:
-        import anthropic
+        from core.model_client import get_model_client as _gmc_img
     except ImportError:
-        return "[image parser unavailable — install anthropic]"
+        return "[image parser unavailable — model client not found]"
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    _p = settings.tier1_provider
+    client = _gmc_img().zai if _p == "zai" else _gmc_img().anthropic
+    _vision_model = settings.tier1_model_override or ("glm-4.5-air" if _p == "zai" else settings.tier1_model)
+
     b64 = base64.standard_b64encode(content_bytes).decode()
 
     message = await client.messages.create(
-        model=settings.tier1_model,  # Haiku — fast and cheap for vision
+        model=_vision_model,  # tier1 model — fast and cheap for vision
         max_tokens=2048,
         messages=[
             {
