@@ -285,33 +285,50 @@ async def _run_subagent(
                     await db.commit()
 
             # SA agents: if this is a root SA job (no parent), auto-escalate to Evolutionarist
-            # so findings get actioned — not just reported.
+            # so findings get implemented and deployed — not just reported.
+            # AWAIT (not fire-and-forget) so the lifecycle is tied to this task
+            # and survives pm2 reloads via the re-queue logic in main.py.
             if agent_type == "sa":
                 async with db_session_factory() as db:
                     from sqlalchemy import select
                     from db.models import AgentJob
                     row = (await db.execute(select(AgentJob).where(AgentJob.id == job_id))).scalar_one_or_none()
-                    if row and row.parent_job_id is None and summary:
-                        escalation_instruction = (
-                            f"An SA agent investigated the following task and produced findings. "
-                            f"Now implement all fixes described in the findings.\n\n"
-                            f"Original task: {instruction[:300]}\n\n"
-                            f"SA findings:\n{summary[:1500]}\n\n"
-                            f"Spawn the appropriate frontend and/or backend agents to implement every fix."
-                        )
-                        evo_job_id = await _create_sub_job(
-                            parent_job_id=job_id,
-                            agent_type="evolutionarist",
-                            instruction=escalation_instruction,
-                            db_session_factory=db_session_factory,
-                        )
-                        asyncio.create_task(_run_evolutionarist(
+                    should_escalate = row and row.parent_job_id is None and summary
+
+                if should_escalate:
+                    escalation_instruction = (
+                        f"An SA agent investigated this task and produced findings. "
+                        f"Now implement every fix described in the findings.\n\n"
+                        f"Original task: {instruction[:300]}\n\n"
+                        f"SA findings:\n{summary[:2000]}\n\n"
+                        f"Spawn frontend and/or backend agents to implement the changes. "
+                        f"After they finish, the harness will tag and deploy automatically."
+                    )
+                    evo_job_id = await _create_sub_job(
+                        parent_job_id=job_id,
+                        agent_type="evolutionarist",
+                        instruction=escalation_instruction,
+                        db_session_factory=db_session_factory,
+                    )
+                    # AWAIT the escalation — keeps it tied to this task's lifecycle
+                    try:
+                        await _run_evolutionarist(
                             evo_job_id, escalation_instruction,
                             DEFAULT_MODELS["evolutionarist"], db_session_factory,
-                        ))
-                        pass  # chip handles live feedback; final message posted on completion
-                        await broadcast(job_id, event)
-                        return
+                        )
+                        # Mark the spawned Evolutionarist as completed
+                        async with db_session_factory() as db:
+                            from sqlalchemy import select
+                            from db.models import AgentJob
+                            evo_row = (await db.execute(select(AgentJob).where(AgentJob.id == evo_job_id))).scalar_one_or_none()
+                            if evo_row and evo_row.status not in ("failed", "cancelled"):
+                                evo_row.status = "completed"
+                                evo_row.completed_at = datetime.now(timezone.utc)
+                                await db.commit()
+                    except Exception:
+                        log.exception("SA escalation failed for job %s", job_id)
+                    await broadcast(job_id, event)
+                    return
 
             # Notify the originating chat conversation
             pr_url = event.get("pr_url")

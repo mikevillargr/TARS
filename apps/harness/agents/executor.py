@@ -58,33 +58,28 @@ _FORBIDDEN_GIT_PATTERNS = [
 ]
 
 # Pre-baked directive prepended to every sub-agent instruction.
+# Forces agents to read AGENTS.md before doing anything else.
 _HARNESS_DIRECTIVE = """\
 ================================================================
-TARS HARNESS RULES — read every line, follow all of them.
+TARS HARNESS — MANDATORY FIRST STEP
 
-GIT: Do NOT run git commit / push / checkout / merge / pull / fetch / add / restore.
-     Do NOT run gh pr create / merge / ready / close.
-     The harness commits, pushes, and deploys automatically when you stop.
-     Read-only git is fine (git status / log / diff / show / grep).
+Before you do ANYTHING else, read the agent operations manual at
+/opt/tars/AGENTS.md. It documents:
+- The codebase structure (where features actually live vs dead code)
+- The git/release/deploy pipeline (what happens after you stop)
+- The verification you MUST run before stopping (npx tsc --noEmit)
+- What commit message format becomes the release note
 
-BEFORE YOU IMPLEMENT ANYTHING:
-1. Find where the feature is ACTUALLY USED. Search for imports and usages
-   before editing. A component that exists but is never imported is dead code
-   — editing it changes nothing in the running app.
-   Run: grep -rn "ComponentName\|function-name" /opt/tars/apps/web/app /opt/tars/apps/web/components --include="*.tsx"
-2. Before changing an API endpoint's response shape, find every caller:
-   grep -rn "api/route-path\|/route-path" /opt/tars/apps/web --include="*.ts" --include="*.tsx"
-   Update ALL callers to match the new shape, or don't change the shape.
-3. For the TARS frontend: the main entry points are:
-   - apps/web/app/(app)/chat/page.tsx  ← chat UI (inline conversation list, message thread)
-   - apps/web/app/(app)/tasks/page.tsx
-   - apps/web/app/(app)/meetings/page.tsx
-   Components under apps/web/components/chat/ may or may not be imported — always verify.
+Run NOW: cat /opt/tars/AGENTS.md
 
-BEFORE YOU STOP:
-- Run: cd /opt/tars/apps/web && npx tsc --noEmit 2>&1 | head -30
-- If there are TypeScript errors, fix them. Do not stop with a broken build.
-- You do not need to run the full build — tsc --noEmit is enough.
+If you skip this, you will likely edit dead code, break the build, or
+have your job marked failed before any code reaches production.
+
+Quick reminders for this session:
+- Do NOT run any git/gh write commands. The harness handles all git ops.
+- Before stopping, run: cd /opt/tars/apps/web && npx tsc --noEmit
+- Your final summary becomes the commit message + release note. Make it
+  a single clear sentence describing what changed (not "Here's a summary…")
 ================================================================
 
 """

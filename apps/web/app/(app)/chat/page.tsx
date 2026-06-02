@@ -809,17 +809,17 @@ function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
   return null
 }
 
-// ─── Agent stream bubble — inline in message thread ──────────────
-function AgentStreamBubble({ msg }: { msg: AgentStreamMessage }) {
+// ─── Agent stream bubble — ephemeral ticker, removed from thread when job ends
+function AgentStreamBubble({ msg, onComplete }: { msg: AgentStreamMessage; onComplete: () => void }) {
+  // No avatar, no bubble — just the ticker. Reads as system chrome, not chat.
   return (
-    <div className="group flex gap-3 min-w-0 max-w-3xl mx-auto">
-      <div className="w-8 h-8 rounded-full shrink-0 overflow-hidden" style={{ border: "2px solid var(--c-moss)" }}>
-        <img src="/tars-avatar.svg" alt="TARS" style={{ width: "100%", height: "100%", display: "block" }} />
-      </div>
-      <div className="flex flex-col min-w-0 flex-1">
-        <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>TARS</span>
-        <AgentStatusChip jobId={msg.job_id} agentType={msg.agent_type} />
-      </div>
+    <div className="flex justify-center my-1">
+      <AgentStatusChip
+        jobId={msg.job_id}
+        agentType={msg.agent_type}
+        onComplete={onComplete}
+        onFail={onComplete}
+      />
     </div>
   )
 }
@@ -839,6 +839,7 @@ interface MessageAreaProps {
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
   setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
   setPlaceResults: React.Dispatch<React.SetStateAction<PlaceResultSet[]>>
+  setAgentStreamMessages: React.Dispatch<React.SetStateAction<AgentStreamMessage[]>>
   onAsk: (q: string) => void
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
@@ -856,6 +857,7 @@ const MessageArea = memo(function MessageArea({
   setArtifactNotifications,
   setContactResults,
   setPlaceResults,
+  setAgentStreamMessages,
   onAsk,
   quoteIndex,
   messagesEndRef,
@@ -874,7 +876,13 @@ const MessageArea = memo(function MessageArea({
       ) : allMessages.map((msg, i) => (
         <React.Fragment key={"id" in msg ? msg.id : `stream-${i}`}>
           {msg.role === "agent_stream"
-            ? <AgentStreamBubble msg={msg as AgentStreamMessage} />
+            ? <AgentStreamBubble
+                msg={msg as AgentStreamMessage}
+                onComplete={() => {
+                  const id = (msg as AgentStreamMessage).job_id
+                  setAgentStreamMessages(prev => prev.filter(m => m.job_id !== id))
+                }}
+              />
             : (
               <>
                 <MessageBubble msg={msg as Message | StreamingMsg} />
@@ -1736,6 +1744,7 @@ export default function ChatPage() {
           setArtifactNotifications={setArtifactNotifications}
           setContactResults={setContactResults}
           setPlaceResults={setPlaceResults}
+          setAgentStreamMessages={setAgentStreamMessages}
           onAsk={handleAsk}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
