@@ -153,6 +153,26 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # ── Shutdown: drain in-flight agent jobs BEFORE closing the loop ──
+    # Without this, asyncio kills running Evolutionarist/SA/FE/BE tasks on
+    # SIGTERM and the user sees "cancelled" status with no PRs and no deploy.
+    try:
+        from agents import job_manager as _jm
+        active = list(_jm._tasks.items())
+        if active:
+            log.info("Shutdown: waiting for %d active agent task(s) to finish (max 4 min)…",
+                     len(active))
+            done, pending = await asyncio.wait(
+                [t for _, t in active],
+                timeout=240,  # under pm2's kill_timeout of 300s
+            )
+            log.info("Shutdown: %d agent task(s) finished, %d still running (will be marked failed and re-queued on next start)",
+                     len(done), len(pending))
+            # The remaining pending tasks will be re-queued on next startup via
+            # the existing re-queue logic at the top of lifespan().
+    except Exception as exc:
+        log.warning("Shutdown agent-drain failed: %s", exc)
+
     keepalive_task.cancel()
     for t in cron_tasks:
         t.cancel()
