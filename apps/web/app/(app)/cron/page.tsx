@@ -16,10 +16,11 @@ interface CronJob {
 }
 
 function humanInterval(sec: number): string {
-  if (sec < 60)        return `Every ${sec}s`
-  if (sec < 3600)      return `Every ${sec / 60}m`
-  if (sec % 3600 === 0) return `Every ${sec / 3600}h`
-  return `Every ${Math.round(sec / 60)}m`
+  if (sec < 60)          return `Every ${sec}s`
+  if (sec < 3600)        return `Every ${sec / 60}m`
+  if (sec < 86400)       return `Every ${sec / 3600}h`
+  if (sec % 604800 === 0) return `Every ${sec / 604800}w`
+  return `Every ${Math.round(sec / 86400)}d`
 }
 
 function relativeTime(iso: string | null): string {

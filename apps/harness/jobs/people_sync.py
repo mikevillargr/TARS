@@ -3,7 +3,7 @@ Google People sync job.
 
 Pulls all contacts (or only changes since last sync) using sync tokens from
 people.connections.list. People API has no push notifications, so we poll
-every 5 minutes — incremental polls return only changed contacts in ~100ms.
+once a week — incremental polls return only changed contacts in ~100ms.
 
 Also pulls otherContacts.list (people you've emailed but never saved) on each
 full sync so that pool is also indexed locally.

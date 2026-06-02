@@ -137,6 +137,7 @@ async def _sync_google_people() -> None:
 
 _FOUR_HOURS  = 4 * 60 * 60
 _FIVE_MINUTES = 5 * 60
+_ONE_WEEK    = 7 * 24 * 60 * 60
 
 def build_tasks() -> list[asyncio.Task]:
     """
@@ -156,8 +157,8 @@ def build_tasks() -> list[asyncio.Task]:
         (
             JobState(
                 name="google_people_sync",
-                description="Pull Google Contacts diffs every 5 minutes",
-                interval_sec=_FIVE_MINUTES,
+                description="Pull Google Contacts diffs once a week",
+                interval_sec=_ONE_WEEK,
                 run_immediately=True,
             ),
             _sync_google_people,

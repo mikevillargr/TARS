@@ -4,6 +4,7 @@ for a given URL. Used by the chat frontend to render inline link preview cards.
 """
 
 import logging
+from typing import Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -24,18 +25,18 @@ _HEADERS = {
 
 class UrlPreviewOut(BaseModel):
     url: str
-    title: str | None = None
-    description: str | None = None
-    image: str | None = None
-    favicon: str | None = None
-    domain: str | None = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    image: Optional[str] = None
+    favicon: Optional[str] = None
+    domain: Optional[str] = None
 
 
 def _extract_meta(html: str, base_url: str) -> dict:
     """Pull title, description, image, favicon from raw HTML."""
     import re
 
-    def get_meta(prop: str, attr: str = "content") -> str | None:
+    def get_meta(prop: str, attr: str = "content") -> Optional[str]:
         # og: and twitter: meta tags
         m = re.search(
             rf'<meta[^>]+(?:property|name)\s*=\s*["\']?{re.escape(prop)}["\']?[^>]+{attr}\s*=\s*["\']([^"\']+)["\']',
