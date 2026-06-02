@@ -4,9 +4,6 @@ on:
   push:
     tags:
       - "v*"
-    paths:
-      - "apps/web/**"
-      - "packages/**"
 
 concurrency:
   group: deploy-production
@@ -20,8 +17,31 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so we can diff against previous tag
+
+      # Only deploy web when apps/web/** or packages/** actually changed.
+      - name: Detect web changes since previous tag
+        id: changed
+        run: |
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${GITHUB_REF_NAME}$" | head -n1)
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found — deploying web"
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Comparing $PREV_TAG → ${GITHUB_REF_NAME}"
+          CHANGED=$(git diff --name-only "$PREV_TAG..${GITHUB_REF_NAME}" -- 'apps/web/' 'packages/' | wc -l)
+          if [ "$CHANGED" -gt 0 ]; then
+            echo "Web changed in $CHANGED file(s) — deploying"
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Web unchanged — skipping web deploy"
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Deploy via SSH
+        if: steps.changed.outputs.should_deploy == 'true'
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}

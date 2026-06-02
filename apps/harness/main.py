@@ -153,25 +153,38 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # ── Shutdown: drain in-flight agent jobs BEFORE closing the loop ──
-    # Without this, asyncio kills running Evolutionarist/SA/FE/BE tasks on
-    # SIGTERM and the user sees "cancelled" status with no PRs and no deploy.
+    # ── Shutdown: mark in-flight agent jobs as pending so they resume on restart
+    # Without this, asyncio kills running tasks on SIGTERM, the CancelledError
+    # handler stamps them "cancelled", and the re-queue logic that only picks
+    # up "running"/"awaiting_approval" misses them — leaving the user with a
+    # job that never completes and no PR/deploy.
     try:
         from agents import job_manager as _jm
-        active = list(_jm._tasks.items())
-        if active:
-            log.info("Shutdown: waiting for %d active agent task(s) to finish (max 4 min)…",
-                     len(active))
-            done, pending = await asyncio.wait(
-                [t for _, t in active],
-                timeout=240,  # under pm2's kill_timeout of 300s
-            )
-            log.info("Shutdown: %d agent task(s) finished, %d still running (will be marked failed and re-queued on next start)",
-                     len(done), len(pending))
-            # The remaining pending tasks will be re-queued on next startup via
-            # the existing re-queue logic at the top of lifespan().
+        active_ids = list(_jm._tasks.keys())
+        if active_ids:
+            log.info("Shutdown: %d active agent task(s) — marking pending for re-queue on next start", len(active_ids))
+            from db.session import AsyncSessionLocal
+            from db.models import AgentJob
+            from sqlalchemy import update
+            async with AsyncSessionLocal() as db:
+                await db.execute(
+                    update(AgentJob)
+                    .where(AgentJob.id.in_(active_ids))
+                    .values(
+                        status="pending",
+                        started_at=None,
+                        output=None,
+                        completed_at=None,
+                    )
+                )
+                await db.commit()
+            # Tell job_manager: subsequent CancelledError handlers in _run_job
+            # should NOT override the "pending" status we just set.
+            _jm._shutdown_requested = True
+            # Give a short window for any in-flight DB writes to finish
+            await asyncio.sleep(2)
     except Exception as exc:
-        log.warning("Shutdown agent-drain failed: %s", exc)
+        log.warning("Shutdown agent re-queue failed: %s", exc)
 
     keepalive_task.cancel()
     for t in cron_tasks:

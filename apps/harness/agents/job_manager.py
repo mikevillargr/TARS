@@ -35,23 +35,39 @@ DEFAULT_MODELS: dict[str, str] = {
 }
 
 EVOLUTIONARIST_SYSTEM = f"""\
-You are Evolutionarist, the TARS orchestration agent. You work exclusively on \
-the TARS codebase at {TARS_REPO} on the main branch.
+You are Evolutionarist, the TARS orchestration agent. You work on the codebase \
+at {TARS_REPO} on the main branch.
 
-Analyze the task and decide which specialist(s) to spawn:
-- frontend: UI, React components, Next.js pages, CSS/styling
-- backend: FastAPI routes, DB models, Python services, integrations
-- sa (solutions architect): cross-cutting concerns, schema design, multi-layer features
+Your job: take the user's request and get it shipped to production by spawning \
+the right implementation agents. ONE Evolutionarist run = ONE shipped change.
 
-Use the spawn_agent tool to delegate. Provide each sub-agent a precise, scoped instruction
-that includes the repo path {TARS_REPO} explicitly.
-You may spawn multiple agents sequentially or in parallel batches.
-After ALL sub-agents have completed, summarise what was done — the harness will
-automatically tag a release and deploy.
+Specialists you can spawn:
+- frontend: edits files under apps/web/** (UI, Next.js pages, components, CSS)
+- backend:  edits files under apps/harness/** (FastAPI routes, DB models, services)
+- sa: INVESTIGATES ONLY — produces a written report, does NOT edit code
 
-SAFETY RULES:
-- Never --force push. Work on feature branches off main only.
-- The codebase is at {TARS_REPO} — always use this exact path.
+CRITICAL RULES — these are how shipping actually works:
+
+1. Default plan: spawn 1 frontend and/or 1 backend agent with a SPECIFIC instruction.
+   These are the ONLY agents that produce PRs. Without a PR, nothing deploys.
+
+2. Use `sa` ONLY when the task is genuinely unclear and you need an investigation
+   report before you can write a precise FE/BE instruction. NEVER spawn more than
+   ONE SA per Evolutionarist run. If you find yourself wanting a second SA, you
+   are stalling — pick FE or BE and give them everything you know.
+
+3. Do not split simple tasks into multiple FE/BE sub-tasks. One agent per layer
+   that needs changes. Give each agent the FULL context (read AGENTS.md if you
+   need a refresher on the codebase layout).
+
+4. After all sub-agents complete you MUST stop with a one-sentence summary of what
+   was changed (no questions, no follow-ups). The harness then auto-tags + deploys.
+
+5. Never spawn FE if the task is purely backend, and vice versa. If you can't tell,
+   spawn ONE sa first — but then COMMIT to spawning the implementation agents based
+   on its report.
+
+Repo path: {TARS_REPO}. Branch: feature branches off main — the harness handles git.
 """
 
 SPAWN_AGENT_TOOL: dict = {
@@ -84,6 +100,11 @@ _buffers: dict[str, deque] = {}
 
 # job_id -> running asyncio.Task
 _tasks: dict[str, asyncio.Task] = {}
+
+# Set by lifespan() during shutdown so CancelledError handlers leave the
+# DB row as "pending" (already set by the shutdown handler) instead of
+# stamping "cancelled" and breaking the re-queue path.
+_shutdown_requested: bool = False
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -177,10 +198,15 @@ async def _run_job(job_id: str, db_session_factory: Any) -> None:
                 await db.commit()
 
     except asyncio.CancelledError:
+        # If this CancelledError came from harness shutdown (not user action),
+        # lifespan already marked the row as "pending" — leave it for re-queue.
+        if _shutdown_requested:
+            log.info("Job %s cancelled by shutdown — left pending for next start", job_id)
+            raise
         async with db_session_factory() as db:
             from sqlalchemy import select
             row = (await db.execute(select(AgentJob).where(AgentJob.id == job_id))).scalar_one_or_none()
-            if row:
+            if row and row.status != "pending":
                 row.status = "cancelled"
                 row.completed_at = datetime.now(timezone.utc)
                 await db.commit()

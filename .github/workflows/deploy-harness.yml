@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*"
-    paths:
-      - "apps/harness/**"
 
 concurrency:
   group: deploy-production
@@ -19,14 +17,41 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so we can diff against previous tag
 
-      # Wait briefly so Deploy Web grabs SSH first and Harness doesn't race.
+      # Only deploy harness when apps/harness/** actually changed since the
+      # previous tag. Most agent jobs only touch the frontend — restarting
+      # the harness on every tag was killing long-running orchestration jobs
+      # mid-flight (Evolutionarist + sub-agents) and breaking the deploy chain.
+      - name: Detect harness changes since previous tag
+        id: changed
+        run: |
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^${GITHUB_REF_NAME}$" | head -n1)
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found — deploying harness"
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Comparing $PREV_TAG → ${GITHUB_REF_NAME}"
+          CHANGED=$(git diff --name-only "$PREV_TAG..${GITHUB_REF_NAME}" -- 'apps/harness/' | wc -l)
+          if [ "$CHANGED" -gt 0 ]; then
+            echo "apps/harness/ changed in $CHANGED file(s) — deploying"
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "apps/harness/ unchanged — skipping harness deploy"
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Wait so Deploy Web grabs SSH first and Harness doesn't race.
       # (concurrency: deploy-production isn't reliably serializing across
       # separate workflow files when triggered by the same tag push.)
       - name: Stagger start to avoid SSH race with Deploy Web
+        if: steps.changed.outputs.should_deploy == 'true'
         run: sleep 90
 
       - name: Deploy via SSH
+        if: steps.changed.outputs.should_deploy == 'true'
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_IP }}
