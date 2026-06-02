@@ -1825,6 +1825,7 @@ export default function ChatPage() {
                 boxShadow: "0 4px 16px rgba(26,23,20,0.08), 0 1px 3px rgba(26,23,20,0.06)",
               }}
             >
+              {/* E2E-TEST-MARKER-7K9Q */}
               <textarea
                 ref={textareaRef}
                 value={inputValue}
