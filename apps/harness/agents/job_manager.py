@@ -232,7 +232,7 @@ async def _run_job(job_id: str, db_session_factory: Any) -> None:
 
 
 async def _notify_chat(job_id: str, message: str, db_session_factory: Any) -> None:
-    """Insert a TARS assistant message into the originating conversation."""
+    """Insert a TARS assistant message and push a real-time notification."""
     try:
         async with db_session_factory() as db:
             from sqlalchemy import select
@@ -248,7 +248,18 @@ async def _notify_chat(job_id: str, message: str, db_session_factory: Any) -> No
             )
             db.add(msg)
             await db.commit()
+            await db.refresh(msg)
             log.info("Job %s: notified chat conversation %s", job_id, job.conversation_id)
+
+            # Push real-time notification so the chat page updates without polling
+            from agents.notifications import publish as _notify_publish
+            await _notify_publish(job.user_id, {
+                "type": "new_message",
+                "conversation_id": job.conversation_id,
+                "message_id": msg.id,
+                "preview": message[:120],
+                "created_at": msg.created_at.isoformat(),
+            })
     except Exception as exc:
         log.warning("Job %s: failed to notify chat: %s", job_id, exc)
 

@@ -18,6 +18,7 @@ import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { useConfirm } from "@/components/ui/confirm-dialog"
+import { useNotifications } from "@/hooks/useNotifications"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -1003,6 +1004,8 @@ export default function ChatPage() {
   const [placeResults, setPlaceResults]                   = useState<PlaceResultSet[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
+  // Conversations with unread async messages (e.g. agent completions)
+  const [unreadConvIds, setUnreadConvIds]           = useState<Set<string>>(new Set())
   const [inputValue, setInputValue]                 = useState("")
   const [attachments, setAttachments]               = useState<File[]>([])
   // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
@@ -1079,7 +1082,44 @@ export default function ChatPage() {
     setAgentStreamMessages([])
     setContactResults([])
     setPlaceResults([])
+    // Clear unread badge when switching to a conversation
+    if (activeChatId) {
+      setUnreadConvIds(prev => {
+        if (!prev.has(activeChatId)) return prev
+        const next = new Set(prev)
+        next.delete(activeChatId)
+        return next
+      })
+    }
   }, [activeChatId])
+
+  // Real-time notifications from agent completions and other async TARS messages
+  useNotifications((notif) => {
+    if (notif.type === "new_message") {
+      const isActive = notif.conversation_id === activeChatIdRef.current
+      if (isActive) {
+        // Reload messages for the active conversation immediately
+        apiGet<{ messages: Message[] }>(`/chat/conversations/${notif.conversation_id}/messages`)
+          .then(data => {
+            setMessages(data.messages ?? [])
+            // Scroll to new message after render
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+          })
+          .catch(() => {})
+      } else {
+        // Mark the conversation as having unread messages
+        setUnreadConvIds(prev => new Set([...prev, notif.conversation_id]))
+        // Move it to top of list so it's visible
+        setConversations(prev => {
+          const idx = prev.findIndex(c => c.id === notif.conversation_id)
+          if (idx <= 0) return prev
+          const updated = [...prev]
+          const [conv] = updated.splice(idx, 1)
+          return [conv, ...updated]
+        })
+      }
+    }
+  })
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -1675,7 +1715,16 @@ export default function ChatPage() {
                   textOverflow: "ellipsis",
                 }}
               >
-                {conv.title ?? "New conversation"}
+                <span className="flex items-center gap-1.5 min-w-0">
+                  {unreadConvIds.has(conv.id) && (
+                    <span
+                      className="shrink-0 rounded-full"
+                      style={{ width: 7, height: 7, backgroundColor: "var(--c-moss)", boxShadow: "0 0 0 2px color-mix(in srgb, var(--c-moss) 25%, transparent)" }}
+                      aria-label="New message"
+                    />
+                  )}
+                  <span className="truncate">{conv.title ?? "New conversation"}</span>
+                </span>
               </button>
               <button
                 onClick={(e) => handleDeleteConversation(conv.id, e)}

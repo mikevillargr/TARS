@@ -7,39 +7,54 @@ import { TarsWebSocket, getWsToken } from "@/lib/websocket"
 interface Props {
   jobId: string
   agentType?: string
-  /** Called when the job completes successfully — chat removes the chip after a delay */
   onComplete?: () => void
-  /** Called when the job fails/errors */
   onFail?: () => void
-  /** Called when this agent spawns a sub-agent — chat renders a sibling chip */
   onSubJobSpawned?: (subJobId: string, agentType: string) => void
 }
 
-export default function AgentStatusChip({ jobId, agentType, onComplete, onFail, onSubJobSpawned }: Props) {
-  const [statusText, setStatusText] = useState<string>("Working…")
+// Human-readable labels for tool events from Claude Code
+function toolLabel(tool: string, input: Record<string, unknown>): string | null {
+  switch (tool) {
+    case "Read": {
+      const p = String(input.file_path ?? "").split("/").slice(-2).join("/")
+      return p ? `Reading ${p}` : null
+    }
+    case "Write":
+    case "Edit": {
+      const p = String(input.file_path ?? "").split("/").slice(-2).join("/")
+      return p ? `${tool === "Write" ? "Writing" : "Editing"} ${p}` : null
+    }
+    case "Bash": {
+      const cmd = String(input.command ?? "").split(" ").slice(0, 3).join(" ").slice(0, 40)
+      if (!cmd || /^(echo|true|false|pwd|ls\b)/i.test(cmd)) return null
+      return cmd
+    }
+    case "Glob":
+    case "Grep":
+      return `Searching codebase`
+    default:
+      return null
+  }
+}
+
+export default function AgentStatusChip({
+  jobId, agentType, onComplete, onFail, onSubJobSpawned,
+}: Props) {
+  const [status, setStatus] = useState<string>("Working…")
   const wsRef = useRef<TarsWebSocket | null>(null)
-  const lastUpdateRef = useRef<number>(0)
+  const lastTs = useRef<number>(0)
+
+  // Throttled setter — max one visible update per 600 ms
+  function push(text: string) {
+    if (!text) return
+    const now = Date.now()
+    if (now - lastTs.current < 600) return
+    lastTs.current = now
+    setStatus(text.length > 72 ? text.slice(0, 71) + "…" : text)
+  }
 
   useEffect(() => {
     let mounted = true
-
-    // Filter and clean a single line of status text
-    function tryUpdate(raw: string) {
-      const text = raw
-        .replace(/\n+/g, " ")
-        .replace(/\*\*/g, "")
-        .replace(/```[a-z]*/g, "")
-        .replace(/^[→•\-\s]+/, "")
-        .trim()
-      if (!text || text.length < 8) return
-      if (/^(Running|Executing|bash|read_file|write_file|edit_file)/i.test(text)) return
-      const now = Date.now()
-      // Throttle: at most one update per 800 ms so it feels like a smooth ticker, not a strobe
-      if (now - lastUpdateRef.current < 800) return
-      lastUpdateRef.current = now
-      const trimmed = text.length > 90 ? text.slice(0, 89) + "…" : text
-      if (mounted) setStatusText(trimmed)
-    }
 
     async function init() {
       try {
@@ -47,44 +62,55 @@ export default function AgentStatusChip({ jobId, agentType, onComplete, onFail, 
         const ws = new TarsWebSocket(`agent-jobs/${jobId}/stream?token=${token}`)
         wsRef.current = ws
 
+        // Model commentary (filtered for noise)
         ws.on("text_chunk", (msg: unknown) => {
-          tryUpdate((msg as { text?: string }).text ?? "")
+          if (!mounted) return
+          const text = ((msg as { text?: string }).text ?? "")
+            .replace(/\n+/g, " ").replace(/\*\*/g, "").trim()
+          if (text.length < 10) return
+          if (/^(→|Working|Analyzing|Commit|Merging|Deploy)/i.test(text)) return
+          push(text)
+        })
+
+        // Tool events — most informative for "what is it doing right now"
+        ws.on("tool_start", (msg: unknown) => {
+          if (!mounted) return
+          const m = msg as { tool?: string; input?: Record<string, unknown> }
+          const label = toolLabel(m.tool ?? "", m.input ?? {})
+          if (label) push(label)
         })
 
         ws.on("deploy_started", () => {
-          if (mounted) setStatusText("Deploying…")
+          if (mounted) push("Deploying to production…")
         })
 
         ws.on("completed", () => {
           if (!mounted) return
-          setStatusText("Done")
-          // Fade out + remove from chat after a moment
-          setTimeout(() => onComplete?.(), 1500)
+          setStatus("Done")
+          setTimeout(() => onComplete?.(), 1200)
         })
 
         ws.on("error", () => {
           if (!mounted) return
-          setStatusText("Failed")
-          setTimeout(() => onFail?.(), 1500)
+          setStatus("Failed")
+          setTimeout(() => onFail?.(), 1200)
         })
 
         ws.on("agent_stopped", () => {
           if (!mounted) return
-          setStatusText("Stopped")
-          setTimeout(() => onFail?.(), 1500)
+          setStatus("Stopped")
+          setTimeout(() => onFail?.(), 1200)
         })
 
         ws.on("sub_job_started", (msg: unknown) => {
           if (!mounted) return
           const m = msg as { sub_job_id?: string; agent_type?: string }
-          if (m.sub_job_id && m.agent_type) {
-            onSubJobSpawned?.(m.sub_job_id, m.agent_type)
-          }
+          if (m.sub_job_id && m.agent_type) onSubJobSpawned?.(m.sub_job_id, m.agent_type)
         })
 
         ws.connect()
       } catch {
-        // silent
+        // silent — chip stays in working state
       }
     }
 
@@ -97,39 +123,41 @@ export default function AgentStatusChip({ jobId, agentType, onComplete, onFail, 
   }, [jobId])
 
   const typeLabel =
-    agentType === "evolutionarist" ? "Agent" :
-    agentType === "sa" ? "Researching" :
-    agentType === "frontend" ? "Frontend" :
-    agentType === "backend" ? "Backend" :
+    agentType === "evolutionarist" ? "Orchestrating" :
+    agentType === "sa"             ? "Researching" :
+    agentType === "frontend"       ? "Frontend" :
+    agentType === "backend"        ? "Backend" :
     "Agent"
 
   return (
     <div
-      className="inline-flex items-center gap-2 px-3 py-1.5 text-xs select-none"
-      style={{
-        color: "var(--c-ink-faint)",
-        opacity: 0.85,
-      }}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs select-none"
+      style={{ color: "var(--c-ink-faint)", opacity: 0.85 }}
     >
       <Loader2 size={11} className="animate-spin shrink-0" />
-      <Sparkles size={10} className="shrink-0" style={{ color: "var(--c-moss)" }} />
-      <span className="font-medium shrink-0" style={{ fontSize: "11px" }}>{typeLabel}</span>
-      <span style={{ color: "var(--c-border)", fontSize: "11px" }}>·</span>
+      <Sparkles size={9} className="shrink-0" style={{ color: "var(--c-moss)" }} />
+      <span className="font-medium shrink-0" style={{ fontSize: "11px", color: "var(--c-ink-faint)" }}>
+        {typeLabel}
+      </span>
+      <span style={{ color: "var(--c-border-faint)", fontSize: "11px" }}>·</span>
       <span
-        key={statusText}
-        className="overflow-hidden"
+        key={status}
         style={{
           fontSize: "11px",
-          animation: "tars-ticker-fade 400ms ease-out",
+          animation: "notif-fade-in 350ms ease-out",
           display: "inline-block",
+          maxWidth: "280px",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
       >
-        {statusText}
+        {status}
       </span>
       <style jsx>{`
-        @keyframes tars-ticker-fade {
+        @keyframes notif-fade-in {
           from { opacity: 0; transform: translateY(2px); }
-          to { opacity: 1; transform: translateY(0); }
+          to   { opacity: 1; transform: translateY(0);   }
         }
       `}</style>
     </div>
