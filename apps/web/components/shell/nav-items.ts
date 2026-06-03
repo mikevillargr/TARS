@@ -6,7 +6,6 @@ export const navItems = [
   { label: "Second Brain", href: "/second-brain", icon: "Brain" },
   { label: "Agent Jobs", href: "/agent-jobs", icon: "Cpu" },
   { label: "Artifacts", href: "/artifacts", icon: "Archive" },
-  { label: "Email Digest", href: "/email-digest", icon: "Mail" },
   { label: "Cron Manager", href: "/cron", icon: "Clock" },
   { label: "Connectors", href: "/connectors", icon: "Plug" },
   { label: "Mnemon", href: "/memory", icon: "Database" },

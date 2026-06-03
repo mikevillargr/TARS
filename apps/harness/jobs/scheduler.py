@@ -1,15 +1,16 @@
 """
-Harness scheduler — lightweight asyncio-based periodic jobs.
-No Redis/BullMQ needed: jobs run inside the FastAPI process on a fixed cadence.
+Harness scheduler — two types of periodic jobs.
 
-Registered jobs run on startup and repeat on their configured interval.
-State (last_run, last_status, next_run) is kept in memory and exposed via
-the /api/cron endpoint so the Cron Manager UI can display them.
+1. Connector jobs: interval-based (fireflies sync, people sync, etc.)
+   State kept in-memory, exposed via /api/cron.
+
+2. Prompt jobs: wall-clock scheduled (daily at 8 AM, every Monday at 9 PM, etc.)
+   Stored in DB (cron_jobs table), checked every 60 s by _prompt_cron_loop.
 """
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Callable, Coroutine, Any, Optional
 
@@ -146,12 +147,49 @@ _FOUR_HOURS  = 4 * 60 * 60
 _FIVE_MINUTES = 5 * 60
 _ONE_WEEK    = 7 * 24 * 60 * 60
 
+async def _prompt_cron_loop() -> None:
+    """
+    Every 60 s: check all enabled prompt cron jobs in DB and fire any that are due.
+    Runs concurrently — each job fires in its own task so one slow job doesn't block others.
+    """
+    # Initial delay so harness fully starts before first check
+    await asyncio.sleep(30)
+
+    while True:
+        try:
+            from db.session import AsyncSessionLocal
+            from db.models import CronJob
+            from sqlalchemy import select
+            from jobs.prompt_cron import is_due, execute as _exec
+
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(CronJob).where(
+                        CronJob.type == "prompt",
+                        CronJob.enabled == True,
+                    )
+                )
+                jobs = result.scalars().all()
+
+            for job in jobs:
+                if not job.schedule_config:
+                    continue
+                if is_due(job.schedule_config, job.timezone or "Asia/Manila", job.last_run_at, job.next_run_at):
+                    log.info("Prompt cron '%s' is due — firing", job.name)
+                    asyncio.create_task(_exec(job.id))
+
+        except Exception as exc:
+            log.exception("Prompt cron loop error: %s", exc)
+
+        await asyncio.sleep(60)
+
+
 def build_tasks() -> list[asyncio.Task]:
     """
     Create and start all scheduled jobs.
     Call once from the FastAPI lifespan — returns asyncio Tasks to cancel on shutdown.
     """
-    jobs = [
+    connector_jobs = [
         (
             JobState(
                 name="fireflies_sync",
@@ -173,9 +211,13 @@ def build_tasks() -> list[asyncio.Task]:
     ]
 
     tasks = []
-    for state, fn in jobs:
+    for state, fn in connector_jobs:
         _registry[state.name] = state
         tasks.append(asyncio.create_task(_loop(state, fn)))
-        log.info("Cron job '%s' scheduled every %ds", state.name, state.interval_sec)
+        log.info("Connector cron '%s' scheduled every %ds", state.name, state.interval_sec)
+
+    # Prompt cron wall-clock checker
+    tasks.append(asyncio.create_task(_prompt_cron_loop()))
+    log.info("Prompt cron wall-clock checker started (60 s interval)")
 
     return tasks

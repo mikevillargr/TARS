@@ -1,8 +1,47 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Clock, Play, Loader2, CheckCircle2, XCircle, RefreshCw, Circle } from "lucide-react"
-import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
+import {
+  Clock, Play, Loader2, CheckCircle2, XCircle, Circle,
+  Plus, Trash2, Pencil, RefreshCw, ChevronDown,
+} from "lucide-react"
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ConnectorJob {
+  name: string
+  description: string
+  interval_sec: number
+  last_run_at: string | null
+  next_run_at: string | null
+  last_status: "pending" | "running" | "ok" | "error"
+  last_error: string | null
+  run_count: number
+}
+
+interface ScheduleConfig {
+  frequency: "daily" | "weekdays" | "weekly" | "biweekly" | "monthly"
+  time: string
+  day_of_week: number
+}
+
+interface PromptJob {
+  id: string
+  name: string
+  prompt_text: string
+  schedule_config: ScheduleConfig
+  schedule_human: string
+  timezone: string
+  enabled: boolean
+  last_run_at: string | null
+  last_run_status: "pending" | "running" | "ok" | "error" | null
+  next_run_at: string | null
+  last_output: string | null
+  output_conversation_id: string | null
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const INTERVAL_OPTIONS = [
   { label: "Every 5m",  value: 300 },
@@ -15,30 +54,37 @@ const INTERVAL_OPTIONS = [
   { label: "Every 1w",  value: 604800 },
 ]
 
-interface CronJob {
-  name:          string
-  description:   string
-  interval_sec:  number
-  last_run_at:   string | null
-  next_run_at:   string | null
-  last_status:   "pending" | "running" | "ok" | "error"
-  last_error:    string | null
-  run_count:     number
-}
+const FREQUENCY_OPTIONS = [
+  { value: "daily",    label: "Every day" },
+  { value: "weekdays", label: "Weekdays (Mon–Fri)" },
+  { value: "weekly",   label: "Weekly" },
+  { value: "biweekly", label: "Every 2 weeks" },
+  { value: "monthly",  label: "Monthly (1st of month)" },
+]
 
-function humanInterval(sec: number): string {
-  if (sec < 60)          return `Every ${sec}s`
-  if (sec < 3600)        return `Every ${sec / 60}m`
-  if (sec < 86400)       return `Every ${sec / 3600}h`
-  if (sec % 604800 === 0) return `Every ${sec / 604800}w`
-  return `Every ${Math.round(sec / 86400)}d`
-}
+const DAY_OPTIONS = [
+  { value: 0, label: "Monday" },
+  { value: 1, label: "Tuesday" },
+  { value: 2, label: "Wednesday" },
+  { value: 3, label: "Thursday" },
+  { value: 4, label: "Friday" },
+  { value: 5, label: "Saturday" },
+  { value: 6, label: "Sunday" },
+]
+
+const HOURS = Array.from({ length: 24 }, (_, i) => {
+  const ampm = i < 12 ? "AM" : "PM"
+  const h = i % 12 || 12
+  return { value: i, label: `${h}:00 ${ampm}` }
+})
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "—"
   const diff = (new Date(iso).getTime() - Date.now()) / 1000
-  const abs   = Math.abs(diff)
-  const past  = diff < 0
+  const abs  = Math.abs(diff)
+  const past = diff < 0
   const label =
     abs < 60    ? `${Math.round(abs)}s`
     : abs < 3600  ? `${Math.round(abs / 60)}m`
@@ -47,293 +93,452 @@ function relativeTime(iso: string | null): string {
   return past ? `${label} ago` : `in ${label}`
 }
 
-function StatusChip({ status }: { status: CronJob["last_status"] }) {
-  const cfg = {
-    ok:      { label: "OK",      color: "var(--c-moss)",      bg: "var(--c-moss-soft)",  icon: CheckCircle2 },
-    error:   { label: "Error",   color: "var(--c-rose)",      bg: "var(--c-rose-soft)",  icon: XCircle },
-    running: { label: "Running", color: "var(--c-amber)",     bg: "var(--c-amber-soft)", icon: Loader2 },
-    pending: { label: "Pending", color: "var(--c-ink-faint)", bg: "var(--c-surface-2)",  icon: Circle },
-  }[status]
+function StatusChip({ status }: { status: string | null }) {
+  if (!status) return null
+  const cfg = ({
+    ok:      { label: "OK",      color: "var(--c-moss)",      bg: "var(--c-moss-soft)",  Icon: CheckCircle2 },
+    error:   { label: "Error",   color: "var(--c-rose)",      bg: "var(--c-rose-soft)",  Icon: XCircle },
+    running: { label: "Running", color: "var(--c-amber)",     bg: "var(--c-amber-soft)", Icon: Loader2 },
+    pending: { label: "Pending", color: "var(--c-ink-faint)", bg: "var(--c-surface-2)",  Icon: Circle },
+  } as Record<string, { label: string; color: string; bg: string; Icon: React.ElementType }>)[status]
+    ?? { label: status, color: "var(--c-ink-faint)", bg: "var(--c-surface-2)", Icon: Circle }
 
-  const Icon = cfg.icon
-
+  const { label, color, bg, Icon } = cfg
   return (
-    <span
-      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
-      style={{ color: cfg.color, backgroundColor: cfg.bg }}
-    >
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full"
+      style={{ color, backgroundColor: bg }}>
       <Icon size={10} className={status === "running" ? "animate-spin" : ""} />
-      {cfg.label}
+      {label}
     </span>
   )
 }
 
-export default function CronPage() {
-  const [jobs,             setJobs]             = useState<CronJob[]>([])
-  const [loading,          setLoading]          = useState(true)
-  const [running,          setRunning]          = useState<string | null>(null)
-  const [selected,         setSelected]         = useState<CronJob | null>(null)
-  const [updatingCadence,  setUpdatingCadence]  = useState(false)
+// ─── Prompt Job Form ──────────────────────────────────────────────────────────
 
-  const load = useCallback(async () => {
-    try {
-      const data = await apiGet<{ items: CronJob[] }>("/cron")
-      setJobs(data.items)
-      // Keep selected in sync
-      setSelected(prev => prev
-        ? data.items.find(j => j.name === prev.name) ?? null
-        : null
-      )
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+interface PromptFormState {
+  name: string
+  prompt_text: string
+  frequency: ScheduleConfig["frequency"]
+  time_hour: number
+  time_minute: number
+  day_of_week: number
+}
 
-  useEffect(() => {
-    load()
-    // Refresh every 30s so status + next_run stay fresh
-    const t = setInterval(load, 30_000)
-    return () => clearInterval(t)
-  }, [load])
+const DEFAULT_FORM: PromptFormState = {
+  name: "", prompt_text: "", frequency: "daily",
+  time_hour: 8, time_minute: 0, day_of_week: 0,
+}
 
-  async function updateCadence(job: CronJob, interval_sec: number) {
-    setUpdatingCadence(true)
-    try {
-      const updated = await apiPatch<CronJob>(`/cron/${job.name}`, { interval_sec })
-      setJobs(prev => prev.map(j => j.name === updated.name ? updated : j))
-      setSelected(updated)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setUpdatingCadence(false)
-    }
+function formToPayload(f: PromptFormState) {
+  return {
+    name: f.name,
+    prompt_text: f.prompt_text,
+    schedule_config: {
+      frequency: f.frequency,
+      time: `${String(f.time_hour).padStart(2, "0")}:${String(f.time_minute).padStart(2, "0")}`,
+      day_of_week: f.day_of_week,
+    },
+    timezone: "Asia/Manila",
+    enabled: true,
   }
+}
 
-  async function runNow(job: CronJob) {
-    setRunning(job.name)
-    try {
-      await apiPost(`/cron/${job.name}/run`)
-      // Poll for completion
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000))
-        await load()
-        const updated = jobs.find(j => j.name === job.name)
-        if (updated && updated.last_status !== "running") break
-      }
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setRunning(null)
-    }
+function jobToForm(job: PromptJob): PromptFormState {
+  const sc = job.schedule_config
+  const [hStr, mStr] = (sc?.time ?? "08:00").split(":")
+  return {
+    name: job.name,
+    prompt_text: job.prompt_text,
+    frequency: sc?.frequency ?? "daily",
+    time_hour: parseInt(hStr ?? "8"),
+    time_minute: parseInt(mStr ?? "0"),
+    day_of_week: sc?.day_of_week ?? 0,
+  }
+}
+
+function PromptForm({
+  initial, onSave, onCancel,
+}: {
+  initial?: PromptJob | null
+  onSave: (p: ReturnType<typeof formToPayload>) => Promise<void>
+  onCancel: () => void
+}) {
+  const [form, setForm] = useState<PromptFormState>(initial ? jobToForm(initial) : DEFAULT_FORM)
+  const [saving, setSaving] = useState(false)
+  const set = <K extends keyof PromptFormState>(k: K, v: PromptFormState[K]) =>
+    setForm(prev => ({ ...prev, [k]: v }))
+  const needsDay = form.frequency === "weekly" || form.frequency === "biweekly"
+
+  const selectCls = "w-full px-3 py-2 rounded-lg text-sm appearance-none outline-none focus:ring-1"
+  const selectStyle = { backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.name.trim() || !form.prompt_text.trim()) return
+    setSaving(true)
+    try { await onSave(formToPayload(form)) } finally { setSaving(false) }
   }
 
   return (
-    <div className="flex h-full" style={{ backgroundColor: "var(--c-canvas)" }}>
-      <div className="flex-1 flex flex-col overflow-hidden">
-
-        {/* Header */}
-        <div
-          className="px-6 py-4 border-b flex items-center justify-between shrink-0"
-          style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ backgroundColor: "var(--c-surface-2)" }}
-            >
-              <Clock size={17} style={{ color: "var(--c-ink-muted)" }} />
-            </div>
-            <div>
-              <h1
-                className="text-lg font-semibold leading-tight"
-                style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}
-              >
-                Cron Manager
-              </h1>
-              <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>Scheduled recurring tasks</p>
-            </div>
-          </div>
-          <button
-            onClick={load}
-            className="p-2 rounded-lg transition-colors"
-            style={{ color: "var(--c-ink-muted)" }}
-            title="Refresh"
-          >
-            <RefreshCw size={15} />
-          </button>
-        </div>
-
-        {/* Table */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <Loader2 size={20} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
-            </div>
-          ) : jobs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 gap-2">
-              <Clock size={28} style={{ color: "var(--c-ink-faint)" }} />
-              <p className="text-sm" style={{ color: "var(--c-ink-faint)" }}>No jobs scheduled</p>
-            </div>
-          ) : (
-            <div
-              className="rounded-xl overflow-hidden"
-              style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)" }}
-            >
-              {/* Column headers */}
-              <div
-                className="grid text-[0.65rem] font-semibold uppercase tracking-wider px-4 py-2.5"
-                style={{
-                  gridTemplateColumns: "2fr 1.2fr 1.4fr 1.4fr 1fr",
-                  backgroundColor: "var(--c-surface-2)",
-                  color: "var(--c-ink-faint)",
-                  borderBottom: "1px solid var(--c-border)",
-                }}
-              >
-                <span>Job</span>
-                <span>Cadence</span>
-                <span>Last Run</span>
-                <span>Next Run</span>
-                <span>Status</span>
-              </div>
-
-              {/* Rows */}
-              {jobs.map((job, i) => (
-                <button
-                  key={job.name}
-                  onClick={() => setSelected(prev => prev?.name === job.name ? null : job)}
-                  className="grid w-full text-left px-4 py-3.5 transition-colors"
-                  style={{
-                    gridTemplateColumns: "2fr 1.2fr 1.4fr 1.4fr 1fr",
-                    alignItems: "center",
-                    borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
-                    backgroundColor: selected?.name === job.name ? "var(--c-surface-2)" : "transparent",
-                  }}
-                >
-                  <div className="pr-3">
-                    <div className="text-sm font-medium leading-snug" style={{ color: "var(--c-ink)" }}>
-                      {job.name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
-                    </div>
-                    <div className="text-[11px] mt-0.5 truncate" style={{ color: "var(--c-ink-faint)" }}>{job.description}</div>
-                  </div>
-                  <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>{humanInterval(job.interval_sec)}</span>
-                  <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{relativeTime(job.last_run_at)}</span>
-                  <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{relativeTime(job.next_run_at)}</span>
-                  <StatusChip status={job.last_status} />
-                </button>
-              ))}
-            </div>
-          )}
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div>
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--c-ink-muted)" }}>Job Name</label>
+        <input type="text" value={form.name} onChange={e => set("name", e.target.value)}
+          placeholder="e.g. Weekly Summary, Morning Brief" required
+          className={selectCls} style={selectStyle} />
+      </div>
+      <div>
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--c-ink-muted)" }}>Prompt</label>
+        <textarea value={form.prompt_text} onChange={e => set("prompt_text", e.target.value)}
+          placeholder="What should TARS do when this cron fires?" rows={4} required
+          className={`${selectCls} resize-none`} style={selectStyle} />
+      </div>
+      <div>
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--c-ink-muted)" }}>Frequency</label>
+        <div className="relative">
+          <select value={form.frequency} onChange={e => set("frequency", e.target.value as PromptFormState["frequency"])}
+            className={`${selectCls} pr-8`} style={selectStyle}>
+            {FREQUENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
         </div>
       </div>
-
-      {/* Right panel */}
-      {selected && (
-        <div
-          className="w-72 border-l flex flex-col shrink-0"
-          style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}
-        >
-          <div
-            className="px-4 py-3 border-b flex items-center justify-between"
-            style={{ borderColor: "var(--c-border)" }}
-          >
-            <span className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>
-              {selected.name.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
-            </span>
-            <button onClick={() => setSelected(null)} style={{ color: "var(--c-ink-faint)" }}>
-              ✕
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Stats */}
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "Runs",     value: selected.run_count.toString() },
-                { label: "Last run", value: relativeTime(selected.last_run_at) },
-                { label: "Next run", value: relativeTime(selected.next_run_at) },
-              ].map(({ label, value }) => (
-                <div key={label} className="rounded-lg p-2.5" style={{ backgroundColor: "var(--c-surface-2)" }}>
-                  <div className="text-[10px] mb-0.5" style={{ color: "var(--c-ink-faint)" }}>{label}</div>
-                  <div className="text-xs font-medium" style={{ color: "var(--c-ink)" }}>{value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Cadence selector */}
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
-                Cadence
-              </div>
-              <div className="relative">
-                <select
-                  value={INTERVAL_OPTIONS.find(o => o.value === selected.interval_sec)?.value ?? ""}
-                  onChange={e => updateCadence(selected, Number(e.target.value))}
-                  disabled={updatingCadence}
-                  className="w-full text-xs rounded-lg px-3 py-2 appearance-none pr-7 disabled:opacity-50"
-                  style={{
-                    backgroundColor: "var(--c-surface-2)",
-                    color: "var(--c-ink)",
-                    border: "1px solid var(--c-border)",
-                  }}
-                >
-                  {!INTERVAL_OPTIONS.find(o => o.value === selected.interval_sec) && (
-                    <option value="">{humanInterval(selected.interval_sec)}</option>
-                  )}
-                  {INTERVAL_OPTIONS.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-                {updatingCadence
-                  ? <Loader2 size={12} className="animate-spin absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
-                  : <span className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[10px]" style={{ color: "var(--c-ink-faint)" }}>▾</span>
-                }
-              </div>
-              <p className="text-[10px] mt-1" style={{ color: "var(--c-ink-faint)" }}>Takes effect after current cycle</p>
-            </div>
-
-            {/* Status */}
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>
-                Status
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusChip status={selected.last_status} />
-                {selected.last_error && (
-                  <span className="text-[11px]" style={{ color: "var(--c-rose)" }}>
-                    {selected.last_error}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
-                Description
-              </div>
-              <p className="text-xs leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
-                {selected.description}
-              </p>
-            </div>
-
-            {/* Run now */}
-            <button
-              onClick={() => runNow(selected)}
-              disabled={running === selected.name || selected.last_status === "running"}
-              className="w-full flex items-center justify-center gap-2 text-sm py-2 rounded-xl font-medium transition-opacity disabled:opacity-50"
-              style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
-            >
-              {running === selected.name || selected.last_status === "running" ? (
-                <><Loader2 size={14} className="animate-spin" /> Running…</>
-              ) : (
-                <><Play size={14} /> Run Now</>
-              )}
-            </button>
+      {needsDay && (
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--c-ink-muted)" }}>Day of Week</label>
+          <div className="relative">
+            <select value={form.day_of_week} onChange={e => set("day_of_week", parseInt(e.target.value))}
+              className={`${selectCls} pr-8`} style={selectStyle}>
+              {DAY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
           </div>
         </div>
       )}
+      <div>
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--c-ink-muted)" }}>
+          Time <span style={{ color: "var(--c-ink-faint)" }}>(Asia/Manila)</span>
+        </label>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <select value={form.time_hour} onChange={e => set("time_hour", parseInt(e.target.value))}
+              className={`${selectCls} pr-8`} style={selectStyle}>
+              {HOURS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
+            </select>
+            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
+          </div>
+          <div className="relative w-28">
+            <select value={form.time_minute} onChange={e => set("time_minute", parseInt(e.target.value))}
+              className={`${selectCls} pr-8`} style={selectStyle}>
+              {[0, 15, 30, 45].map(m => <option key={m} value={m}>:{String(m).padStart(2, "0")}</option>)}
+            </select>
+            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <button type="submit" disabled={saving}
+          className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+          style={{ backgroundColor: "var(--c-moss)", color: "#fff" }}>
+          {saving ? "Saving…" : initial ? "Save Changes" : "Create Job"}
+        </button>
+        <button type="button" onClick={onCancel}
+          className="px-4 py-2 rounded-lg text-sm"
+          style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// ─── Connector Job Card ───────────────────────────────────────────────────────
+
+function ConnectorJobCard({
+  job, running, onRun, onChangeInterval,
+}: {
+  job: ConnectorJob; running: boolean
+  onRun: () => void; onChangeInterval: (v: number) => void
+}) {
+  return (
+    <div className="rounded-xl border p-4" style={{ backgroundColor: "var(--c-surface-raised)", borderColor: "var(--c-border)" }}>
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 p-2 rounded-lg shrink-0" style={{ backgroundColor: "var(--c-surface-2)" }}>
+          <RefreshCw size={15} style={{ color: "var(--c-ink-muted)" }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{job.name}</span>
+            <StatusChip status={job.last_status} />
+          </div>
+          <p className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{job.description}</p>
+          <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+            <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>Last: {relativeTime(job.last_run_at)}</span>
+            <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>Next: {relativeTime(job.next_run_at)}</span>
+            <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>Runs: {job.run_count}</span>
+          </div>
+          {job.last_error && (
+            <p className="text-[11px] mt-1 truncate" style={{ color: "var(--c-rose)" }}>{job.last_error}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative">
+            <select value={job.interval_sec} onChange={e => onChangeInterval(parseInt(e.target.value))}
+              className="text-xs pl-2 pr-6 py-1.5 rounded-lg appearance-none outline-none"
+              style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink-muted)" }}>
+              {INTERVAL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
+          </div>
+          <button onClick={onRun} disabled={running || job.last_status === "running"}
+            className="p-1.5 rounded-lg transition-colors disabled:opacity-40"
+            style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }} title="Run now">
+            {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Prompt Job Card ──────────────────────────────────────────────────────────
+
+function PromptJobCard({
+  job, running, onRun, onEdit, onToggle, onDelete,
+}: {
+  job: PromptJob; running: boolean
+  onRun: () => void; onEdit: () => void
+  onToggle: () => void; onDelete: () => void
+}) {
+  return (
+    <div className="rounded-xl border" style={{ backgroundColor: "var(--c-surface-raised)", borderColor: "var(--c-border)", opacity: job.enabled ? 1 : 0.65 }}>
+      <div className="flex items-start gap-3 p-4">
+        <div className="mt-0.5 p-2 rounded-lg shrink-0" style={{ backgroundColor: job.enabled ? "var(--c-moss-soft)" : "var(--c-surface-2)" }}>
+          <Clock size={15} style={{ color: job.enabled ? "var(--c-moss)" : "var(--c-ink-faint)" }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>{job.name}</span>
+            {job.last_run_status && <StatusChip status={job.last_run_status} />}
+            {!job.enabled && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-faint)" }}>Paused</span>
+            )}
+          </div>
+          <p className="text-xs mt-0.5 font-medium" style={{ color: "var(--c-moss)" }}>{job.schedule_human}</p>
+          <div className="flex items-center gap-4 mt-1 flex-wrap">
+            <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>Last: {relativeTime(job.last_run_at)}</span>
+            <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>Next: {relativeTime(job.next_run_at)}</span>
+          </div>
+          <p className="text-[11px] mt-1.5 line-clamp-2" style={{ color: "var(--c-ink-faint)" }}>{job.prompt_text}</p>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={onToggle}
+            className="p-1.5 rounded-lg transition-colors"
+            style={{ backgroundColor: job.enabled ? "var(--c-moss-soft)" : "var(--c-surface-2)", color: job.enabled ? "var(--c-moss)" : "var(--c-ink-faint)" }}
+            title={job.enabled ? "Pause" : "Resume"}>
+            {job.enabled ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+          </button>
+          <button onClick={onRun} disabled={running}
+            className="p-1.5 rounded-lg transition-colors disabled:opacity-40"
+            style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }} title="Run now">
+            {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+          </button>
+          <button onClick={onEdit}
+            className="p-1.5 rounded-lg transition-colors"
+            style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }} title="Edit">
+            <Pencil size={14} />
+          </button>
+          <button onClick={onDelete}
+            className="p-1.5 rounded-lg transition-colors"
+            style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }} title="Delete">
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+      {job.last_output && (
+        <div className="px-4 pb-3">
+          <div className="rounded-lg p-2.5" style={{ backgroundColor: "var(--c-surface-2)" }}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide mb-1" style={{ color: "var(--c-ink-faint)" }}>Last output</p>
+            <p className="text-xs leading-relaxed line-clamp-3" style={{ color: "var(--c-ink-muted)" }}>{job.last_output}</p>
+            {job.output_conversation_id && (
+              <a href={`/chat?conv=${job.output_conversation_id}`}
+                className="text-[11px] mt-1 inline-block hover:underline" style={{ color: "var(--c-moss)" }}>
+                Open in chat →
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+export default function CronPage() {
+  const [tab, setTab] = useState<"connector" | "prompt">("connector")
+  const [connectorJobs, setConnectorJobs] = useState<ConnectorJob[]>([])
+  const [connectorLoading, setConnectorLoading] = useState(true)
+  const [runningConnector, setRunningConnector] = useState<string | null>(null)
+  const [promptJobs, setPromptJobs] = useState<PromptJob[]>([])
+  const [promptLoading, setPromptLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editingJob, setEditingJob] = useState<PromptJob | null>(null)
+  const [runningPrompt, setRunningPrompt] = useState<string | null>(null)
+
+  const loadConnector = useCallback(async () => {
+    try { const d = await apiGet<{ items: ConnectorJob[] }>("/cron/connector-jobs"); setConnectorJobs(d.items ?? []) }
+    catch { /* ignore */ } finally { setConnectorLoading(false) }
+  }, [])
+
+  const loadPrompt = useCallback(async () => {
+    try { const d = await apiGet<{ items: PromptJob[] }>("/cron/prompt-jobs"); setPromptJobs(d.items ?? []) }
+    catch { /* ignore */ } finally { setPromptLoading(false) }
+  }, [])
+
+  useEffect(() => { loadConnector(); loadPrompt() }, [loadConnector, loadPrompt])
+  useEffect(() => {
+    const t = setInterval(() => { loadConnector(); loadPrompt() }, 30_000)
+    return () => clearInterval(t)
+  }, [loadConnector, loadPrompt])
+
+  async function changeInterval(name: string, interval_sec: number) {
+    await apiPatch(`/cron/connector-jobs/${name}`, { interval_sec })
+    loadConnector()
+  }
+
+  async function runConnector(name: string) {
+    setRunningConnector(name)
+    try { await apiPost(`/cron/connector-jobs/${name}/run`, {}); setTimeout(loadConnector, 1500) }
+    finally { setRunningConnector(null) }
+  }
+
+  async function createPrompt(payload: ReturnType<typeof formToPayload>) {
+    await apiPost("/cron/prompt-jobs", payload)
+    setShowForm(false); loadPrompt()
+  }
+
+  async function updatePrompt(id: string, payload: Partial<ReturnType<typeof formToPayload>>) {
+    await apiPatch(`/cron/prompt-jobs/${id}`, payload)
+    setEditingJob(null); loadPrompt()
+  }
+
+  async function deletePrompt(id: string) {
+    await apiDelete(`/cron/prompt-jobs/${id}`); loadPrompt()
+  }
+
+  async function togglePrompt(job: PromptJob) {
+    await apiPatch(`/cron/prompt-jobs/${job.id}`, { enabled: !job.enabled }); loadPrompt()
+  }
+
+  async function runPrompt(id: string) {
+    setRunningPrompt(id)
+    try { await apiPost(`/cron/prompt-jobs/${id}/run`, {}); setTimeout(loadPrompt, 2000) }
+    finally { setRunningPrompt(null) }
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: "var(--c-border)" }}>
+        <div>
+          <h1 className="text-xl font-semibold" style={{ color: "var(--c-ink)" }}>Cron Manager</h1>
+          <p className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>Scheduled tasks and timed prompts</p>
+        </div>
+        {tab === "prompt" && (
+          <button onClick={() => { setEditingJob(null); setShowForm(true) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+            style={{ backgroundColor: "var(--c-moss)", color: "#fff" }}>
+            <Plus size={15} /> New Prompt
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 px-6 pt-4 shrink-0">
+        {(["connector", "prompt"] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className="px-4 py-1.5 text-sm font-medium rounded-lg transition-colors"
+            style={tab === t
+              ? { backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }
+              : { color: "var(--c-ink-faint)" }}>
+            {t === "connector" ? "Connector Jobs" : "Prompt Jobs"}
+            {t === "prompt" && promptJobs.length > 0 && (
+              <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold"
+                style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}>
+                {promptJobs.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+
+        {/* CONNECTOR TAB */}
+        {tab === "connector" && (
+          connectorLoading
+            ? <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} /></div>
+            : connectorJobs.length === 0
+              ? <EmptyState message="No connector jobs running." />
+              : <div className="flex flex-col gap-3 max-w-2xl">
+                  {connectorJobs.map(j => (
+                    <ConnectorJobCard key={j.name} job={j}
+                      running={runningConnector === j.name}
+                      onRun={() => runConnector(j.name)}
+                      onChangeInterval={v => changeInterval(j.name, v)} />
+                  ))}
+                </div>
+        )}
+
+        {/* PROMPT TAB */}
+        {tab === "prompt" && (
+          <div className="max-w-2xl">
+            {showForm && !editingJob && (
+              <div className="mb-4 p-4 rounded-xl border" style={{ backgroundColor: "var(--c-surface-raised)", borderColor: "var(--c-border)" }}>
+                <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--c-ink)" }}>New Prompt Job</h3>
+                <PromptForm onSave={createPrompt} onCancel={() => setShowForm(false)} />
+              </div>
+            )}
+            {promptLoading
+              ? <div className="flex justify-center py-16"><Loader2 size={22} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} /></div>
+              : promptJobs.length === 0 && !showForm
+                ? <EmptyState message={'No prompt jobs yet. Hit "New Prompt" to schedule a recurring TARS prompt.'} />
+                : <div className="flex flex-col gap-3">
+                    {promptJobs.map(job =>
+                      editingJob?.id === job.id
+                        ? (
+                          <div key={job.id} className="p-4 rounded-xl border" style={{ backgroundColor: "var(--c-surface-raised)", borderColor: "var(--c-border)" }}>
+                            <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--c-ink)" }}>Edit — {job.name}</h3>
+                            <PromptForm initial={editingJob}
+                              onSave={p => updatePrompt(job.id, p)}
+                              onCancel={() => setEditingJob(null)} />
+                          </div>
+                        )
+                        : (
+                          <PromptJobCard key={job.id} job={job}
+                            running={runningPrompt === job.id}
+                            onRun={() => runPrompt(job.id)}
+                            onEdit={() => { setShowForm(false); setEditingJob(job) }}
+                            onToggle={() => togglePrompt(job)}
+                            onDelete={() => deletePrompt(job.id)} />
+                        )
+                    )}
+                  </div>
+            }
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <Clock size={32} className="mb-3 opacity-20" style={{ color: "var(--c-ink)" }} />
+      <p className="text-sm max-w-xs" style={{ color: "var(--c-ink-faint)" }}>{message}</p>
     </div>
   )
 }

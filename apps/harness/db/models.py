@@ -107,25 +107,23 @@ class MeetingActionItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
-class EmailDigest(Base):
-    __tablename__ = "email_digests"
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
-    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    action_items: Mapped[list] = mapped_column(JSON, default=list)
-    raw_thread_ids: Mapped[list] = mapped_column(JSON, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
-
-
 class CronJob(Base):
     __tablename__ = "cron_jobs"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    schedule: Mapped[str] = mapped_column(String, nullable=False)
+    # "connector" jobs use schedule (interval string) + connector_ids
+    # "prompt" jobs use schedule_config (dict) + prompt_text
+    type: Mapped[str] = mapped_column(String, default="connector")
+    schedule: Mapped[str] = mapped_column(String, nullable=False, default="")
     connector_ids: Mapped[list] = mapped_column(JSON, default=list)
+    # prompt cron fields
+    prompt_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    schedule_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    timezone: Mapped[str] = mapped_column(String, default="Asia/Manila")
+    last_output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    output_conversation_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # shared
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_run_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)

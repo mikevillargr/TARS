@@ -22,7 +22,9 @@ _ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 def _set_env(key: str, value: str) -> None:
     """Persist a value to .env and update the live settings object in memory."""
-    dotenv_set_key(str(_ENV_PATH), key, value)
+    # quote_mode="never" prevents dotenv_set_key from wrapping values in single
+    # quotes, which would make pydantic-settings read "'zai'" instead of "zai"
+    dotenv_set_key(str(_ENV_PATH), key, value, quote_mode="never")
     object.__setattr__(settings, key, value)
 
 

@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import auth, health, chat, tasks, meetings, calendar
-from api.routes import second_brain, agent_jobs, artifacts, email_digest
+from api.routes import second_brain, agent_jobs, artifacts
 from api.routes import cron, connectors, memory, contacts
 from api.routes import settings as settings_route
 from api.routes import preview as preview_route
@@ -222,7 +222,6 @@ app.include_router(calendar.router, prefix="/api/calendar")
 app.include_router(second_brain.router, prefix="/api/second-brain")
 app.include_router(agent_jobs.router, prefix="/api/agent-jobs")
 app.include_router(artifacts.router, prefix="/api/artifacts")
-app.include_router(email_digest.router, prefix="/api/email-digest")
 app.include_router(cron.router, prefix="/api/cron")
 app.include_router(connectors.router, prefix="/api/connectors")
 app.include_router(memory.router, prefix="/api/memory")
