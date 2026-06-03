@@ -244,6 +244,7 @@ function PromptForm({
 }) {
   const [form, setForm] = useState<PromptFormState>(initial ? jobToForm(initial) : DEFAULT_FORM)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const set = <K extends keyof PromptFormState>(k: K, v: PromptFormState[K]) =>
     setForm(prev => ({ ...prev, [k]: v }))
   const needsDay = form.frequency === "weekly" || form.frequency === "biweekly"
@@ -255,7 +256,14 @@ function PromptForm({
     e.preventDefault()
     if (!form.name.trim() || !form.prompt_text.trim()) return
     setSaving(true)
-    try { await onSave(formToPayload(form)) } finally { setSaving(false) }
+    setError(null)
+    try {
+      await onSave(formToPayload(form))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save — check your connection and try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -304,6 +312,11 @@ function PromptForm({
           onChange={(h, m) => { set("time_hour", h); set("time_minute", m) }}
         />
       </div>
+      {error && (
+        <p className="text-xs px-3 py-2 rounded-lg" style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }}>
+          {error}
+        </p>
+      )}
       <div className="flex gap-2 pt-1">
         <button type="submit" disabled={saving}
           className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
