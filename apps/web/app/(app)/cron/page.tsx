@@ -72,11 +72,6 @@ const DAY_OPTIONS = [
   { value: 6, label: "Sunday" },
 ]
 
-const HOURS = Array.from({ length: 24 }, (_, i) => {
-  const ampm = i < 12 ? "AM" : "PM"
-  const h = i % 12 || 12
-  return { value: i, label: `${h}:00 ${ampm}` }
-})
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -156,6 +151,90 @@ function jobToForm(job: PromptJob): PromptFormState {
   }
 }
 
+// ─── Time Picker ─────────────────────────────────────────────────────────────
+// Segmented inline control: [ 08 ] : [ 30 ] [ AM | PM ]
+// No dropdowns — narrow number inputs + toggle pill.
+
+function TimePicker({
+  hour, minute, onChange,
+}: {
+  hour: number
+  minute: number
+  onChange: (hour: number, minute: number) => void
+}) {
+  const isPM = hour >= 12
+  const display12 = hour % 12 || 12
+
+  function setHour12(val: number) {
+    const clamped = Math.max(1, Math.min(12, val))
+    onChange(isPM ? (clamped === 12 ? 12 : clamped + 12) : (clamped === 12 ? 0 : clamped), minute)
+  }
+
+  function setMinute(val: number) {
+    onChange(hour, Math.max(0, Math.min(59, val)))
+  }
+
+  function toggleAmPm(pm: boolean) {
+    if (pm && !isPM) onChange(hour === 0 ? 12 : hour + 12, minute)
+    else if (!pm && isPM) onChange(hour === 12 ? 0 : hour - 12, minute)
+  }
+
+  const segmentBase = "w-10 text-center text-sm font-medium bg-transparent outline-none tabular-nums"
+  const segmentStyle = { color: "var(--c-ink)" }
+
+  return (
+    <div
+      className="inline-flex items-center gap-0 rounded-lg px-3 py-2"
+      style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}
+    >
+      {/* Hour */}
+      <input
+        type="number"
+        min={1} max={12}
+        value={display12}
+        onChange={e => setHour12(parseInt(e.target.value) || 12)}
+        onFocus={e => e.target.select()}
+        className={segmentBase}
+        style={{ ...segmentStyle, MozAppearance: "textfield" } as React.CSSProperties}
+      />
+      <span className="text-sm font-medium select-none" style={{ color: "var(--c-ink-faint)" }}>:</span>
+      {/* Minute */}
+      <input
+        type="number"
+        min={0} max={59}
+        value={String(minute).padStart(2, "0")}
+        onChange={e => setMinute(parseInt(e.target.value) || 0)}
+        onFocus={e => e.target.select()}
+        className={segmentBase}
+        style={{ ...segmentStyle, MozAppearance: "textfield" } as React.CSSProperties}
+      />
+      {/* AM / PM toggle */}
+      <div
+        className="flex items-center ml-2 rounded-md overflow-hidden text-xs font-semibold"
+        style={{ border: "1px solid var(--c-border)" }}
+      >
+        {(["AM", "PM"] as const).map(period => {
+          const active = (period === "PM") === isPM
+          return (
+            <button
+              key={period}
+              type="button"
+              onClick={() => toggleAmPm(period === "PM")}
+              className="px-2 py-0.5 transition-colors"
+              style={{
+                backgroundColor: active ? "var(--c-moss)" : "var(--c-surface-2)",
+                color: active ? "#fff" : "var(--c-ink-faint)",
+              }}
+            >
+              {period}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function PromptForm({
   initial, onSave, onCancel,
 }: {
@@ -219,22 +298,11 @@ function PromptForm({
         <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--c-ink-muted)" }}>
           Time <span style={{ color: "var(--c-ink-faint)" }}>(Asia/Manila)</span>
         </label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <select value={form.time_hour} onChange={e => set("time_hour", parseInt(e.target.value))}
-              className={`${selectCls} pr-8`} style={selectStyle}>
-              {HOURS.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
-            </select>
-            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
-          </div>
-          <div className="relative w-28">
-            <select value={form.time_minute} onChange={e => set("time_minute", parseInt(e.target.value))}
-              className={`${selectCls} pr-8`} style={selectStyle}>
-              {[0, 15, 30, 45].map(m => <option key={m} value={m}>:{String(m).padStart(2, "0")}</option>)}
-            </select>
-            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
-          </div>
-        </div>
+        <TimePicker
+          hour={form.time_hour}
+          minute={form.time_minute}
+          onChange={(h, m) => { set("time_hour", h); set("time_minute", m) }}
+        />
       </div>
       <div className="flex gap-2 pt-1">
         <button type="submit" disabled={saving}
