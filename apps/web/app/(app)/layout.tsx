@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sid
 import { AppSidebar } from "@/components/shell/app-sidebar"
 import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, X } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
@@ -166,7 +167,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       lastToastIdRef.current = notif.message_id
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       setToast(notif)
-      toastTimerRef.current = setTimeout(() => setToast(null), 5000)
+      toastTimerRef.current = setTimeout(() => setToast(null), 8000)
     })
     return unsub
   }, [subscribe, pathname])
@@ -197,6 +198,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
+    <>
     <SidebarProvider>
       <AppSidebar />
       <main className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
@@ -310,11 +312,14 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       {/* Global Command Palette */}
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
 
-      {/* Notification toast — shown when TARS sends a message while not on /chat */}
-      {toast && (
-        <NotificationToast notif={toast} onDismiss={() => setToast(null)} />
-      )}
     </SidebarProvider>
+
+    {/* Toast portalled to document.body to escape SidebarProvider's stacking context */}
+    {toast && typeof document !== "undefined" && createPortal(
+      <NotificationToast notif={toast} onDismiss={() => setToast(null)} />,
+      document.body
+    )}
+    </>
   )
 }
 

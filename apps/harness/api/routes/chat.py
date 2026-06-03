@@ -1720,6 +1720,21 @@ async def send_message(
                 )
                 bg_db.add(assistant_msg)
                 await bg_db.commit()
+                await bg_db.refresh(assistant_msg)  # re-load after commit so .id/.created_at are accessible
+
+                # Notify any connected WebSocket clients (sidebar dot, toast)
+                from agents.notifications import publish as _notif_publish
+                preview = (assistant_content or "").strip()[:120]
+                msg_id = str(assistant_msg.id)
+                msg_ts = assistant_msg.created_at.isoformat() if assistant_msg.created_at else ""
+                await _notif_publish(user_id, {
+                    "type": "new_message",
+                    "conversation_id": conversation_id,
+                    "message_id": msg_id,
+                    "preview": preview,
+                    "created_at": msg_ts,
+                })
+                log.info("[notifications] published new_message for conv %s", conversation_id)
 
                 title_msgs = messages + [{"role": "assistant", "content": assistant_content}]
                 new_title = await _generate_title(title_msgs, client)

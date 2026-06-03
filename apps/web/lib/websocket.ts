@@ -18,9 +18,12 @@ export class TarsWebSocket {
    */
   constructor(path: string, baseUrl?: string) {
     if (baseUrl === "") {
-      // Direct nginx path — WebSocket upgrade handled by nginx rule
+      // Direct path — nginx handles WS upgrade in production.
+      // In local dev (localhost:3000) Next.js can't upgrade WebSockets,
+      // so redirect to the harness port directly.
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-      this.url = `${protocol}//${window.location.host}/api/${path}`
+      const host = window.location.host === "localhost:3000" ? "localhost:8000" : window.location.host
+      this.url = `${protocol}//${host}/api/${path}`
     } else if (baseUrl) {
       const wsBase = baseUrl.replace(/^http/, "ws")
       this.url = `${wsBase}/api/${path}`

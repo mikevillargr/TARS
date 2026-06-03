@@ -84,7 +84,7 @@ export function AppSidebar() {
                 const Icon = iconMap[item.icon as keyof typeof iconMap]
                 const isActive = pathname.startsWith(item.href)
                 return (
-                  <SidebarMenuItem key={item.href}>
+                  <SidebarMenuItem key={item.href} className="relative">
                     <SidebarMenuButton
                       isActive={isActive}
                       render={<Link href={item.href} />}
@@ -94,22 +94,18 @@ export function AppSidebar() {
                           : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
                       }
                     >
-                      <div className="relative shrink-0">
-                        <Icon
-                          className={`size-4 ${isActive ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}`}
-                        />
-                        {item.label === "Chat" && hasUnread && !onChat && (
-                          <span
-                            className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full border-2"
-                            style={{
-                              backgroundColor: "var(--c-moss)",
-                              borderColor: "var(--c-sidebar, var(--sidebar-background, #1a1714))",
-                            }}
-                          />
-                        )}
-                      </div>
+                      <Icon
+                        className={`size-4 shrink-0 ${isActive ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}`}
+                      />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
+                    {/* Dot outside the overflow-hidden button */}
+                    {item.label === "Chat" && hasUnread && !onChat && (
+                      <span
+                        className="pointer-events-none absolute top-1.5 left-5 w-2 h-2 rounded-full"
+                        style={{ backgroundColor: "var(--c-moss)" }}
+                      />
+                    )}
                   </SidebarMenuItem>
                 )
               })}
