@@ -359,9 +359,10 @@ function ConnectorJobCard({
             <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
           </div>
           <button onClick={onRun} disabled={running || job.last_status === "running"}
-            className="p-1.5 rounded-lg transition-colors disabled:opacity-40"
-            style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }} title="Run now">
-            {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+            style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink-muted)" }}>
+            {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+            Test
           </button>
         </div>
       </div>
@@ -407,9 +408,10 @@ function PromptJobCard({
             {job.enabled ? <CheckCircle2 size={14} /> : <Circle size={14} />}
           </button>
           <button onClick={onRun} disabled={running}
-            className="p-1.5 rounded-lg transition-colors disabled:opacity-40"
-            style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }} title="Run now">
-            {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+            style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink-muted)" }}>
+            {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+            {running ? "Running…" : "Test"}
           </button>
           <button onClick={onEdit}
             className="p-1.5 rounded-lg transition-colors"
