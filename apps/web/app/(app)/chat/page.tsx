@@ -927,6 +927,20 @@ function ArtifactLoader({ onArtifactLoad }: { onArtifactLoad: (artifactId: strin
   return null
 }
 
+// ─── Conversation opener — handles ?open=<id> from cron/notifications ────
+function ConversationOpener({ onOpen }: { onOpen: (id: string) => void }) {
+  const searchParams = useSearchParams()
+  const handledRef = useRef(false)
+  useEffect(() => {
+    const id = searchParams.get("open")
+    if (!id || handledRef.current) return
+    handledRef.current = true
+    onOpen(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+  return null
+}
+
 // ─── Ask loader — handles ?ask=<query> from command palette ──────
 // Sets the input value and auto-sends on first load.
 function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
@@ -1728,6 +1742,7 @@ export default function ChatPage() {
           setInputValue(q)
           autoSendPendingRef.current = true
         }} />
+        <ConversationOpener onOpen={(id) => setActiveChatId(id)} />
       </Suspense>
 
       {/* ── Mobile conversation drawer ────────────────────────── */}

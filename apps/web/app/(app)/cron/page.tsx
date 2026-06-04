@@ -522,7 +522,7 @@ export default function CronPage() {
       const res = await apiPost<{ conversation_id: string | null }>(`/cron/prompt-jobs/${id}/run`, {})
       loadPrompt()
       if (res?.conversation_id) {
-        router.push(`/chat/${res.conversation_id}`)
+        router.push(`/chat?open=${res.conversation_id}`)
       }
     } finally {
       setRunningPrompt(null)

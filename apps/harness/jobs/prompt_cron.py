@@ -135,8 +135,8 @@ async def execute(job_id: str) -> str | None:
     """
     Run a prompt cron job end-to-end:
       1. Load job from DB
-      2. Build context via context assembler
-      3. Call Claude Sonnet (Tier 3) — tool use enabled
+      2. Build full context via context assembler (Tier 3 — includes capabilities + Gmail + tasks + calendar)
+      3. Call Claude Sonnet (Tier 3) with the same tool set as chat
       4. Save response as a new conversation
       5. Publish new_message notification
       6. Update job state (last_run_at, next_run_at, last_output, status)
@@ -144,12 +144,19 @@ async def execute(job_id: str) -> str | None:
     Returns the new conversation ID on success, None on failure.
     """
     from db.session import AsyncSessionLocal
-    from db.models import CronJob, Conversation, Message, User
+    from db.models import CronJob, Conversation, Message, User, Task
     from sqlalchemy import select
-    from core.model_client import get_model_client, ModelTier
+    from core.model_client import (
+        get_model_client, ModelTier,
+        CREATE_TASK_TOOL, SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
+        READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL,
+        WEB_SEARCH_TOOL, LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
+        CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
+    )
     from core.context_assembler import assemble
     from agents.notifications import publish as _notify
 
+    # ── Load job ──────────────────────────────────────────────────────────────
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(CronJob).where(CronJob.id == job_id))
         job = result.scalar_one_or_none()
@@ -165,31 +172,294 @@ async def execute(job_id: str) -> str | None:
         prompt = job.prompt_text
         user_id = job.user_id
         tz_name = job.timezone or "Asia/Manila"
+        job_name = job.name
 
-    # Assemble context (memory + second brain)
-    try:
-        system_prompt = await assemble(user_id, prompt)
-    except Exception:
-        system_prompt = (
-            "You are TARS, Mike Villar's personal AI operating system. "
-            "Be direct, precise, and efficient."
-        )
+    # ── Assemble full context (Tier 3 = capabilities block + Gmail + tasks + calendar) ──
+    async with AsyncSessionLocal() as assemble_db:
+        try:
+            system_prompt = await assemble(
+                user_id, prompt,
+                db=assemble_db,
+                tier=ModelTier.TIER3,
+                user_timezone=tz_name,
+            )
+        except Exception as exc:
+            log.warning("Context assembly failed for cron %s: %s", job_id, exc)
+            system_prompt = (
+                "You are TARS, Mike Villar's personal AI operating system. "
+                "Be direct, precise, and efficient."
+            )
 
-    # Always Tier 3 (Sonnet) — prompt crons may use tools and need full context
+    # ── Stream the model with tools ────────────────────────────────────────────
     client = get_model_client()
 
-    log.info("Executing prompt cron '%s' (job %s)", job.name if job else job_id, job_id)
+    tools = [
+        CREATE_TASK_TOOL,
+        SAVE_MEMORY_TOOL,
+        SAVE_TO_SECOND_BRAIN_TOOL,
+        READ_EMAIL_TOOL,
+        SEND_EMAIL_TOOL,
+        READ_MEETING_TOOL,
+        SYNC_MEETINGS_TOOL,
+        WEB_SEARCH_TOOL,
+        LOOKUP_CONTACT_TOOL,
+        SEARCH_CONTACTS_TOOL,
+        CREATE_CONTACT_TOOL,
+        UPDATE_CONTACT_TOOL,
+    ]
+
+    log.info("Executing prompt cron '%s' (job %s)", job_name, job_id)
 
     full_response = ""
     try:
-        async for chunk in client.stream(
-            messages=[{"role": "user", "content": prompt}],
-            tier=ModelTier.TIER3,
-            system=system_prompt,
-            max_tokens=4096,
-        ):
-            if isinstance(chunk, dict) and chunk.get("type") == "chunk":
-                full_response += chunk.get("text", "")
+        async with AsyncSessionLocal() as tool_db:
+            async def _tool_executor(name: str, tool_input: dict) -> str:
+                if name == "create_task":
+                    task = Task(
+                        user_id=user_id,
+                        title=tool_input["title"],
+                        description=tool_input.get("description"),
+                        priority=tool_input.get("priority", "normal"),
+                        status="inbox",
+                        source="cron",
+                    )
+                    tool_db.add(task)
+                    await tool_db.commit()
+                    return f"Task created: '{tool_input['title']}'"
+
+                if name == "save_memory":
+                    try:
+                        from memory import mnemon
+                        await mnemon.save(
+                            tool_db, user_id,
+                            content=tool_input["content"],
+                            domain=tool_input.get("domain", "work"),
+                            source="cron",
+                            importance=tool_input.get("importance", 3),
+                        )
+                        return "Memory saved."
+                    except Exception as exc:
+                        return f"Failed to save memory: {exc}"
+
+                if name == "save_to_second_brain":
+                    try:
+                        from memory.second_brain import ingest_text
+                        item_id = await ingest_text(
+                            tool_db, user_id,
+                            content=tool_input["content"],
+                            title=tool_input.get("title", "Cron note"),
+                            tags=tool_input.get("tags", []),
+                        )
+                        return f"Saved to Second Brain (id: {item_id})."
+                    except Exception as exc:
+                        return f"Failed to save to Second Brain: {exc}"
+
+                if name == "read_email":
+                    try:
+                        from db.models import Connector
+                        conn_result = await tool_db.execute(
+                            select(Connector).where(
+                                Connector.user_id == user_id,
+                                Connector.name == "Gmail",
+                            )
+                        )
+                        conn = conn_result.scalar_one_or_none()
+                        if not conn or not conn.auth.get("refresh_token"):
+                            return "Gmail not connected."
+                        from connectors.gmail import GmailClient, extract_thread_text
+                        import asyncio as _asyncio
+                        gclient = GmailClient(conn.auth)
+                        loop = _asyncio.get_event_loop()
+                        thread_id = tool_input.get("thread_id", "").strip()
+                        if not thread_id and tool_input.get("search_query"):
+                            threads = await loop.run_in_executor(
+                                None,
+                                lambda: gclient.list_threads(query=tool_input["search_query"], max_results=1),
+                            )
+                            if not threads:
+                                return "No email found matching that search."
+                            thread_id = threads[0]["id"]
+                        if not thread_id:
+                            return "Provide a thread_id or search_query."
+                        if len(thread_id) == 8:
+                            candidates = await loop.run_in_executor(
+                                None,
+                                lambda: gclient.list_threads(query="in:inbox", max_results=20),
+                            )
+                            match = next((t["id"] for t in candidates if t["id"].startswith(thread_id)), None)
+                            if match:
+                                thread_id = match
+                        thread = await loop.run_in_executor(None, lambda: gclient.get_thread(thread_id))
+                        body = extract_thread_text(thread)
+                        if not body:
+                            return "Email body is empty."
+                        if len(body) > 4000:
+                            body = body[:4000] + "\n\n[... email truncated ...]"
+                        return body
+                    except Exception as exc:
+                        return f"Failed to read email: {exc}"
+
+                if name == "send_email":
+                    try:
+                        from db.models import Connector
+                        conn_result = await tool_db.execute(
+                            select(Connector).where(
+                                Connector.user_id == user_id,
+                                Connector.name == "Gmail",
+                            )
+                        )
+                        conn = conn_result.scalar_one_or_none()
+                        if not conn or not conn.auth.get("refresh_token"):
+                            return "Gmail not connected."
+                        from connectors.gmail import GmailClient
+                        import asyncio as _asyncio
+                        gclient = GmailClient(conn.auth)
+                        loop = _asyncio.get_event_loop()
+                        result = await loop.run_in_executor(
+                            None,
+                            lambda: gclient.send_email(
+                                to=tool_input["to"],
+                                subject=tool_input["subject"],
+                                body=tool_input["body"],
+                                cc=tool_input.get("cc"),
+                                thread_id=tool_input.get("thread_id"),
+                            ),
+                        )
+                        return result
+                    except Exception as exc:
+                        return f"Failed to send email: {exc}"
+
+                if name == "sync_meetings":
+                    try:
+                        from core.config import settings as _settings
+                        if not _settings.fireflies_api_key:
+                            return "Fireflies API key not configured."
+                        from connectors.fireflies import FirefliesClient
+                        from jobs.meeting_processor import ingest_from_webhook, process_meeting as _proc_meeting
+                        ff_client = FirefliesClient(_settings.fireflies_api_key)
+                        transcripts = await ff_client.list_recent(limit=20)
+                        synced = 0
+                        skipped = 0
+                        for t in transcripts:
+                            tid = t.get("id")
+                            if not tid:
+                                continue
+                            new_id = await ingest_from_webhook(tool_db, user_id, tid)
+                            if new_id:
+                                await _proc_meeting(tool_db, new_id, user_id)
+                                synced += 1
+                            else:
+                                skipped += 1
+                        if synced:
+                            return f"Synced {synced} new meeting{'s' if synced != 1 else ''} ({skipped} already up to date)."
+                        return f"All {skipped} recent meetings are already up to date."
+                    except Exception as exc:
+                        return f"Failed to sync meetings: {exc}"
+
+                if name == "read_meeting":
+                    try:
+                        from db.models import Meeting, MeetingActionItem
+                        meeting_id = tool_input.get("meeting_id", "").strip()
+                        include_transcript = tool_input.get("include_transcript", False)
+                        m_result = await tool_db.execute(
+                            select(Meeting).where(Meeting.id == meeting_id, Meeting.user_id == user_id)
+                        )
+                        meeting = m_result.scalar_one_or_none()
+                        if not meeting:
+                            return f"Meeting '{meeting_id}' not found."
+                        ai_result = await tool_db.execute(
+                            select(MeetingActionItem).where(MeetingActionItem.meeting_id == meeting_id)
+                        )
+                        action_items = ai_result.scalars().all()
+                        parts = [f"# {meeting.title}"]
+                        if meeting.started_at:
+                            parts.append(f"Date: {meeting.started_at.strftime('%B %-d, %Y')}")
+                        if meeting.summary:
+                            parts.append(f"\n## Summary\n{meeting.summary}")
+                        if action_items:
+                            parts.append(f"\n## Action Items")
+                            for ai in action_items:
+                                parts.append(f"  • {ai.raw_text}")
+                        if include_transcript and meeting.transcript:
+                            transcript = meeting.transcript[:20000]
+                            parts.append(f"\n## Transcript\n{transcript}")
+                        return "\n".join(parts)
+                    except Exception as exc:
+                        return f"Failed to read meeting: {exc}"
+
+                if name == "web_search":
+                    try:
+                        from core.config import settings as _settings
+                        query = tool_input.get("query", "")
+                        if not query:
+                            return "No search query provided."
+                        if _settings.tavily_api_key:
+                            import httpx
+                            async with httpx.AsyncClient(timeout=15) as http:
+                                resp = await http.post(
+                                    "https://api.tavily.com/search",
+                                    json={"api_key": _settings.tavily_api_key, "query": query, "max_results": 5},
+                                )
+                            data = resp.json()
+                            results = data.get("results", [])
+                            if not results:
+                                return "No results found."
+                            lines = []
+                            for r in results[:5]:
+                                lines.append(f"**{r.get('title', '')}**\n{r.get('url', '')}\n{r.get('content', '')[:300]}")
+                            return "\n\n".join(lines)
+                        return "Web search not configured (no Tavily API key)."
+                    except Exception as exc:
+                        return f"Web search failed: {exc}"
+
+                if name in ("lookup_contact", "search_contacts"):
+                    try:
+                        from db.models import Contact
+                        from sqlalchemy import or_, func as _func
+                        query_str = tool_input.get("query", "").strip()
+                        if not query_str:
+                            result = await tool_db.execute(
+                                select(Contact).where(Contact.user_id == user_id).limit(10)
+                            )
+                            contacts = result.scalars().all()
+                        else:
+                            result = await tool_db.execute(
+                                select(Contact).where(
+                                    Contact.user_id == user_id,
+                                    or_(
+                                        Contact.name.ilike(f"%{query_str}%"),
+                                        Contact.primary_email.ilike(f"%{query_str}%"),
+                                    )
+                                ).limit(10)
+                            )
+                            contacts = result.scalars().all()
+                        if not contacts:
+                            return f"No contacts found for '{query_str}'."
+                        lines = []
+                        for c in contacts:
+                            line = f"{c.name}"
+                            if c.primary_email:
+                                line += f" <{c.primary_email}>"
+                            if c.organization:
+                                line += f" — {c.organization}"
+                            lines.append(line)
+                        return "\n".join(lines)
+                    except Exception as exc:
+                        return f"Failed to lookup contact: {exc}"
+
+                return f"Tool '{name}' is not available in scheduled task context."
+
+            async for chunk in client.stream(
+                messages=[{"role": "user", "content": prompt}],
+                tier=ModelTier.TIER3,
+                system=system_prompt,
+                tools=tools,
+                tool_executor=_tool_executor,
+                max_tokens=4096,
+            ):
+                if isinstance(chunk, dict) and chunk.get("type") == "chunk":
+                    full_response += chunk.get("text", "")
+
     except Exception as exc:
         log.error("Prompt cron %s model call failed: %s", job_id, exc)
         async with AsyncSessionLocal() as db:
@@ -206,23 +476,21 @@ async def execute(job_id: str) -> str | None:
     if not full_response.strip():
         full_response = "(No response generated)"
 
-    # Build a title from the job name + date
+    # ── Save as a new conversation ─────────────────────────────────────────────
     now_local = datetime.now(pytz.timezone(tz_name))
-    title = f"[Cron] {job.name} — {now_local.strftime('%b %-d')}"
+    title = f"[Cron] {job_name} — {now_local.strftime('%b %-d')}"
 
-    # Save as a new conversation (or reuse existing output conversation)
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(CronJob).where(CronJob.id == job_id))
         job = result.scalar_one_or_none()
         if not job:
             return None
 
-        # Create a fresh conversation for this run
         conv = Conversation(user_id=user_id, title=title)
         db.add(conv)
         await db.flush()
 
-        # Only save the assistant response — the prompt is the cron config, not a user turn
+        # Only save the assistant response — prompt is cron config, not a user turn
         assistant_msg = Message(
             conversation_id=conv.id,
             role="assistant",
@@ -233,7 +501,6 @@ async def execute(job_id: str) -> str | None:
         db.add(assistant_msg)
         await db.flush()
 
-        # Update job state
         job.last_run_at = datetime.now(timezone.utc)
         job.last_run_status = "ok"
         job.last_output = full_response[:500]
@@ -249,7 +516,7 @@ async def execute(job_id: str) -> str | None:
         conv_id = conv.id
         msg_id = str(assistant_msg.id)
 
-    # Notify via WebSocket so dot/toast appears
+    # ── Notify ────────────────────────────────────────────────────────────────
     await _notify(user_id, {
         "type": "new_message",
         "conversation_id": conv_id,
@@ -258,5 +525,5 @@ async def execute(job_id: str) -> str | None:
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    log.info("Prompt cron '%s' completed — conversation %s", job_id, conv_id)
+    log.info("Prompt cron '%s' completed — conversation %s", job_name, conv_id)
     return conv_id
