@@ -9,10 +9,10 @@ Built on Next.js 16 + FastAPI with a three-tier model routing architecture. Inst
 ## What it does
 
 ### Chat
-Streaming AI assistant with full tool use. Renders markdown, code with syntax highlighting, SVG diagrams, and Mermaid flowcharts inline. Inline text selection toolbar — highlight anything in any message to Copy, Create Task, Save to Second Brain, Add to Calendar, Open URL, or Compose email. Tool calls surface as chips mid-message. Conversation list with auto-generated titles, focus mode, and file/image attachment support.
+Streaming AI assistant with full tool use. Renders markdown, code with syntax highlighting, SVG diagrams, Mermaid flowcharts, and matplotlib charts inline. Charts open in a lightbox and come with chips to Save to Second Brain, Create Task, or Download. Inline text selection toolbar — highlight anything in any message to Copy, Create Task, Save to Second Brain, Add to Calendar, Open URL, or Compose email. Tool calls surface as chips mid-message. Conversation list with auto-generated titles, focus mode, and file/image attachment support.
 
 ### Tasks
-Kanban board across five columns: Inbox → Todo → In Progress → Done → Snoozed. Cards show source badge, priority colour bar, due date, and connector sync indicator. Right-panel detail with full description, activity log, and inline editing. Bulk actions, quick-add, filter/sort bar. Tasks are auto-extracted from meetings and can be created from chat, artifacts, and Second Brain items.
+Kanban board across five columns: Inbox → Todo → In Progress → Done → Snoozed. Cards show source badge, priority colour bar, due date, description preview, and connector sync indicator. Right-panel detail includes checklist support, full description, activity log, and inline editing. Custom column management. Bulk actions, quick-add, filter/sort bar. Tasks are auto-extracted from meetings and can be created from chat, artifacts, and Second Brain items.
 
 ### Meetings
 Fireflies.ai integration. Lists all meetings with status badges (Processing / Ready / Action Required). Detail view has Summary, Transcript (speaker labels + timestamps), and Actions tabs. Action items show suggested owners and due dates with one-click task creation. Auto-syncs every 4 hours via cron.
@@ -28,7 +28,7 @@ Semantic knowledge store backed by pgvector. Two-stage RAG retrieval: item-level
 - **Documents** — Tiptap WYSIWYG editor (headings, lists, code, links, images, inline AI rewrite)
 - **Files** — PDF, DOCX, PPTX, XLSX, images
 
-Quick Capture from any page. AI BubbleMenu on selected text: Improve / Shorten / Expand / Rephrase / Continue, streamed via SSE. Items convertible to tasks in one click.
+Quick Capture from any page with inline domain creation. AI BubbleMenu on selected text: Improve / Shorten / Expand / Rephrase / Continue, streamed via SSE. Items convertible to tasks in one click. Filter by tag and domain directly from the capture flow.
 
 ### Agent Jobs
 Claude Code subprocess executor. Accepts a natural language instruction and optional repo path. Streams live output to the UI. Supervised mode pauses for Approve / Modify / Reject before destructive steps. Job list shows status pills, live streaming output, and creation time.
@@ -47,13 +47,16 @@ Two-type scheduled job system:
 Google Calendar, Gmail, and Fireflies with a standard base interface. Each connector card shows live status, last synced time, capabilities, and a webhook event log.
 
 ### Mnemon
-Episodic memory layer. Stores facts, decisions, and context extracted from every conversation. Browse, filter by domain/source/importance, semantic search, edit, delete, or manually add memories. Injected into every chat turn alongside Second Brain context.
+Episodic memory layer. Stores facts, decisions, and context extracted from every conversation. Browse, filter by domain/source/importance, semantic search, edit, delete, or manually add memories. Injected into every chat turn alongside Second Brain context. Domains are shared with Second Brain — manage your domain taxonomy in one place across both systems.
+
+### Domains
+User-managed taxonomy applied to both Second Brain items and Mnemon memories. Create, rename, and delete domains from the capture flow or directly in settings. Domains replace free-text categories with a consistent, searchable vocabulary across the knowledge layer.
 
 ### Notifications
-Real-time WebSocket notification system. A green dot appears on the Chat nav item and mobile tab bar whenever TARS sends a message while you're on another page. A toast notification pops up with a message preview and "View →" link. Both clear automatically when you open the conversation.
+Real-time WebSocket notification system. A green dot appears on the Chat nav item and mobile tab bar whenever TARS sends a message while you're on another page. A toast notification pops up with a message preview and "View →" link. Both clear automatically when you open the conversation. Mute toggle and optional audio alert.
 
 ### Settings
-Profile, model routing config, notification preferences, API key management, PWA install prompt.
+Profile, model routing config with live switching between Anthropic and Z.ai (GLM) per tier, notification preferences, API key management, PWA install prompt.
 
 ---
 
@@ -78,6 +81,7 @@ Profile, model routing config, notification preferences, API key management, PWA
 | `lookup_contact` / `search_contacts` | Search and fetch contacts |
 | `search_places` / `save_place` | Find and save places |
 | `create_agent_job` | Spin up a Claude Code agent job from chat |
+| `generate_chart` | Render a data chart inline via matplotlib |
 
 Tools are available to Tier 2 and Tier 3 models. Tier 1 (Haiku) handles fast/simple queries without tools.
 
