@@ -743,6 +743,44 @@ CREATE_AGENT_JOB_TOOL = {
 }
 
 
+GENERATE_CHART_TOOL = {
+    "name": "generate_chart",
+    "description": (
+        "Generate a data visualization or chart using Python (matplotlib, seaborn, numpy, pandas). "
+        "Write complete Python code that creates a figure and saves it with plt.savefig(output_path). "
+        "The variable `output_path` is pre-defined — use it exactly as-is. "
+        "Available imports: matplotlib, matplotlib.pyplot as plt, numpy as np, pandas as pd, seaborn as sns, "
+        "json, math, datetime. Do NOT import os, subprocess, sys, or access the file system. "
+        "Always call plt.tight_layout() before saving. Use a clean, minimal style."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Short descriptive title for the chart (used for display and artifact name).",
+            },
+            "code": {
+                "type": "string",
+                "description": (
+                    "Complete Python code to generate the chart. "
+                    "Must call plt.savefig(output_path) or fig.savefig(output_path) to save. "
+                    "The variable output_path is already defined — do not redefine it. "
+                    "Example:\n"
+                    "  import numpy as np\n"
+                    "  x = np.linspace(0, 10, 100)\n"
+                    "  plt.plot(x, np.sin(x))\n"
+                    "  plt.title('Sine Wave')\n"
+                    "  plt.tight_layout()\n"
+                    "  plt.savefig(output_path)"
+                ),
+            },
+        },
+        "required": ["title", "code"],
+    },
+}
+
+
 # ─── Tier routing tables ─────────────────────────────────────────────────────
 
 # Tier 2 display label derived from the model name (strip org prefix for brevity)

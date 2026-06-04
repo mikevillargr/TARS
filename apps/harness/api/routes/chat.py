@@ -25,6 +25,7 @@ from core.model_client import (
     CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
     SEARCH_PLACES_TOOL, SAVE_PLACE_TOOL, GET_SAVED_PLACES_TOOL,
     CREATE_AGENT_JOB_TOOL,
+    GENERATE_CHART_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -602,6 +603,7 @@ async def send_message(
         SAVE_PLACE_TOOL,
         GET_SAVED_PLACES_TOOL,
         CREATE_AGENT_JOB_TOOL,
+        GENERATE_CHART_TOOL,
     ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -1671,13 +1673,83 @@ async def send_message(
                             log.warning("create_agent_job tool failed: %s", exc)
                             return f"Failed to create agent job: {exc}"
 
+                    if name == "generate_chart":
+                        import subprocess as _subprocess
+                        import tempfile as _tempfile
+                        import base64 as _base64
+                        import os as _os
+                        import re as _re
+                        title = tool_input.get("title", "Chart")
+                        code = tool_input.get("code", "")
+
+                        # Wrap code in a safe execution environment
+                        with _tempfile.NamedTemporaryFile(suffix=".png", delete=False) as _f:
+                            _output_path = _f.name
+
+                        _wrapper = f"""
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import json, math
+from datetime import datetime, timedelta
+
+plt.rcParams.update({{
+    'figure.facecolor': '#1a1714',
+    'axes.facecolor': '#1a1714',
+    'axes.edgecolor': '#3a342d',
+    'axes.labelcolor': '#e8e4de',
+    'xtick.color': '#9c9088',
+    'ytick.color': '#9c9088',
+    'text.color': '#e8e4de',
+    'grid.color': '#2a2520',
+    'grid.alpha': 0.5,
+}})
+
+output_path = {repr(_output_path)}
+
+{code}
+
+plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor=plt.rcParams['figure.facecolor'])
+plt.close('all')
+"""
+                        try:
+                            _result = _subprocess.run(
+                                ["python3", "-c", _wrapper],
+                                capture_output=True, text=True, timeout=30,
+                            )
+                            if _result.returncode != 0:
+                                err = _result.stderr.strip().split("\n")[-1]
+                                return f"Chart generation failed: {err}"
+
+                            with open(_output_path, "rb") as _imgf:
+                                _img_b64 = _base64.b64encode(_imgf.read()).decode()
+
+                            await _emit_card({
+                                "type": "chart_image",
+                                "title": title,
+                                "image_base64": _img_b64,
+                            })
+                            return f"Chart '{title}' generated and displayed."
+
+                        except _subprocess.TimeoutExpired:
+                            return "Chart generation timed out (30s limit)."
+                        except Exception as exc:
+                            log.warning("generate_chart failed: %s", exc)
+                            return f"Chart generation failed: {exc}"
+                        finally:
+                            if _os.path.exists(_output_path):
+                                _os.unlink(_output_path)
+
                     return "Action completed."
 
                 async for event in client.stream(messages, effective_tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
-                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created"):
+                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image"):
                         tool_results.append(event)
                         await queue.put(sse_event(event))
                     elif event["type"] == "done":

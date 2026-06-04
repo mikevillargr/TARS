@@ -677,6 +677,24 @@ function InlineMessageCards({
         if (evt.type === "artifact_created") {
           return <ArtifactCard key={key} n={{ artifact_id: e.artifact_id as string, filename: e.filename as string, filetype: e.filetype as ArtifactNotification["filetype"] }} onDismiss={() => dismiss(key)} />
         }
+        if (evt.type === "chart_image" && e.image_base64) {
+          return (
+            <div key={key} className="rounded-xl overflow-hidden border" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface-raised)" }}>
+              {typeof e.title === "string" && (
+                <div className="px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs font-medium" style={{ color: "var(--c-ink-muted)" }}>{e.title}</span>
+                  <button onClick={() => dismiss(key)} className="text-[10px] px-2 py-0.5 rounded opacity-50 hover:opacity-100" style={{ color: "var(--c-ink-faint)" }}>✕</button>
+                </div>
+              )}
+              <img
+                src={`data:image/png;base64,${e.image_base64 as string}`}
+                alt={typeof e.title === "string" ? e.title : "Chart"}
+                className="w-full block"
+                style={{ maxHeight: "500px", objectFit: "contain" }}
+              />
+            </div>
+          )
+        }
         return null
       })}
     </div>
@@ -1460,6 +1478,10 @@ export default function ChatPage() {
                   tool_use_id: `place-${Date.now()}-${Math.random()}`,
                   places: evt.places,
                 } as PlaceResultSet])
+              }
+            } else if (evt.type === "chart_image") {
+              if (chatId === activeChatIdRef.current) {
+                streamingCardsRef.current.push({ type: "chart_image", title: evt.title, image_base64: evt.image_base64 })
               }
             } else if (evt.type === "agent_job_created") {
               if (chatId === activeChatIdRef.current) {
