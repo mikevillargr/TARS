@@ -1760,6 +1760,51 @@ plt.close('all')
 
             assistant_content = "".join(full_response)
 
+            # ── Chart code-block fallback ────────────────────────────────────
+            # If the model output a ```python block with matplotlib instead of
+            # calling the generate_chart tool (common with non-Claude models),
+            # extract the code, execute it, and emit the chart card.
+            import re as _chart_re
+            _CODE_BLOCK = _chart_re.compile(
+                r"```python\s*\n(.*?)```", _chart_re.DOTALL | _chart_re.IGNORECASE
+            )
+            if not any(r.get("type") == "chart_image" for r in tool_results):
+                _chart_match = _CODE_BLOCK.search(assistant_content)
+                if _chart_match and any(
+                    kw in _chart_match.group(1)
+                    for kw in ("plt.", "matplotlib", "seaborn", "sns.", "fig,", "fig =", "ax =", "subplot")
+                ):
+                    import subprocess as _sp, tempfile as _tf, base64 as _b64, os as _cos
+                    _code = _chart_match.group(1)
+                    with _tf.NamedTemporaryFile(suffix=".png", delete=False) as _f:
+                        _op = _f.name
+                    _wrapper = f"""
+import matplotlib; matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import numpy as np, pandas as pd, seaborn as sns, json, math
+from datetime import datetime, timedelta
+plt.rcParams.update({{'figure.facecolor':'#1a1714','axes.facecolor':'#1a1714','axes.edgecolor':'#3a342d','axes.labelcolor':'#e8e4de','xtick.color':'#9c9088','ytick.color':'#9c9088','text.color':'#e8e4de','grid.color':'#2a2520','grid.alpha':0.5}})
+output_path = {repr(_op)}
+{_code}
+plt.tight_layout()
+plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor=plt.rcParams['figure.facecolor'])
+plt.close('all')
+"""
+                    try:
+                        _r = _sp.run(["python3", "-c", _wrapper], capture_output=True, text=True, timeout=30)
+                        if _r.returncode == 0 and _cos.path.exists(_op) and _cos.path.getsize(_op) > 0:
+                            with open(_op, "rb") as _imgf:
+                                _b = _b64.b64encode(_imgf.read()).decode()
+                            _card = {"type": "chart_image", "title": "Chart", "image_base64": _b}
+                            tool_results.append(_card)
+                            await queue.put(sse_event(_card))
+                            log.info("Chart rendered from code block fallback")
+                    except Exception as _ce:
+                        log.debug("Chart code-block fallback failed: %s", _ce)
+                    finally:
+                        if _cos.path.exists(_op):
+                            _cos.unlink(_op)
+
             # If the model only emitted tool calls (no text) but did produce
             # cards, give the message a tiny placeholder so the bubble isn't
             # blank on reload. Cards re-render from tool_results.
