@@ -45,22 +45,23 @@ function MermaidRenderer({ code }: { code: string }) {
         theme: "neutral",
         fontFamily: "inherit",
         fontSize: 13,
+        suppressErrorRendering: true,  // v11: don't inject error HTML into the page
       })
-      // Each render needs a unique id; reuse idRef across re-renders of same diagram
       mermaid.render(idRef.current, code)
         .then(({ svg }) => {
           if (containerRef.current) {
             containerRef.current.innerHTML = svg
-            // Make svg responsive
             const svgEl = containerRef.current.querySelector("svg")
             if (svgEl) { svgEl.style.width = "100%"; svgEl.style.height = "auto" }
             setRendered(true)
           }
         })
-        .catch((err: Error) => {
-          setError(err.message || "Diagram failed to render")
+        .catch(() => {
+          // Clear any error HTML Mermaid may have injected before rejecting
+          if (containerRef.current) containerRef.current.innerHTML = ""
+          setError("invalid")
         })
-    }).catch(() => setError("Mermaid library failed to load"))
+    }).catch(() => setError("invalid"))
   }, [code])
 
   if (error) {
