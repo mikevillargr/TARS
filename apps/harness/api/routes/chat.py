@@ -1769,11 +1769,13 @@ plt.close('all')
                 r"```python\s*\n(.*?)```", _chart_re.DOTALL | _chart_re.IGNORECASE
             )
             if not any(r.get("type") == "chart_image" for r in tool_results):
-                _chart_match = _CODE_BLOCK.search(assistant_content)
-                if _chart_match and any(
-                    kw in _chart_match.group(1)
-                    for kw in ("plt.", "matplotlib", "seaborn", "sns.", "fig,", "fig =", "ax =", "subplot")
-                ):
+                # Also match untagged code blocks (``` with no language)
+                _CODE_BLOCK_ANY = _chart_re.compile(
+                    r"```(?:python|py)?\s*\n(.*?)```", _chart_re.DOTALL | _chart_re.IGNORECASE
+                )
+                _chart_match = _CODE_BLOCK_ANY.search(assistant_content)
+                _CHART_KW = ("plt.", "matplotlib", "seaborn", "sns.", "fig,", "fig =", "ax =", "subplot", "pyplot")
+                if _chart_match and any(kw in _chart_match.group(1) for kw in _CHART_KW):
                     import subprocess as _sp, tempfile as _tf, base64 as _b64, os as _cos
                     _code = _chart_match.group(1)
                     with _tf.NamedTemporaryFile(suffix=".png", delete=False) as _f:
