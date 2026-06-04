@@ -589,6 +589,9 @@ async def send_message(
     except Exception:
         pass  # Non-blocking
 
+    from core.config import settings as _cfg
+    _using_zai = _cfg.tier3_provider == "zai"
+
     # Tools available for TIER2 and TIER3.
     # TIER2 (RunPod) ignores them in the payload but the Sonnet fallback path
     # uses them — so we must build them here regardless, otherwise a RunPod
@@ -620,7 +623,7 @@ async def send_message(
         # generate_chart only sent to Anthropic — Z.ai/GLM refuses the tool and
         # outputs "environment not configured". With Z.ai, the code-block fallback
         # runs post-stream instead (no tool needed, GLM naturally writes Python code).
-        *([GENERATE_CHART_TOOL] if settings.tier3_provider != "zai" else []),
+        *([GENERATE_CHART_TOOL] if not _using_zai else []),
     ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
