@@ -1,18 +1,18 @@
 # TARS
 
-Personal AI operating system for Mike Villar. Direct, efficient, humor setting 75%.
+An AI operating system that runs your life. Chat, tasks, meetings, knowledge, scheduled prompts, agent jobs — all in one place, all connected, all talking to each other.
 
-Built on Next.js 15 + FastAPI with a three-tier model routing architecture. Every module is live and connected.
+Built on Next.js 16 + FastAPI with a three-tier model routing architecture. Installable as a PWA. Every module is live and connected.
 
 ---
 
 ## What it does
 
 ### Chat
-Streaming AI assistant with full tool use. Renders markdown, code with syntax highlighting, SVG diagrams, and Mermaid flowcharts inline. Inline text selection toolbar — highlight anything to Copy, Create Task, Save to Second Brain, Add to Calendar, Open URL, or Compose email. Tool calls surface as chips mid-message. Conversation list with auto-generated titles, focus mode, and file/image attachment support.
+Streaming AI assistant with full tool use. Renders markdown, code with syntax highlighting, SVG diagrams, and Mermaid flowcharts inline. Inline text selection toolbar — highlight anything in any message to Copy, Create Task, Save to Second Brain, Add to Calendar, Open URL, or Compose email. Tool calls surface as chips mid-message. Conversation list with auto-generated titles, focus mode, and file/image attachment support.
 
 ### Tasks
-Kanban board across five columns: Inbox → Todo → In Progress → Done → Snoozed. Cards show source badge, priority colour bar, due date, and connector sync indicator. Right-panel detail with full description, activity log, and inline editing. Bulk actions, quick-add, filter/sort bar. Tasks are auto-extracted from meetings and emails, and creatable from chat, artifacts, and Second Brain items.
+Kanban board across five columns: Inbox → Todo → In Progress → Done → Snoozed. Cards show source badge, priority colour bar, due date, and connector sync indicator. Right-panel detail with full description, activity log, and inline editing. Bulk actions, quick-add, filter/sort bar. Tasks are auto-extracted from meetings and can be created from chat, artifacts, and Second Brain items.
 
 ### Meetings
 Fireflies.ai integration. Lists all meetings with status badges (Processing / Ready / Action Required). Detail view has Summary, Transcript (speaker labels + timestamps), and Actions tabs. Action items show suggested owners and due dates with one-click task creation. Auto-syncs every 4 hours via cron.
@@ -25,35 +25,39 @@ Semantic knowledge store backed by pgvector. Two-stage RAG retrieval: item-level
 
 - **URLs** — trafilatura extraction + AI summary
 - **Notes** — plain text with tags and domain
-- **Documents** — Tiptap WYSIWYG editor with rich text (headings, lists, code, links, images, inline AI)
-- **Files** — PDF, DOCX, PPTX, XLSX, images (via upload)
+- **Documents** — Tiptap WYSIWYG editor (headings, lists, code, links, images, inline AI rewrite)
+- **Files** — PDF, DOCX, PPTX, XLSX, images
 
-Quick Capture supports URL and Document modes. Document items open in a full editable modal; URL/note/meeting items open read-only. AI BubbleMenu on selected text: Improve / Shorten / Expand / Rephrase / Continue, streamed via SSE. Items can be converted to tasks in one click.
+Quick Capture from any page. AI BubbleMenu on selected text: Improve / Shorten / Expand / Rephrase / Continue, streamed via SSE. Items convertible to tasks in one click.
 
 ### Agent Jobs
-Claude Code subprocess executor. Accepts a natural language instruction and optional repo path. Streams live output. Supervised mode pauses for Approve / Modify / Reject before destructive steps. Job list shows status pills and creation time.
+Claude Code subprocess executor. Accepts a natural language instruction and optional repo path. Streams live output to the UI. Supervised mode pauses for Approve / Modify / Reject before destructive steps. Job list shows status pills, live streaming output, and creation time.
 
 ### Artifacts
-Generated output library. Every file TARS produces — documents, code, reports, spreadsheets, transcripts — is automatically saved here when created via the `generate_document`, `generate_presentation`, or `generate_pdf` tools. Grid and list views. Full preview in modal (markdown rendered, code syntax-highlighted, DOCX/PPTX text extracted). Version history, download, re-open in chat. Save any artifact directly to Second Brain or create a task from it.
-
-### Email Digest
-Gmail integration. Summarised digests of your inbox on a configurable schedule. Each digest shows the summary, extracted action items with one-click task creation, and a source thread count. Manual trigger available.
+Generated output library. Every file TARS produces — documents, code, reports, spreadsheets, transcripts — is automatically saved and versioned when created via `generate_document`, `generate_presentation`, or `generate_pdf` tools. Grid and list views. Full preview in modal (markdown rendered, code syntax-highlighted). Version history, download, re-open in chat, save to Second Brain.
 
 ### Cron Manager
-UI for all scheduled background jobs — morning brief, email digest, meeting sync, and any custom jobs. Shows human-readable schedule, last run status, next run time, and per-execution output history. Enable/disable toggle and manual trigger.
+Two-type scheduled job system:
+
+**Connector Jobs** — system sync tasks (Fireflies transcript pull, Google Contacts sync) with configurable intervals and a Test button for immediate execution.
+
+**Prompt Jobs** — user-defined prompts that run on a wall-clock schedule. Create any number with an arbitrary name. Set frequency (daily / weekdays / weekly / biweekly / monthly), time, and day. When fired, the prompt runs through Claude Sonnet (Tier 3 with full tool access), and the response is saved as a new chat conversation with a notification. Last output is previewed on the card with a direct "Open in chat →" link. Time picker uses Asia/Manila timezone with a segmented HH:MM AM/PM control.
 
 ### Connectors
-Google Calendar, Gmail, and Fireflies with a standard base interface. Each connector shows live status, last synced time, capabilities, and a webhook event log. Adding new connectors is a single new file.
+Google Calendar, Gmail, and Fireflies with a standard base interface. Each connector card shows live status, last synced time, capabilities, and a webhook event log.
 
-### Memory Browser
-Episodic memory layer (Mnemon). Stores facts, decisions, and context from every conversation. Browse, filter by domain/source/importance, semantic search, edit, delete, or manually add memories. Injected into every chat turn alongside Second Brain context.
+### Mnemon
+Episodic memory layer. Stores facts, decisions, and context extracted from every conversation. Browse, filter by domain/source/importance, semantic search, edit, delete, or manually add memories. Injected into every chat turn alongside Second Brain context.
+
+### Notifications
+Real-time WebSocket notification system. A green dot appears on the Chat nav item and mobile tab bar whenever TARS sends a message while you're on another page. A toast notification pops up with a message preview and "View →" link. Both clear automatically when you open the conversation.
 
 ### Settings
 Profile, model routing config, notification preferences, API key management, PWA install prompt.
 
 ---
 
-## Tools available to TARS
+## Tools available in chat
 
 | Tool | What it does |
 |---|---|
@@ -66,11 +70,14 @@ Profile, model routing config, notification preferences, API key management, PWA
 | `send_email` | Send or reply to an email via Gmail |
 | `read_meeting` | Fetch a meeting transcript and summary |
 | `sync_meetings` | Trigger a Fireflies sync |
-| `web_search` | Tavily search with snippet results |
-| `save_to_second_brain` | Ingest content as a document |
+| `web_search` | Search the web with snippet results |
+| `save_to_second_brain` | Ingest a URL or text as a knowledge item |
 | `generate_document` | Produce a DOCX artifact |
 | `generate_presentation` | Produce a PPTX artifact |
 | `generate_pdf` | Produce a PDF artifact |
+| `lookup_contact` / `search_contacts` | Search and fetch contacts |
+| `search_places` / `save_place` | Find and save places |
+| `create_agent_job` | Spin up a Claude Code agent job from chat |
 
 Tools are available to Tier 2 and Tier 3 models. Tier 1 (Haiku) handles fast/simple queries without tools.
 
@@ -84,26 +91,29 @@ Every request
     ├─ Classifier: Claude Haiku (~200ms)
     │
     ├─ Tier 1 (simple/fast)     → Claude Haiku          ~500ms
-    ├─ Tier 2 (most tasks)      → RunPod GPU             ~2-4s warm / cold falls back
+    ├─ Tier 2 (most tasks)      → RunPod Serverless GPU  ~2-4s warm
     └─ Tier 3 (tools/frontier)  → Claude Sonnet          ~3-8s
 ```
+
+Prompt cron jobs always route to Tier 3. Cold-start fallback: messages ≤500 chars → Haiku, longer → Sonnet.
 
 **Stack**
 
 | Layer | Choice |
 |---|---|
-| Frontend | Next.js 15 PWA + Tailwind + shadcn/ui |
+| Frontend | Next.js 16 PWA + Tailwind + shadcn/ui |
 | Backend | FastAPI (Python) + SQLAlchemy async |
 | Database | PostgreSQL + pgvector |
-| Queue | Redis |
-| Episodic memory | Mnemon |
+| Cache | Redis |
+| Episodic memory | Mnemon (custom RAG layer) |
 | Semantic memory | Second Brain — pgvector, two-stage RAG |
-| Tier 1 + classifier | `claude-haiku-4-5-20251001` via Anthropic API |
-| Tier 2 | RunPod Serverless GPU — model set via `WORKHORSE_MODEL` |
+| Tier 1 + classifier | Claude Haiku via Anthropic API |
+| Tier 2 | RunPod Serverless GPU — model via `WORKHORSE_MODEL` |
 | Tier 3 | Claude Sonnet via Anthropic API |
 | Document editor | Tiptap v2 (ProseMirror) |
+| Real-time | WebSocket notification stream |
 | Process manager | PM2 |
-| Reverse proxy | Nginx + DuckDNS SSL |
+| Reverse proxy | Nginx + Let's Encrypt SSL |
 | CI/CD | GitHub Actions → SSH deploy |
 
 ---
@@ -114,10 +124,13 @@ Every request
 # Start Postgres + Redis
 docker compose up -d postgres redis
 
-# Harness
+# Run migrations
 cd apps/harness
+source .venv/bin/activate
+python -m alembic upgrade head
+
+# Harness
 cp .env.example .env   # fill in your keys
-pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
 # Web
@@ -126,7 +139,7 @@ npm install
 npm run dev
 ```
 
-Web: http://localhost:3000 · Harness API docs: http://localhost:8000/docs
+Web: `http://localhost:3000` · Harness API docs: `http://localhost:8000/docs`
 
 ---
 
@@ -135,10 +148,11 @@ Web: http://localhost:3000 · Harness API docs: http://localhost:8000/docs
 See `.env.example` at the repo root. Minimum required:
 
 ```env
-TARS_ANTHROPIC_API_KEY=
+ANTHROPIC_API_KEY=
 DATABASE_URL=postgresql+asyncpg://tars:password@localhost:5432/tars
 JWT_SECRET=
-TARS_PASSWORD_HASH=        # bcrypt hash of your login password
+TARS_USERNAME=
+TARS_PASSWORD_HASH=        # bcrypt hash — see below
 ```
 
 Generate a password hash:
@@ -163,32 +177,24 @@ FIREFLIES_API_KEY=         # meeting transcripts
 
 ## Deployment
 
-Production runs on Hostinger KVM4 (4 vCPU / 16GB RAM) at `tarsmv.duckdns.org`.
-
-Pushing a `v*` tag to `main` triggers GitHub Actions — CI lint/typecheck, then parallel SSH deploys for web and harness, with a health check at the end.
+Runs on a Hostinger KVM4 (4 vCPU / 16GB RAM) managed by PM2 behind Nginx.
 
 ```bash
-# Never push directly to main. Always go through dev → PR → release tag.
-git checkout dev
-# ... make changes, commit ...
-git push origin dev
-# When ready to release:
-gh pr create --base main --head dev
-gh pr merge <n> --merge
-git checkout main && git pull
-git tag -a v1.x.x -m "Release v1.x.x — ..."
-git push origin main --tags
-gh release create v1.x.x --title "..." --notes "..."
+# Pull and deploy
+ssh root@<your-server> "cd /opt/tars && git pull origin main"
+ssh root@<your-server> "cd /opt/tars/apps/harness && source .venv/bin/activate && python -m alembic upgrade head"
+ssh root@<your-server> "pm2 restart tars-harness"
+ssh root@<your-server> "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && pm2 restart tars-web"
 ```
+
+> ⚠️ The server has fail2ban. Do not run retry loops against SSH — repeated failed connection attempts will trigger an IP block.
 
 ---
 
 ## Versioning
 
-[Semantic versioning](https://semver.org). All releases tagged and accompanied by release notes on GitHub.
+[Semantic versioning](https://semver.org). All releases tagged on GitHub.
 
 - **MAJOR** — breaking changes or major new capability
-- **MINOR** — new features, backward compatible  
-- **PATCH** — bug fixes and infrastructure only
-
-Current: **v1.2.2**
+- **MINOR** — new features, backward compatible
+- **PATCH** — bug fixes only
