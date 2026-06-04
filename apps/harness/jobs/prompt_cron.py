@@ -131,7 +131,7 @@ def human_schedule(schedule_config: dict) -> str:
 # Executor
 # ---------------------------------------------------------------------------
 
-async def execute(job_id: str) -> None:
+async def execute(job_id: str) -> str | None:
     """
     Run a prompt cron job end-to-end:
       1. Load job from DB
@@ -140,6 +140,8 @@ async def execute(job_id: str) -> None:
       4. Save response as a new conversation
       5. Publish new_message notification
       6. Update job state (last_run_at, next_run_at, last_output, status)
+
+    Returns the new conversation ID on success, None on failure.
     """
     from db.session import AsyncSessionLocal
     from db.models import CronJob, Conversation, Message, User
@@ -153,12 +155,12 @@ async def execute(job_id: str) -> None:
         job = result.scalar_one_or_none()
         if not job or job.type != "prompt" or not job.prompt_text:
             log.warning("Prompt cron %s not found or misconfigured", job_id)
-            return
+            return None
 
         user_result = await db.execute(select(User).where(User.id == job.user_id))
         user = user_result.scalar_one_or_none()
         if not user:
-            return
+            return None
 
         prompt = job.prompt_text
         user_id = job.user_id
@@ -198,7 +200,7 @@ async def execute(job_id: str) -> None:
                 if job.schedule_config:
                     job.next_run_at = next_run_at(job.schedule_config, job.timezone or "Asia/Manila", job.last_run_at)
                 await db.commit()
-        return
+        return None
 
     if not full_response.strip():
         full_response = "(No response generated)"
@@ -212,7 +214,7 @@ async def execute(job_id: str) -> None:
         result = await db.execute(select(CronJob).where(CronJob.id == job_id))
         job = result.scalar_one_or_none()
         if not job:
-            return
+            return None
 
         # Create a fresh conversation for this run
         conv = Conversation(user_id=user_id, title=title)
@@ -266,3 +268,4 @@ async def execute(job_id: str) -> None:
     })
 
     log.info("Prompt cron '%s' completed — conversation %s", job_id, conv_id)
+    return conv_id

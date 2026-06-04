@@ -208,7 +208,6 @@ async def delete_prompt_job(
 @router.post("/prompt-jobs/{job_id}/run")
 async def trigger_prompt_job(
     job_id: str,
-    background_tasks: BackgroundTasks,
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -219,8 +218,8 @@ async def trigger_prompt_job(
     if not job:
         raise HTTPException(status_code=404)
     from jobs.prompt_cron import execute
-    background_tasks.add_task(execute, job_id)
-    return {"queued": job_id}
+    conv_id = await execute(job_id)
+    return {"conversation_id": conv_id}
 
 
 # ─── Legacy fallback ──────────────────────────────────────────────────────────

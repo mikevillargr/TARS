@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   Clock, Play, Loader2, CheckCircle2, XCircle, Circle,
   Plus, Trash2, Pencil, RefreshCw, ChevronDown,
@@ -459,6 +460,7 @@ function PromptJobCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function CronPage() {
+  const router = useRouter()
   const [tab, setTab] = useState<"connector" | "prompt">("connector")
   const [connectorJobs, setConnectorJobs] = useState<ConnectorJob[]>([])
   const [connectorLoading, setConnectorLoading] = useState(true)
@@ -516,8 +518,15 @@ export default function CronPage() {
 
   async function runPrompt(id: string) {
     setRunningPrompt(id)
-    try { await apiPost(`/cron/prompt-jobs/${id}/run`, {}); setTimeout(loadPrompt, 2000) }
-    finally { setRunningPrompt(null) }
+    try {
+      const res = await apiPost<{ conversation_id: string | null }>(`/cron/prompt-jobs/${id}/run`, {})
+      loadPrompt()
+      if (res?.conversation_id) {
+        router.push(`/chat/${res.conversation_id}`)
+      }
+    } finally {
+      setRunningPrompt(null)
+    }
   }
 
   return (
