@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2 } from "lucide-react"
-import { apiGet, apiPatch, apiPost } from "@/lib/api-client"
+import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X } from "lucide-react"
+import { apiGet, apiPatch, apiPost, apiDelete } from "@/lib/api-client"
+import { useDomains, invalidateDomains, type Domain } from "@/hooks/useDomains"
 
 // Browsers that support beforeinstallprompt (Chrome, Edge, Android)
 interface BeforeInstallPromptEvent extends Event {
@@ -84,6 +85,12 @@ const KEY_LABELS: Record<string, string> = {
   runpod:    "RunPod",
 }
 
+const DOMAIN_PALETTE = [
+  "#6B7280", "#3B82F6", "#8B5CF6", "#10B981",
+  "#F59E0B", "#EF4444", "#EC4899", "#14B8A6",
+  "#F97316", "#6366F1", "#84CC16", "#78716C",
+]
+
 // Common timezones sorted by offset
 const COMMON_TIMEZONES = [
   "Pacific/Honolulu",
@@ -139,6 +146,15 @@ export default function SettingsPage() {
   const [isIOS, setIsIOS]                   = useState(false)
   const [showIOSInstructions, setShowIOSInstructions] = useState(false)
   const [installDone, setInstallDone]       = useState(false)
+
+  // Domains
+  const { domains, reload: reloadDomains } = useDomains()
+  const [newDomainName, setNewDomainName]   = useState("")
+  const [newDomainColor, setNewDomainColor] = useState("#6366F1")
+  const [addingDomain, setAddingDomain]     = useState(false)
+  const [editingDomainId, setEditingDomainId] = useState<string | null>(null)
+  const [editDomainName, setEditDomainName]   = useState("")
+  const [editDomainColor, setEditDomainColor] = useState("")
 
   // Load all settings from API on mount
   useEffect(() => {
@@ -282,6 +298,40 @@ export default function SettingsPage() {
   function autoDetect() {
     const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
     if (detected) saveTimezone(detected)
+  }
+
+  async function addDomain() {
+    if (!newDomainName.trim()) return
+    try {
+      await apiPost("/domains", { name: newDomainName.trim(), color: newDomainColor })
+      invalidateDomains()
+      await reloadDomains()
+      setNewDomainName("")
+      setNewDomainColor("#6366F1")
+    } catch (e) { console.error(e) }
+  }
+
+  async function saveDomainEdit(id: string) {
+    try {
+      await apiPatch(`/domains/${id}`, { name: editDomainName.trim(), color: editDomainColor })
+      invalidateDomains()
+      await reloadDomains()
+      setEditingDomainId(null)
+    } catch (e) { console.error(e) }
+  }
+
+  async function deleteDomain(id: string) {
+    try {
+      await apiDelete(`/domains/${id}`)
+      invalidateDomains()
+      await reloadDomains()
+    } catch (e) { console.error(e) }
+  }
+
+  function startEdit(d: Domain) {
+    setEditingDomainId(d.id)
+    setEditDomainName(d.name)
+    setEditDomainColor(d.color)
   }
 
   return (
@@ -482,6 +532,158 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* ── Domains ── */}
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+              Domains
+            </h2>
+            <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
+              Used to categorise memories and knowledge items
+            </span>
+          </div>
+
+          {/* Domain list */}
+          <div className="flex flex-col rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
+            {domains.map((d, i) => (
+              <div
+                key={d.id}
+                className="flex items-center gap-3 px-3 py-2.5"
+                style={{
+                  borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
+                  backgroundColor: "var(--c-surface)",
+                }}
+              >
+                {editingDomainId === d.id ? (
+                  /* Edit row */
+                  <>
+                    {/* Color swatches */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {DOMAIN_PALETTE.map(hex => (
+                        <button
+                          key={hex}
+                          onClick={() => setEditDomainColor(hex)}
+                          className="rounded-full transition-transform"
+                          style={{
+                            width: 14, height: 14,
+                            backgroundColor: hex,
+                            outline: editDomainColor === hex ? `2px solid ${hex}` : "none",
+                            outlineOffset: 2,
+                            transform: editDomainColor === hex ? "scale(1.2)" : "scale(1)",
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <input
+                      autoFocus
+                      className="input-field flex-1 text-sm"
+                      style={{ padding: "0.2rem 0.5rem", height: "1.75rem" }}
+                      value={editDomainName}
+                      onChange={e => setEditDomainName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") saveDomainEdit(d.id); if (e.key === "Escape") setEditingDomainId(null) }}
+                    />
+                    <button
+                      onClick={() => saveDomainEdit(d.id)}
+                      className="text-xs px-2 py-1 rounded font-medium shrink-0"
+                      style={{ backgroundColor: "var(--c-moss)", color: "#fff" }}
+                    >
+                      Save
+                    </button>
+                    <button onClick={() => setEditingDomainId(null)} className="p-1 rounded shrink-0" style={{ color: "var(--c-ink-faint)" }}>
+                      <X size={13} />
+                    </button>
+                  </>
+                ) : (
+                  /* Display row */
+                  <>
+                    <span className="rounded-full shrink-0" style={{ width: 10, height: 10, backgroundColor: d.color, display: "inline-block" }} />
+                    <span className="flex-1 text-sm font-medium capitalize" style={{ color: "var(--c-ink)" }}>{d.name}</span>
+                    {d.is_system && (
+                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
+                        style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-faint)" }}>
+                        system
+                      </span>
+                    )}
+                    <span className="text-xs shrink-0 tabular-nums" style={{ color: "var(--c-ink-faint)", minWidth: "2rem", textAlign: "right" }}>
+                      {(d.memory_count + d.knowledge_count) || ""}
+                    </span>
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
+                      <button onClick={() => startEdit(d)} className="p-1 rounded transition-colors hover:bg-[var(--c-surface-2)]" style={{ color: "var(--c-ink-faint)" }}>
+                        <Pencil size={12} />
+                      </button>
+                      {!d.is_system && (
+                        <button onClick={() => deleteDomain(d.id)} className="p-1 rounded transition-colors hover:bg-[var(--c-rose-soft)]" style={{ color: "var(--c-ink-faint)" }}>
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+
+            {/* Add new domain row */}
+            {addingDomain ? (
+              <div
+                className="flex items-center gap-3 px-3 py-2.5"
+                style={{ borderTop: "1px solid var(--c-border-faint)", backgroundColor: "var(--c-surface)" }}
+              >
+                <div className="flex items-center gap-1 shrink-0">
+                  {DOMAIN_PALETTE.map(hex => (
+                    <button
+                      key={hex}
+                      onClick={() => setNewDomainColor(hex)}
+                      className="rounded-full transition-transform"
+                      style={{
+                        width: 14, height: 14,
+                        backgroundColor: hex,
+                        outline: newDomainColor === hex ? `2px solid ${hex}` : "none",
+                        outlineOffset: 2,
+                        transform: newDomainColor === hex ? "scale(1.2)" : "scale(1)",
+                      }}
+                    />
+                  ))}
+                </div>
+                <input
+                  autoFocus
+                  placeholder="Domain name…"
+                  className="input-field flex-1 text-sm"
+                  style={{ padding: "0.2rem 0.5rem", height: "1.75rem" }}
+                  value={newDomainName}
+                  onChange={e => setNewDomainName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") addDomain(); if (e.key === "Escape") { setAddingDomain(false); setNewDomainName("") } }}
+                />
+                <button
+                  onClick={addDomain}
+                  disabled={!newDomainName.trim()}
+                  className="text-xs px-2 py-1 rounded font-medium shrink-0 disabled:opacity-40"
+                  style={{ backgroundColor: "var(--c-moss)", color: "#fff" }}
+                >
+                  Add
+                </button>
+                <button onClick={() => { setAddingDomain(false); setNewDomainName("") }} className="p-1 rounded shrink-0" style={{ color: "var(--c-ink-faint)" }}>
+                  <X size={13} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAddingDomain(true)}
+                className="flex items-center gap-2 px-3 py-2.5 text-sm transition-colors w-full"
+                style={{
+                  borderTop: domains.length > 0 ? "1px solid var(--c-border-faint)" : "none",
+                  color: "var(--c-ink-faint)",
+                  backgroundColor: "transparent",
+                }}
+              >
+                <Plus size={13} /> Add domain
+              </button>
+            )}
+          </div>
+          <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
+            New items are auto-classified into a domain. System domains can be renamed but not deleted. Deleting a custom domain reassigns its items to <em>general</em>.
+          </p>
         </section>
 
         {/* ── API Keys ── */}

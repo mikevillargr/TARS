@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { apiGet, apiPatch, apiDelete } from "@/lib/api-client"
+import { useDomains } from "@/hooks/useDomains"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { TiptapEditor } from "./TiptapEditor"
 
@@ -43,8 +44,6 @@ export interface ItemDetailModalProps {
   searchChunk?: string | null
 }
 
-const DOMAINS = ["work", "personal", "cycling", "client", "health"]
-
 function TypeIcon({ type, size = 14 }: { type: string; size?: number }) {
   if (type === "url")      return <LinkIcon size={size} />
   if (type === "note")     return <FileText size={size} />
@@ -65,13 +64,14 @@ export function ItemDetailModal({
   searchChunk,
 }: ItemDetailModalProps) {
   const router = useRouter()
+  const { domains } = useDomains()
   const [item, setItem]               = useState<KnowledgeItemDetail | null>(null)
   const [loading, setLoading]         = useState(false)
   const [editing, setEditing]         = useState(false)
   const [editTitle, setEditTitle]     = useState("")
   const [editNote, setEditNote]       = useState("")
   const [editTags, setEditTags]       = useState("")
-  const [editDomain, setEditDomain]   = useState("work")
+  const [editDomain, setEditDomain]   = useState("")
   const [docMarkdown, setDocMarkdown] = useState("")
   const [wordCount, setWordCount]     = useState(0)
   const [saving, setSaving]           = useState(false)
@@ -338,14 +338,17 @@ export function ItemDetailModal({
             {/* Domain + tags */}
             {editing ? (
               <div className="space-y-2">
-                <select
-                  value={editDomain}
-                  onChange={e => setEditDomain(e.target.value)}
-                  className="text-xs px-2 py-1.5 rounded-lg outline-none w-full"
-                  style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)" }}
-                >
-                  {DOMAINS.map(d => <option key={d}>{d}</option>)}
-                </select>
+                <div className="relative">
+                  {(() => { const dc = domains.find(d => d.name === editDomain); return dc ? <span className="absolute left-2.5 top-1/2 -translate-y-1/2 rounded-full pointer-events-none" style={{ width: 8, height: 8, backgroundColor: dc.color }} /> : null })()}
+                  <select
+                    value={editDomain}
+                    onChange={e => setEditDomain(e.target.value)}
+                    className="text-xs px-2 py-1.5 rounded-lg outline-none w-full"
+                    style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)", paddingLeft: domains.find(d => d.name === editDomain) ? "1.5rem" : undefined }}
+                  >
+                    {domains.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                  </select>
+                </div>
                 <div className="relative">
                   <Tag size={11} className="absolute left-2 top-1/2 -translate-y-1/2" style={{ color: "var(--c-ink-faint)" }} />
                   <input
@@ -359,11 +362,15 @@ export function ItemDetailModal({
               </div>
             ) : (
               <div className="flex flex-wrap gap-1.5">
-                {item.domain && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}>
-                    {item.domain}
-                  </span>
-                )}
+                {item.domain && (() => {
+                  const dc = domains.find(d => d.name === item.domain)
+                  return (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}>
+                      {dc && <span className="rounded-full inline-block" style={{ width: 6, height: 6, backgroundColor: dc.color }} />}
+                      {item.domain}
+                    </span>
+                  )
+                })()}
                 {(item.tags ?? []).map(tag => (
                   <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-faint)", border: "1px solid var(--c-border-faint)" }}>
                     #{tag}

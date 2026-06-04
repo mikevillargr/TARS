@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { apiPost, apiUpload } from "@/lib/api-client"
+import { useDomains } from "@/hooks/useDomains"
 import { TiptapEditor } from "./TiptapEditor"
 
 interface KnowledgeItem {
@@ -40,8 +41,6 @@ export interface CaptureModalProps {
   defaultTab?: "url" | "document" | "file"
 }
 
-const DOMAINS = ["work", "personal", "cycling", "client", "health"]
-
 const ACCEPTED_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -68,6 +67,7 @@ function formatBytes(n: number) {
 export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }: CaptureModalProps) {
   const router = useRouter()
   const [tab, setTab] = useState<"url" | "document" | "file">(defaultTab)
+  const { domains } = useDomains()
 
   // URL tab
   const [captureUrl, setCaptureUrl] = useState("")
@@ -80,10 +80,10 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Shared metadata
+  // Shared metadata — empty string = auto-classify
   const [captureNote, setCaptureNote] = useState("")
   const [captureTags, setCaptureTags] = useState("")
-  const [captureDomain, setCaptureDomain] = useState("work")
+  const [captureDomain, setCaptureDomain] = useState("")
   const [showMeta, setShowMeta] = useState(false)
 
   // State
@@ -126,7 +126,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
           url: captureUrl.trim(),
           personal_note: captureNote,
           tags,
-          domain: captureDomain,
+          domain: captureDomain || null,
         })
         onSaved?.(item)
         handleClose()
@@ -138,7 +138,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
           title: docTitle.trim(),
           personal_note: captureNote,
           tags,
-          domain: captureDomain,
+          domain: captureDomain || null,
         })
         onSaved?.(item)
         handleClose()
@@ -233,7 +233,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
             <MetadataFields
               note={captureNote} onNoteChange={setCaptureNote}
               tags={captureTags} onTagsChange={setCaptureTags}
-              domain={captureDomain} onDomainChange={setCaptureDomain}
+              domain={captureDomain} onDomainChange={setCaptureDomain} domainOptions={domains}
               show={showMeta} onToggle={() => setShowMeta(p => !p)}
             />
           </div>
@@ -267,7 +267,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               <MetadataFields
                 note={captureNote} onNoteChange={setCaptureNote}
                 tags={captureTags} onTagsChange={setCaptureTags}
-                domain={captureDomain} onDomainChange={setCaptureDomain}
+                domain={captureDomain} onDomainChange={setCaptureDomain} domainOptions={domains}
                 show={showMeta} onToggle={() => setShowMeta(p => !p)}
               />
             </div>
@@ -437,12 +437,15 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
 
 function MetadataFields({
   note, onNoteChange, tags, onTagsChange, domain, onDomainChange, show, onToggle,
+  domainOptions,
 }: {
   note: string; onNoteChange: (v: string) => void
   tags: string; onTagsChange: (v: string) => void
   domain: string; onDomainChange: (v: string) => void
   show: boolean; onToggle: () => void
+  domainOptions: { name: string; color: string }[]
 }) {
+  const activeDomain = domainOptions.find(d => d.name === domain)
   return (
     <div>
       <button
@@ -484,13 +487,23 @@ function MetadataFields({
               <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
                 Domain
               </label>
-              <select
-                value={domain}
-                onChange={e => onDomainChange(e.target.value)}
-                className="input-field w-full"
-              >
-                {DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
+              <div className="relative">
+                {activeDomain && (
+                  <span
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+                    style={{ width: 8, height: 8, backgroundColor: activeDomain.color }}
+                  />
+                )}
+                <select
+                  value={domain}
+                  onChange={e => onDomainChange(e.target.value)}
+                  className="input-field w-full"
+                  style={{ paddingLeft: activeDomain ? "1.5rem" : undefined }}
+                >
+                  <option value="">Auto-detect</option>
+                  {domainOptions.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                </select>
+              </div>
             </div>
           </div>
         </div>

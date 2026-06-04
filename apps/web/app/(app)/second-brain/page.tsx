@@ -9,6 +9,7 @@ import {
 import { apiGet, apiPost } from "@/lib/api-client"
 import { ItemDetailModal } from "@/components/second-brain/ItemDetailModal"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
+import { useDomains } from "@/hooks/useDomains"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ function typeLabel(type: string) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SecondBrainPage() {
+  const { domains: domainList } = useDomains()
   const [items, setItems]                       = useState<KnowledgeItem[]>([])
   const [loading, setLoading]                   = useState(true)
   const [viewMode, setViewMode]                 = useState<"grid" | "list">("grid")
@@ -88,8 +90,6 @@ export default function SecondBrainPage() {
     return () => clearTimeout(t)
   }, [query])
 
-  const domains = ["All", ...Array.from(new Set(items.map((i) => i.domain).filter(Boolean) as string[]))]
-
   const displayItems = searchResults
     ? items.filter((item) => searchResults.some((r) => r.item_id === item.id))
     : items.filter((item) => selectedDomain === "All" || item.domain === selectedDomain)
@@ -107,13 +107,13 @@ export default function SecondBrainPage() {
         <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>{items.length} items</span>
       </div>
       <div className="space-y-1 flex-1">
-        {domains.map((domain) => {
-          const count = domain === "All" ? items.length : items.filter((i) => i.domain === domain).length
-          const isActive = selectedDomain === domain
+        {/* All Items */}
+        {["All"].concat([]).map(() => {
+          const isActive = selectedDomain === "All"
           return (
             <button
-              key={domain}
-              onClick={() => { setSelectedDomain(domain); setMobileSidebar(false) }}
+              key="All"
+              onClick={() => { setSelectedDomain("All"); setMobileSidebar(false) }}
               className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors"
               style={{
                 backgroundColor: isActive ? "var(--c-moss-soft)" : "transparent",
@@ -122,8 +122,32 @@ export default function SecondBrainPage() {
                 borderLeft: isActive ? "2px solid var(--c-moss)" : "2px solid transparent",
               }}
             >
-              <span>{domain === "All" ? "All Items" : domain}</span>
-              <span style={{ color: isActive ? "var(--c-moss)" : "var(--c-ink-faint)" }}>{count}</span>
+              <span>All Items</span>
+              <span style={{ color: isActive ? "var(--c-moss)" : "var(--c-ink-faint)" }}>{items.length}</span>
+            </button>
+          )
+        })}
+        {domainList.map((d) => {
+          const count = items.filter((i) => i.domain === d.name).length
+          const isActive = selectedDomain === d.name
+          return (
+            <button
+              key={d.id}
+              onClick={() => { setSelectedDomain(d.name); setMobileSidebar(false) }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors"
+              style={{
+                backgroundColor: isActive ? "var(--c-moss-soft)" : "transparent",
+                color: isActive ? "var(--c-moss)" : "var(--c-ink)",
+                fontWeight: isActive ? 500 : 400,
+                borderLeft: isActive ? "2px solid var(--c-moss)" : "2px solid transparent",
+              }}
+            >
+              <span
+                className="rounded-full shrink-0"
+                style={{ width: 8, height: 8, backgroundColor: d.color, opacity: isActive ? 1 : 0.7 }}
+              />
+              <span className="flex-1 text-left">{d.name}</span>
+              <span style={{ color: isActive ? "var(--c-moss)" : "var(--c-ink-faint)" }}>{count || ""}</span>
             </button>
           )
         })}
@@ -223,6 +247,10 @@ export default function SecondBrainPage() {
                   <div className={`flex items-center justify-between ${viewMode === "list" ? "w-40 shrink-0" : "mb-2"}`}>
                     <div className="flex items-center gap-1.5" style={{ color: "var(--c-ink-faint)" }}>
                       <TypeIcon type={item.type} size={12} />
+                      {item.domain && (() => {
+                        const dc = domainList.find(d => d.name === item.domain)
+                        return dc ? <span className="rounded-full shrink-0" style={{ width: 6, height: 6, backgroundColor: dc.color }} /> : null
+                      })()}
                       <span className="text-[10px] uppercase tracking-wider font-medium">{item.domain ?? typeLabel(item.type)}</span>
                     </div>
                     <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>

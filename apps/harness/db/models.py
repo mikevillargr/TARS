@@ -314,6 +314,20 @@ class ContactSyncState(Base):
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+# ── User Domains ─────────────────────────────────────────────────────────────
+
+class UserDomain(Base):
+    """User-managed taxonomy shared by Second Brain and Mnemon."""
+    __tablename__ = "user_domains"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    color: Mapped[str] = mapped_column(String, nullable=False, default="#6B7280")
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 # ── Places ───────────────────────────────────────────────────────────────────
 class Place(Base):
     """Personal places — saved locations with coordinates and metadata."""

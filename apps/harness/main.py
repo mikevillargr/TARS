@@ -15,6 +15,7 @@ from api.routes import second_brain, agent_jobs, artifacts
 from api.routes import cron, connectors, memory, contacts
 from api.routes import settings as settings_route
 from api.routes import preview as preview_route
+from api.routes import domains as domains_route
 from api.routes import search as search_route
 from api.routes import transcribe as transcribe_route
 from api.routes import notifications as notifications_route
@@ -231,3 +232,4 @@ app.include_router(preview_route.router, prefix="/api")
 app.include_router(search_route.router, prefix="/api/search")
 app.include_router(transcribe_route.router, prefix="/api")
 app.include_router(notifications_route.router, prefix="/api/notifications")
+app.include_router(domains_route.router, prefix="/api/domains")

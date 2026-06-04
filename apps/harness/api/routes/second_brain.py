@@ -42,7 +42,7 @@ class IngestUrlRequest(BaseModel):
     url: str
     personal_note: str = ""
     tags: List[str] = []
-    domain: str = "work"
+    domain: Optional[str] = None
 
 
 class IngestTextRequest(BaseModel):
@@ -50,7 +50,7 @@ class IngestTextRequest(BaseModel):
     title: str = ""
     personal_note: str = ""
     tags: List[str] = []
-    domain: str = "work"
+    domain: Optional[str] = None
 
 
 class UpdateItemRequest(BaseModel):
@@ -66,7 +66,7 @@ class IngestDocumentRequest(BaseModel):
     title: str = ""
     personal_note: str = ""
     tags: List[str] = []
-    domain: str = "work"
+    domain: Optional[str] = None
 
 
 class EnhanceRequest(BaseModel):

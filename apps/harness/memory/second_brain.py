@@ -8,9 +8,47 @@ from typing import List, Optional
 from sqlalchemy import select, desc, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models import KnowledgeItem, DocumentChunk
+from sqlalchemy import select
+from db.models import KnowledgeItem, DocumentChunk, UserDomain
 from memory.embeddings import embed_one, embed
 from memory.chunker import chunk_text
+
+
+async def classify_domain(db: AsyncSession, user_id: str, content_snippet: str) -> str:
+    """Auto-classify content into a user domain using Haiku. Falls back to 'general'."""
+    try:
+        from sqlalchemy import func as _func
+        domains = (await db.execute(
+            select(UserDomain.name)
+            .where(UserDomain.user_id == user_id)
+            .order_by(UserDomain.position)
+        )).scalars().all()
+        if not domains:
+            return "general"
+
+        from core.config import settings as _s
+        import anthropic as _a
+        client = _a.AsyncAnthropic(api_key=_s.anthropic_api_key)
+        domain_list = ", ".join(domains)
+        msg = await client.messages.create(
+            model=_s.tier1_model,
+            max_tokens=10,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Pick the best category for this content from: {domain_list}\n\n"
+                    f"Content: {content_snippet[:300]}\n\n"
+                    "Return ONLY the category name, nothing else."
+                ),
+            }],
+        )
+        result = msg.content[0].text.strip().lower()
+        for d in domains:
+            if d.lower() == result:
+                return d
+        return "general"
+    except Exception:
+        return "general"
 
 
 # ── Ingest ────────────────────────────────────────────────────────────────────
@@ -21,7 +59,7 @@ async def ingest_url(
     url: str,
     personal_note: str = "",
     tags: List[str] = [],
-    domain: str = "work",
+    domain: Optional[str] = None,
 ) -> KnowledgeItem:
     """Fetch URL, extract clean text, chunk, embed, save."""
     import asyncio
@@ -82,7 +120,7 @@ async def ingest_meeting(
         raw_content=transcript,
         clean_content=transcript,
         tags=["meeting", "transcript"],
-        domain="work",
+        domain="work",  # meetings always go to work domain
         embedding=item_embedding,
         summary=summary[:500] if summary else None,
         source_title=title,
@@ -116,7 +154,7 @@ async def ingest_text(
     title: str = "",
     personal_note: str = "",
     tags: List[str] = [],
-    domain: str = "work",
+    domain: Optional[str] = None,
 ) -> KnowledgeItem:
     """Save a plain text or markdown note."""
     return await _ingest_content(
@@ -138,7 +176,7 @@ async def ingest_document(
     title: str = "",
     personal_note: str = "",
     tags: List[str] = [],
-    domain: str = "work",
+    domain: Optional[str] = None,
 ) -> KnowledgeItem:
     """Save a rich document created in the WYSIWYG editor (Markdown content)."""
     return await _ingest_content(
@@ -163,8 +201,13 @@ async def _ingest_content(
     author: str = "",
     personal_note: str = "",
     tags: List[str] = [],
-    domain: str = "work",
+    domain: Optional[str] = None,
 ) -> KnowledgeItem:
+    # Auto-classify when domain not provided
+    if not domain:
+        snippet = f"{title} {content[:300]}".strip()
+        domain = await classify_domain(db, user_id, snippet)
+
     # Generate item-level summary embedding (first 800 words as summary proxy)
     summary_text = " ".join(content.split()[:800])
     item_embedding = embed_one(summary_text) if summary_text else None

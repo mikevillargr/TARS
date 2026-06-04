@@ -1,6 +1,6 @@
 export type TaskStatus = "inbox" | "todo" | "in_progress" | "done" | "snoozed"
 export type TaskPriority = "urgent" | "high" | "normal" | "low"
-export type MemoryDomain = "work" | "personal" | "health" | "cycling" | "client"
+export type MemoryDomain = string
 export type MemorySource = "conversation" | "meeting" | "email" | "manual"
 export type ConnectorStatus = "connected" | "disconnected" | "error"
 export type AgentJobStatus = "pending" | "running" | "needs_input" | "done" | "failed"

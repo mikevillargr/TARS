@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { Database, Search, Trash2, Zap, Plus, X, ChevronDown } from "lucide-react"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
+import { useDomains } from "@/hooks/useDomains"
 
 interface Memory {
   id: string
@@ -22,12 +23,12 @@ interface MemoryListResponse {
   offset: number
 }
 
-const DOMAINS = ["All", "work", "personal", "cycling", "client", "health"]
 const SOURCES = ["All", "conversation", "meeting", "email", "manual"]
 const PAGE_SIZE = 100
 
 export default function MemoryPage() {
   const confirm = useConfirm()
+  const { domains: domainList } = useDomains()
   const [memories, setMemories]           = useState<Memory[]>([])
   const [total, setTotal]                 = useState(0)
   const [offset, setOffset]               = useState(0)
@@ -201,7 +202,8 @@ export default function MemoryPage() {
               value={domainFilter}
               onChange={(e) => { setDomainFilter(e.target.value); setOffset(0) }}
             >
-              {DOMAINS.map((d) => <option key={d} value={d}>{d === "All" ? "Domain: All" : d}</option>)}
+              <option value="All">Domain: All</option>
+              {domainList.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
             </select>
             <select
               className="input-field py-1.5 text-xs bg-canvas"
@@ -235,7 +237,10 @@ export default function MemoryPage() {
                 <div key={mem.id} className="card group">
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex gap-2">
-                      <span className="badge badge-neutral bg-surface-2">{mem.domain}</span>
+                      <span className="badge badge-neutral bg-surface-2 flex items-center gap-1">
+                        {(() => { const dc = domainList.find(d => d.name === mem.domain); return dc ? <span className="rounded-full inline-block shrink-0" style={{ width: 6, height: 6, backgroundColor: dc.color }} /> : null })()}
+                        {mem.domain}
+                      </span>
                       <span className="text-[10px] text-ink-faint uppercase tracking-wider font-medium pt-0.5">
                         {mem.source}
                       </span>
@@ -303,7 +308,7 @@ export default function MemoryPage() {
             />
             <div className="flex gap-3 mb-4">
               <select className="input-field text-sm flex-1" value={addDomain} onChange={(e) => setAddDomain(e.target.value)}>
-                {DOMAINS.slice(1).map((d) => <option key={d} value={d}>{d}</option>)}
+                {domainList.map((d) => <option key={d.name} value={d.name}>{d.name}</option>)}
               </select>
               <div className="flex items-center gap-2 text-sm text-ink-muted">
                 <span>Importance</span>
