@@ -86,18 +86,31 @@ def next_run_at(
     return candidate.astimezone(timezone.utc)
 
 
+_STALE_WINDOW_MINUTES = 30  # skip if job is more than this many minutes overdue
+
+
 def is_due(
     schedule_config: dict,
     tz_name: str,
     last_run_at: Optional[datetime],
     next_run_at_stored: Optional[datetime],
 ) -> bool:
-    """Return True if the job should fire right now."""
-    if next_run_at_stored:
-        return datetime.now(timezone.utc) >= next_run_at_stored
-    # Fallback: compute fresh
-    nxt = next_run_at(schedule_config, tz_name, last_run_at)
-    return datetime.now(timezone.utc) >= nxt
+    """
+    Return True if the job should fire right now.
+
+    Stale-fire protection: if the job is more than STALE_WINDOW_MINUTES past
+    its scheduled time (e.g. harness was down for hours), skip it — we don't
+    want a 7 AM morning brief running at noon.  next_run_at will be advanced
+    to the following occurrence by the caller.
+    """
+    now = datetime.now(timezone.utc)
+    nxt = next_run_at_stored or next_run_at(schedule_config, tz_name, last_run_at)
+    if now < nxt:
+        return False
+    overdue_minutes = (now - nxt).total_seconds() / 60
+    if overdue_minutes > _STALE_WINDOW_MINUTES:
+        return False  # too late — caller will advance next_run_at
+    return True
 
 
 def human_schedule(schedule_config: dict) -> str:

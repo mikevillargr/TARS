@@ -151,6 +151,14 @@ async def _prompt_cron_loop() -> None:
     """
     Every 60 s: check all enabled prompt cron jobs in DB and fire any that are due.
     Runs concurrently — each job fires in its own task so one slow job doesn't block others.
+
+    Race-condition fix: next_run_at is stamped to the NEXT occurrence in the DB
+    before the task is spawned, so a second loop iteration 60 s later won't
+    re-fire the same window even if execute() is still running.
+
+    Stale-fire protection: is_due() returns False when the job is >30 min overdue
+    (e.g. harness was down for hours). We still advance next_run_at so the job
+    resumes on its normal future schedule.
     """
     # Initial delay so harness fully starts before first check
     await asyncio.sleep(30)
@@ -160,7 +168,7 @@ async def _prompt_cron_loop() -> None:
             from db.session import AsyncSessionLocal
             from db.models import CronJob
             from sqlalchemy import select
-            from jobs.prompt_cron import is_due, execute as _exec
+            from jobs.prompt_cron import is_due, execute as _exec, next_run_at as _nxt
 
             async with AsyncSessionLocal() as db:
                 result = await db.execute(
@@ -170,13 +178,34 @@ async def _prompt_cron_loop() -> None:
                     )
                 )
                 jobs = result.scalars().all()
+                due_ids: list[str] = []
 
-            for job in jobs:
-                if not job.schedule_config:
-                    continue
-                if is_due(job.schedule_config, job.timezone or "Asia/Manila", job.last_run_at, job.next_run_at):
-                    log.info("Prompt cron '%s' is due — firing", job.name)
-                    asyncio.create_task(_exec(job.id))
+                now_utc = datetime.now(timezone.utc)
+                changed = False
+                for job in jobs:
+                    if not job.schedule_config:
+                        continue
+                    tz = job.timezone or "Asia/Manila"
+                    if is_due(job.schedule_config, tz, job.last_run_at, job.next_run_at):
+                        log.info("Prompt cron '%s' is due — firing", job.name)
+                        due_ids.append(job.id)
+                        # Immediately stamp next_run_at so a second loop
+                        # iteration can't double-fire this window.
+                        job.next_run_at = _nxt(job.schedule_config, tz, job.last_run_at)
+                        changed = True
+                    elif job.next_run_at and now_utc > job.next_run_at:
+                        # Stale window (>30 min overdue) — advance to next occurrence
+                        log.info(
+                            "Prompt cron '%s' missed its window (>30 min late) — skipping to next", job.name
+                        )
+                        job.next_run_at = _nxt(job.schedule_config, tz, job.last_run_at)
+                        changed = True
+
+                if changed:
+                    await db.commit()
+
+            for job_id in due_ids:
+                asyncio.create_task(_exec(job_id))
 
         except Exception as exc:
             log.exception("Prompt cron loop error: %s", exc)
