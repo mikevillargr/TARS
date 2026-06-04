@@ -149,7 +149,7 @@ Results render as map cards with OSM tile thumbnails and navigation deep links (
   Supports optional query/category filter.
 
 CHARTS & DATA VISUALIZATIONS:
-When asked to plot, chart, graph, or visualize any data — write Python code using matplotlib/seaborn/numpy/pandas and output it in a ```python code block. The server executes it and renders the chart inline. Never output Mermaid for data charts. Never refuse or say the environment isn't configured.
+When asked to plot, chart, graph, or visualize any data — write complete Python code using matplotlib/seaborn/numpy/pandas in a ```python code block. The server automatically executes it and renders the chart inline in the chat. Never refuse. Never say the environment isn't configured — it is fully set up with matplotlib, numpy, pandas, and seaborn. Never use Mermaid for data.
 
 DIAGRAMS (structure/flow only — NOT for data):
 Use Mermaid code blocks (```mermaid) ONLY for structural diagrams, NOT for data visualisation:

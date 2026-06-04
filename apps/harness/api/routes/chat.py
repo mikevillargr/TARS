@@ -617,7 +617,10 @@ async def send_message(
         SAVE_PLACE_TOOL,
         GET_SAVED_PLACES_TOOL,
         CREATE_AGENT_JOB_TOOL,
-        GENERATE_CHART_TOOL,
+        # generate_chart only sent to Anthropic — Z.ai/GLM refuses the tool and
+        # outputs "environment not configured". With Z.ai, the code-block fallback
+        # runs post-stream instead (no tool needed, GLM naturally writes Python code).
+        *([GENERATE_CHART_TOOL] if settings.tier3_provider != "zai" else []),
     ] if effective_tier != ModelTier.TIER1 else None
     queue: asyncio.Queue = asyncio.Queue()
 
