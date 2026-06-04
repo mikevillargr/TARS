@@ -4,12 +4,18 @@ import { useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import {
   X, Link as LinkIcon, FileText, Loader2, ChevronDown,
-  Upload, Camera, File as FileIcon,
+  Upload, Camera, File as FileIcon, Plus, Check,
 } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { apiPost, apiUpload } from "@/lib/api-client"
-import { useDomains } from "@/hooks/useDomains"
+import { useDomains, invalidateDomains, fetchDomains } from "@/hooks/useDomains"
 import { TiptapEditor } from "./TiptapEditor"
+
+const DOMAIN_PALETTE = [
+  "#6B7280", "#3B82F6", "#8B5CF6", "#10B981",
+  "#F59E0B", "#EF4444", "#EC4899", "#14B8A6",
+  "#F97316", "#6366F1", "#84CC16", "#78716C",
+]
 
 interface KnowledgeItem {
   id: string
@@ -67,8 +73,6 @@ function formatBytes(n: number) {
 export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }: CaptureModalProps) {
   const router = useRouter()
   const [tab, setTab] = useState<"url" | "document" | "file">(defaultTab)
-  const { domains } = useDomains()
-
   // URL tab
   const [captureUrl, setCaptureUrl] = useState("")
   // Document tab
@@ -233,7 +237,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
             <MetadataFields
               note={captureNote} onNoteChange={setCaptureNote}
               tags={captureTags} onTagsChange={setCaptureTags}
-              domain={captureDomain} onDomainChange={setCaptureDomain} domainOptions={domains}
+              domain={captureDomain} onDomainChange={setCaptureDomain}
               show={showMeta} onToggle={() => setShowMeta(p => !p)}
             />
           </div>
@@ -267,7 +271,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
               <MetadataFields
                 note={captureNote} onNoteChange={setCaptureNote}
                 tags={captureTags} onTagsChange={setCaptureTags}
-                domain={captureDomain} onDomainChange={setCaptureDomain} domainOptions={domains}
+                domain={captureDomain} onDomainChange={setCaptureDomain}
                 show={showMeta} onToggle={() => setShowMeta(p => !p)}
               />
             </div>
@@ -437,15 +441,36 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }
 
 function MetadataFields({
   note, onNoteChange, tags, onTagsChange, domain, onDomainChange, show, onToggle,
-  domainOptions,
 }: {
   note: string; onNoteChange: (v: string) => void
   tags: string; onTagsChange: (v: string) => void
   domain: string; onDomainChange: (v: string) => void
   show: boolean; onToggle: () => void
-  domainOptions: { name: string; color: string }[]
 }) {
-  const activeDomain = domainOptions.find(d => d.name === domain)
+  const { domains, reload } = useDomains()
+  const [addingDomain, setAddingDomain] = useState(false)
+  const [newName, setNewName]           = useState("")
+  const [newColor, setNewColor]         = useState("#6366F1")
+  const [creating, setCreating]         = useState(false)
+
+  const activeDomain = domains.find(d => d.name === domain)
+
+  async function createDomain() {
+    if (!newName.trim() || creating) return
+    setCreating(true)
+    try {
+      await apiPost("/domains", { name: newName.trim(), color: newColor })
+      invalidateDomains()
+      await fetchDomains()
+      await reload()
+      onDomainChange(newName.trim())
+      setAddingDomain(false)
+      setNewName("")
+      setNewColor("#6366F1")
+    } catch (e) { console.error(e) }
+    finally { setCreating(false) }
+  }
+
   return (
     <div>
       <button
@@ -487,23 +512,72 @@ function MetadataFields({
               <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
                 Domain
               </label>
-              <div className="relative">
-                {activeDomain && (
-                  <span
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 rounded-full pointer-events-none"
-                    style={{ width: 8, height: 8, backgroundColor: activeDomain.color }}
-                  />
-                )}
-                <select
-                  value={domain}
-                  onChange={e => onDomainChange(e.target.value)}
-                  className="input-field w-full"
-                  style={{ paddingLeft: activeDomain ? "1.5rem" : undefined }}
-                >
-                  <option value="">Auto-detect</option>
-                  {domainOptions.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
-                </select>
-              </div>
+
+              {addingDomain ? (
+                /* Inline new domain creator */
+                <div className="rounded-lg border p-2 space-y-2" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-canvas)" }}>
+                  <div className="flex flex-wrap gap-1">
+                    {DOMAIN_PALETTE.map(hex => (
+                      <button
+                        key={hex}
+                        type="button"
+                        onClick={() => setNewColor(hex)}
+                        className="rounded-full transition-transform"
+                        style={{
+                          width: 14, height: 14,
+                          backgroundColor: hex,
+                          outline: newColor === hex ? `2px solid ${hex}` : "none",
+                          outlineOffset: 2,
+                          transform: newColor === hex ? "scale(1.2)" : "scale(1)",
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5 items-center">
+                    <span className="rounded-full shrink-0" style={{ width: 8, height: 8, backgroundColor: newColor }} />
+                    <input
+                      autoFocus
+                      value={newName}
+                      onChange={e => setNewName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); createDomain() } if (e.key === "Escape") { setAddingDomain(false); setNewName("") } }}
+                      placeholder="Domain name…"
+                      className="input-field flex-1 text-xs"
+                      style={{ padding: "0.2rem 0.4rem", height: "1.6rem" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={createDomain}
+                      disabled={!newName.trim() || creating}
+                      className="p-1 rounded disabled:opacity-40"
+                      style={{ backgroundColor: "var(--c-moss)", color: "#fff" }}
+                    >
+                      {creating ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                    </button>
+                    <button type="button" onClick={() => { setAddingDomain(false); setNewName("") }} className="p-1 rounded" style={{ color: "var(--c-ink-faint)" }}>
+                      <X size={11} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  {activeDomain && (
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 rounded-full pointer-events-none" style={{ width: 8, height: 8, backgroundColor: activeDomain.color }} />
+                  )}
+                  <select
+                    value={domain}
+                    onChange={e => {
+                      if (e.target.value === "__new__") { setAddingDomain(true); return }
+                      onDomainChange(e.target.value)
+                    }}
+                    className="input-field w-full"
+                    style={{ paddingLeft: activeDomain ? "1.5rem" : undefined }}
+                  >
+                    <option value="">Auto-detect</option>
+                    {domains.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+                    <option value="__new__">+ New domain…</option>
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         </div>

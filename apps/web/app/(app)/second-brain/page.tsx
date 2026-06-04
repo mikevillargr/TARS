@@ -60,6 +60,7 @@ export default function SecondBrainPage() {
   const [selectedId, setSelectedId]             = useState<string | null>(null)
   const [isMobileSidebarOpen, setMobileSidebar] = useState(false)
   const [selectedDomain, setSelectedDomain]     = useState("All")
+  const [selectedTag, setSelectedTag]           = useState("")
   const [query, setQuery]                       = useState("")
   const [searchResults, setSearchResults]       = useState<SearchResult[] | null>(null)
   const [searching, setSearching]               = useState(false)
@@ -90,9 +91,15 @@ export default function SecondBrainPage() {
     return () => clearTimeout(t)
   }, [query])
 
+  const allTags = [...new Set(items.flatMap(i => i.tags ?? []))].sort()
+
   const displayItems = searchResults
     ? items.filter((item) => searchResults.some((r) => r.item_id === item.id))
-    : items.filter((item) => selectedDomain === "All" || item.domain === selectedDomain)
+    : items.filter((item) => {
+        if (selectedDomain !== "All" && item.domain !== selectedDomain) return false
+        if (selectedTag && !(item.tags ?? []).includes(selectedTag)) return false
+        return true
+      })
 
   // Matched search chunk for selected item
   const selectedSearchChunk = selectedId && searchResults
@@ -113,7 +120,7 @@ export default function SecondBrainPage() {
           return (
             <button
               key="All"
-              onClick={() => { setSelectedDomain("All"); setMobileSidebar(false) }}
+              onClick={() => { setSelectedDomain("All"); setSelectedTag(""); setMobileSidebar(false) }}
               className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors"
               style={{
                 backgroundColor: isActive ? "var(--c-moss-soft)" : "transparent",
@@ -133,7 +140,7 @@ export default function SecondBrainPage() {
           return (
             <button
               key={d.id}
-              onClick={() => { setSelectedDomain(d.name); setMobileSidebar(false) }}
+              onClick={() => { setSelectedDomain(d.name); setSelectedTag(""); setMobileSidebar(false) }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors"
               style={{
                 backgroundColor: isActive ? "var(--c-moss-soft)" : "transparent",
@@ -152,6 +159,44 @@ export default function SecondBrainPage() {
           )
         })}
       </div>
+
+      {/* Tags section */}
+      {allTags.length > 0 && (
+        <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="text-[0.6rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Tags</span>
+            {selectedTag && (
+              <button
+                onClick={() => setSelectedTag("")}
+                className="text-[10px] flex items-center gap-0.5"
+                style={{ color: "var(--c-ink-faint)" }}
+              >
+                <X size={10} /> clear
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1 px-1">
+            {allTags.map(tag => {
+              const isActive = selectedTag === tag
+              const count = items.filter(i => (i.tags ?? []).includes(tag)).length
+              return (
+                <button
+                  key={tag}
+                  onClick={() => { setSelectedTag(isActive ? "" : tag); setMobileSidebar(false) }}
+                  className="text-[11px] px-2 py-0.5 rounded-full transition-colors"
+                  style={{
+                    backgroundColor: isActive ? "var(--c-moss)" : "var(--c-surface-2)",
+                    color: isActive ? "#fff" : "var(--c-ink-muted)",
+                    border: `1px solid ${isActive ? "var(--c-moss)" : "var(--c-border-faint)"}`,
+                  }}
+                >
+                  #{tag} <span style={{ opacity: 0.7 }}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 
@@ -184,7 +229,7 @@ export default function SecondBrainPage() {
                   <Menu size={20} />
                 </button>
                 <h1 className="font-semibold text-xl" style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}>
-                  {query ? "Search Results" : selectedDomain === "All" ? "Second Brain" : selectedDomain}
+                  {query ? "Search Results" : selectedTag ? `#${selectedTag}` : selectedDomain === "All" ? "Second Brain" : selectedDomain}
                 </h1>
               </div>
               <div className="flex items-center gap-2">
@@ -277,10 +322,21 @@ export default function SecondBrainPage() {
                   </div>
 
                   {/* Tags */}
-                  {viewMode === "grid" && item.tags?.length > 0 && (
+                  {viewMode === "grid" && (item.tags ?? []).length > 0 && (
                     <div className="flex gap-1 flex-wrap mt-2">
-                      {item.tags.slice(0, 3).map((tag) => (
-                        <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-faint)" }}>#{tag}</span>
+                      {(item.tags ?? []).slice(0, 4).map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={e => { e.stopPropagation(); setSelectedTag(selectedTag === tag ? "" : tag) }}
+                          className="text-[10px] px-1.5 py-0.5 rounded-full transition-colors"
+                          style={{
+                            backgroundColor: selectedTag === tag ? "var(--c-moss)" : "var(--c-surface-2)",
+                            color: selectedTag === tag ? "#fff" : "var(--c-ink-faint)",
+                          }}
+                        >
+                          #{tag}
+                        </button>
                       ))}
                     </div>
                   )}
