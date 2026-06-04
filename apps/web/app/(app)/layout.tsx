@@ -2,9 +2,8 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, X, Bell, BellOff } from "lucide-react"
+import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, Bell, BellOff } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
-import { createPortal } from "react-dom"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
@@ -12,7 +11,7 @@ import { SelectionToolbar } from "@/components/chat/SelectionToolbar"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
 import { CommandPalette } from "@/components/shell/CommandPalette"
 import { ConfirmProvider } from "@/components/ui/confirm-dialog"
-import { NotificationProvider, useNotificationContext, type TarsNotification } from "@/context/NotificationContext"
+import { NotificationProvider, useNotificationContext } from "@/context/NotificationContext"
 
 // ─── Notification sound (Web Audio API — no file needed) ────────────────────
 
@@ -41,51 +40,6 @@ function playNotificationChime() {
   } catch {
     // AudioContext blocked or unavailable — silently skip
   }
-}
-
-// ─── Toast ──────────────────────────────────────────────────────────────────
-
-function NotificationToast({
-  notif,
-  onDismiss,
-}: {
-  notif: TarsNotification
-  onDismiss: () => void
-}) {
-  const router = useRouter()
-
-  return (
-    <div
-      role="alert"
-      onClick={() => { router.push(`/chat?open=${notif.conversation_id}`); onDismiss() }}
-      className="fixed bottom-24 right-4 lg:bottom-6 z-50 flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg max-w-xs w-full cursor-pointer select-none"
-      style={{
-        backgroundColor: "var(--c-surface-raised)",
-        borderColor: "var(--c-border)",
-        animation: "slideUpFade 0.22s ease-out",
-      }}
-    >
-      <div
-        className="mt-1 shrink-0 w-2 h-2 rounded-full"
-        style={{ backgroundColor: "var(--c-moss)", boxShadow: "0 0 0 3px color-mix(in srgb, var(--c-moss) 20%, transparent)" }}
-      />
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--c-moss)" }}>TARS</p>
-        <p className="text-sm leading-snug line-clamp-3" style={{ color: "var(--c-ink)" }}>
-          {notif.preview || "New message"}
-        </p>
-        <p className="mt-1 text-xs" style={{ color: "var(--c-ink-faint)" }}>Tap to open →</p>
-      </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onDismiss() }}
-        className="shrink-0 p-0.5 rounded hover:opacity-60 transition-opacity mt-0.5"
-        style={{ color: "var(--c-ink-faint)" }}
-        aria-label="Dismiss"
-      >
-        <X size={13} />
-      </button>
-    </div>
-  )
 }
 
 // ─── Bottom tab bar ──────────────────────────────────────────────────────────
@@ -177,9 +131,6 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const voice = useVoiceInput()
 
   const { hasUnread, clearUnread, subscribe } = useNotificationContext()
-  const [toast, setToast] = useState<TarsNotification | null>(null)
-  const lastToastIdRef = useRef<string | null>(null)
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Sound on/off — persisted in localStorage
   const [soundOn, setSoundOn] = useState(true)
@@ -209,20 +160,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     if (pathname.startsWith("/chat")) clearUnread()
   }, [pathname, clearUnread])
 
-  // Notification handler — toast + audio + browser notification
+  // Notification handler — audio chime + browser notification only (no toast)
   const soundOnRef = useRef(soundOn)
   soundOnRef.current = soundOn
 
   useEffect(() => {
     const unsub = subscribe((notif) => {
       if (notif.type !== "new_message") return
-      if (notif.message_id === lastToastIdRef.current) return
-      lastToastIdRef.current = notif.message_id
-
-      // Always show toast (even on chat page — it may be a different conversation)
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-      setToast(notif)
-      toastTimerRef.current = setTimeout(() => setToast(null), 8000)
 
       // Audio chime
       if (soundOnRef.current) playNotificationChime()
@@ -400,12 +344,6 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
 
     </SidebarProvider>
-
-    {/* Toast portalled to document.body to escape SidebarProvider's stacking context */}
-    {toast && typeof document !== "undefined" && createPortal(
-      <NotificationToast notif={toast} onDismiss={() => setToast(null)} />,
-      document.body
-    )}
     </>
   )
 }
