@@ -17,6 +17,8 @@ from typing import Optional
 
 import pytz
 
+from core.config import settings
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -232,7 +234,7 @@ async def execute(job_id: str) -> None:
             conversation_id=conv.id,
             role="assistant",
             content=full_response,
-            model_used="claude-sonnet-4-6",
+            model_used=settings.tier3_model_override or ("glm-4.7" if settings.tier3_provider == "zai" else "claude-sonnet-4-6"),
             tokens_used=0,
         )
         db.add(assistant_msg)
