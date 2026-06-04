@@ -1007,7 +1007,7 @@ const MessageArea = memo(function MessageArea({
   const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
     || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-6">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 pb-36 space-y-6">
       {allMessages.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
           <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>TARS</p>
@@ -1979,9 +1979,9 @@ export default function ChatPage() {
         />
 
         {/* ── Floating input ─────────────────────────────────────── */}
-        {/* Gradient fade creates a soft visual lift from the message stream */}
+        {/* Positioned absolutely over the bottom of the message scroll area */}
         <div
-          className="shrink-0 px-3 pb-3 pt-0"
+          className="absolute bottom-0 left-0 right-0 px-3 pb-3 pt-0 z-10"
           style={{ background: "linear-gradient(to bottom, transparent 0%, var(--c-surface) 28px)" }}
         >
           <div className="max-w-3xl mx-auto">
