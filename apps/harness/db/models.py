@@ -78,8 +78,19 @@ class Task(Base):
     connector_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     linked_artifacts: Mapped[list] = mapped_column(JSON, default=list)   # list of artifact IDs
     linked_knowledge: Mapped[list] = mapped_column(JSON, default=list)   # list of knowledge item IDs
+    checklist: Mapped[list] = mapped_column(JSON, default=list)          # [{id, text, done}]
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+
+class TaskColumn(Base):
+    __tablename__ = "task_columns"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    color: Mapped[str] = mapped_column(String, nullable=False, default="var(--c-ink-muted)")
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
 class Meeting(Base):
