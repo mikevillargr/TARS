@@ -570,34 +570,24 @@ Single user. Username + password. No registration flow.
 
 ### SSH Access Rules — CRITICAL
 
-The production server (`72.60.234.180`) sits behind Hostinger's network firewall.
-**Repeated failed SSH connection attempts will trigger an IP-level block that takes 15–30 min to expire and locks out ALL traffic (SSH + HTTPS), not just SSH.**
-
-**Always use `tars` alias (never the raw IP directly):**
-```bash
-ssh tars "your command"
-```
-
-This routes through `hostinger-vps` (76.13.191.149) as a ProxyJump, which bypasses the rate-limit trigger.
+The production server has fail2ban. **Hammering repeated SSH connection attempts will trigger a server-side IP block.**
 
 **Rules:**
-1. **Never run retry loops** that hammer SSH connections. One failed attempt = stop and investigate, do not auto-retry in a loop.
-2. **Always use the alias** `tars` from `~/.ssh/config` — it has `ProxyJump hostinger-vps` set.
-3. **If the server appears unreachable**, first verify via jump host: `ssh hostinger-vps "ping -c 1 72.60.234.180"` — if ping works from there, the issue is a local IP block, not a server outage.
-4. **Never call `ssh root@72.60.234.180` directly** — always use the alias.
-5. **Deployment commands:**
+1. **Never run retry loops** against SSH. One failed attempt = stop, report to Mike, wait for instruction. Do NOT auto-retry in a loop.
+2. **If the server appears unreachable**, try once, then stop. Do not keep retrying.
+3. **Deployment commands** (run once, no loops):
 ```bash
 # Pull latest
-ssh tars "cd /opt/tars && git pull origin main"
+ssh root@72.60.234.180 "cd /opt/tars && git pull origin main"
 
 # Run migrations
-ssh tars "cd /opt/tars/apps/harness && source .venv/bin/activate && python3 -m alembic upgrade head"
+ssh root@72.60.234.180 "cd /opt/tars/apps/harness && source .venv/bin/activate && python3 -m alembic upgrade head"
 
 # Restart harness
-ssh tars "pm2 restart tars-harness"
+ssh root@72.60.234.180 "pm2 restart tars-harness"
 
 # Build and deploy web
-ssh tars "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && mkdir -p .next/standalone/apps/web/public && cp -r public/* .next/standalone/apps/web/public/ && pm2 restart tars-web"
+ssh root@72.60.234.180 "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && mkdir -p .next/standalone/apps/web/public && cp -r public/* .next/standalone/apps/web/public/ && pm2 restart tars-web"
 ```
 
 ---
