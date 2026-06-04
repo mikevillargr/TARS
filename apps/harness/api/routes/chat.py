@@ -1798,6 +1798,10 @@ plt.close('all')
                 if _chart_match and any(kw in _chart_match.group(1) for kw in _CHART_KW):
                     import subprocess as _sp, tempfile as _tf, base64 as _b64, os as _cos
                     _code = _chart_match.group(1)
+                    # Strip plt.show() — in headless (Agg) mode it can clear
+                    # figure state before our savefig runs
+                    import re as _cre
+                    _code_clean = _cre.sub(r'plt\.show\(\)', '', _code)
                     with _tf.NamedTemporaryFile(suffix=".png", delete=False) as _f:
                         _op = _f.name
                     _wrapper = f"""
@@ -1807,22 +1811,31 @@ import numpy as np, pandas as pd, seaborn as sns, json, math
 from datetime import datetime, timedelta
 plt.rcParams.update({{'figure.facecolor':'#1a1714','axes.facecolor':'#1a1714','axes.edgecolor':'#3a342d','axes.labelcolor':'#e8e4de','xtick.color':'#9c9088','ytick.color':'#9c9088','text.color':'#e8e4de','grid.color':'#2a2520','grid.alpha':0.5}})
 output_path = {repr(_op)}
-{_code}
-plt.tight_layout()
-plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor=plt.rcParams['figure.facecolor'])
+{_code_clean}
+# Save — use fig.savefig if a fig variable exists, else plt.savefig
+try:
+    _figs = [v for k, v in list(locals().items()) if hasattr(v, 'savefig') and hasattr(v, 'get_axes')]
+    _save_fig = _figs[0] if _figs else plt
+    _save_fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='#1a1714')
+except Exception:
+    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='#1a1714')
 plt.close('all')
 """
                     try:
                         _r = _sp.run(["python3", "-c", _wrapper], capture_output=True, text=True, timeout=30)
-                        if _r.returncode == 0 and _cos.path.exists(_op) and _cos.path.getsize(_op) > 0:
+                        if _r.returncode != 0:
+                            log.warning("Chart fallback exec failed:\n%s", _r.stderr[-600:])
+                        elif _cos.path.exists(_op) and _cos.path.getsize(_op) > 0:
                             with open(_op, "rb") as _imgf:
                                 _b = _b64.b64encode(_imgf.read()).decode()
                             _card = {"type": "chart_image", "title": "Chart", "image_base64": _b}
                             tool_results.append(_card)
                             await queue.put(sse_event(_card))
                             log.info("Chart rendered from code block fallback")
+                        else:
+                            log.warning("Chart fallback: output file missing or empty")
                     except Exception as _ce:
-                        log.debug("Chart code-block fallback failed: %s", _ce)
+                        log.warning("Chart code-block fallback failed: %s", _ce)
                     finally:
                         if _cos.path.exists(_op):
                             _cos.unlink(_op)
@@ -1838,6 +1851,8 @@ plt.close('all')
                     assistant_content = "Here's who I found:"
                 elif "artifact_created" in kinds:
                     assistant_content = "Done — see the file above."
+                elif "chart_image" in kinds:
+                    assistant_content = "Here's your chart."
                 else:
                     assistant_content = "Done."
 
