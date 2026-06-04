@@ -222,17 +222,7 @@ async def execute(job_id: str) -> str | None:
         db.add(conv)
         await db.flush()
 
-        # User prompt message
-        user_msg = Message(
-            conversation_id=conv.id,
-            role="user",
-            content=prompt,
-            model_used="",
-            tokens_used=0,
-        )
-        db.add(user_msg)
-
-        # Assistant response message
+        # Only save the assistant response — the prompt is the cron config, not a user turn
         assistant_msg = Message(
             conversation_id=conv.id,
             role="assistant",
