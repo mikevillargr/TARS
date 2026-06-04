@@ -2,7 +2,7 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, X } from "lucide-react"
+import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, X, Bell, BellOff } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
 import { createPortal } from "react-dom"
 import Link from "next/link"
@@ -14,43 +14,71 @@ import { CommandPalette } from "@/components/shell/CommandPalette"
 import { ConfirmProvider } from "@/components/ui/confirm-dialog"
 import { NotificationProvider, useNotificationContext, type TarsNotification } from "@/context/NotificationContext"
 
+// ─── Notification sound (Web Audio API — no file needed) ────────────────────
+
+function playNotificationChime() {
+  try {
+    const ctx = new AudioContext()
+    const now = ctx.currentTime
+    // Two-note rising chime: C5 → E5
+    const notes = [523.25, 659.25]
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = "sine"
+      osc.frequency.value = freq
+      const start = now + i * 0.18
+      gain.gain.setValueAtTime(0, start)
+      gain.gain.linearRampToValueAtTime(0.18, start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.55)
+      osc.start(start)
+      osc.stop(start + 0.6)
+    })
+    // Auto-close context after sound finishes
+    setTimeout(() => ctx.close(), 1500)
+  } catch {
+    // AudioContext blocked or unavailable — silently skip
+  }
+}
+
 // ─── Toast ──────────────────────────────────────────────────────────────────
 
-function NotificationToast({ notif, onDismiss }: { notif: TarsNotification; onDismiss: () => void }) {
+function NotificationToast({
+  notif,
+  onDismiss,
+}: {
+  notif: TarsNotification
+  onDismiss: () => void
+}) {
   const router = useRouter()
 
   return (
     <div
       role="alert"
-      className="fixed bottom-24 right-4 lg:bottom-6 z-50 flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg max-w-xs w-full animate-in slide-in-from-bottom-4 fade-in duration-200"
+      onClick={() => { router.push(`/chat?open=${notif.conversation_id}`); onDismiss() }}
+      className="fixed bottom-24 right-4 lg:bottom-6 z-50 flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg max-w-xs w-full cursor-pointer select-none"
       style={{
         backgroundColor: "var(--c-surface-raised)",
         borderColor: "var(--c-border)",
+        animation: "slideUpFade 0.22s ease-out",
       }}
     >
       <div
-        className="mt-0.5 shrink-0 w-2 h-2 rounded-full"
+        className="mt-1 shrink-0 w-2 h-2 rounded-full"
         style={{ backgroundColor: "var(--c-moss)", boxShadow: "0 0 0 3px color-mix(in srgb, var(--c-moss) 20%, transparent)" }}
       />
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--c-ink-muted)" }}>TARS</p>
-        <p
-          className="text-sm leading-snug line-clamp-2"
-          style={{ color: "var(--c-ink)" }}
-        >
+        <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--c-moss)" }}>TARS</p>
+        <p className="text-sm leading-snug line-clamp-3" style={{ color: "var(--c-ink)" }}>
           {notif.preview || "New message"}
         </p>
-        <button
-          onClick={() => { router.push("/chat"); onDismiss() }}
-          className="mt-1.5 text-xs font-medium"
-          style={{ color: "var(--c-moss)" }}
-        >
-          View →
-        </button>
+        <p className="mt-1 text-xs" style={{ color: "var(--c-ink-faint)" }}>Tap to open →</p>
       </div>
       <button
-        onClick={onDismiss}
-        className="shrink-0 p-0.5 rounded hover:opacity-60 transition-opacity"
+        onClick={(e) => { e.stopPropagation(); onDismiss() }}
+        className="shrink-0 p-0.5 rounded hover:opacity-60 transition-opacity mt-0.5"
         style={{ color: "var(--c-ink-faint)" }}
         aria-label="Dismiss"
       >
@@ -153,24 +181,73 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   const lastToastIdRef = useRef<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Sound on/off — persisted in localStorage
+  const [soundOn, setSoundOn] = useState(true)
+  useEffect(() => {
+    const stored = localStorage.getItem("tars_sound")
+    if (stored !== null) setSoundOn(stored === "1")
+  }, [])
+  const toggleSound = useCallback(() => {
+    setSoundOn(prev => {
+      const next = !prev
+      localStorage.setItem("tars_sound", next ? "1" : "0")
+      return next
+    })
+  }, [])
+
+  // Request browser Notification permission once on mount (non-intrusive)
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      // Delay slightly so it doesn't fire immediately on page load
+      const t = setTimeout(() => Notification.requestPermission(), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [])
+
   // Clear global unread when on chat page
   useEffect(() => {
     if (pathname.startsWith("/chat")) clearUnread()
   }, [pathname, clearUnread])
 
-  // Show toast for new messages only when not on chat and not already shown
+  // Notification handler — toast + audio + browser notification
+  const soundOnRef = useRef(soundOn)
+  soundOnRef.current = soundOn
+
   useEffect(() => {
     const unsub = subscribe((notif) => {
       if (notif.type !== "new_message") return
-      if (pathname.startsWith("/chat")) return
       if (notif.message_id === lastToastIdRef.current) return
       lastToastIdRef.current = notif.message_id
+
+      // Always show toast (even on chat page — it may be a different conversation)
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       setToast(notif)
       toastTimerRef.current = setTimeout(() => setToast(null), 8000)
+
+      // Audio chime
+      if (soundOnRef.current) playNotificationChime()
+
+      // Browser / PWA system notification when tab is not focused
+      if (
+        typeof Notification !== "undefined" &&
+        Notification.permission === "granted" &&
+        document.visibilityState !== "visible"
+      ) {
+        const n = new Notification("TARS", {
+          body: notif.preview || "New message from TARS",
+          icon: "/icon-192.png",
+          tag: notif.conversation_id,
+          renotify: true,
+        })
+        n.onclick = () => {
+          window.focus()
+          router.push(`/chat?open=${notif.conversation_id}`)
+          n.close()
+        }
+      }
     })
     return unsub
-  }, [subscribe, pathname])
+  }, [subscribe, router])
 
   // Mobile header mic: records, then navigates to /chat?ask=<text> which AskLoader auto-sends
   const handleHeaderMicTap = useCallback(() => {
@@ -258,6 +335,17 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                 Agent Active
               </div>
             )}
+
+            {/* Sound toggle */}
+            <button
+              onClick={toggleSound}
+              className="p-2 rounded-lg transition-opacity hover:opacity-70"
+              style={{ color: soundOn ? "var(--c-ink-muted)" : "var(--c-ink-faint)" }}
+              title={soundOn ? "Mute notifications" : "Unmute notifications"}
+              aria-label={soundOn ? "Mute notifications" : "Unmute notifications"}
+            >
+              {soundOn ? <Bell size={17} /> : <BellOff size={17} />}
+            </button>
 
             {/* Mobile-only voice new-chat button */}
             <button

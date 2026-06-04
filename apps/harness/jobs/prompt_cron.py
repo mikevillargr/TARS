@@ -478,7 +478,7 @@ async def execute(job_id: str) -> str | None:
 
     # ── Save as a new conversation ─────────────────────────────────────────────
     now_local = datetime.now(pytz.timezone(tz_name))
-    title = f"[Cron] {job_name} — {now_local.strftime('%b %-d')}"
+    title = f"{job_name} — {now_local.strftime('%b %-d')}"
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(CronJob).where(CronJob.id == job_id))
