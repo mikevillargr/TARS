@@ -42,7 +42,8 @@ _CLASSIFY_SYSTEM = (
     "(a) actions that change state: create/add/book/schedule/remind/mark/cancel/update/track/follow-up/note/log/capture; "
     "(b) requests that need tools or web search (current events, live prices, recent news, real-time data); "
     "(c) document/file generation: create a document/report/PDF/PPTX/DOCX/presentation/slide deck; "
-    "(d) frontier tasks: strategy, proposals, client deliverables, deep analysis. "
+    "(d) data visualization: plot/chart/graph/visualize/draw a chart/show a graph/make a chart; "
+    "(e) frontier tasks: strategy, proposals, client deliverables, deep analysis. "
     "Default to tier3 whenever there is any doubt.\n\n"
     "Reply with exactly one word: tier1, tier2, or tier3"
 )
@@ -129,6 +130,11 @@ _TIER3_RE = re.compile(
     r"|current (price|status|version|news|update)"
     r"|latest (news|update|version|release|price)"
     r"|live (data|price|rate|status)"
+    # Data visualization — always needs generate_chart tool (Tier 3 only)
+    r"|plot (a |an |me |the )?(chart|graph|bar|line|scatter|pie|histogram|heatmap|figure)"
+    r"|(make|create|generate|draw|show|build|produce|render) (a |an |me |the )?(chart|graph|plot|visualization|figure|heatmap|histogram)"
+    r"|visuali[sz]e"
+    r"|bar chart|line chart|line graph|pie chart|scatter plot|heatmap|histogram"
     r")\b",
     re.IGNORECASE,
 )
