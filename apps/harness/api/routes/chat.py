@@ -218,23 +218,30 @@ async def _extract_and_save_facts(
         return
 
     try:
-        resp = await client.anthropic.messages.create(
-            model="claude-haiku-4-5-20251001",
+        from core.config import settings as _s
+        _provider = _s.tier1_provider or "anthropic"
+        _api_key  = _s.zai_api_key if _provider == "zai" else _s.anthropic_api_key
+        _base_url = _s.zai_base_url if _provider == "zai" else None
+        _model    = _s.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        import anthropic as _anth
+        _fact_client = _anth.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
+        resp = await _fact_client.messages.create(
+            model=_model,
             max_tokens=300,
             system=(
-                "Extract personal facts about Mike from his message. Only use what HE said — "
+                "Extract personal facts about the user from their message. Only use what THEY said — "
                 "ignore the assistant context completely.\n"
                 "Output each fact on its own line in this exact format:\n"
                 "  DOMAIN|fact in third person\n"
                 "Valid domains: work, personal, health, cycling, client\n"
                 "Examples:\n"
-                "  cycling|Mike's BMC Roadmachine has Ultegra Di2 and weighs 7.2 kg\n"
-                "  health|Mike has Maxicare insurance, premium due June 1\n"
-                "  work|Mike decided to delay the OpenRice campaign until Q3\n"
-                "  client|Mike's NCH Inc. contact is Jaime Santos\n"
-                "Output SKIP if no personal facts about Mike are present."
+                "  cycling|User's BMC Roadmachine has Ultegra Di2 and weighs 7.2 kg\n"
+                "  health|User has Maxicare insurance, premium due June 1\n"
+                "  work|User decided to delay the OpenRice campaign until Q3\n"
+                "  client|User's NCH Inc. contact is Jaime Santos\n"
+                "Output SKIP if no personal facts about the user are present."
             ),
-            messages=[{"role": "user", "content": f"Mike's message: {user_content[:500]}"}],
+            messages=[{"role": "user", "content": f"User's message: {user_content[:500]}"}],
         )
         raw = resp.content[0].text.strip()
         if not raw or raw.upper() == "SKIP":
@@ -288,8 +295,15 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
         if m.get("content") and not str(m.get("content", "")).startswith("<tool")
     )
     try:
-        resp = await client.anthropic.messages.create(
-            model="claude-sonnet-4-6",
+        from core.config import settings as _ts
+        _provider = _ts.tier1_provider or "anthropic"
+        _api_key  = _ts.zai_api_key if _provider == "zai" else _ts.anthropic_api_key
+        _base_url = _ts.zai_base_url if _provider == "zai" else None
+        _model    = _ts.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        import anthropic as _anth_t
+        _title_client = _anth_t.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
+        resp = await _title_client.messages.create(
+            model=_model,
             max_tokens=15,
             system="Write a 3-5 word title for this conversation. No quotes, no punctuation, no explanation. Just the title.",
             messages=[{"role": "user", "content": context}],
