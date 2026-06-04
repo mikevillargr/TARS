@@ -1737,7 +1737,7 @@ plt.close('all')
 """
                         try:
                             _result = _subprocess.run(
-                                ["python3", "-c", _wrapper],
+                                [__import__('sys').executable, "-c", _wrapper],
                                 capture_output=True, text=True, timeout=30,
                             )
                             if _result.returncode != 0:
@@ -1822,7 +1822,8 @@ except Exception:
 plt.close('all')
 """
                     try:
-                        _r = _sp.run(["python3", "-c", _wrapper], capture_output=True, text=True, timeout=30)
+                        import sys as _sys
+                        _r = _sp.run([_sys.executable, "-c", _wrapper], capture_output=True, text=True, timeout=30)
                         if _r.returncode != 0:
                             log.warning("Chart fallback exec failed:\n%s", _r.stderr[-600:])
                         elif _cos.path.exists(_op) and _cos.path.getsize(_op) > 0:
