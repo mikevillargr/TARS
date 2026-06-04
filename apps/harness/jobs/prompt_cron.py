@@ -176,7 +176,7 @@ async def execute(job_id: str) -> str | None:
         )
 
     # Always Tier 3 (Sonnet) — prompt crons may use tools and need full context
-    client = get_model_client(ModelTier.TIER3)
+    client = get_model_client()
 
     log.info("Executing prompt cron '%s' (job %s)", job.name if job else job_id, job_id)
 
@@ -184,11 +184,12 @@ async def execute(job_id: str) -> str | None:
     try:
         async for chunk in client.stream(
             messages=[{"role": "user", "content": prompt}],
+            tier=ModelTier.TIER3,
             system=system_prompt,
             max_tokens=4096,
         ):
-            if isinstance(chunk, str):
-                full_response += chunk
+            if isinstance(chunk, dict) and chunk.get("type") == "chunk":
+                full_response += chunk.get("text", "")
     except Exception as exc:
         log.error("Prompt cron %s model call failed: %s", job_id, exc)
         async with AsyncSessionLocal() as db:
