@@ -237,7 +237,6 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
           body: notif.preview || "New message from TARS",
           icon: "/icon-192.png",
           tag: notif.conversation_id,
-          renotify: true,
         })
         n.onclick = () => {
           window.focus()
