@@ -58,7 +58,7 @@ export default function RootLayout({
     >
       {/* Blocking script: applies .dark class before any render to prevent flash */}
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('tars-theme')||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.classList.toggle('dark',t==='dark');}catch(e){}})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var m=localStorage.getItem('tars-theme');var dark=m==='dark'||(m!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',dark);}catch(e){}})();` }} />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ServiceWorkerRegister />

@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
-  Mail, Clock, Plug, Database, Settings, Archive, Sun, Moon,
+  Mail, Clock, Plug, Database, Settings, Archive, Sun, Moon, Monitor,
 } from "lucide-react"
 import {
   Sidebar,
@@ -58,7 +58,7 @@ function TarsLogo() {
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { theme, toggle: toggleTheme } = useTheme()
+  const { mode, toggle: toggleTheme } = useTheme()
   const { hasUnread } = useNotificationContext()
   const onChat = pathname.startsWith("/chat")
 
@@ -115,23 +115,27 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="px-3 py-3 border-t border-sidebar-border">
-        {/* Dark mode toggle */}
+        {/* Theme toggle — cycles: light → dark → system */}
         <div
           className="flex items-center justify-between px-3 py-2 rounded-lg"
           style={{ color: "var(--c-ink-muted)" }}
         >
-          <span className="text-sm font-medium">Dark Mode</span>
+          <span className="text-sm font-medium">
+            {mode === "light" ? "Light" : mode === "dark" ? "Dark" : "System"}
+          </span>
           <button
             onClick={toggleTheme}
             className="p-1.5 rounded-lg transition-colors hover:bg-[var(--c-surface-raised)]"
             style={{ color: "var(--c-ink-muted)" }}
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={mode === "light" ? "Switch to dark mode" : mode === "dark" ? "Use system theme" : "Switch to light mode"}
+            aria-label={mode === "light" ? "Switch to dark mode" : mode === "dark" ? "Use system theme" : "Switch to light mode"}
           >
-            {theme === "dark" ? (
+            {mode === "light" ? (
               <Sun className="w-4 h-4" />
-            ) : (
+            ) : mode === "dark" ? (
               <Moon className="w-4 h-4" />
+            ) : (
+              <Monitor className="w-4 h-4" />
             )}
           </button>
         </div>
