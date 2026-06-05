@@ -23,8 +23,6 @@ _buffers: dict[str, deque] = {}
 
 def subscribe(user_id: str, send_fn: Callable) -> None:
     _subs.setdefault(user_id, set()).add(send_fn)
-    # Replay last 20 events so reconnect catches up
-    asyncio.create_task(_replay(user_id, send_fn))
 
 
 def unsubscribe(user_id: str, send_fn: Callable) -> None:

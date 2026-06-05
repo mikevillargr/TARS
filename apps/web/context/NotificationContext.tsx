@@ -24,6 +24,9 @@ const Ctx = createContext<NotificationCtx>({
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [hasUnread, setHasUnread] = useState(false)
   const listeners = useRef<Set<(n: TarsNotification) => void>>(new Set())
+  // Session-level dedup — prevents replayed or duplicate WS events from
+  // re-firing the chime or re-showing the dot for already-seen messages.
+  const seenIds = useRef(new Set<string>())
 
   const subscribe = useCallback((fn: (n: TarsNotification) => void) => {
     listeners.current.add(fn)
@@ -33,7 +36,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const clearUnread = useCallback(() => setHasUnread(false), [])
 
   useNotifications((notif) => {
-    if (notif.type === "new_message") setHasUnread(true)
+    if (notif.type === "new_message") {
+      if (seenIds.current.has(notif.message_id)) return
+      seenIds.current.add(notif.message_id)
+      setHasUnread(true)
+    }
     listeners.current.forEach(fn => fn(notif))
   })
 
