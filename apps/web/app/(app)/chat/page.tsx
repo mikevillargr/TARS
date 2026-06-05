@@ -69,6 +69,15 @@ interface CalendarSuggestion {
   location?: string
 }
 
+interface EmailDraft {
+  draft_id: string
+  to: string
+  subject: string
+  body: string
+  cc?: string
+  thread_id?: string
+}
+
 function formatSuggestTime(iso: string) {
   try {
     const d = new Date(iso)
@@ -199,6 +208,115 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
         Add Task
       </button>
       <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+    </div>
+  )
+}
+
+// ─── Email draft approval card ───────────────────────────────────
+function EmailDraftCard({ draft, onDismiss }: { draft: EmailDraft; onDismiss: () => void }) {
+  const [sending, setSending] = useState(false)
+  const [sent, setSent]       = useState(false)
+  const [error, setError]     = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+
+  async function confirmSend() {
+    setSending(true)
+    setError(null)
+    try {
+      await apiPost("/email/confirm-send", {
+        to:        draft.to,
+        subject:   draft.subject,
+        body:      draft.body,
+        cc:        draft.cc ?? null,
+        thread_id: draft.thread_id ?? null,
+      })
+      setSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Send failed")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (sent) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-lg" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
+        <Mail size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Email sent to {draft.to}</span>
+        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+      </div>
+    )
+  }
+
+  const bodyPreview = draft.body.length > 160 && !expanded
+    ? draft.body.slice(0, 160).trimEnd() + "…"
+    : draft.body
+
+  return (
+    <div className="rounded-xl max-w-lg overflow-hidden" style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)" }}>
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--c-border-faint)", backgroundColor: "var(--c-surface)" }}>
+        <Mail size={12} style={{ color: "var(--c-amber)", flexShrink: 0 }} />
+        <span className="text-xs font-semibold" style={{ color: "var(--c-amber)" }}>Draft — waiting for approval</span>
+        <button onClick={onDismiss} className="ml-auto" style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+      </div>
+
+      {/* Fields */}
+      <div className="px-3 py-2.5 space-y-1.5 text-xs" style={{ color: "var(--c-ink)" }}>
+        <div className="flex gap-2">
+          <span className="w-12 shrink-0 font-medium" style={{ color: "var(--c-ink-faint)" }}>To</span>
+          <span className="break-all">{draft.to}</span>
+        </div>
+        {draft.cc && (
+          <div className="flex gap-2">
+            <span className="w-12 shrink-0 font-medium" style={{ color: "var(--c-ink-faint)" }}>CC</span>
+            <span className="break-all">{draft.cc}</span>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <span className="w-12 shrink-0 font-medium" style={{ color: "var(--c-ink-faint)" }}>Subject</span>
+          <span className="font-medium">{draft.subject}</span>
+        </div>
+        <div className="flex gap-2">
+          <span className="w-12 shrink-0 font-medium" style={{ color: "var(--c-ink-faint)" }}>Body</span>
+          <div className="flex-1 min-w-0">
+            <p className="whitespace-pre-wrap leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>{bodyPreview}</p>
+            {draft.body.length > 160 && (
+              <button
+                onClick={() => setExpanded(e => !e)}
+                className="text-[10px] mt-1"
+                style={{ color: "var(--c-moss)" }}
+              >
+                {expanded ? "Show less" : "Show full body"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Actions */}
+      {error && (
+        <p className="px-3 pb-2 text-[11px]" style={{ color: "var(--c-rose)" }}>{error}</p>
+      )}
+      <div className="flex items-center gap-2 px-3 py-2" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
+        <button
+          onClick={confirmSend}
+          disabled={sending}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold disabled:opacity-50"
+          style={{ backgroundColor: "var(--c-moss)", color: "#fff" }}
+        >
+          {sending ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
+          {sending ? "Sending…" : "Send"}
+        </button>
+        <button
+          onClick={onDismiss}
+          disabled={sending}
+          className="px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-50"
+          style={{ color: "var(--c-ink-muted)", backgroundColor: "var(--c-surface-2)" }}
+        >
+          Discard
+        </button>
+      </div>
     </div>
   )
 }
@@ -800,6 +918,17 @@ function InlineMessageCards({
         if (evt.type === "chart_image" && e.image_base64) {
           return <ChartImageCard key={key} title={typeof e.title === "string" ? e.title : "Chart"} imageBase64={e.image_base64 as string} onDismiss={() => dismiss(key)} onAsk={onAsk} />
         }
+        if (evt.type === "email_draft") {
+          const draft: EmailDraft = {
+            draft_id:  key,
+            to:        e.to as string,
+            subject:   e.subject as string,
+            body:      e.body as string,
+            cc:        e.cc as string | undefined,
+            thread_id: e.thread_id as string | undefined,
+          }
+          return <EmailDraftCard key={key} draft={draft} onDismiss={() => dismiss(key)} />
+        }
         return null
       })}
     </div>
@@ -990,11 +1119,13 @@ interface MessageAreaProps {
   artifactNotifications: ArtifactNotification[]
   contactResults: ContactResultSet[]
   placeResults: PlaceResultSet[]
+  emailDrafts: EmailDraft[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
   setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
   setPlaceResults: React.Dispatch<React.SetStateAction<PlaceResultSet[]>>
+  setEmailDrafts: React.Dispatch<React.SetStateAction<EmailDraft[]>>
   setAgentStreamMessages: React.Dispatch<React.SetStateAction<AgentStreamMessage[]>>
   onAsk: (q: string) => void
   quoteIndex: number
@@ -1008,11 +1139,13 @@ const MessageArea = memo(function MessageArea({
   artifactNotifications,
   contactResults,
   placeResults,
+  emailDrafts,
   setCalendarSuggestions,
   setTaskSuggestions,
   setArtifactNotifications,
   setContactResults,
   setPlaceResults,
+  setEmailDrafts,
   setAgentStreamMessages,
   onAsk,
   quoteIndex,
@@ -1020,6 +1153,7 @@ const MessageArea = memo(function MessageArea({
 }: MessageAreaProps) {
   const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
     || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
+    || emailDrafts.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 pb-28 space-y-6">
       {allMessages.length === 0 ? (
@@ -1112,6 +1246,13 @@ const MessageArea = memo(function MessageArea({
               onDismiss={() => setPlaceResults(prev => prev.filter(x => x.tool_use_id !== set.tool_use_id))}
             />
           ))}
+          {emailDrafts.map((d) => (
+            <EmailDraftCard
+              key={d.draft_id}
+              draft={d}
+              onDismiss={() => setEmailDrafts(prev => prev.filter(x => x.draft_id !== d.draft_id))}
+            />
+          ))}
         </div>
       )}
       <div ref={messagesEndRef} />
@@ -1149,6 +1290,7 @@ export default function ChatPage() {
   const [agentStreamMessages, setAgentStreamMessages]     = useState<AgentStreamMessage[]>([])
   const [contactResults, setContactResults]               = useState<ContactResultSet[]>([])
   const [placeResults, setPlaceResults]                   = useState<PlaceResultSet[]>([])
+  const [emailDrafts, setEmailDrafts]                     = useState<EmailDraft[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   // Conversations with unread async messages (e.g. agent completions)
@@ -1602,6 +1744,19 @@ export default function ChatPage() {
               if (chatId === activeChatIdRef.current) {
                 streamingCardsRef.current.push({ type: "chart_image", title: evt.title, image_base64: evt.image_base64 })
               }
+            } else if (evt.type === "email_draft") {
+              if (chatId === activeChatIdRef.current) {
+                const draft: EmailDraft = {
+                  draft_id:  `draft-${Date.now()}-${Math.random()}`,
+                  to:        evt.to as string,
+                  subject:   evt.subject as string,
+                  body:      evt.body as string,
+                  cc:        evt.cc as string | undefined,
+                  thread_id: evt.thread_id as string | undefined,
+                }
+                streamingCardsRef.current.push({ type: "email_draft", ...draft })
+                setEmailDrafts(prev => [...prev, draft])
+              }
             } else if (evt.type === "agent_job_created") {
               if (chatId === activeChatIdRef.current) {
                 setAgentStreamMessages(prev => [...prev, {
@@ -1982,11 +2137,13 @@ export default function ChatPage() {
           artifactNotifications={artifactNotifications}
           contactResults={contactResults}
           placeResults={placeResults}
+          emailDrafts={emailDrafts}
           setCalendarSuggestions={setCalendarSuggestions}
           setTaskSuggestions={setTaskSuggestions}
           setArtifactNotifications={setArtifactNotifications}
           setContactResults={setContactResults}
           setPlaceResults={setPlaceResults}
+          setEmailDrafts={setEmailDrafts}
           setAgentStreamMessages={setAgentStreamMessages}
           onAsk={handleAsk}
           quoteIndex={quoteIndex}

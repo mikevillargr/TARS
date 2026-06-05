@@ -14,6 +14,7 @@ from api.routes import auth, health, chat, tasks, meetings, calendar
 from api.routes import second_brain, agent_jobs, artifacts
 from api.routes import cron, connectors, memory, contacts
 from api.routes import settings as settings_route
+from api.routes import email as email_route
 from api.routes import preview as preview_route
 from api.routes import domains as domains_route
 from api.routes import search as search_route
@@ -225,6 +226,7 @@ app.include_router(agent_jobs.router, prefix="/api/agent-jobs")
 app.include_router(artifacts.router, prefix="/api/artifacts")
 app.include_router(cron.router, prefix="/api/cron")
 app.include_router(connectors.router, prefix="/api/connectors")
+app.include_router(email_route.router, prefix="/api/email")
 app.include_router(memory.router, prefix="/api/memory")
 app.include_router(contacts.router, prefix="/api/contacts")
 app.include_router(settings_route.router, prefix="/api/settings")

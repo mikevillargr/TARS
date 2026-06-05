@@ -1152,38 +1152,17 @@ async def send_message(
                             return f"Failed to read email: {exc}"
 
                     if name == "send_email":
-                        try:
-                            from sqlalchemy import select as _select
-                            from db.models import Connector
-                            conn_result = await bg_db.execute(
-                                _select(Connector).where(
-                                    Connector.user_id == user_id,
-                                    Connector.name == "Gmail",
-                                )
-                            )
-                            conn = conn_result.scalar_one_or_none()
-                            if not conn or not conn.auth.get("refresh_token"):
-                                return "Gmail not connected — cannot send email."
-
-                            from connectors.gmail import GmailClient
-                            import asyncio as _asyncio
-
-                            gclient = GmailClient(conn.auth)
-                            loop = _asyncio.get_event_loop()
-                            result = await loop.run_in_executor(
-                                None,
-                                lambda: gclient.send_email(
-                                    to=tool_input["to"],
-                                    subject=tool_input["subject"],
-                                    body=tool_input["body"],
-                                    cc=tool_input.get("cc"),
-                                    thread_id=tool_input.get("thread_id"),
-                                ),
-                            )
-                            return result
-                        except Exception as exc:
-                            log.warning("send_email tool failed: %s", exc)
-                            return f"Failed to send email: {exc}"
+                        # Never send automatically — always surface a draft card for
+                        # explicit approval. The actual send happens via POST /api/email/confirm-send.
+                        await _emit_card({
+                            "type": "email_draft",
+                            "to": tool_input.get("to", ""),
+                            "subject": tool_input.get("subject", ""),
+                            "body": tool_input.get("body", ""),
+                            "cc": tool_input.get("cc"),
+                            "thread_id": tool_input.get("thread_id"),
+                        })
+                        return "Draft prepared. Showing it to Mike for approval before sending."
 
                     if name == "sync_meetings":
                         try:
