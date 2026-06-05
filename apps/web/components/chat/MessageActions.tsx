@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { BookOpen, CheckSquare, Square, Check, Calendar, ChevronDown, ChevronUp, Loader2, X } from "lucide-react"
+import { BookOpen, CheckSquare, Square, Check, Calendar, ChevronDown, Loader2, X } from "lucide-react"
 import { apiPost } from "@/lib/api-client"
-import { analyzeContent, type CalendarHint } from "./contentAnalysis"
+import { analyzeContent, type CalendarHint, type ReplyOption } from "./contentAnalysis"
 
 // ─── Bulk task chip ───────────────────────────────────────────────────────────
 
@@ -280,6 +280,58 @@ function CalendarChip({ hint }: { hint: CalendarHint }) {
   )
 }
 
+// ─── Reply option chips ───────────────────────────────────────────────────────
+// One-click chips that submit a pre-extracted TARS option as the user's reply.
+
+function ReplyChips({ options, onSend }: { options: ReplyOption[]; onSend: (text: string) => void }) {
+  const [sent, setSent] = useState<string | null>(null)
+
+  if (sent !== null) {
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        <div
+          className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl"
+          style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}
+        >
+          <Check size={11} />
+          {sent}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => (
+        <button
+          key={opt.label}
+          onClick={() => { setSent(opt.label); onSend(opt.label) }}
+          className="inline-flex items-center text-xs px-3 py-1.5 rounded-xl transition-colors"
+          style={{
+            backgroundColor: "var(--c-canvas)",
+            color: "var(--c-ink-muted)",
+            border: "1px solid var(--c-border)",
+          }}
+          onMouseEnter={(e) => {
+            const el = e.currentTarget
+            el.style.backgroundColor = "var(--c-surface-2)"
+            el.style.color = "var(--c-ink)"
+            el.style.borderColor = "var(--c-moss)"
+          }}
+          onMouseLeave={(e) => {
+            const el = e.currentTarget
+            el.style.backgroundColor = "var(--c-canvas)"
+            el.style.color = "var(--c-ink-muted)"
+            el.style.borderColor = "var(--c-border)"
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ─── Generic hover-only action ────────────────────────────────────────────────
 
 function HoverAction({
@@ -331,7 +383,7 @@ function HoverAction({
 
 // ─── Main export ──────────────────────────────────────────────────────────────
 
-export function MessageActions({ content }: { content: string }) {
+export function MessageActions({ content, onSend }: { content: string; onSend?: (text: string) => void }) {
   const analysis = useMemo(() => analyzeContent(content), [content])
 
   function deriveTitle(text: string): string {
@@ -357,12 +409,17 @@ export function MessageActions({ content }: { content: string }) {
     })
   }
 
-  const hasContextual = analysis.listItems.length >= 2 || analysis.calendarHint !== null
+  const hasContextual = analysis.replyOptions.length >= 2 || analysis.listItems.length >= 2 || analysis.calendarHint !== null
 
   return (
     <div className="mt-1.5 ml-1 space-y-1.5">
-      {/* ── Contextual chips — always visible when detected ── */}
-      {hasContextual && (
+      {/* ── Reply option chips — one-click responses to TARS choice lists ── */}
+      {analysis.replyOptions.length >= 2 && onSend && (
+        <ReplyChips options={analysis.replyOptions} onSend={onSend} />
+      )}
+
+      {/* ── Contextual action chips — always visible when detected ── */}
+      {(analysis.listItems.length >= 2 || analysis.calendarHint !== null) && (
         <div className="flex flex-wrap items-start gap-2">
           {analysis.listItems.length >= 2 && (
             <div className="relative">

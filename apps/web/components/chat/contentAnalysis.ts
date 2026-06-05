@@ -81,6 +81,27 @@ export function detectCalendarHint(content: string): CalendarHint | null {
   }
 }
 
+// ─── Reply option extraction ──────────────────────────────────────────────────
+// Detects when TARS presents a numbered/bulleted choice list where each item
+// starts with a bold label — signals the user should pick one, not type text.
+
+export interface ReplyOption {
+  label: string  // the bold text — used as chip label and sent message
+}
+
+// Matches: "- **Label** — ..." or "1. **Label** ..." etc.
+const OPTION_LINE_RE = /^(?:[-*•]|\d+\.)\s+\*\*(.+?)\*\*/
+
+export function extractReplyOptions(content: string): ReplyOption[] {
+  const options: ReplyOption[] = []
+  for (const line of content.split("\n")) {
+    const m = line.trim().match(OPTION_LINE_RE)
+    if (m) options.push({ label: m[1].trim() })
+  }
+  // 2–5 bold-labeled bullets = a choice list; anything else is just formatting
+  return options.length >= 2 && options.length <= 5 ? options : []
+}
+
 // ─── Research / reference detection ──────────────────────────────────────────
 
 export function isResearchContent(content: string): boolean {
@@ -96,12 +117,16 @@ export interface ContentAnalysis {
   listItems: string[]        // extracted bullet/numbered items
   calendarHint: CalendarHint | null
   isResearch: boolean
+  replyOptions: ReplyOption[]
 }
 
 export function analyzeContent(content: string): ContentAnalysis {
+  const replyOptions = extractReplyOptions(content)
   return {
-    listItems: extractListItems(content),
+    // Suppress list items when reply options are present — same bullets, different intent
+    listItems: replyOptions.length >= 2 ? [] : extractListItems(content),
     calendarHint: detectCalendarHint(content),
     isResearch: isResearchContent(content),
+    replyOptions,
   }
 }

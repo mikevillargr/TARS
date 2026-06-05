@@ -808,7 +808,7 @@ function InlineMessageCards({
 
 // ─── Single message bubble ────────────────────────────────────────
 // memo: skips re-render when msg reference is stable (i.e. on inputValue keystrokes)
-const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message | StreamingMsg }) {
+const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message | StreamingMsg; onAsk?: (q: string) => void }) {
   const isUser = msg.role === "user"
   const toolCalls = !isUser && "tool_calls" in msg ? msg.tool_calls : undefined
   const modelLabel = !isUser && "model_used" in msg ? formatModelName(msg.model_used) : null
@@ -878,7 +878,7 @@ const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message | Stre
 
         {/* Action bar — Save to Second Brain / Create Task. Hidden until hover. */}
         {!isUser && !isStreaming && (
-          <MessageActions content={msg.content} />
+          <MessageActions content={msg.content} onSend={onAsk} />
         )}
       </div>
     </div>
@@ -1055,7 +1055,7 @@ const MessageArea = memo(function MessageArea({
               />
             : (
               <>
-                <MessageBubble msg={msg as Message | StreamingMsg} />
+                <MessageBubble msg={msg as Message | StreamingMsg} onAsk={onAsk} />
                 {/* Inline cards anchored to this saved assistant message */}
                 {"tool_results" in msg &&
                   (msg as Message).tool_results != null &&
