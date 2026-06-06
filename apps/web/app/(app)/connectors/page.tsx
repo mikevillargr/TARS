@@ -461,7 +461,7 @@ export default function ConnectorsPage() {
                       </div>
                       <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
                         {c.status === "connected"
-                          ? `Synced ${formatSyncedAt(c.last_synced_at)}`
+                          ? c.last_synced_at ? `Synced ${formatSyncedAt(c.last_synced_at)}` : "Not yet synced"
                           : "Not connected"}
                       </div>
                     </div>
