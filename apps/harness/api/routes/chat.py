@@ -1948,14 +1948,6 @@ plt.close('all')
                         if _cos.path.exists(_op):
                             _cos.unlink(_op)
 
-            # If the generate_chart tool ran (Claude models), inject the image inline
-            # so it renders in the message body rather than only as a card below it.
-            for _tr in tool_results:
-                if _tr.get("type") == "chart_image" and _tr.get("image_base64"):
-                    _inline_img = f"\n\n![{_tr.get('title', 'Chart')}](data:image/png;base64,{_tr['image_base64']})\n\n"
-                    assistant_content = assistant_content.rstrip() + _inline_img
-                    break
-
             # If the model only emitted tool calls (no text) but did produce
             # cards, give the message a tiny placeholder so the bubble isn't
             # blank on reload. Cards re-render from tool_results.
@@ -1975,7 +1967,10 @@ plt.close('all')
             # ── Phase 2: signal completion to client immediately ─────────────
             # Do NOT wait for DB saves / title gen / memory — client gets the
             # response right away, then we persist in the background.
-            await queue.put(sse_event({"type": "done", "model": model_used, "tokens": tokens_used}))
+            # Include final content so the frontend can replace its accumulated
+            # stream text (which may differ if we modified it post-stream,
+            # e.g. replacing a matplotlib code block with an inline image).
+            await queue.put(sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "content": assistant_content}))
             await queue.put(sse_done())
 
             # ── Phase 3: persist (client already showing the response) ───────

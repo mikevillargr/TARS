@@ -1769,10 +1769,16 @@ export default function ChatPage() {
                 }])
               }
             } else if (evt.type === "done") {
+              // Prefer backend's final content over accumulated stream text.
+              // The backend may have modified the content post-stream (e.g.
+              // replacing a matplotlib code block with an inline rendered image).
+              const finalContent = (typeof evt.content === "string" && evt.content.trim())
+                ? evt.content
+                : accumulated
               const finalMsg: Message = {
                 id: `done-${Date.now()}`,
                 role: "assistant",
-                content: accumulated,
+                content: finalContent,
                 model_used: evt.model,
                 created_at: new Date().toISOString(),
                 ...(streamingCardsRef.current.length > 0 && { tool_results: [...streamingCardsRef.current] }),
