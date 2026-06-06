@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import { Plug, X, Plus, Unplug, Users, Loader2, Settings2, Check } from "lucide-react"
 import { apiGet, apiDelete, apiPost, apiPatch } from "@/lib/api-client"
 import { PendingContactsReview } from "@/components/connectors/PendingContactsReview"
@@ -9,9 +9,10 @@ import { useConfirm } from "@/components/ui/confirm-dialog"
 interface SettingsField {
   key: string
   label: string
-  type: "select" | "text"
+  type: "select" | "text" | "password"
   options?: string[]
   default?: string
+  group?: string  // "credentials" fields only shown when disconnected
 }
 
 // Backend shape — must mirror api/routes/connectors.py::ConnectorOut
@@ -21,6 +22,7 @@ interface Connector {
   status: "connected" | "disconnected" | "error"
   capabilities: string[]
   last_synced_at: string | null
+  config: Record<string, string>
   metadata: {
     description?: string
     auth_type?: "oauth2" | "api_key" | "credentials"
@@ -121,6 +123,73 @@ function ConnectorLogo({ id, name, size = 28 }: { id: string; name: string; size
   return <GenericConnectorLogo name={name} size={size} />
 }
 
+// ─── Settings panel component ────────────────────────────────────────────────
+
+function SettingsPanel({
+  connectorId, schema, configValues, setConfigValues, onSave, busy, saved, savedConfig,
+}: {
+  connectorId: string
+  schema: SettingsField[]
+  configValues: Record<string, string>
+  setConfigValues: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  onSave: () => void
+  busy: boolean
+  saved: boolean
+  savedConfig?: Record<string, string>
+}) {
+  return (
+    <div>
+      <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: "var(--c-ink-faint)" }}>
+        <Settings2 size={10} /> Settings
+      </div>
+      <div className="flex flex-col gap-2">
+        {schema.map(field => {
+          const isSet = savedConfig?.[field.key] === "***"
+          return (
+            <div key={field.key}>
+              <label className="block text-xs mb-1" style={{ color: "var(--c-ink-muted)" }}>
+                {field.label}
+                {isSet && <span className="ml-1.5 text-[0.6rem]" style={{ color: "var(--c-moss)" }}>✓ set</span>}
+              </label>
+              {field.type === "select" && field.options ? (
+                <select
+                  value={configValues[field.key] ?? field.default ?? field.options[0]}
+                  onChange={e => setConfigValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                  className="w-full text-xs rounded-md px-2 py-1.5 border"
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
+                >
+                  {field.options.map(opt => (
+                    <option key={opt} value={opt}>
+                      {parseInt(opt) >= 60 ? `${parseInt(opt) / 60}h` : `${opt}m`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={field.type === "password" ? "password" : "text"}
+                  placeholder={isSet ? "Enter new value to change" : field.label}
+                  value={configValues[field.key] ?? ""}
+                  onChange={e => setConfigValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                  className="w-full text-xs rounded-md px-2 py-1.5 border"
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
+                />
+              )}
+            </div>
+          )
+        })}
+        <button
+          onClick={onSave}
+          disabled={busy}
+          className="flex items-center gap-1.5 justify-center rounded-md py-1.5 text-xs font-medium transition-colors disabled:opacity-50 mt-1"
+          style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)" }}
+        >
+          {busy ? <Loader2 size={11} className="animate-spin" /> : saved ? <><Check size={11} /> Saved</> : "Save settings"}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Format helpers ──────────────────────────────────────────────────────────
 
 function formatSyncedAt(iso: string | null): string {
@@ -155,8 +224,8 @@ export default function ConnectorsPage() {
   const [garminPassword, setGarminPassword] = useState("")
   const [garminError,    setGarminError]    = useState<string | null>(null)
   // Settings panel
-  const [settingsSaved,  setSettingsSaved]  = useState<string | null>(null)
-  const [intervalValues, setIntervalValues] = useState<Record<string, string>>({})
+  const [settingsSaved, setSettingsSaved] = useState<string | null>(null)
+  const [configValues,  setConfigValues]  = useState<Record<string, string>>({})
 
   // ── Loaders ────────────────────────────────────────────────────────────────
   const loadConnectors = useCallback(async () => {
@@ -187,6 +256,18 @@ export default function ConnectorsPage() {
     loadConnectors()
     loadPendingCount()
   }, [loadConnectors, loadPendingCount])
+
+  // Seed configValues from the connector's saved DB config when selection changes
+  useEffect(() => {
+    if (!selected) return
+    const seed: Record<string, string> = {}
+    for (const [k, v] of Object.entries(selected.config ?? {})) {
+      // Don't pre-fill masked secret — leave blank so user must re-enter to change
+      if (v !== "***") seed[k] = v
+    }
+    setConfigValues(seed)
+    setSettingsSaved(null)
+  }, [selected?.id])
 
   // Show a brief "connected!" toast when redirected back from Google OAuth.
   // Read window.location.search directly (rather than useSearchParams) so the
@@ -250,12 +331,17 @@ export default function ConnectorsPage() {
     }
   }
 
-  async function saveInterval(connectorId: string) {
-    const value = intervalValues[connectorId]
-    if (!value) return
+  async function saveConfig(connectorId: string, schema: SettingsField[]) {
     setBusyId(`${connectorId}_settings`)
     try {
-      await apiPatch(`/connectors/${connectorId}/config`, { sync_interval_minutes: parseInt(value) })
+      // Build patch from configValues, coercing sync_interval_minutes to int
+      const patch: Record<string, string | number> = {}
+      for (const field of schema) {
+        const val = configValues[field.key]
+        if (val === undefined || val === "") continue
+        patch[field.key] = field.key === "sync_interval_minutes" ? parseInt(val) : val
+      }
+      await apiPatch(`/connectors/${connectorId}/config`, patch)
       setSettingsSaved(connectorId)
       setTimeout(() => setSettingsSaved(null), 2500)
     } catch (err) {
@@ -504,55 +590,17 @@ export default function ConnectorsPage() {
                   </div>
                 )}
 
-                {/* Settings schema — sync interval etc. */}
-                {selected.metadata.settings_schema && selected.metadata.settings_schema.length > 0 && (
-                  <div>
-                    <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: "var(--c-ink-faint)" }}>
-                      <Settings2 size={10} /> Settings
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {selected.metadata.settings_schema.map(field => (
-                        <div key={field.key}>
-                          <label className="block text-xs mb-1" style={{ color: "var(--c-ink-muted)" }}>{field.label}</label>
-                          {field.type === "select" && field.options ? (
-                            <select
-                              value={intervalValues[selected.id] ?? field.default ?? field.options[0]}
-                              onChange={e => setIntervalValues(prev => ({ ...prev, [selected.id]: e.target.value }))}
-                              className="w-full text-xs rounded-md px-2 py-1.5 border"
-                              style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
-                            >
-                              {field.options.map(opt => (
-                                <option key={opt} value={opt}>
-                                  {parseInt(opt) >= 60 ? `${parseInt(opt) / 60}h` : `${opt}m`}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              type="text"
-                              value={intervalValues[`${selected.id}_${field.key}`] ?? ""}
-                              onChange={e => setIntervalValues(prev => ({ ...prev, [`${selected.id}_${field.key}`]: e.target.value }))}
-                              className="w-full text-xs rounded-md px-2 py-1.5 border"
-                              style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
-                            />
-                          )}
-                        </div>
-                      ))}
-                      <button
-                        onClick={() => saveInterval(selected.id)}
-                        disabled={busyId === `${selected.id}_settings`}
-                        className="flex items-center gap-1.5 justify-center rounded-md py-1.5 text-xs font-medium transition-colors disabled:opacity-50 mt-1"
-                        style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)" }}
-                      >
-                        {busyId === `${selected.id}_settings`
-                          ? <Loader2 size={11} className="animate-spin" />
-                          : settingsSaved === selected.id
-                          ? <><Check size={11} /> Saved</>
-                          : "Save settings"
-                        }
-                      </button>
-                    </div>
-                  </div>
+                {/* Settings schema — sync interval etc. (non-credential fields only when connected) */}
+                {selected.metadata.settings_schema && selected.metadata.settings_schema.filter(f => f.group !== "credentials").length > 0 && (
+                  <SettingsPanel
+                    connectorId={selected.id}
+                    schema={selected.metadata.settings_schema.filter(f => f.group !== "credentials")}
+                    configValues={configValues}
+                    setConfigValues={setConfigValues}
+                    onSave={() => saveConfig(selected.id, selected.metadata.settings_schema!)}
+                    busy={busyId === `${selected.id}_settings`}
+                    saved={settingsSaved === selected.id}
+                  />
                 )}
 
                 {/* Disconnect button — OAuth and credentials connectors */}
@@ -583,13 +631,28 @@ export default function ConnectorsPage() {
                   </p>
                 </div>
                 {selected.metadata.auth_type === "oauth2" ? (
-                  <button
-                    onClick={() => startConnect(selected)}
-                    className="btn-primary w-full justify-center"
-                    style={{ padding: "0.5rem 1rem" }}
-                  >
-                    <Plus size={14} /> Connect Account
-                  </button>
+                  <>
+                    {/* Credential fields (client_id, client_secret) shown when disconnected */}
+                    {selected.metadata.settings_schema?.some(f => f.group === "credentials") && (
+                      <SettingsPanel
+                        connectorId={selected.id}
+                        schema={selected.metadata.settings_schema.filter(f => f.group === "credentials")}
+                        configValues={configValues}
+                        setConfigValues={setConfigValues}
+                        onSave={() => saveConfig(selected.id, selected.metadata.settings_schema!)}
+                        busy={busyId === `${selected.id}_settings`}
+                        saved={settingsSaved === selected.id}
+                        savedConfig={selected.config}
+                      />
+                    )}
+                    <button
+                      onClick={() => startConnect(selected)}
+                      className="btn-primary w-full justify-center"
+                      style={{ padding: "0.5rem 1rem" }}
+                    >
+                      <Plus size={14} /> Connect Account
+                    </button>
+                  </>
                 ) : selected.metadata.auth_type === "credentials" ? (
                   <div className="w-full flex flex-col gap-2">
                     {garminError && (

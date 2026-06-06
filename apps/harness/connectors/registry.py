@@ -43,6 +43,18 @@ def list_connectors() -> List[ConnectorStatus]:
                 "auth_type": "oauth2",
                 "settings_schema": [
                     {
+                        "key": "client_id",
+                        "label": "Client ID",
+                        "type": "text",
+                        "group": "credentials",
+                    },
+                    {
+                        "key": "client_secret",
+                        "label": "Client Secret",
+                        "type": "password",
+                        "group": "credentials",
+                    },
+                    {
                         "key": "sync_interval_minutes",
                         "label": "Sync every",
                         "type": "select",

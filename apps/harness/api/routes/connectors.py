@@ -45,6 +45,7 @@ class ConnectorOut(BaseModel):
     capabilities: List[str]
     last_synced_at: Optional[str]
     metadata: dict
+    config: dict  # safe config — garth_tokens excluded, client_secret masked
 
 
 class WebhookEventOut(BaseModel):
@@ -94,6 +95,16 @@ async def get_connectors(
                     c.status = "connected"
             elif db_conn.auth.get("refresh_token"):
                 c.status = "connected"
+        # Build safe config: strip large internal blobs, mask secrets
+        safe_config: dict = {}
+        if db_conn:
+            for k, v in db_conn.config.items():
+                if k == "garth_tokens":
+                    continue  # too large, internal
+                if k == "client_secret" and v:
+                    safe_config[k] = "***"  # indicate it's set without exposing value
+                else:
+                    safe_config[k] = v
         out.append(ConnectorOut(
             id=c.id,
             name=c.name,
@@ -101,6 +112,7 @@ async def get_connectors(
             capabilities=c.capabilities,
             last_synced_at=last_synced,
             metadata=c.metadata,
+            config=safe_config,
         ))
     return out
 
@@ -108,20 +120,28 @@ async def get_connectors(
 # ── Google OAuth flow ─────────────────────────────────────────────────────────
 
 @router.get("/oauth/authorize/{connector}")
-async def oauth_authorize(connector: str, request: Request):
+async def oauth_authorize(connector: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Redirect user to the connector's OAuth consent page. No auth needed — just a redirect."""
     via_prod = "localhost" not in str(request.base_url)
 
     if connector == "strava":
         from core.config import settings
-        if not settings.strava_client_id:
-            raise HTTPException(status_code=503, detail="STRAVA_CLIENT_ID not configured")
+        # Prefer DB-stored credentials; fall back to env vars
+        client_id = settings.strava_client_id
+        conn_result = await db.execute(
+            select(Connector).where(Connector.name == "Strava").limit(1)
+        )
+        strava_conn = conn_result.scalar_one_or_none()
+        if strava_conn and strava_conn.config.get("client_id"):
+            client_id = strava_conn.config["client_id"]
+        if not client_id:
+            raise HTTPException(status_code=503, detail="Strava Client ID not configured — set it in the connector settings panel")
         redirect_uri = (
             "https://tarsmv.duckdns.org/api/connectors/oauth/callback/strava"
             if via_prod else "http://localhost:8000/api/connectors/oauth/callback/strava"
         )
         from connectors.strava import get_auth_url
-        return RedirectResponse(get_auth_url(settings.strava_client_id, redirect_uri))
+        return RedirectResponse(get_auth_url(client_id, redirect_uri))
 
     if connector not in _GOOGLE_CONNECTORS:
         raise HTTPException(status_code=400, detail="Unknown connector")
@@ -150,12 +170,22 @@ async def oauth_callback(
 
         from core.config import settings
         from connectors.strava import exchange_code as strava_exchange
+        # Resolve credentials: DB config takes priority over env vars
+        client_id = settings.strava_client_id
+        client_secret = settings.strava_client_secret
+        pre_conn = await db.execute(select(Connector).where(Connector.name == "Strava").limit(1))
+        pre_strava = pre_conn.scalar_one_or_none()
+        if pre_strava:
+            if pre_strava.config.get("client_id"):
+                client_id = pre_strava.config["client_id"]
+            if pre_strava.config.get("client_secret"):
+                client_secret = pre_strava.config["client_secret"]
         redirect_uri = (
             "https://tarsmv.duckdns.org/api/connectors/oauth/callback/strava"
             if via_prod else "http://localhost:8000/api/connectors/oauth/callback/strava"
         )
         try:
-            auth = await strava_exchange(settings.strava_client_id, settings.strava_client_secret, code)
+            auth = await strava_exchange(client_id, client_secret, code)
         except Exception as exc:
             log.exception("Strava token exchange failed: %s", exc)
             raise HTTPException(status_code=400, detail=f"Strava token exchange failed: {exc}")
@@ -314,16 +344,15 @@ async def garmin_disconnect(
         await db.commit()
 
 
-# ── Connector config (sync interval etc.) ────────────────────────────────────
+# ── Connector config (sync interval, credentials, etc.) ──────────────────────
 
-class ConnectorConfigPatch(BaseModel):
-    sync_interval_minutes: Optional[int] = None
-
+from fastapi import Body
+from typing import Any
 
 @router.patch("/{connector_id}/config", status_code=200)
 async def patch_connector_config(
     connector_id: str,
-    body: ConnectorConfigPatch,
+    body: dict[str, Any] = Body(...),
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
@@ -336,23 +365,34 @@ async def patch_connector_config(
     )
     conn = result.scalar_one_or_none()
     if not conn:
-        raise HTTPException(status_code=404, detail="Connector not found — connect it first")
+        # Create a stub row so config can be saved before the first OAuth connect
+        conn = Connector(
+            user_id=user_id,
+            name=name,
+            status="disconnected",
+            capabilities=_CONNECTOR_CAPS.get(connector_id, []),
+        )
+        db.add(conn)
+        await db.flush()
 
-    patch = body.model_dump(exclude_none=True)
-    conn.config = {**conn.config, **patch}
+    conn.config = {**conn.config, **body}
 
-    # Live-update the scheduler interval if it's a registered job
-    if body.sync_interval_minutes:
+    # Live-update the scheduler interval if present
+    interval = body.get("sync_interval_minutes")
+    if isinstance(interval, int) and interval > 0:
         job_name = f"{connector_id}_sync"
         try:
             from jobs.scheduler import update_interval
-            update_interval(job_name, body.sync_interval_minutes * 60)
-            log.info("%s sync interval updated to %d min", connector_id, body.sync_interval_minutes)
+            update_interval(job_name, interval * 60)
+            log.info("%s sync interval updated to %d min", connector_id, interval)
         except KeyError:
-            pass  # Scheduler job may not be registered yet (harness restart will pick it up)
+            pass
 
     await db.commit()
-    return {"ok": True, "config": conn.config}
+    # Return safe config (mask client_secret)
+    safe = {k: ("***" if k == "client_secret" and v else v)
+            for k, v in conn.config.items() if k != "garth_tokens"}
+    return {"ok": True, "config": safe}
 
 
 # ── Webhook log ───────────────────────────────────────────────────────────────
