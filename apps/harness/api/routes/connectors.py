@@ -72,7 +72,12 @@ async def get_connectors(
     # Enrich each connector with last_synced_at + true connected status from DB
     # Map static.id → DB row via _CONNECTOR_NAMES (handles non-trivial mappings
     # like "gcal" → "Google Calendar" and "google_people" → "Google Contacts")
-    db_result = await db.execute(select(Connector))
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if user:
+        db_result = await db.execute(select(Connector).where(Connector.user_id == user.id))
+    else:
+        db_result = await db.execute(select(Connector))
     db_by_name = {c.name: c for c in db_result.scalars().all()}
 
     out = []
@@ -270,15 +275,20 @@ async def oauth_callback(
 @router.delete("/oauth/{connector}", status_code=204)
 async def oauth_disconnect(
     connector: str,
-    user_id: str = Depends(require_auth),
+    _: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
     if connector not in _GOOGLE_CONNECTORS and connector != "strava":
         raise HTTPException(status_code=400, detail="Unknown connector")
 
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=500, detail="No user in database")
+
     result = await db.execute(
         select(Connector).where(
-            Connector.user_id == user_id,
+            Connector.user_id == user.id,
             Connector.name == _CONNECTOR_NAMES[connector],
         )
     )
@@ -299,7 +309,7 @@ class GarminConnectBody(BaseModel):
 @router.post("/garmin/connect", status_code=200)
 async def garmin_connect(
     body: GarminConnectBody,
-    user_id: str = Depends(require_auth),
+    _: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
     from connectors.garmin import GarminClient
@@ -309,8 +319,13 @@ async def garmin_connect(
         log.exception("Garmin login failed: %s", exc)
         raise HTTPException(status_code=400, detail=f"Garmin login failed: {exc}")
 
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=500, detail="No user in database")
+
     conn_result = await db.execute(
-        select(Connector).where(Connector.user_id == user_id, Connector.name == "Garmin Connect")
+        select(Connector).where(Connector.user_id == user.id, Connector.name == "Garmin Connect")
     )
     conn = conn_result.scalar_one_or_none()
     if conn:
@@ -318,7 +333,7 @@ async def garmin_connect(
         conn.status = "connected"
     else:
         conn = Connector(
-            user_id=user_id,
+            user_id=user.id,
             name="Garmin Connect",
             status="connected",
             config={"garth_tokens": tokens},
@@ -327,17 +342,21 @@ async def garmin_connect(
         db.add(conn)
 
     await db.commit()
-    log.info("Garmin connected for user %s", user_id)
+    log.info("Garmin connected for user %s", user.id)
     return {"ok": True}
 
 
 @router.delete("/garmin/disconnect", status_code=204)
 async def garmin_disconnect(
-    user_id: str = Depends(require_auth),
+    _: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return
     result = await db.execute(
-        select(Connector).where(Connector.user_id == user_id, Connector.name == "Garmin Connect")
+        select(Connector).where(Connector.user_id == user.id, Connector.name == "Garmin Connect")
     )
     conn = result.scalar_one_or_none()
     if conn:
@@ -355,24 +374,30 @@ from typing import Any
 async def patch_connector_config(
     connector_id: str,
     body: dict[str, Any] = Body(...),
-    user_id: str = Depends(require_auth),
+    _: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
     name = _CONNECTOR_NAMES.get(connector_id)
     if not name:
         raise HTTPException(status_code=400, detail="Unknown connector")
 
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=500, detail="No user in database")
+
     result = await db.execute(
-        select(Connector).where(Connector.user_id == user_id, Connector.name == name)
+        select(Connector).where(Connector.user_id == user.id, Connector.name == name)
     )
     conn = result.scalar_one_or_none()
     if not conn:
         # Create a stub row so config can be saved before the first OAuth connect
         conn = Connector(
-            user_id=user_id,
+            user_id=user.id,
             name=name,
             status="disconnected",
             capabilities=_CONNECTOR_CAPS.get(connector_id, []),
+            config={},
         )
         db.add(conn)
         await db.flush()
