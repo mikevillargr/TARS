@@ -310,24 +310,15 @@ class GarminConnectBody(BaseModel):
     password: str
 
 
-@router.post("/garmin/connect", status_code=200)
-async def garmin_connect(
-    body: GarminConnectBody,
-    _: str = Depends(require_auth),
-    db: AsyncSession = Depends(get_db),
-):
-    from connectors.garmin import GarminClient
-    try:
-        tokens = await GarminClient.login(body.email, body.password)
-    except Exception as exc:
-        log.exception("Garmin login failed: %s", exc)
-        raise HTTPException(status_code=400, detail=f"Garmin login failed: {exc}")
+class GarminTokenBody(BaseModel):
+    tokens: str  # pre-authenticated garth token string
 
+
+async def _save_garmin_tokens(tokens: str, db: AsyncSession):
     user_result = await db.execute(select(User).limit(1))
     user = user_result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=500, detail="No user in database")
-
     conn_result = await db.execute(
         select(Connector).where(Connector.user_id == user.id, Connector.name == "Garmin Connect")
     )
@@ -344,9 +335,43 @@ async def garmin_connect(
             capabilities=["read"],
         )
         db.add(conn)
-
     await db.commit()
-    log.info("Garmin connected for user %s", user.id)
+    return user.id
+
+
+@router.post("/garmin/connect-token", status_code=200)
+async def garmin_connect_token(
+    body: GarminTokenBody,
+    _: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Accept a pre-authenticated garth token (for when SSO login is blocked from server IP)."""
+    import garth
+    try:
+        c = garth.Client()
+        c.loads(body.tokens)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid token: {exc}")
+    user_id = await _save_garmin_tokens(body.tokens, db)
+    log.info("Garmin connected via token for user %s", user_id)
+    return {"ok": True}
+
+
+@router.post("/garmin/connect", status_code=200)
+async def garmin_connect(
+    body: GarminConnectBody,
+    _: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    from connectors.garmin import GarminClient
+    try:
+        tokens = await GarminClient.login(body.email, body.password)
+    except Exception as exc:
+        log.exception("Garmin login failed: %s", exc)
+        raise HTTPException(status_code=400, detail=f"Garmin login failed: {exc}")
+
+    user_id = await _save_garmin_tokens(tokens, db)
+    log.info("Garmin connected for user %s", user_id)
     return {"ok": True}
 
 

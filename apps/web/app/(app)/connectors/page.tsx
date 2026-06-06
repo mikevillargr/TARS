@@ -223,6 +223,8 @@ export default function ConnectorsPage() {
   const [garminEmail,    setGarminEmail]    = useState("")
   const [garminPassword, setGarminPassword] = useState("")
   const [garminError,    setGarminError]    = useState<string | null>(null)
+  const [garminTokenMode, setGarminTokenMode] = useState(false)
+  const [garminToken,    setGarminToken]    = useState("")
   // Settings panel
   const [settingsSaved, setSettingsSaved] = useState<string | null>(null)
   const [configValues,  setConfigValues]  = useState<Record<string, string>>({})
@@ -364,6 +366,22 @@ export default function ConnectorsPage() {
       await loadConnectors()
     } catch (err) {
       setGarminError(err instanceof Error ? err.message : "Login failed")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function connectGarminToken() {
+    if (!garminToken.trim()) return
+    setGarminError(null)
+    setBusyId("garmin")
+    try {
+      await apiPost("/connectors/garmin/connect-token", { tokens: garminToken.trim() })
+      setGarminToken("")
+      setGarminTokenMode(false)
+      await loadConnectors()
+    } catch (err) {
+      setGarminError(err instanceof Error ? err.message : "Invalid token")
     } finally {
       setBusyId(null)
     }
@@ -713,32 +731,83 @@ export default function ConnectorsPage() {
                         {garminError}
                       </p>
                     )}
-                    <input
-                      type="email"
-                      placeholder="Garmin email"
-                      value={garminEmail}
-                      onChange={e => setGarminEmail(e.target.value)}
-                      className="w-full text-xs rounded-md px-3 py-2 border"
-                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
-                    />
-                    <input
-                      type="password"
-                      placeholder="Password"
-                      value={garminPassword}
-                      onChange={e => setGarminPassword(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && connectGarmin()}
-                      className="w-full text-xs rounded-md px-3 py-2 border"
-                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
-                    />
-                    <button
-                      onClick={connectGarmin}
-                      disabled={busyId === "garmin" || !garminEmail || !garminPassword}
-                      className="btn-primary w-full justify-center disabled:opacity-50"
-                      style={{ padding: "0.5rem 1rem" }}
-                    >
-                      {busyId === "garmin" ? <Loader2 size={13} className="animate-spin" /> : <Plus size={14} />}
-                      Connect Garmin
-                    </button>
+                    {garminTokenMode ? (
+                      <>
+                        <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>
+                          Run this locally, then paste the output below:
+                        </p>
+                        <pre className="text-xs rounded-md px-3 py-2 select-all" style={{ backgroundColor: "var(--c-surface-3)", color: "var(--c-ink-faint)", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+{`python3 -c "
+import garth, getpass
+c = garth.Client()
+c.login(input('Email: '), getpass.getpass())
+print(c.dumps())
+"`}
+                        </pre>
+                        <textarea
+                          placeholder="Paste token JSON here"
+                          value={garminToken}
+                          onChange={e => setGarminToken(e.target.value)}
+                          rows={4}
+                          className="w-full text-xs rounded-md px-3 py-2 border font-mono"
+                          style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)", resize: "vertical" }}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { setGarminTokenMode(false); setGarminError(null) }}
+                            className="btn-secondary flex-1 justify-center"
+                            style={{ padding: "0.5rem 1rem" }}
+                          >
+                            Back
+                          </button>
+                          <button
+                            onClick={connectGarminToken}
+                            disabled={busyId === "garmin" || !garminToken.trim()}
+                            className="btn-primary flex-1 justify-center disabled:opacity-50"
+                            style={{ padding: "0.5rem 1rem" }}
+                          >
+                            {busyId === "garmin" ? <Loader2 size={13} className="animate-spin" /> : <Plus size={14} />}
+                            Connect
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          type="email"
+                          placeholder="Garmin email"
+                          value={garminEmail}
+                          onChange={e => setGarminEmail(e.target.value)}
+                          className="w-full text-xs rounded-md px-3 py-2 border"
+                          style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
+                        />
+                        <input
+                          type="password"
+                          placeholder="Password"
+                          value={garminPassword}
+                          onChange={e => setGarminPassword(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && connectGarmin()}
+                          className="w-full text-xs rounded-md px-3 py-2 border"
+                          style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
+                        />
+                        <button
+                          onClick={connectGarmin}
+                          disabled={busyId === "garmin" || !garminEmail || !garminPassword}
+                          className="btn-primary w-full justify-center disabled:opacity-50"
+                          style={{ padding: "0.5rem 1rem" }}
+                        >
+                          {busyId === "garmin" ? <Loader2 size={13} className="animate-spin" /> : <Plus size={14} />}
+                          Connect Garmin
+                        </button>
+                        <button
+                          onClick={() => { setGarminError(null); setGarminTokenMode(true) }}
+                          className="text-xs text-center underline underline-offset-2 bg-transparent border-none cursor-pointer"
+                          style={{ color: "var(--c-ink-faint)" }}
+                        >
+                          Blocked by rate limit? Use token instead
+                        </button>
+                      </>
+                    )}
                   </div>
                 ) : selected.metadata.auth_type === "api_key" ? (
                   <button
