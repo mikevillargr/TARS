@@ -23,13 +23,17 @@ _CONNECTOR_NAMES = {
     "gmail":         "Gmail",
     "gcal":          "Google Calendar",
     "google_people": "Google Contacts",
+    "strava":        "Strava",
+    "garmin":        "Garmin Connect",
 }
 _CONNECTOR_CAPS = {
     "gmail":         ["read", "webhook"],
     "gcal":          ["read", "write"],
     "google_people": ["read", "write"],
+    "strava":        ["read"],
+    "garmin":        ["read"],
 }
-_GOOGLE_CONNECTORS = set(_CONNECTOR_NAMES.keys())
+_GOOGLE_CONNECTORS = {"gmail", "gcal", "google_people"}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -78,9 +82,18 @@ async def get_connectors(
         last_synced = (
             db_conn.last_synced_at.isoformat() if db_conn and db_conn.last_synced_at else None
         )
-        # If tokens are in DB, mark as connected regardless of env vars
-        if db_conn and db_conn.auth.get("refresh_token"):
-            c.status = "connected"
+        if db_conn:
+            # OAuth connectors: check for refresh_token in auth
+            # Strava: check for access_token in auth
+            # Garmin: check for garth_tokens in config
+            if c.id == "garmin":
+                if db_conn.config.get("garth_tokens"):
+                    c.status = "connected"
+            elif c.id == "strava":
+                if db_conn.auth.get("access_token"):
+                    c.status = "connected"
+            elif db_conn.auth.get("refresh_token"):
+                c.status = "connected"
         out.append(ConnectorOut(
             id=c.id,
             name=c.name,
@@ -174,7 +187,7 @@ async def oauth_disconnect(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    if connector not in _GOOGLE_CONNECTORS:
+    if connector not in _GOOGLE_CONNECTORS and connector != "strava":
         raise HTTPException(status_code=400, detail="Unknown connector")
 
     result = await db.execute(
@@ -188,6 +201,177 @@ async def oauth_disconnect(
         conn.auth = {}
         conn.status = "disconnected"
         await db.commit()
+
+
+# ── Strava OAuth flow ─────────────────────────────────────────────────────────
+
+@router.get("/oauth/authorize/strava")
+async def strava_authorize(request: Request):
+    from core.config import settings
+    if not settings.strava_client_id:
+        raise HTTPException(status_code=503, detail="STRAVA_CLIENT_ID not configured")
+
+    via_prod = "localhost" not in str(request.base_url)
+    redirect_uri = (
+        "https://tarsmv.duckdns.org/api/connectors/oauth/callback/strava"
+        if via_prod
+        else "http://localhost:8000/api/connectors/oauth/callback/strava"
+    )
+    from connectors.strava import get_auth_url
+    return RedirectResponse(get_auth_url(settings.strava_client_id, redirect_uri))
+
+
+@router.get("/oauth/callback/strava")
+async def strava_callback(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    code: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    via_prod = "localhost" not in str(request.base_url)
+    base = "https://tarsmv.duckdns.org" if via_prod else "http://localhost:3000"
+
+    if error or not code:
+        log.warning("Strava OAuth error: %s", error or "missing code")
+        return RedirectResponse(f"{base}/connectors?error={error or 'missing_code'}")
+
+    from core.config import settings
+    from connectors.strava import exchange_code
+
+    redirect_uri = (
+        "https://tarsmv.duckdns.org/api/connectors/oauth/callback/strava"
+        if via_prod
+        else "http://localhost:8000/api/connectors/oauth/callback/strava"
+    )
+    try:
+        auth = await exchange_code(settings.strava_client_id, settings.strava_client_secret, code)
+    except Exception as exc:
+        log.exception("Strava token exchange failed: %s", exc)
+        raise HTTPException(status_code=400, detail=f"Strava token exchange failed: {exc}")
+
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=500, detail="No user in database")
+
+    conn_result = await db.execute(
+        select(Connector).where(Connector.user_id == user.id, Connector.name == "Strava")
+    )
+    conn = conn_result.scalar_one_or_none()
+    if conn:
+        conn.auth = auth
+        conn.status = "connected"
+    else:
+        conn = Connector(
+            user_id=user.id,
+            name="Strava",
+            status="connected",
+            auth=auth,
+            capabilities=["read"],
+        )
+        db.add(conn)
+
+    await db.commit()
+    log.info("Strava connected for user %s", user.id)
+    return RedirectResponse(f"{base}/connectors?connected=strava")
+
+
+# ── Garmin credentials flow ───────────────────────────────────────────────────
+
+class GarminConnectBody(BaseModel):
+    email: str
+    password: str
+
+
+@router.post("/garmin/connect", status_code=200)
+async def garmin_connect(
+    body: GarminConnectBody,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    from connectors.garmin import GarminClient
+    try:
+        tokens = await GarminClient.login(body.email, body.password)
+    except Exception as exc:
+        log.exception("Garmin login failed: %s", exc)
+        raise HTTPException(status_code=400, detail=f"Garmin login failed: {exc}")
+
+    conn_result = await db.execute(
+        select(Connector).where(Connector.user_id == user_id, Connector.name == "Garmin Connect")
+    )
+    conn = conn_result.scalar_one_or_none()
+    if conn:
+        conn.config = {**conn.config, "garth_tokens": tokens}
+        conn.status = "connected"
+    else:
+        conn = Connector(
+            user_id=user_id,
+            name="Garmin Connect",
+            status="connected",
+            config={"garth_tokens": tokens},
+            capabilities=["read"],
+        )
+        db.add(conn)
+
+    await db.commit()
+    log.info("Garmin connected for user %s", user_id)
+    return {"ok": True}
+
+
+@router.delete("/garmin/disconnect", status_code=204)
+async def garmin_disconnect(
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Connector).where(Connector.user_id == user_id, Connector.name == "Garmin Connect")
+    )
+    conn = result.scalar_one_or_none()
+    if conn:
+        conn.config = {k: v for k, v in conn.config.items() if k != "garth_tokens"}
+        conn.status = "disconnected"
+        await db.commit()
+
+
+# ── Connector config (sync interval etc.) ────────────────────────────────────
+
+class ConnectorConfigPatch(BaseModel):
+    sync_interval_minutes: Optional[int] = None
+
+
+@router.patch("/{connector_id}/config", status_code=200)
+async def patch_connector_config(
+    connector_id: str,
+    body: ConnectorConfigPatch,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    name = _CONNECTOR_NAMES.get(connector_id)
+    if not name:
+        raise HTTPException(status_code=400, detail="Unknown connector")
+
+    result = await db.execute(
+        select(Connector).where(Connector.user_id == user_id, Connector.name == name)
+    )
+    conn = result.scalar_one_or_none()
+    if not conn:
+        raise HTTPException(status_code=404, detail="Connector not found — connect it first")
+
+    patch = body.model_dump(exclude_none=True)
+    conn.config = {**conn.config, **patch}
+
+    # Live-update the scheduler interval if it's a registered job
+    if body.sync_interval_minutes:
+        job_name = f"{connector_id}_sync"
+        try:
+            from jobs.scheduler import update_interval
+            update_interval(job_name, body.sync_interval_minutes * 60)
+            log.info("%s sync interval updated to %d min", connector_id, body.sync_interval_minutes)
+        except KeyError:
+            pass  # Scheduler job may not be registered yet (harness restart will pick it up)
+
+    await db.commit()
+    return {"ok": True, "config": conn.config}
 
 
 # ── Webhook log ───────────────────────────────────────────────────────────────

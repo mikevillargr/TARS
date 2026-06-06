@@ -33,4 +33,42 @@ def list_connectors() -> List[ConnectorStatus]:
             capabilities=["read", "write"],
             metadata={"description": "Contact graph + auto-enrichment", "auth_type": "oauth2"},
         ),
+        ConnectorStatus(
+            id="strava",
+            name="Strava",
+            status="disconnected",  # upgraded in route if DB token exists
+            capabilities=["read"],
+            metadata={
+                "description": "Rides, runs, HR zones, and athlete stats",
+                "auth_type": "oauth2",
+                "settings_schema": [
+                    {
+                        "key": "sync_interval_minutes",
+                        "label": "Sync every",
+                        "type": "select",
+                        "options": ["15", "30", "60", "120", "360"],
+                        "default": "60",
+                    },
+                ],
+            },
+        ),
+        ConnectorStatus(
+            id="garmin",
+            name="Garmin Connect",
+            status="disconnected",  # upgraded in route if garth_tokens in config
+            capabilities=["read"],
+            metadata={
+                "description": "Activities, sleep, HRV, and body battery",
+                "auth_type": "credentials",
+                "settings_schema": [
+                    {
+                        "key": "sync_interval_minutes",
+                        "label": "Sync every",
+                        "type": "select",
+                        "options": ["15", "30", "60", "120", "360"],
+                        "default": "60",
+                    },
+                ],
+            },
+        ),
     ]

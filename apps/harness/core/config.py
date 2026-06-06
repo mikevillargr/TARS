@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     google_people_client_id: str = ""
     google_people_client_secret: str = ""
 
+    strava_client_id: str = ""
+    strava_client_secret: str = ""
+
     # Whisper voice transcription (faster-whisper, CPU)
     # Options: tiny, tiny.en, small, small.en, medium, medium.en, large-v3
     whisper_model: str = "small"

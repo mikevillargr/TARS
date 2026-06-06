@@ -141,8 +141,128 @@ async def _sync_google_people() -> None:
     await sync_people()
 
 
+async def _sync_strava() -> None:
+    """Fetch latest Strava activities and store as Mnemon memories."""
+    from core.config import settings
+    if not settings.strava_client_id:
+        log.info("Strava sync skipped — STRAVA_CLIENT_ID not configured")
+        return
+
+    from db.session import AsyncSessionLocal
+    from db.models import User, Connector
+    from sqlalchemy import select
+    from connectors.strava import StravaClient
+    from memory import mnemon
+    from datetime import datetime, timezone
+
+    async with AsyncSessionLocal() as db:
+        user_result = await db.execute(select(User).limit(1))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            return
+
+        conn_result = await db.execute(
+            select(Connector).where(Connector.name == "Strava", Connector.user_id == user.id)
+        )
+        conn = conn_result.scalar_one_or_none()
+        if not conn or not conn.auth.get("access_token"):
+            log.info("Strava sync skipped — not connected")
+            return
+
+        # Update scheduler interval from connector config
+        interval_min = int(conn.config.get("sync_interval_minutes", 60))
+        if "strava_sync" in _registry:
+            _registry["strava_sync"].interval_sec = interval_min * 60
+
+        client = StravaClient(conn.auth, settings.strava_client_id, settings.strava_client_secret)
+
+        # Refresh token if needed and persist updated auth
+        if client.needs_refresh():
+            updated_auth = await client.refresh_token()
+            conn.auth = updated_auth
+            await db.commit()
+
+        activities = await client.list_activities(limit=10)
+        if not activities:
+            return
+
+        # Store latest activity summary as a memory
+        latest = activities[0]
+        summary = (
+            f"Strava activity: {latest['name']} ({latest['sport_type']}) on "
+            f"{latest['start_date'][:10] if latest.get('start_date') else 'unknown date'}. "
+            f"{latest['distance_km']}km in {latest['duration']}."
+        )
+        if latest.get("avg_hr"):
+            summary += f" Avg HR: {latest['avg_hr']} bpm."
+        if latest.get("elevation_m"):
+            summary += f" Elevation: {latest['elevation_m']}m."
+
+        await mnemon.write(db, user.id, summary, domain="cycling", source="connector", importance=2)
+
+        conn.last_synced_at = datetime.now(timezone.utc)
+        await db.commit()
+        log.info("Strava sync complete — latest: %s", latest["name"])
+
+
+async def _sync_garmin() -> None:
+    """Fetch latest Garmin health metrics and store as Mnemon memories."""
+    from db.session import AsyncSessionLocal
+    from db.models import User, Connector
+    from sqlalchemy import select
+    from connectors.garmin import GarminClient
+    from memory import mnemon
+    from datetime import datetime, timezone
+
+    async with AsyncSessionLocal() as db:
+        user_result = await db.execute(select(User).limit(1))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            return
+
+        conn_result = await db.execute(
+            select(Connector).where(Connector.name == "Garmin Connect", Connector.user_id == user.id)
+        )
+        conn = conn_result.scalar_one_or_none()
+        if not conn or not conn.config.get("garth_tokens"):
+            log.info("Garmin sync skipped — not connected")
+            return
+
+        # Update scheduler interval from connector config
+        interval_min = int(conn.config.get("sync_interval_minutes", 60))
+        if "garmin_sync" in _registry:
+            _registry["garmin_sync"].interval_sec = interval_min * 60
+
+        client = GarminClient(conn.config)
+
+        try:
+            sleep  = await client.get_sleep()
+            hrv    = await client.get_hrv()
+            battery = await client.get_body_battery()
+        except Exception as exc:
+            log.exception("Garmin data fetch failed: %s", exc)
+            raise
+
+        parts = [f"Garmin health data for {sleep['date']}."]
+        if sleep.get("sleep_score"):
+            mins = (sleep.get("duration_sec") or 0) // 60
+            parts.append(f"Sleep score: {sleep['sleep_score']}, duration: {mins // 60}h {mins % 60}m.")
+        if hrv.get("last_night_avg"):
+            parts.append(f"HRV: {hrv['last_night_avg']} (5-night avg: {hrv.get('last_5_night_avg')}).")
+        if battery.get("current") is not None:
+            parts.append(f"Body battery: {battery['current']} (max today: {battery.get('max')}).")
+
+        summary = " ".join(parts)
+        await mnemon.write(db, user.id, summary, domain="health", source="connector", importance=2)
+
+        conn.last_synced_at = datetime.now(timezone.utc)
+        await db.commit()
+        log.info("Garmin sync complete — %s", sleep["date"])
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
+_ONE_HOUR    = 60 * 60
 _FOUR_HOURS  = 4 * 60 * 60
 _FIVE_MINUTES = 5 * 60
 _ONE_WEEK    = 7 * 24 * 60 * 60
@@ -236,6 +356,24 @@ def build_tasks() -> list[asyncio.Task]:
                 run_immediately=True,
             ),
             _sync_google_people,
+        ),
+        (
+            JobState(
+                name="strava_sync",
+                description="Fetch latest Strava activities (default: every 60 min)",
+                interval_sec=_ONE_HOUR,
+                run_immediately=False,  # skip on startup — waits for first natural interval
+            ),
+            _sync_strava,
+        ),
+        (
+            JobState(
+                name="garmin_sync",
+                description="Fetch Garmin sleep/HRV/body battery (default: every 60 min)",
+                interval_sec=_ONE_HOUR,
+                run_immediately=False,
+            ),
+            _sync_garmin,
         ),
     ]
 

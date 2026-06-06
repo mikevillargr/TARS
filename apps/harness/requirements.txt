@@ -31,3 +31,4 @@ google-api-python-client==2.169.0
 reportlab==4.2.5
 faster-whisper>=1.0.0
 claude-code-sdk>=0.0.13
+garth>=0.4.46

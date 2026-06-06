@@ -1,21 +1,30 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Plug, X, Plus, Unplug, Users, Loader2 } from "lucide-react"
-import { apiGet, apiDelete } from "@/lib/api-client"
+import { Plug, X, Plus, Unplug, Users, Loader2, Settings2, Check } from "lucide-react"
+import { apiGet, apiDelete, apiPost, apiPatch } from "@/lib/api-client"
 import { PendingContactsReview } from "@/components/connectors/PendingContactsReview"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 
+interface SettingsField {
+  key: string
+  label: string
+  type: "select" | "text"
+  options?: string[]
+  default?: string
+}
+
 // Backend shape — must mirror api/routes/connectors.py::ConnectorOut
 interface Connector {
-  id: string                     // "gmail" | "gcal" | "google_people" | "fireflies"
-  name: string                   // "Gmail" | "Google Calendar" | "Google Contacts" | "Fireflies"
+  id: string
+  name: string
   status: "connected" | "disconnected" | "error"
   capabilities: string[]
   last_synced_at: string | null
   metadata: {
     description?: string
-    auth_type?: "oauth2" | "api_key"
+    auth_type?: "oauth2" | "api_key" | "credentials"
+    settings_schema?: SettingsField[]
   }
 }
 
@@ -71,6 +80,25 @@ function FirefliesLogo({ size = 28 }: { size?: number }) {
   )
 }
 
+function StravaLogo({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <rect width="48" height="48" rx="8" fill="#FC4C02"/>
+      <polygon points="18,8 26,24 22,24 30,40 22,40 14,24 18,24" fill="white"/>
+      <polygon points="26,24 30,16 34,24 30,32" fill="white" opacity="0.7"/>
+    </svg>
+  )
+}
+
+function GarminLogo({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <rect width="48" height="48" rx="8" fill="#007CC3"/>
+      <path d="M8 24 C8 15.2 15.2 8 24 8 C32.8 8 40 15.2 40 24 C40 32.8 32.8 40 24 40 L24 33 C29 33 33 29 33 24 C33 19 29 15 24 15 C19 15 15 19 15 24 L15 40 L8 40 Z" fill="white"/>
+    </svg>
+  )
+}
+
 function GenericConnectorLogo({ name, size = 28 }: { name: string; size?: number }) {
   const initial = name[0]?.toUpperCase() ?? "?"
   return (
@@ -88,6 +116,8 @@ function ConnectorLogo({ id, name, size = 28 }: { id: string; name: string; size
   if (id === "gcal")          return <GoogleCalendarLogo size={size} />
   if (id === "google_people") return <GoogleContactsLogo size={size} />
   if (id === "fireflies")     return <FirefliesLogo size={size} />
+  if (id === "strava")        return <StravaLogo size={size} />
+  if (id === "garmin")        return <GarminLogo size={size} />
   return <GenericConnectorLogo name={name} size={size} />
 }
 
@@ -118,8 +148,15 @@ export default function ConnectorsPage() {
   const [selected,     setSelected]     = useState<Connector | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
   const [reviewOpen,   setReviewOpen]   = useState(false)
-  const [busyId,       setBusyId]       = useState<string | null>(null)
-  const [justConnected, setJustConnected] = useState<string | null>(null)
+  const [busyId,         setBusyId]         = useState<string | null>(null)
+  const [justConnected,  setJustConnected]  = useState<string | null>(null)
+  // Garmin credentials form
+  const [garminEmail,    setGarminEmail]    = useState("")
+  const [garminPassword, setGarminPassword] = useState("")
+  const [garminError,    setGarminError]    = useState<string | null>(null)
+  // Settings panel
+  const [settingsSaved,  setSettingsSaved]  = useState<string | null>(null)
+  const [intervalValues, setIntervalValues] = useState<Record<string, string>>({})
 
   // ── Loaders ────────────────────────────────────────────────────────────────
   const loadConnectors = useCallback(async () => {
@@ -184,10 +221,45 @@ export default function ConnectorsPage() {
     if (!ok) return
     setBusyId(c.id)
     try {
-      await apiDelete(`/connectors/oauth/${c.id}`)
+      if (c.id === "garmin") {
+        await apiDelete(`/connectors/garmin/disconnect`)
+      } else {
+        await apiDelete(`/connectors/oauth/${c.id}`)
+      }
       await loadConnectors()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Disconnect failed")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function connectGarmin() {
+    if (!garminEmail || !garminPassword) return
+    setGarminError(null)
+    setBusyId("garmin")
+    try {
+      await apiPost("/connectors/garmin/connect", { email: garminEmail, password: garminPassword })
+      setGarminEmail("")
+      setGarminPassword("")
+      await loadConnectors()
+    } catch (err) {
+      setGarminError(err instanceof Error ? err.message : "Login failed")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function saveInterval(connectorId: string) {
+    const value = intervalValues[connectorId]
+    if (!value) return
+    setBusyId(`${connectorId}_settings`)
+    try {
+      await apiPatch(`/connectors/${connectorId}/config`, { sync_interval_minutes: parseInt(value) })
+      setSettingsSaved(connectorId)
+      setTimeout(() => setSettingsSaved(null), 2500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save settings")
     } finally {
       setBusyId(null)
     }
@@ -432,8 +504,59 @@ export default function ConnectorsPage() {
                   </div>
                 )}
 
-                {/* OAuth connectors get a Disconnect button. Fireflies (api_key) does not. */}
-                {selected.metadata.auth_type === "oauth2" && (
+                {/* Settings schema — sync interval etc. */}
+                {selected.metadata.settings_schema && selected.metadata.settings_schema.length > 0 && (
+                  <div>
+                    <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: "var(--c-ink-faint)" }}>
+                      <Settings2 size={10} /> Settings
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {selected.metadata.settings_schema.map(field => (
+                        <div key={field.key}>
+                          <label className="block text-xs mb-1" style={{ color: "var(--c-ink-muted)" }}>{field.label}</label>
+                          {field.type === "select" && field.options ? (
+                            <select
+                              value={intervalValues[selected.id] ?? field.default ?? field.options[0]}
+                              onChange={e => setIntervalValues(prev => ({ ...prev, [selected.id]: e.target.value }))}
+                              className="w-full text-xs rounded-md px-2 py-1.5 border"
+                              style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
+                            >
+                              {field.options.map(opt => (
+                                <option key={opt} value={opt}>
+                                  {parseInt(opt) >= 60 ? `${parseInt(opt) / 60}h` : `${opt}m`}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={intervalValues[`${selected.id}_${field.key}`] ?? ""}
+                              onChange={e => setIntervalValues(prev => ({ ...prev, [`${selected.id}_${field.key}`]: e.target.value }))}
+                              className="w-full text-xs rounded-md px-2 py-1.5 border"
+                              style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
+                            />
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => saveInterval(selected.id)}
+                        disabled={busyId === `${selected.id}_settings`}
+                        className="flex items-center gap-1.5 justify-center rounded-md py-1.5 text-xs font-medium transition-colors disabled:opacity-50 mt-1"
+                        style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)" }}
+                      >
+                        {busyId === `${selected.id}_settings`
+                          ? <Loader2 size={11} className="animate-spin" />
+                          : settingsSaved === selected.id
+                          ? <><Check size={11} /> Saved</>
+                          : "Save settings"
+                        }
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Disconnect button — OAuth and credentials connectors */}
+                {(selected.metadata.auth_type === "oauth2" || selected.metadata.auth_type === "credentials") && (
                   <div className="pt-1">
                     <button
                       onClick={() => disconnect(selected)}
@@ -467,6 +590,40 @@ export default function ConnectorsPage() {
                   >
                     <Plus size={14} /> Connect Account
                   </button>
+                ) : selected.metadata.auth_type === "credentials" ? (
+                  <div className="w-full flex flex-col gap-2">
+                    {garminError && (
+                      <p className="text-xs rounded-md px-2 py-1.5" style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }}>
+                        {garminError}
+                      </p>
+                    )}
+                    <input
+                      type="email"
+                      placeholder="Garmin email"
+                      value={garminEmail}
+                      onChange={e => setGarminEmail(e.target.value)}
+                      className="w-full text-xs rounded-md px-3 py-2 border"
+                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
+                    />
+                    <input
+                      type="password"
+                      placeholder="Password"
+                      value={garminPassword}
+                      onChange={e => setGarminPassword(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && connectGarmin()}
+                      className="w-full text-xs rounded-md px-3 py-2 border"
+                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)", borderColor: "var(--c-border)" }}
+                    />
+                    <button
+                      onClick={connectGarmin}
+                      disabled={busyId === "garmin" || !garminEmail || !garminPassword}
+                      className="btn-primary w-full justify-center disabled:opacity-50"
+                      style={{ padding: "0.5rem 1rem" }}
+                    >
+                      {busyId === "garmin" ? <Loader2 size={13} className="animate-spin" /> : <Plus size={14} />}
+                      Connect Garmin
+                    </button>
+                  </div>
                 ) : (
                   <p className="text-xs text-center" style={{ color: "var(--c-ink-faint)" }}>
                     Configure this connector via environment variables.
