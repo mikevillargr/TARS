@@ -555,7 +555,7 @@ export default function ConnectorsPage() {
                     Sync Status
                   </div>
                   <div className="rounded-lg p-3 text-xs" style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}>
-                    Last synced {formatSyncedAt(selected.last_synced_at)}
+                    {selected.last_synced_at ? `Last synced ${formatSyncedAt(selected.last_synced_at)}` : "Not yet synced"}
                   </div>
                 </div>
 
