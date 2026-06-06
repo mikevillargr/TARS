@@ -1881,52 +1881,73 @@ plt.close('all')
             assistant_content = "".join(full_response)
 
             # ── Chart code-block fallback ────────────────────────────────────
-            # Execute ALL matplotlib code blocks in the response (models often
-            # produce multiple charts). Each block is replaced inline with the
-            # rendered PNG. Blocks that fail (bad code, missing data, etc.) are
-            # left as-is and logged — they don't abort the others.
+            # Execute ALL matplotlib code blocks in the response. Models often
+            # produce multiple charts, and sometimes split data-setup into one
+            # block and plotting into the next. Strategy:
+            #   1. Try each chart block standalone.
+            #   2. If it fails (likely NameError from missing prior-block vars),
+            #      retry with ALL preceding code blocks prepended — this handles
+            #      the data-setup + plot-block pattern.
             import re as _chart_re, subprocess as _sp, tempfile as _tf, base64 as _b64, os as _cos, sys as _sys
             if not any(r.get("type") == "chart_image" for r in tool_results):
                 _CODE_BLOCK_ANY = _chart_re.compile(
                     r"```(?:python|py)?\s*\n(.*?)```", _chart_re.DOTALL | _chart_re.IGNORECASE
                 )
                 _CHART_KW = ("plt.", "matplotlib", "seaborn", "sns.", "fig,", "fig =", "ax =", "subplot", "pyplot")
-                _RCPARAMS = "{'figure.facecolor':'#1a1714','axes.facecolor':'#1a1714','axes.edgecolor':'#3a342d','axes.labelcolor':'#e8e4de','xtick.color':'#9c9088','ytick.color':'#9c9088','text.color':'#e8e4de','grid.color':'#2a2520','grid.alpha':0.5}"
+                _PREAMBLE = (
+                    "import matplotlib; matplotlib.use('Agg')\n"
+                    "import matplotlib.pyplot as plt\n"
+                    "import numpy as np, pandas as pd, seaborn as sns, json, math\n"
+                    "from datetime import datetime, timedelta\n"
+                    "plt.rcParams.update({'figure.facecolor':'#1a1714','axes.facecolor':'#1a1714',"
+                    "'axes.edgecolor':'#3a342d','axes.labelcolor':'#e8e4de','xtick.color':'#9c9088',"
+                    "'ytick.color':'#9c9088','text.color':'#e8e4de','grid.color':'#2a2520','grid.alpha':0.5})\n"
+                )
+                _SAVEFIG = (
+                    "\ntry:\n"
+                    "    _figs=[v for k,v in list(locals().items()) if hasattr(v,'savefig') and hasattr(v,'get_axes')]\n"
+                    "    (_figs[0] if _figs else plt).savefig(output_path,dpi=150,bbox_inches='tight',facecolor='#1a1714')\n"
+                    "except Exception:\n"
+                    "    plt.savefig(output_path,dpi=150,bbox_inches='tight',facecolor='#1a1714')\n"
+                    "plt.close('all')\n"
+                )
 
-                # Collect all matches first (finditer positions shift after replacements)
+                def _run_chart_code(code_str: str, out_path: str) -> bool:
+                    wrapper = (
+                        _PREAMBLE
+                        + f"output_path = {repr(out_path)}\n"
+                        + _chart_re.sub(r'plt\.show\(\)', '', code_str)
+                        + _SAVEFIG
+                    )
+                    r = _sp.run([_sys.executable, "-c", wrapper], capture_output=True, text=True, timeout=30)
+                    if r.returncode != 0:
+                        log.warning("Chart fallback exec failed:\n%s", r.stderr[-600:])
+                        return False
+                    return _cos.path.exists(out_path) and _cos.path.getsize(out_path) > 0
+
+                # Collect all code blocks and track which are matplotlib blocks
                 _all_blocks = list(_CODE_BLOCK_ANY.finditer(assistant_content))
-                _offset = 0  # tracks cumulative length change as we replace blocks
+                _all_codes  = [m.group(1) for m in _all_blocks]
+                _offset = 0
 
-                for _m in _all_blocks:
-                    _code = _m.group(1)
+                for _i, _m in enumerate(_all_blocks):
+                    _code = _all_codes[_i]
                     if not any(kw in _code for kw in _CHART_KW):
                         continue
 
-                    _code_clean = _chart_re.sub(r'plt\.show\(\)', '', _code)
                     with _tf.NamedTemporaryFile(suffix=".png", delete=False) as _f:
                         _op = _f.name
 
-                    _wrapper = f"""
-import matplotlib; matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import numpy as np, pandas as pd, seaborn as sns, json, math
-from datetime import datetime, timedelta
-plt.rcParams.update({_RCPARAMS})
-output_path = {repr(_op)}
-{_code_clean}
-try:
-    _figs = [v for k, v in list(locals().items()) if hasattr(v, 'savefig') and hasattr(v, 'get_axes')]
-    _save_fig = _figs[0] if _figs else plt
-    _save_fig.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='#1a1714')
-except Exception:
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='#1a1714')
-plt.close('all')
-"""
                     try:
-                        _r = _sp.run([_sys.executable, "-c", _wrapper], capture_output=True, text=True, timeout=30)
-                        if _r.returncode != 0:
-                            log.warning("Chart fallback exec failed:\n%s", _r.stderr[-600:])
-                        elif _cos.path.exists(_op) and _cos.path.getsize(_op) > 0:
+                        _ok = _run_chart_code(_code, _op)
+
+                        if not _ok and _i > 0:
+                            # Retry with all preceding blocks prepended (handles
+                            # data-in-block-1 + plot-in-block-2 pattern)
+                            _combined = "\n".join(_all_codes[:_i]) + "\n" + _code
+                            _ok = _run_chart_code(_combined, _op)
+
+                        if _ok:
                             with open(_op, "rb") as _imgf:
                                 _b = _b64.b64encode(_imgf.read()).decode()
                             _inline_img = f"\n\n![Chart](data:image/png;base64,{_b})\n\n"
@@ -1936,7 +1957,7 @@ plt.close('all')
                             _offset += len(_inline_img) - (_end - _start)
                             log.info("Chart rendered inline from code block fallback")
                         else:
-                            log.warning("Chart fallback: output file missing or empty")
+                            log.warning("Chart fallback: block %d failed even with context", _i)
                     except Exception as _ce:
                         log.warning("Chart code-block fallback failed: %s", _ce)
                     finally:
