@@ -192,7 +192,7 @@ async def oauth_callback(
             if via_prod else "http://localhost:8000/api/connectors/oauth/callback/strava"
         )
         try:
-            auth = await strava_exchange(client_id, client_secret, code)
+            auth = await strava_exchange(client_id, client_secret, code, redirect_uri)
         except Exception as exc:
             log.exception("Strava token exchange failed: %s", exc)
             raise HTTPException(status_code=400, detail=f"Strava token exchange failed: {exc}")

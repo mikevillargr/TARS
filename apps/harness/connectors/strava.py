@@ -23,15 +23,17 @@ def get_auth_url(client_id: str, redirect_uri: str) -> str:
     return f"{STRAVA_AUTH_URL}?{params}"
 
 
-async def exchange_code(client_id: str, client_secret: str, code: str) -> dict:
+async def exchange_code(client_id: str, client_secret: str, code: str, redirect_uri: str) -> dict:
     async with httpx.AsyncClient() as http:
         r = await http.post(STRAVA_TOKEN_URL, data={
             "client_id": client_id,
             "client_secret": client_secret,
             "code": code,
             "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
         })
-        r.raise_for_status()
+        if not r.is_success:
+            raise ValueError(f"Strava token exchange {r.status_code}: {r.text}")
         data = r.json()
     return {
         "access_token":  data["access_token"],
