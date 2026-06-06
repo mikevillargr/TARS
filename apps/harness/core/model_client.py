@@ -848,6 +848,9 @@ GENERATE_CHART_TOOL = {
         "The server has matplotlib, seaborn, numpy, and pandas fully installed and ready. "
         "Write Python code using those libraries. The variable `output_path` is pre-defined — "
         "save the figure with plt.savefig(output_path) or fig.savefig(output_path). "
+        "CRITICAL: The code runs in an isolated subprocess. ALL data must be defined as Python "
+        "literals inside the code — never reference external variables like `activities`, `df`, "
+        "or any name from the conversation context. Embed the actual values directly in the code. "
         "The chart will render immediately in the chat. Always call plt.tight_layout() before saving."
     ),
     "input_schema": {

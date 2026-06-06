@@ -1881,38 +1881,39 @@ plt.close('all')
             assistant_content = "".join(full_response)
 
             # ── Chart code-block fallback ────────────────────────────────────
-            # If the model output a ```python block with matplotlib instead of
-            # calling the generate_chart tool (common with non-Claude models),
-            # extract the code, execute it, and emit the chart card.
-            import re as _chart_re
-            _CODE_BLOCK = _chart_re.compile(
-                r"```python\s*\n(.*?)```", _chart_re.DOTALL | _chart_re.IGNORECASE
-            )
+            # Execute ALL matplotlib code blocks in the response (models often
+            # produce multiple charts). Each block is replaced inline with the
+            # rendered PNG. Blocks that fail (bad code, missing data, etc.) are
+            # left as-is and logged — they don't abort the others.
+            import re as _chart_re, subprocess as _sp, tempfile as _tf, base64 as _b64, os as _cos, sys as _sys
             if not any(r.get("type") == "chart_image" for r in tool_results):
-                # Also match untagged code blocks (``` with no language)
                 _CODE_BLOCK_ANY = _chart_re.compile(
                     r"```(?:python|py)?\s*\n(.*?)```", _chart_re.DOTALL | _chart_re.IGNORECASE
                 )
-                _chart_match = _CODE_BLOCK_ANY.search(assistant_content)
                 _CHART_KW = ("plt.", "matplotlib", "seaborn", "sns.", "fig,", "fig =", "ax =", "subplot", "pyplot")
-                if _chart_match and any(kw in _chart_match.group(1) for kw in _CHART_KW):
-                    import subprocess as _sp, tempfile as _tf, base64 as _b64, os as _cos
-                    _code = _chart_match.group(1)
-                    # Strip plt.show() — in headless (Agg) mode it can clear
-                    # figure state before our savefig runs
-                    import re as _cre
-                    _code_clean = _cre.sub(r'plt\.show\(\)', '', _code)
+                _RCPARAMS = "{'figure.facecolor':'#1a1714','axes.facecolor':'#1a1714','axes.edgecolor':'#3a342d','axes.labelcolor':'#e8e4de','xtick.color':'#9c9088','ytick.color':'#9c9088','text.color':'#e8e4de','grid.color':'#2a2520','grid.alpha':0.5}"
+
+                # Collect all matches first (finditer positions shift after replacements)
+                _all_blocks = list(_CODE_BLOCK_ANY.finditer(assistant_content))
+                _offset = 0  # tracks cumulative length change as we replace blocks
+
+                for _m in _all_blocks:
+                    _code = _m.group(1)
+                    if not any(kw in _code for kw in _CHART_KW):
+                        continue
+
+                    _code_clean = _chart_re.sub(r'plt\.show\(\)', '', _code)
                     with _tf.NamedTemporaryFile(suffix=".png", delete=False) as _f:
                         _op = _f.name
+
                     _wrapper = f"""
 import matplotlib; matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np, pandas as pd, seaborn as sns, json, math
 from datetime import datetime, timedelta
-plt.rcParams.update({{'figure.facecolor':'#1a1714','axes.facecolor':'#1a1714','axes.edgecolor':'#3a342d','axes.labelcolor':'#e8e4de','xtick.color':'#9c9088','ytick.color':'#9c9088','text.color':'#e8e4de','grid.color':'#2a2520','grid.alpha':0.5}})
+plt.rcParams.update({_RCPARAMS})
 output_path = {repr(_op)}
 {_code_clean}
-# Save — use fig.savefig if a fig variable exists, else plt.savefig
 try:
     _figs = [v for k, v in list(locals().items()) if hasattr(v, 'savefig') and hasattr(v, 'get_axes')]
     _save_fig = _figs[0] if _figs else plt
@@ -1922,23 +1923,17 @@ except Exception:
 plt.close('all')
 """
                     try:
-                        import sys as _sys
                         _r = _sp.run([_sys.executable, "-c", _wrapper], capture_output=True, text=True, timeout=30)
                         if _r.returncode != 0:
                             log.warning("Chart fallback exec failed:\n%s", _r.stderr[-600:])
                         elif _cos.path.exists(_op) and _cos.path.getsize(_op) > 0:
                             with open(_op, "rb") as _imgf:
                                 _b = _b64.b64encode(_imgf.read()).decode()
-                            # Replace the code block with an inline markdown image so the
-                            # chart renders directly in the message body rather than as a
-                            # separate card. This avoids the card-below-message UX and
-                            # works with ReactMarkdown's native img rendering.
                             _inline_img = f"\n\n![Chart](data:image/png;base64,{_b})\n\n"
-                            assistant_content = (
-                                assistant_content[:_chart_match.start()]
-                                + _inline_img
-                                + assistant_content[_chart_match.end():]
-                            )
+                            _start = _m.start() + _offset
+                            _end   = _m.end()   + _offset
+                            assistant_content = assistant_content[:_start] + _inline_img + assistant_content[_end:]
+                            _offset += len(_inline_img) - (_end - _start)
                             log.info("Chart rendered inline from code block fallback")
                         else:
                             log.warning("Chart fallback: output file missing or empty")
