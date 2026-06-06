@@ -141,7 +141,9 @@ async def oauth_authorize(connector: str, request: Request, db: AsyncSession = D
             if via_prod else "http://localhost:8000/api/connectors/oauth/callback/strava"
         )
         from connectors.strava import get_auth_url
-        return RedirectResponse(get_auth_url(client_id, redirect_uri))
+        auth_url = get_auth_url(client_id, redirect_uri)
+        log.info("Strava auth URL: %s", auth_url)
+        return RedirectResponse(auth_url)
 
     if connector not in _GOOGLE_CONNECTORS:
         raise HTTPException(status_code=400, detail="Unknown connector")
