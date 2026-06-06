@@ -12,13 +12,14 @@ _SCOPES = "read,activity:read_all,profile:read_all"
 
 
 def get_auth_url(client_id: str, redirect_uri: str) -> str:
-    params = (
-        f"client_id={client_id}"
-        f"&redirect_uri={redirect_uri}"
-        f"&response_type=code"
-        f"&approval_prompt=force"
-        f"&scope={_SCOPES}"
-    )
+    from urllib.parse import urlencode
+    params = urlencode({
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "approval_prompt": "force",
+        "scope": _SCOPES,
+    })
     return f"{STRAVA_AUTH_URL}?{params}"
 
 
