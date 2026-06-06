@@ -109,12 +109,24 @@ async def get_connectors(
 
 @router.get("/oauth/authorize/{connector}")
 async def oauth_authorize(connector: str, request: Request):
-    """Redirect user to Google's OAuth consent page. No auth needed — just a redirect."""
+    """Redirect user to the connector's OAuth consent page. No auth needed — just a redirect."""
+    via_prod = "localhost" not in str(request.base_url)
+
+    if connector == "strava":
+        from core.config import settings
+        if not settings.strava_client_id:
+            raise HTTPException(status_code=503, detail="STRAVA_CLIENT_ID not configured")
+        redirect_uri = (
+            "https://tarsmv.duckdns.org/api/connectors/oauth/callback/strava"
+            if via_prod else "http://localhost:8000/api/connectors/oauth/callback/strava"
+        )
+        from connectors.strava import get_auth_url
+        return RedirectResponse(get_auth_url(settings.strava_client_id, redirect_uri))
+
     if connector not in _GOOGLE_CONNECTORS:
         raise HTTPException(status_code=400, detail="Unknown connector")
 
     from connectors.google_oauth import get_auth_url
-    via_prod = "localhost" not in str(request.base_url)
     url = get_auth_url(connector, via_production=via_prod)
     return RedirectResponse(url)
 
@@ -127,7 +139,49 @@ async def oauth_callback(
     code: Optional[str] = None,
     error: Optional[str] = None,
 ):
-    """Google redirects here after user grants access. No JWT needed — browser-driven."""
+    """OAuth callback — handles both Google and Strava. No JWT needed — browser-driven."""
+    via_prod = "localhost" not in str(request.base_url)
+    base = "https://tarsmv.duckdns.org" if via_prod else "http://localhost:3000"
+
+    if connector == "strava":
+        if error or not code:
+            log.warning("Strava OAuth error: %s", error or "missing code")
+            return RedirectResponse(f"{base}/connectors?error={error or 'missing_code'}")
+
+        from core.config import settings
+        from connectors.strava import exchange_code as strava_exchange
+        redirect_uri = (
+            "https://tarsmv.duckdns.org/api/connectors/oauth/callback/strava"
+            if via_prod else "http://localhost:8000/api/connectors/oauth/callback/strava"
+        )
+        try:
+            auth = await strava_exchange(settings.strava_client_id, settings.strava_client_secret, code)
+        except Exception as exc:
+            log.exception("Strava token exchange failed: %s", exc)
+            raise HTTPException(status_code=400, detail=f"Strava token exchange failed: {exc}")
+
+        user_result = await db.execute(select(User).limit(1))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=500, detail="No user in database")
+
+        conn_result = await db.execute(
+            select(Connector).where(Connector.user_id == user.id, Connector.name == "Strava")
+        )
+        conn = conn_result.scalar_one_or_none()
+        if conn:
+            conn.auth = auth
+            conn.status = "connected"
+        else:
+            conn = Connector(
+                user_id=user.id, name="Strava", status="connected",
+                auth=auth, capabilities=["read"],
+            )
+            db.add(conn)
+        await db.commit()
+        log.info("Strava connected for user %s", user.id)
+        return RedirectResponse(f"{base}/connectors?connected=strava")
+
     if connector not in _GOOGLE_CONNECTORS:
         raise HTTPException(status_code=400, detail="Unknown connector")
 
@@ -201,79 +255,6 @@ async def oauth_disconnect(
         conn.auth = {}
         conn.status = "disconnected"
         await db.commit()
-
-
-# ── Strava OAuth flow ─────────────────────────────────────────────────────────
-
-@router.get("/oauth/authorize/strava")
-async def strava_authorize(request: Request):
-    from core.config import settings
-    if not settings.strava_client_id:
-        raise HTTPException(status_code=503, detail="STRAVA_CLIENT_ID not configured")
-
-    via_prod = "localhost" not in str(request.base_url)
-    redirect_uri = (
-        "https://tarsmv.duckdns.org/api/connectors/oauth/callback/strava"
-        if via_prod
-        else "http://localhost:8000/api/connectors/oauth/callback/strava"
-    )
-    from connectors.strava import get_auth_url
-    return RedirectResponse(get_auth_url(settings.strava_client_id, redirect_uri))
-
-
-@router.get("/oauth/callback/strava")
-async def strava_callback(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    code: Optional[str] = None,
-    error: Optional[str] = None,
-):
-    via_prod = "localhost" not in str(request.base_url)
-    base = "https://tarsmv.duckdns.org" if via_prod else "http://localhost:3000"
-
-    if error or not code:
-        log.warning("Strava OAuth error: %s", error or "missing code")
-        return RedirectResponse(f"{base}/connectors?error={error or 'missing_code'}")
-
-    from core.config import settings
-    from connectors.strava import exchange_code
-
-    redirect_uri = (
-        "https://tarsmv.duckdns.org/api/connectors/oauth/callback/strava"
-        if via_prod
-        else "http://localhost:8000/api/connectors/oauth/callback/strava"
-    )
-    try:
-        auth = await exchange_code(settings.strava_client_id, settings.strava_client_secret, code)
-    except Exception as exc:
-        log.exception("Strava token exchange failed: %s", exc)
-        raise HTTPException(status_code=400, detail=f"Strava token exchange failed: {exc}")
-
-    user_result = await db.execute(select(User).limit(1))
-    user = user_result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=500, detail="No user in database")
-
-    conn_result = await db.execute(
-        select(Connector).where(Connector.user_id == user.id, Connector.name == "Strava")
-    )
-    conn = conn_result.scalar_one_or_none()
-    if conn:
-        conn.auth = auth
-        conn.status = "connected"
-    else:
-        conn = Connector(
-            user_id=user.id,
-            name="Strava",
-            status="connected",
-            auth=auth,
-            capabilities=["read"],
-        )
-        db.add(conn)
-
-    await db.commit()
-    log.info("Strava connected for user %s", user.id)
-    return RedirectResponse(f"{base}/connectors?connected=strava")
 
 
 # ── Garmin credentials flow ───────────────────────────────────────────────────
