@@ -1708,9 +1708,17 @@ async def send_message(
                                 await bg_db.commit()
 
                             if name == "get_strava_activities":
-                                _limit = min(int(tool_input.get("limit", 10)), 30)
+                                _limit = min(int(tool_input.get("limit", 10)), 100)
+                                _page  = max(int(tool_input.get("page", 1)), 1)
+                                _before = tool_input.get("before")
+                                _after  = tool_input.get("after")
                                 _sport = (tool_input.get("sport_type") or "").strip().lower()
-                                _acts = await _sc.list_activities(limit=_limit)
+                                _acts = await _sc.list_activities(
+                                    limit=_limit,
+                                    page=_page,
+                                    before=int(_before) if _before else None,
+                                    after=int(_after) if _after else None,
+                                )
                                 if _sport:
                                     _acts = [a for a in _acts if a.get("sport_type", "").lower() == _sport]
                                 if not _acts:

@@ -758,7 +758,19 @@ GET_STRAVA_ACTIVITIES_TOOL = {
         "properties": {
             "limit": {
                 "type": "integer",
-                "description": "Number of activities to fetch (1–30). Default 10.",
+                "description": "Number of activities per page (1–100). Default 10.",
+            },
+            "page": {
+                "type": "integer",
+                "description": "Page number for pagination. Default 1 (most recent). Use 2, 3, etc. to go further back in history.",
+            },
+            "before": {
+                "type": "integer",
+                "description": "Unix epoch timestamp. Only return activities that started before this time. Useful for querying a specific date range.",
+            },
+            "after": {
+                "type": "integer",
+                "description": "Unix epoch timestamp. Only return activities that started after this time. Useful for querying a specific date range.",
             },
             "sport_type": {
                 "type": "string",

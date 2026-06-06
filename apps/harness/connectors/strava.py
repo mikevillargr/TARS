@@ -72,12 +72,23 @@ class StravaClient:
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self._auth['access_token']}"}
 
-    async def list_activities(self, limit: int = 20) -> list:
+    async def list_activities(
+        self,
+        limit: int = 20,
+        page: int = 1,
+        before: Optional[int] = None,
+        after: Optional[int] = None,
+    ) -> list:
+        params: dict = {"per_page": limit, "page": page}
+        if before:
+            params["before"] = before
+        if after:
+            params["after"] = after
         async with httpx.AsyncClient() as http:
             r = await http.get(
                 f"{STRAVA_API_BASE}/athlete/activities",
                 headers=self._headers(),
-                params={"per_page": limit},
+                params=params,
             )
             r.raise_for_status()
             activities = r.json()
