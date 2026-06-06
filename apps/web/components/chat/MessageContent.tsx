@@ -452,7 +452,8 @@ export function MessageContent({ content }: { content: string }) {
           ),
 
           // Images — handles data: URLs from generated charts
-          img: ({ src, alt }) => <InlineImage src={src} alt={alt} />,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          img: (props: any) => <InlineImage src={props.src} alt={props.alt} />,
 
           // Horizontal rule
           hr: () => (
