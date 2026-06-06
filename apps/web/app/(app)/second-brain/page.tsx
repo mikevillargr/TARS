@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import {
   Search, LayoutGrid, List as ListIcon,
   Link as LinkIcon, FileText, File, Mic, Plus, Menu, X, Loader2,
-  BookOpen,
+  BookOpen, Tag,
 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
 import { ItemDetailModal } from "@/components/second-brain/ItemDetailModal"
@@ -65,6 +65,8 @@ export default function SecondBrainPage() {
   const [searchResults, setSearchResults]       = useState<SearchResult[] | null>(null)
   const [searching, setSearching]               = useState(false)
   const [showCapture, setShowCapture]           = useState(false)
+  const [tagSearch, setTagSearch]               = useState("")
+  const [showAllTags, setShowAllTags]           = useState(false)
 
   const loadItems = useCallback(async () => {
     setLoading(true)
@@ -161,42 +163,96 @@ export default function SecondBrainPage() {
       </div>
 
       {/* Tags section */}
-      {allTags.length > 0 && (
-        <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
-          <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[0.6rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Tags</span>
-            {selectedTag && (
+      {allTags.length > 0 && (() => {
+        const TAG_PAGE_SIZE = 10
+        const filtered = tagSearch.trim()
+          ? allTags.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()))
+          : allTags
+        const visibleTags = (showAllTags || tagSearch.trim()) ? filtered : filtered.slice(0, TAG_PAGE_SIZE)
+        const hiddenCount = filtered.length - TAG_PAGE_SIZE
+
+        return (
+          <div className="mt-4 pt-4 flex flex-col gap-2" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
+            {/* Header row */}
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[0.6rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Tags</span>
+              {selectedTag && (
+                <button
+                  onClick={() => setSelectedTag("")}
+                  className="text-[10px] flex items-center gap-0.5"
+                  style={{ color: "var(--c-ink-faint)" }}
+                >
+                  <X size={10} /> clear
+                </button>
+              )}
+            </div>
+
+            {/* Search input */}
+            <div className="relative px-1">
+              <Search size={11} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "var(--c-ink-faint)" }} />
+              <input
+                type="text"
+                value={tagSearch}
+                onChange={e => { setTagSearch(e.target.value); setShowAllTags(false) }}
+                placeholder="Filter tags…"
+                className="w-full pl-6 pr-2 py-1 rounded-md text-[11px] outline-none"
+                style={{
+                  backgroundColor: "var(--c-canvas)",
+                  border: "1px solid var(--c-border-faint)",
+                  color: "var(--c-ink)",
+                }}
+              />
+              {tagSearch && (
+                <button
+                  onClick={() => setTagSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color: "var(--c-ink-faint)" }}
+                >
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+
+            {/* Tag chips */}
+            {visibleTags.length > 0 ? (
+              <div className="flex flex-wrap gap-1 px-1">
+                {visibleTags.map(tag => {
+                  const isActive = selectedTag === tag
+                  const count = items.filter(i => (i.tags ?? []).includes(tag)).length
+                  return (
+                    <button
+                      key={tag}
+                      onClick={() => { setSelectedTag(isActive ? "" : tag); setMobileSidebar(false) }}
+                      className="text-[11px] px-2 py-0.5 rounded-full transition-colors"
+                      style={{
+                        backgroundColor: isActive ? "var(--c-moss)" : "var(--c-surface-2)",
+                        color: isActive ? "#fff" : "var(--c-ink-muted)",
+                        border: `1px solid ${isActive ? "var(--c-moss)" : "var(--c-border-faint)"}`,
+                      }}
+                    >
+                      #{tag} <span style={{ opacity: 0.7 }}>{count}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="px-1 text-[11px]" style={{ color: "var(--c-ink-faint)" }}>No tags match.</p>
+            )}
+
+            {/* Show more / less */}
+            {!tagSearch.trim() && hiddenCount > 0 && (
               <button
-                onClick={() => setSelectedTag("")}
-                className="text-[10px] flex items-center gap-0.5"
+                onClick={() => setShowAllTags(v => !v)}
+                className="px-1 text-[11px] text-left flex items-center gap-1"
                 style={{ color: "var(--c-ink-faint)" }}
               >
-                <X size={10} /> clear
+                <Tag size={10} />
+                {showAllTags ? "Show fewer" : `${hiddenCount} more tag${hiddenCount !== 1 ? "s" : ""}…`}
               </button>
             )}
           </div>
-          <div className="flex flex-wrap gap-1 px-1">
-            {allTags.map(tag => {
-              const isActive = selectedTag === tag
-              const count = items.filter(i => (i.tags ?? []).includes(tag)).length
-              return (
-                <button
-                  key={tag}
-                  onClick={() => { setSelectedTag(isActive ? "" : tag); setMobileSidebar(false) }}
-                  className="text-[11px] px-2 py-0.5 rounded-full transition-colors"
-                  style={{
-                    backgroundColor: isActive ? "var(--c-moss)" : "var(--c-surface-2)",
-                    color: isActive ? "#fff" : "var(--c-ink-muted)",
-                    border: `1px solid ${isActive ? "var(--c-moss)" : "var(--c-border-faint)"}`,
-                  }}
-                >
-                  #{tag} <span style={{ opacity: 0.7 }}>{count}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 
@@ -246,6 +302,22 @@ export default function SecondBrainPage() {
                 </button>
               </div>
             </div>
+
+            {/* Active tag chip */}
+            {selectedTag && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: "var(--c-ink-faint)" }}>Filtered by:</span>
+                <button
+                  onClick={() => setSelectedTag("")}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium transition-colors"
+                  style={{ backgroundColor: "var(--c-moss)", color: "#fff" }}
+                >
+                  <Tag size={11} />
+                  #{selectedTag}
+                  <X size={11} />
+                </button>
+              </div>
+            )}
 
             <div className="relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--c-ink-faint)" }} />
