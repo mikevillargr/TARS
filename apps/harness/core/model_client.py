@@ -744,6 +744,81 @@ CREATE_AGENT_JOB_TOOL = {
 }
 
 
+GET_STRAVA_ACTIVITIES_TOOL = {
+    "name": "get_strava_activities",
+    "description": (
+        "Fetch Mike's recent Strava activities (rides, runs, swims, walks, etc.). "
+        "Use when Mike asks about his recent training, how far he rode, his last run, "
+        "this week's rides, monthly training volume, or any activity data from Strava. "
+        "Returns distance, duration, heart rate, elevation, suffer score, and activity IDs. "
+        "Activity IDs can be passed to get_strava_activity for full details."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "limit": {
+                "type": "integer",
+                "description": "Number of activities to fetch (1–30). Default 10.",
+            },
+            "sport_type": {
+                "type": "string",
+                "description": (
+                    "Optional filter by sport type. Common values: Ride, Run, Swim, Walk, "
+                    "VirtualRide, TrailRun, Hike. Omit to return all activity types."
+                ),
+            },
+        },
+        "required": [],
+    },
+}
+
+GET_STRAVA_ACTIVITY_TOOL = {
+    "name": "get_strava_activity",
+    "description": (
+        "Fetch full details of one specific Strava activity by ID. "
+        "Use when Mike asks about a specific activity — calories burned, normalized power, "
+        "cadence, device used, activity notes, or other details not in the activities list."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "activity_id": {
+                "type": "integer",
+                "description": "Strava activity ID — visible in get_strava_activities results or [STRAVA] context.",
+            },
+        },
+        "required": ["activity_id"],
+    },
+}
+
+GET_STRAVA_STATS_TOOL = {
+    "name": "get_strava_stats",
+    "description": (
+        "Fetch Mike's Strava career and YTD training statistics: total distance, elevation, "
+        "and moving time for rides and runs (recent 4 weeks, year-to-date, all-time). "
+        "Use when Mike asks about his training volume, yearly totals, how much he's ridden this year, "
+        "career mileage, or wants a high-level fitness overview."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
+
+GET_STRAVA_ZONES_TOOL = {
+    "name": "get_strava_zones",
+    "description": (
+        "Fetch Mike's heart rate and power training zones from Strava. "
+        "Use when Mike asks about his HR zones, power zones, training thresholds, or FTP."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
+
 GENERATE_CHART_TOOL = {
     "name": "generate_chart",
     "description": (

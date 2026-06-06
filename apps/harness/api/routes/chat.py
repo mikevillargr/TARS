@@ -25,6 +25,8 @@ from core.model_client import (
     CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
     SEARCH_PLACES_TOOL, SAVE_PLACE_TOOL, GET_SAVED_PLACES_TOOL,
     CREATE_AGENT_JOB_TOOL,
+    GET_STRAVA_ACTIVITIES_TOOL, GET_STRAVA_ACTIVITY_TOOL,
+    GET_STRAVA_STATS_TOOL, GET_STRAVA_ZONES_TOOL,
     GENERATE_CHART_TOOL,
 )
 from core.context_assembler import assemble
@@ -620,6 +622,10 @@ async def send_message(
         SAVE_PLACE_TOOL,
         GET_SAVED_PLACES_TOOL,
         CREATE_AGENT_JOB_TOOL,
+        GET_STRAVA_ACTIVITIES_TOOL,
+        GET_STRAVA_ACTIVITY_TOOL,
+        GET_STRAVA_STATS_TOOL,
+        GET_STRAVA_ZONES_TOOL,
         # generate_chart only sent to Anthropic — Z.ai/GLM refuses the tool and
         # outputs "environment not configured". With Z.ai, the code-block fallback
         # runs post-stream instead (no tool needed, GLM naturally writes Python code).
@@ -1671,6 +1677,111 @@ async def send_message(
                         except Exception as exc:
                             log.warning("create_agent_job tool failed: %s", exc)
                             return f"Failed to create agent job: {exc}"
+
+                    if name in ("get_strava_activities", "get_strava_activity", "get_strava_stats", "get_strava_zones"):
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Connector as _Connector
+                            from connectors.strava import StravaClient as _StravaClient
+                            from sqlalchemy.orm.attributes import flag_modified as _flag_modified
+
+                            conn_result = await bg_db.execute(
+                                _select(_Connector).where(
+                                    _Connector.user_id == user_id,
+                                    _Connector.name == "Strava",
+                                )
+                            )
+                            strava_conn = conn_result.scalar_one_or_none()
+                            if not strava_conn or not strava_conn.auth.get("access_token"):
+                                return "Strava is not connected. Connect it in Connectors → Strava."
+
+                            _sc = _StravaClient(
+                                strava_conn.auth,
+                                strava_conn.config.get("client_id", ""),
+                                strava_conn.config.get("client_secret", ""),
+                            )
+
+                            if _sc.needs_refresh():
+                                new_auth = await _sc.refresh_token()
+                                strava_conn.auth = {**new_auth}
+                                _flag_modified(strava_conn, "auth")
+                                await bg_db.commit()
+
+                            if name == "get_strava_activities":
+                                _limit = min(int(tool_input.get("limit", 10)), 30)
+                                _sport = (tool_input.get("sport_type") or "").strip().lower()
+                                _acts = await _sc.list_activities(limit=_limit)
+                                if _sport:
+                                    _acts = [a for a in _acts if a.get("sport_type", "").lower() == _sport]
+                                if not _acts:
+                                    return "No activities found."
+                                _lines = [f"Strava activities ({len(_acts)}):"]
+                                for _a in _acts:
+                                    _d = (_a.get("start_date") or "")[:10]
+                                    _ln = f"• [{_a['id']}] {_d} — {_a.get('sport_type')} — {_a['name']} — {_a['distance_km']} km in {_a['duration']}"
+                                    if _a.get("elevation_m"): _ln += f", {_a['elevation_m']:.0f}m elev"
+                                    if _a.get("avg_hr"):      _ln += f", avg HR {_a['avg_hr']:.0f} bpm"
+                                    if _a.get("suffer_score"): _ln += f", suffer {_a['suffer_score']}"
+                                    if _a.get("pr_count"):    _ln += f", {_a['pr_count']} PR{'s' if _a['pr_count'] != 1 else ''}"
+                                    _lines.append(_ln)
+                                return "\n".join(_lines)
+
+                            if name == "get_strava_activity":
+                                _a = await _sc.get_activity(int(tool_input["activity_id"]))
+                                _lines = [
+                                    f"Activity: {_a['name']} (ID {_a['id']})",
+                                    f"Date: {(_a.get('start_date') or '')[:10]}",
+                                    f"Type: {_a.get('sport_type')}",
+                                    f"Distance: {_a['distance_km']} km",
+                                    f"Duration: {_a['duration']}",
+                                ]
+                                if _a.get("avg_speed_kph"):      _lines.append(f"Avg Speed: {_a['avg_speed_kph']:.1f} km/h")
+                                if _a.get("elevation_m"):         _lines.append(f"Elevation: {_a['elevation_m']:.0f} m")
+                                if _a.get("avg_hr"):              _lines.append(f"Avg HR: {_a['avg_hr']:.0f} bpm")
+                                if _a.get("max_hr"):              _lines.append(f"Max HR: {_a['max_hr']:.0f} bpm")
+                                if _a.get("avg_watts"):           _lines.append(f"Avg Power: {_a['avg_watts']:.0f} W")
+                                if _a.get("normalized_watts"):    _lines.append(f"Normalized Power: {_a['normalized_watts']:.0f} W")
+                                if _a.get("avg_cadence"):         _lines.append(f"Cadence: {_a['avg_cadence']:.0f} rpm")
+                                if _a.get("calories"):            _lines.append(f"Calories: {_a['calories']}")
+                                if _a.get("device_name"):         _lines.append(f"Device: {_a['device_name']}")
+                                if _a.get("description"):         _lines.append(f"Notes: {_a['description']}")
+                                return "\n".join(_lines)
+
+                            if name == "get_strava_stats":
+                                _stats = await _sc.get_athlete_stats()
+                                def _fmt(t: dict) -> str:
+                                    _h, _rem = divmod(int(t.get("moving_time_sec", 0)), 3600)
+                                    _m = _rem // 60
+                                    return f"{t.get('count', 0)} activities — {t.get('distance_km', 0):.0f} km — {t.get('elevation_m', 0):.0f} m elev — {_h}h {_m:02d}m"
+                                return "\n".join([
+                                    "Strava Statistics:",
+                                    f"  Rides, last 4 weeks:  {_fmt(_stats.get('recent_ride_totals', {}))}",
+                                    f"  Rides, YTD:           {_fmt(_stats.get('ytd_ride_totals', {}))}",
+                                    f"  Rides, all time:      {_fmt(_stats.get('all_ride_totals', {}))}",
+                                    f"  Runs,  last 4 weeks:  {_fmt(_stats.get('recent_run_totals', {}))}",
+                                    f"  Runs,  YTD:           {_fmt(_stats.get('ytd_run_totals', {}))}",
+                                ])
+
+                            if name == "get_strava_zones":
+                                _z = await _sc.get_athlete_zones()
+                                _lines = ["Strava Training Zones:"]
+                                _hr = _z.get("heart_rate", {}).get("zones", [])
+                                if _hr:
+                                    _lines.append("Heart Rate:")
+                                    for _i, _zone in enumerate(_hr, 1):
+                                        _max = _zone.get("max", "∞")
+                                        _lines.append(f"  Z{_i}: {_zone.get('min', 0)}–{_max} bpm")
+                                _pwr = _z.get("power", {}).get("zones", [])
+                                if _pwr:
+                                    _lines.append("Power:")
+                                    for _i, _zone in enumerate(_pwr, 1):
+                                        _max = _zone.get("max", "∞")
+                                        _lines.append(f"  Z{_i}: {_zone.get('min', 0)}–{_max} W")
+                                return "\n".join(_lines) if len(_lines) > 1 else "No zone data available."
+
+                        except Exception as exc:
+                            log.warning("Strava tool '%s' failed: %s", name, exc)
+                            return f"Strava error: {exc}"
 
                     if name == "generate_chart":
                         import subprocess as _subprocess

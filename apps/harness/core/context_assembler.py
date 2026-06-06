@@ -160,6 +160,18 @@ Use Mermaid code blocks (```mermaid) ONLY for structural diagrams, NOT for data 
 • mindmap — topic breakdowns, brainstorming
 Never use Mermaid pie charts or bar charts for real data — use Python/matplotlib instead.
 
+STRAVA (cycling & training data):
+Mike is a randonneur and cyclist — Strava data is frequently relevant. Check the [STRAVA] context section first; use tools when more detail is needed.
+• get_strava_activities — fetch recent rides, runs, or workouts. Use when Mike asks about training, recent rides, last run, this week's volume, or activity history. Filter by sport_type (Ride, Run, VirtualRide, etc.) or leave blank for all. Returns distance, duration, HR, elevation, suffer score, and IDs.
+• get_strava_activity — full details of one activity by ID (calories, normalized power, cadence, device, notes). Use when Mike asks about specifics on a particular effort.
+• get_strava_stats — YTD and all-time ride/run totals (distance, elevation, moving time). Use when Mike asks about yearly mileage, career totals, or training volume overview.
+• get_strava_zones — heart rate and power training zones. Use when Mike asks about his HR zones, power zones, or threshold values.
+
+Proactive Strava behavior:
+— When Mike mentions a recent ride or run, reference the [STRAVA] context first before calling a tool.
+— When Mike asks to chart or graph his training data, call get_strava_activities then use generate_chart with the data.
+— When discussing training load, suffer score is a useful proxy for effort.
+
 AGENT JOBS (Evolutionarist):
 TARS has a self-evolving coding agent system. Spawn agents that work on the TARS codebase.
 • create_agent_job — spawn an agent job. Use when Mike asks to:
@@ -197,7 +209,7 @@ and Entire Travel Group. He is a randonneur and cyclist. He manages his health a
 
 [RELEVANT KNOWLEDGE]
 {second_brain_context}
-{gmail_section}{gcal_section}{tasks_section}{meetings_section}{contacts_section}
+{gmail_section}{gcal_section}{tasks_section}{meetings_section}{contacts_section}{strava_section}
 [ACTIVE CONTEXT]
 Timezone: {user_timezone}
 {location_section}{active_tasks_count} open tasks
@@ -354,6 +366,46 @@ async def _fetch_gcal_context(db: AsyncSession, user_id: str, tz_name: str = "As
         return ""
 
 
+async def _fetch_strava_context(db: AsyncSession, user_id: str) -> str:
+    """Inject last 5 Strava activities so TARS can reference them without a tool call."""
+    try:
+        from sqlalchemy import select
+        from db.models import Connector
+        result = await db.execute(
+            select(Connector).where(
+                Connector.user_id == user_id,
+                Connector.name == "Strava",
+            )
+        )
+        conn = result.scalar_one_or_none()
+        if not conn or not conn.auth.get("access_token"):
+            return ""
+
+        from connectors.strava import StravaClient
+        strava = StravaClient(
+            conn.auth,
+            conn.config.get("client_id", ""),
+            conn.config.get("client_secret", ""),
+        )
+        activities = await strava.list_activities(limit=5)
+        if not activities:
+            return "\n[STRAVA]\nConnected — no recent activities.\n"
+
+        lines = ["\n[STRAVA — RECENT ACTIVITIES]"]
+        for a in activities:
+            date = (a.get("start_date") or "")[:10]
+            ln = f"  • [{a['id']}] {date} — {a.get('sport_type')} — {a['name']} — {a['distance_km']} km in {a['duration']}"
+            if a.get("elevation_m"): ln += f", {a['elevation_m']:.0f}m elev"
+            if a.get("avg_hr"):      ln += f", HR {a['avg_hr']:.0f}"
+            if a.get("suffer_score"): ln += f", suffer {a['suffer_score']}"
+            lines.append(ln)
+        lines.append("")
+        return "\n".join(lines)
+    except Exception as exc:
+        log.warning("Strava context fetch failed: %s", exc)
+        return ""
+
+
 async def _fetch_contacts_context(db: AsyncSession, user_id: str) -> str:
     """Inject a brief contact database summary so the agent knows the scale at a glance."""
     try:
@@ -413,6 +465,7 @@ async def assemble(
     tasks_section = ""
     meetings_section = ""
     contacts_section = ""
+    strava_section = ""
     user_tz = user_timezone
 
     if db is not None:
@@ -445,7 +498,7 @@ async def assemble(
             return (_mnemon, _second_brain)
 
         if is_lightweight:
-            # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings + contacts count
+            # Tier 1: memory (top 3) + tasks + calendar + Gmail + recent meetings + contacts + strava
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
@@ -453,6 +506,7 @@ async def assemble(
                 _fetch_gmail_context(db, user_id),
                 _fetch_meetings_context(db, user_id, limit=5),
                 _fetch_contacts_context(db, user_id),
+                _fetch_strava_context(db, user_id),
                 return_exceptions=True,
             )
             if len(results) > 0 and isinstance(results[0], tuple):
@@ -467,8 +521,10 @@ async def assemble(
                 meetings_section = results[4]
             if len(results) > 5 and isinstance(results[5], str):
                 contacts_section = results[5]
+            if len(results) > 6 and isinstance(results[6], str):
+                strava_section = results[6]
         else:
-            # Tier 2/3: full context — tasks, email, calendar, memory, meetings, contacts count
+            # Tier 2/3: full context — tasks, email, calendar, memory, meetings, contacts, strava
             results = await asyncio.gather(
                 _fetch_memory(),
                 _fetch_tasks_context(db, user_id),
@@ -476,6 +532,7 @@ async def assemble(
                 _fetch_gcal_context(db, user_id, user_tz),
                 _fetch_meetings_context(db, user_id, limit=7),
                 _fetch_contacts_context(db, user_id),
+                _fetch_strava_context(db, user_id),
                 return_exceptions=True,
             )
             if len(results) > 0 and isinstance(results[0], tuple):
@@ -490,6 +547,8 @@ async def assemble(
                 meetings_section = results[4]
             if len(results) > 5 and isinstance(results[5], str):
                 contacts_section = results[5]
+            if len(results) > 6 and isinstance(results[6], str):
+                strava_section = results[6]
 
     # Build location section — reverse-geocode to human-readable when possible
     location_section = ""
@@ -527,6 +586,7 @@ async def assemble(
         tasks_section=tasks_section,
         meetings_section=meetings_section,
         contacts_section=contacts_section,
+        strava_section=strava_section,
         location_section=location_section,
         user_timezone=user_tz,
         active_tasks_count=active_tasks_count,
