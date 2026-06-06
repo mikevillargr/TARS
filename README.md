@@ -4,12 +4,14 @@ An AI operating system that runs your life. Chat, tasks, meetings, knowledge, sc
 
 Built on Next.js 16 + FastAPI with a three-tier model routing architecture. Installable as a PWA. Every module is live and connected.
 
+**Current version: v2.2.0**
+
 ---
 
 ## What it does
 
 ### Chat
-Streaming AI assistant with full tool use. Renders markdown, code with syntax highlighting, SVG diagrams, Mermaid flowcharts, and matplotlib charts inline. Charts open in a lightbox and come with chips to Save to Second Brain, Create Task, or Download. Inline text selection toolbar — highlight anything in any message to Copy, Create Task, Save to Second Brain, Add to Calendar, Open URL, or Compose email. Tool calls surface as chips mid-message. Conversation list with auto-generated titles, focus mode, and file/image attachment support.
+Streaming AI assistant with full tool use. Renders markdown, code with syntax highlighting, SVG diagrams, Mermaid flowcharts, and matplotlib charts directly inline in the message body — the code block is replaced by the rendered image when streaming finishes, with click-to-expand and a download button. Contextual reply chips appear when TARS presents a numbered list of options. Inline text selection toolbar — highlight anything in any message to Copy, Create Task, Save to Second Brain, Add to Calendar, Open URL, or Compose email. Tool calls surface as chips mid-message. Conversation list with auto-generated titles, focus mode, and file/image attachment support.
 
 ### Tasks
 Kanban board across five columns: Inbox → Todo → In Progress → Done → Snoozed. Cards show source badge, priority colour bar, due date, description preview, and connector sync indicator. Right-panel detail includes checklist support, full description, activity log, and inline editing. Custom column management. Bulk actions, quick-add, filter/sort bar. Tasks are auto-extracted from meetings and can be created from chat, artifacts, and Second Brain items.
@@ -20,8 +22,11 @@ Fireflies.ai integration. Lists all meetings with status badges (Processing / Re
 ### Calendar
 Google Calendar sync. Month/Week/Day views (week default). Events colour-coded by type — meetings, tasks with due dates, cron jobs, agent jobs. Mini month picker sidebar, Today button. Click any event to open the detail panel.
 
+### Strava & Garmin
+Fitness data connectors with full OAuth. Strava activities are searchable with date-range filtering, pagination, and multi-page server-side fetching. TARS can reference your recent rides, runs, and stats in chat via tool calls — pace, distance, elevation, heart rate zones, gear. Garmin Connect is integrated with token-based auth and a fallback flow for rate-limited IPs.
+
 ### Second Brain
-Semantic knowledge store backed by pgvector. Two-stage RAG retrieval: item-level cosine similarity → chunk-level reranking within matched documents. Ingests:
+Semantic knowledge store backed by pgvector. Two-stage RAG retrieval: item-level cosine similarity → chunk-level reranking within matched documents. Tag filter sidebar is searchable and paginated — handles large tag vocabularies cleanly. Ingests:
 
 - **URLs** — trafilatura extraction + AI summary
 - **Notes** — plain text with tags and domain
@@ -44,7 +49,7 @@ Two-type scheduled job system:
 **Prompt Jobs** — user-defined prompts that run on a wall-clock schedule. Create any number with an arbitrary name. Set frequency (daily / weekdays / weekly / biweekly / monthly), time, and day. When fired, the prompt runs through Claude Sonnet (Tier 3 with full tool access), and the response is saved as a new chat conversation with a notification. Last output is previewed on the card with a direct "Open in chat →" link. Time picker uses Asia/Manila timezone with a segmented HH:MM AM/PM control.
 
 ### Connectors
-Google Calendar, Gmail, and Fireflies with a standard base interface. Each connector card shows live status, last synced time, capabilities, and a webhook event log.
+Google Calendar, Gmail, Fireflies, Strava, and Garmin Connect with a standard base interface. Each connector card shows live status, last synced time, capabilities, and a webhook event log. OAuth connectors have a full in-app flow with credential management from the Settings panel. All connectors support manual Sync Now and disconnect.
 
 ### Mnemon
 Episodic memory layer. Stores facts, decisions, and context extracted from every conversation. Browse, filter by domain/source/importance, semantic search, edit, delete, or manually add memories. Injected into every chat turn alongside Second Brain context. Domains are shared with Second Brain — manage your domain taxonomy in one place across both systems.
@@ -81,7 +86,11 @@ Profile, model routing config with live switching between Anthropic and Z.ai (GL
 | `lookup_contact` / `search_contacts` | Search and fetch contacts |
 | `search_places` / `save_place` | Find and save places |
 | `create_agent_job` | Spin up a Claude Code agent job from chat |
-| `generate_chart` | Render a data chart inline via matplotlib |
+| `generate_chart` | Render a matplotlib chart inline in the message body |
+| `get_strava_activities` | List recent Strava activities with filtering |
+| `get_strava_activity` | Fetch a single activity with full streams |
+| `get_strava_stats` | Fetch cumulative training stats |
+| `get_strava_zones` | Fetch heart rate and power zones |
 
 Tools are available to Tier 2 and Tier 3 models. Tier 1 (Haiku) handles fast/simple queries without tools.
 
@@ -202,3 +211,20 @@ ssh root@<your-server> "cd /opt/tars/apps/web && npm run build && cp -r .next/st
 - **MAJOR** — breaking changes or major new capability
 - **MINOR** — new features, backward compatible
 - **PATCH** — bug fixes only
+
+## Changelog
+
+### v2.2.0
+- **Strava connector** — full OAuth, activity list with date-range filtering, pagination, and multi-page fetching; four chat tools (activities, single activity, stats, zones)
+- **Garmin Connect** — token-based auth with fallback for rate-limited IPs
+- **Inline matplotlib charts** — code block is replaced by the rendered PNG when streaming completes; click to expand, download button; works for both Claude (tool) and Z.ai (code-block fallback) paths
+- **Email send approval gate** — send_email tool always surfaces a draft card for explicit approval before sending
+- **Contextual reply chips** — when TARS presents a numbered option list, clickable chips appear so you can reply without typing
+- **Second Brain tag filter** — sidebar tag list is now searchable and paginated
+- **Connector improvements** — Sync Now button on all connectors, Fireflies disconnect, better status display
+
+### v2.1.0 – v2.1.1
+Places, contacts, inline map cards, email draft cards, Google Contacts sync, pending contacts queue, Tiptap document editor in Second Brain.
+
+### v2.0.0
+Domains taxonomy, Mnemon memory browser, notification WebSocket, PWA manifest, Settings panel, full production deploy on Hostinger KVM4.
