@@ -76,23 +76,30 @@ class StravaClient:
         self,
         limit: int = 20,
         page: int = 1,
+        num_pages: int = 1,
         before: Optional[int] = None,
         after: Optional[int] = None,
     ) -> list:
-        params: dict = {"per_page": limit, "page": page}
-        if before:
-            params["before"] = before
-        if after:
-            params["after"] = after
+        all_raw: list = []
         async with httpx.AsyncClient() as http:
-            r = await http.get(
-                f"{STRAVA_API_BASE}/athlete/activities",
-                headers=self._headers(),
-                params=params,
-            )
-            r.raise_for_status()
-            activities = r.json()
+            for p in range(page, page + num_pages):
+                params: dict = {"per_page": limit, "page": p}
+                if before:
+                    params["before"] = before
+                if after:
+                    params["after"] = after
+                r = await http.get(
+                    f"{STRAVA_API_BASE}/athlete/activities",
+                    headers=self._headers(),
+                    params=params,
+                )
+                r.raise_for_status()
+                batch = r.json()
+                all_raw.extend(batch)
+                if len(batch) < limit:
+                    break
 
+        activities = all_raw
         return [
             {
                 "id":           a["id"],

@@ -762,7 +762,16 @@ GET_STRAVA_ACTIVITIES_TOOL = {
             },
             "page": {
                 "type": "integer",
-                "description": "Page number for pagination. Default 1 (most recent). Use 2, 3, etc. to go further back in history.",
+                "description": "Starting page number. Default 1 (most recent). Use 2, 3, etc. to start further back.",
+            },
+            "num_pages": {
+                "type": "integer",
+                "description": (
+                    "Number of consecutive pages to fetch and return as one combined list. "
+                    "Default 1. Use with limit=100 to retrieve large chunks of history — "
+                    "e.g. num_pages=6 with limit=100 returns up to 600 activities. "
+                    "Stop condition: if a page returns fewer than limit items, fetching stops early."
+                ),
             },
             "before": {
                 "type": "integer",

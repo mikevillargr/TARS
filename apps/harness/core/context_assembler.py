@@ -162,7 +162,7 @@ Never use Mermaid pie charts or bar charts for real data — use Python/matplotl
 
 STRAVA (cycling & training data):
 Mike is a randonneur and cyclist — Strava data is frequently relevant. Check the [STRAVA] context section first; use tools when more detail is needed.
-• get_strava_activities — fetch rides, runs, or workouts. Use when Mike asks about training, recent rides, last run, this week's volume, or activity history. Filter by sport_type (Ride, Run, VirtualRide, etc.) or leave blank for all. Returns distance, duration, HR, elevation, suffer score, and IDs. Use page=2/3/etc. to go further back in history. Use before/after (Unix epoch) to filter by date range.
+• get_strava_activities — fetch rides, runs, or workouts. Filter by sport_type (Ride, Run, VirtualRide, etc.) or leave blank for all. Returns distance, duration, HR, elevation, suffer score, and IDs. Use before/after (Unix epoch) to filter by date range. To retrieve large history: set limit=100 and num_pages=6 to get up to 600 activities in one call (fetches pages 1–6 server-side, stops early when results run out). For full all-time history (~540 rides), use limit=100 num_pages=6.
 • get_strava_activity — full details of one activity by ID (calories, normalized power, cadence, device, notes). Use when Mike asks about specifics on a particular effort.
 • get_strava_stats — YTD and all-time ride/run totals (distance, elevation, moving time). Use when Mike asks about yearly mileage, career totals, or training volume overview.
 • get_strava_zones — heart rate and power training zones. Use when Mike asks about his HR zones, power zones, or threshold values.
