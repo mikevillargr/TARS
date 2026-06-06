@@ -263,6 +263,73 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   )
 }
 
+// ─── Inline image ─────────────────────────────────────────────────
+// Renders markdown images (including data: URLs from generated charts).
+// Provides an expand-on-click overlay and a download button for data: images.
+function InlineImage({ src, alt }: { src?: string; alt?: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const isData = src?.startsWith("data:")
+
+  const download = () => {
+    if (!src) return
+    const a = document.createElement("a")
+    a.href = src
+    a.download = (alt || "chart") + (isData ? ".png" : "")
+    a.click()
+  }
+
+  return (
+    <>
+      <span
+        className="block my-3 rounded-xl overflow-hidden cursor-zoom-in"
+        style={{ border: "1px solid var(--c-border)" }}
+        onClick={() => setExpanded(true)}
+      >
+        {/* Header bar — only shown for data: (generated) images */}
+        {isData && (
+          <span
+            className="flex items-center justify-between px-3 py-1.5"
+            style={{ backgroundColor: "var(--c-surface-raised)", borderBottom: "1px solid var(--c-border)" }}
+          >
+            <span className="text-[11px] font-mono" style={{ color: "var(--c-ink-faint)" }}>
+              {alt || "chart"}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); download() }}
+              className="text-[10px] px-2 py-0.5 rounded transition-colors"
+              style={{ color: "var(--c-ink-faint)" }}
+            >
+              download
+            </button>
+          </span>
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={alt || ""}
+          style={{ display: "block", maxWidth: "100%", width: "100%" }}
+        />
+      </span>
+
+      {/* Full-screen overlay */}
+      {expanded && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.85)" }}
+          onClick={() => setExpanded(false)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt={alt || ""}
+            style={{ maxWidth: "100%", maxHeight: "90vh", objectFit: "contain", borderRadius: "12px" }}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
 // ─── Inline code ─────────────────────────────────────────────────
 function InlineCode({ children }: { children: React.ReactNode }) {
   return (
@@ -383,6 +450,9 @@ export function MessageContent({ content }: { content: string }) {
           em: ({ children }) => (
             <em className="italic" style={{ color: "var(--c-ink-muted)" }}>{children}</em>
           ),
+
+          // Images — handles data: URLs from generated charts
+          img: ({ src, alt }) => <InlineImage src={src} alt={alt} />,
 
           // Horizontal rule
           hr: () => (

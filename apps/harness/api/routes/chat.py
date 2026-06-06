@@ -1929,10 +1929,17 @@ plt.close('all')
                         elif _cos.path.exists(_op) and _cos.path.getsize(_op) > 0:
                             with open(_op, "rb") as _imgf:
                                 _b = _b64.b64encode(_imgf.read()).decode()
-                            _card = {"type": "chart_image", "title": "Chart", "image_base64": _b}
-                            tool_results.append(_card)
-                            await queue.put(sse_event(_card))
-                            log.info("Chart rendered from code block fallback")
+                            # Replace the code block with an inline markdown image so the
+                            # chart renders directly in the message body rather than as a
+                            # separate card. This avoids the card-below-message UX and
+                            # works with ReactMarkdown's native img rendering.
+                            _inline_img = f"\n\n![Chart](data:image/png;base64,{_b})\n\n"
+                            assistant_content = (
+                                assistant_content[:_chart_match.start()]
+                                + _inline_img
+                                + assistant_content[_chart_match.end():]
+                            )
+                            log.info("Chart rendered inline from code block fallback")
                         else:
                             log.warning("Chart fallback: output file missing or empty")
                     except Exception as _ce:
@@ -1940,6 +1947,14 @@ plt.close('all')
                     finally:
                         if _cos.path.exists(_op):
                             _cos.unlink(_op)
+
+            # If the generate_chart tool ran (Claude models), inject the image inline
+            # so it renders in the message body rather than only as a card below it.
+            for _tr in tool_results:
+                if _tr.get("type") == "chart_image" and _tr.get("image_base64"):
+                    _inline_img = f"\n\n![{_tr.get('title', 'Chart')}](data:image/png;base64,{_tr['image_base64']})\n\n"
+                    assistant_content = assistant_content.rstrip() + _inline_img
+                    break
 
             # If the model only emitted tool calls (no text) but did produce
             # cards, give the message a tiny placeholder so the bubble isn't
