@@ -357,6 +357,7 @@ export function MessageContent({ content }: { content: string }) {
     <div className="message-content space-y-0.5 min-w-0 max-w-full w-full overflow-hidden" data-selectable>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={(url: string) => url}
         components={{
           // Strip the outer <pre> ReactMarkdown wraps around code blocks —
           // our CodeBlock component already handles its own container.
