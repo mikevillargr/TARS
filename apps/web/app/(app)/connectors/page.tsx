@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useState } from "react"
-import { Plug, X, Plus, Unplug, Users, Loader2, Settings2, Check } from "lucide-react"
+import { Plug, X, Plus, Unplug, Users, Loader2, Settings2, Check, RefreshCw } from "lucide-react"
 import { apiGet, apiDelete, apiPost, apiPatch } from "@/lib/api-client"
 import { PendingContactsReview } from "@/components/connectors/PendingContactsReview"
 import { useConfirm } from "@/components/ui/confirm-dialog"
@@ -226,6 +226,9 @@ export default function ConnectorsPage() {
   // Settings panel
   const [settingsSaved, setSettingsSaved] = useState<string | null>(null)
   const [configValues,  setConfigValues]  = useState<Record<string, string>>({})
+  const [syncingId,     setSyncingId]     = useState<string | null>(null)
+
+  const SYNCABLE_IDS = new Set(["fireflies", "google_people", "strava", "garmin"])
 
   // ── Loaders ────────────────────────────────────────────────────────────────
   const loadConnectors = useCallback(async () => {
@@ -311,12 +314,40 @@ export default function ConnectorsPage() {
     try {
       if (c.id === "garmin") {
         await apiDelete(`/connectors/garmin/disconnect`)
+      } else if (c.id === "fireflies") {
+        await apiDelete(`/connectors/fireflies/disconnect`)
       } else {
         await apiDelete(`/connectors/oauth/${c.id}`)
       }
       await loadConnectors()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Disconnect failed")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function syncNow(c: Connector) {
+    setSyncingId(c.id)
+    try {
+      await apiPost(`/connectors/${c.id}/sync`, {})
+      // Brief delay so the background task has a chance to update last_synced_at
+      await new Promise(r => setTimeout(r, 1500))
+      await loadConnectors()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed")
+    } finally {
+      setSyncingId(null)
+    }
+  }
+
+  async function enableFireflies() {
+    setBusyId("fireflies")
+    try {
+      await apiPost("/connectors/fireflies/enable", {})
+      await loadConnectors()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Enable failed")
     } finally {
       setBusyId(null)
     }
@@ -612,20 +643,33 @@ export default function ConnectorsPage() {
                   />
                 )}
 
-                {/* Disconnect button — OAuth and credentials connectors */}
-                {(selected.metadata.auth_type === "oauth2" || selected.metadata.auth_type === "credentials") && (
+                {/* Sync Now */}
+                {SYNCABLE_IDS.has(selected.id) && (
                   <div className="pt-1">
                     <button
-                      onClick={() => disconnect(selected)}
-                      disabled={busyId === selected.id}
+                      onClick={() => syncNow(selected)}
+                      disabled={!!syncingId}
                       className="flex items-center gap-1.5 w-full justify-center rounded-md py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
-                      style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }}
+                      style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink)" }}
                     >
-                      {busyId === selected.id ? <Loader2 size={12} className="animate-spin" /> : <Unplug size={12} />}
-                      Disconnect
+                      {syncingId === selected.id ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                      {syncingId === selected.id ? "Syncing…" : "Sync Now"}
                     </button>
                   </div>
                 )}
+
+                {/* Disconnect */}
+                <div className="pt-1">
+                  <button
+                    onClick={() => disconnect(selected)}
+                    disabled={busyId === selected.id}
+                    className="flex items-center gap-1.5 w-full justify-center rounded-md py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+                    style={{ backgroundColor: "var(--c-rose-soft)", color: "var(--c-rose)" }}
+                  >
+                    {busyId === selected.id ? <Loader2 size={12} className="animate-spin" /> : <Unplug size={12} />}
+                    Disconnect
+                  </button>
+                </div>
               </>
             ) : (
               <div className="flex flex-col items-center gap-4 pt-4">
@@ -696,6 +740,16 @@ export default function ConnectorsPage() {
                       Connect Garmin
                     </button>
                   </div>
+                ) : selected.metadata.auth_type === "api_key" ? (
+                  <button
+                    onClick={enableFireflies}
+                    disabled={busyId === selected.id}
+                    className="btn-primary w-full justify-center disabled:opacity-50"
+                    style={{ padding: "0.5rem 1rem" }}
+                  >
+                    {busyId === selected.id ? <Loader2 size={13} className="animate-spin" /> : <Plug size={14} />}
+                    Enable
+                  </button>
                 ) : (
                   <p className="text-xs text-center" style={{ color: "var(--c-ink-faint)" }}>
                     Configure this connector via environment variables.

@@ -92,12 +92,16 @@ async def get_connectors(
             # OAuth connectors: check for refresh_token in auth
             # Strava: check for access_token in auth
             # Garmin: check for garth_tokens in config
+            # Fireflies: api_key — connected by env var, but DB disabled flag overrides
             if c.id == "garmin":
                 if db_conn.config.get("garth_tokens"):
                     c.status = "connected"
             elif c.id == "strava":
                 if db_conn.auth.get("access_token"):
                     c.status = "connected"
+            elif c.id == "fireflies":
+                if db_conn.config.get("disabled"):
+                    c.status = "disconnected"
             elif db_conn.auth.get("refresh_token"):
                 c.status = "connected"
         # Build safe config: strip large internal blobs, mask secrets
@@ -420,6 +424,81 @@ async def patch_connector_config(
     safe = {k: ("***" if k == "client_secret" and v else v)
             for k, v in conn.config.items() if k != "garth_tokens"}
     return {"ok": True, "config": safe}
+
+
+# ── Fireflies api_key connect/disconnect ─────────────────────────────────────
+
+@router.delete("/fireflies/disconnect", status_code=204)
+async def fireflies_disconnect(
+    _: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return
+    result = await db.execute(
+        select(Connector).where(Connector.user_id == user.id, Connector.name == "Fireflies")
+    )
+    conn = result.scalar_one_or_none()
+    if conn:
+        conn.config = {**conn.config, "disabled": True}
+        conn.status = "disconnected"
+        await db.commit()
+    else:
+        db.add(Connector(
+            user_id=user.id, name="Fireflies", status="disconnected",
+            capabilities=["read", "webhook"], config={"disabled": True},
+        ))
+        await db.commit()
+
+
+@router.post("/fireflies/enable", status_code=200)
+async def fireflies_enable(
+    _: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    from core.config import settings
+    if not settings.fireflies_api_key:
+        raise HTTPException(status_code=400, detail="FIREFLIES_API_KEY is not configured on this server")
+    user_result = await db.execute(select(User).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=500, detail="No user in database")
+    result = await db.execute(
+        select(Connector).where(Connector.user_id == user.id, Connector.name == "Fireflies")
+    )
+    conn = result.scalar_one_or_none()
+    if conn:
+        conn.config = {k: v for k, v in conn.config.items() if k != "disabled"}
+        conn.status = "connected"
+        await db.commit()
+    return {"ok": True}
+
+
+# ── Manual sync trigger ───────────────────────────────────────────────────────
+
+_SYNCABLE = {"fireflies", "google_people", "strava", "garmin"}
+
+
+@router.post("/{connector_id}/sync", status_code=200)
+async def sync_connector_now(
+    connector_id: str,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(require_auth),
+):
+    if connector_id not in _SYNCABLE:
+        raise HTTPException(status_code=400, detail=f"No sync job for connector '{connector_id}'")
+    from jobs import scheduler as _sched
+    fn_map = {
+        "fireflies":     _sched._sync_fireflies,
+        "google_people": _sched._sync_google_people,
+        "strava":        _sched._sync_strava,
+        "garmin":        _sched._sync_garmin,
+    }
+    background_tasks.add_task(fn_map[connector_id])
+    log.info("Manual sync triggered for %s", connector_id)
+    return {"ok": True}
 
 
 # ── Webhook log ───────────────────────────────────────────────────────────────
