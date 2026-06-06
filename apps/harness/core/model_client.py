@@ -768,9 +768,9 @@ GET_STRAVA_ACTIVITIES_TOOL = {
                 "type": "integer",
                 "description": (
                     "Number of consecutive pages to fetch and return as one combined list. "
-                    "Default 1. Use with limit=100 to retrieve large chunks of history — "
-                    "e.g. num_pages=6 with limit=100 returns up to 600 activities. "
-                    "Stop condition: if a page returns fewer than limit items, fetching stops early."
+                    "Default 1. Set to 500 with limit=100 to retrieve the full activity history — "
+                    "fetching stops automatically when Strava returns an empty or partial page, "
+                    "so there is no risk of over-fetching."
                 ),
             },
             "before": {

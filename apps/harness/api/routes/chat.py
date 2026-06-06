@@ -1710,7 +1710,7 @@ async def send_message(
                             if name == "get_strava_activities":
                                 _limit     = min(int(tool_input.get("limit", 10)), 100)
                                 _page      = max(int(tool_input.get("page", 1)), 1)
-                                _num_pages = min(int(tool_input.get("num_pages", 1)), 10)
+                                _num_pages = min(int(tool_input.get("num_pages", 1)), 500)
                                 _before    = tool_input.get("before")
                                 _after     = tool_input.get("after")
                                 _sport     = (tool_input.get("sport_type") or "").strip().lower()
