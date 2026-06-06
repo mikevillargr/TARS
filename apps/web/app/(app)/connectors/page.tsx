@@ -270,16 +270,23 @@ export default function ConnectorsPage() {
   }, [selected?.id])
 
   // Show a brief "connected!" toast when redirected back from Google OAuth.
+  // Also surface any ?error= param from a failed OAuth flow.
   // Read window.location.search directly (rather than useSearchParams) so the
   // page can be statically prerendered without a Suspense boundary.
   useEffect(() => {
     if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
     const connected = params.get("connected")
+    const oauthError = params.get("error")
     if (connected) {
       setJustConnected(connected)
       const t = setTimeout(() => setJustConnected(null), 4000)
       return () => clearTimeout(t)
+    }
+    if (oauthError) {
+      setError(`OAuth failed: ${oauthError.replace(/_/g, " ")}`)
+      // Clear the query param so refreshing doesn't re-show it
+      window.history.replaceState(null, "", window.location.pathname)
     }
   }, [])
 
@@ -342,6 +349,8 @@ export default function ConnectorsPage() {
         patch[field.key] = field.key === "sync_interval_minutes" ? parseInt(val) : val
       }
       await apiPatch(`/connectors/${connectorId}/config`, patch)
+      // Reload so the UI reflects the saved values (especially the ✓ set indicator)
+      await loadConnectors()
       setSettingsSaved(connectorId)
       setTimeout(() => setSettingsSaved(null), 2500)
     } catch (err) {
