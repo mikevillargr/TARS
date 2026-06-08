@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm"
 import {
   Archive, Search, Grid2x2, List, Download, MessageSquare, X,
   FileText, Code2, FileSpreadsheet, FileAudio, BarChart2,
-  ChevronDown, Loader2, Trash2, Eye, Brain, ListTodo, Check,
+  ChevronDown, Loader2, Trash2, Eye, Brain, ListTodo, Check, Image,
 } from "lucide-react"
 import { apiGet, apiDelete } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
@@ -35,7 +35,7 @@ interface ArtifactDetail extends Artifact {
 
 interface PreviewResult {
   text: string
-  type: "docx" | "pptx" | "text" | "binary"
+  type: "docx" | "pptx" | "text" | "binary" | "image"
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,6 +46,7 @@ const TYPE_META: Record<string, { icon: React.ReactNode; bg: string; color: stri
   report:      { icon: <BarChart2 size={16} />,       bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "Report" },
   transcript:  { icon: <FileAudio size={16} />,       bg: "var(--c-rose-soft)",  color: "var(--c-rose)",      label: "Transcript" },
   spreadsheet: { icon: <FileSpreadsheet size={16} />, bg: "var(--c-moss-soft)",  color: "var(--c-moss)",      label: "Spreadsheet" },
+  image:       { icon: <Image size={16} />,           bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "Image" },
 }
 
 function typeMeta(type: string) {
@@ -97,6 +98,10 @@ function isPptx(detail: ArtifactDetail | null) {
   return detail?.filename?.toLowerCase().endsWith(".pptx") ?? false
 }
 
+function isImageArtifact(detail: ArtifactDetail | null) {
+  return detail?.type === "image"
+}
+
 // ─── Grid card ────────────────────────────────────────────────────────────────
 
 function GridCard({
@@ -129,24 +134,47 @@ function GridCard({
     } catch (err) { console.error(err) }
   }
 
+  const isImg = artifact.type === "image"
+
   return (
     <button
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className="card text-left flex flex-col cursor-pointer transition-shadow hover:shadow-md relative overflow-hidden"
-      style={{ padding: "0.875rem", height: "10rem", outline: selected ? "2px solid var(--c-moss)" : "none", outlineOffset: "1px" }}
+      style={{ padding: isImg ? 0 : "0.875rem", height: "10rem", outline: selected ? "2px solid var(--c-moss)" : "none", outlineOffset: "1px" }}
     >
-      <div className="flex items-start gap-3 flex-1 min-h-0">
-        <TypeIcon type={artifact.type} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium leading-snug line-clamp-2" style={{ color: "var(--c-ink)" }}>{artifact.filename}</p>
-          <p className="text-[11px] mt-0.5 truncate" style={{ color: "var(--c-ink-faint)" }}>{sourceLabel(artifact.source)}</p>
+      {isImg ? (
+        /* Image thumbnail fills the card */
+        <div className="flex-1 min-h-0 w-full overflow-hidden rounded-t-lg">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/proxy/artifacts/${artifact.id}/view`}
+            alt={artifact.filename}
+            className="w-full h-full object-cover"
+            style={{ maxHeight: "7rem" }}
+          />
         </div>
-      </div>
-      <div className="flex items-center justify-between mt-2 pt-2" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
-        <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>{formatDate(artifact.created_at)}</span>
-        <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>{formatSize(artifact.size_bytes)}</span>
+      ) : (
+        <div className="flex items-start gap-3 flex-1 min-h-0">
+          <TypeIcon type={artifact.type} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium leading-snug line-clamp-2" style={{ color: "var(--c-ink)" }}>{artifact.filename}</p>
+            <p className="text-[11px] mt-0.5 truncate" style={{ color: "var(--c-ink-faint)" }}>{sourceLabel(artifact.source)}</p>
+          </div>
+        </div>
+      )}
+      <div
+        className="flex items-center justify-between pt-2 mt-2"
+        style={{
+          borderTop: "1px solid var(--c-border-faint)",
+          padding: isImg ? "0.375rem 0.625rem" : undefined,
+        }}
+      >
+        <span className="text-[10px] truncate max-w-[60%]" style={{ color: "var(--c-ink-faint)" }}>
+          {isImg ? artifact.filename.replace(/\.[^/.]+$/, "") : formatDate(artifact.created_at)}
+        </span>
+        <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>{isImg ? formatDate(artifact.created_at) : formatSize(artifact.size_bytes)}</span>
       </div>
 
       {hovered && (
@@ -217,6 +245,8 @@ function ArtifactModal({
         if (isPdf(detail) || isDocx(detail) || isPptx(detail)) {
           const p = await fetch(`/api/proxy/artifacts/${detail.id}/preview`).then(r => r.json()) as PreviewResult
           content = p.text ?? `${detail.filename}\n(No text extracted)`
+        } else if (isImageArtifact(detail)) {
+          content = `Image: ${detail.filename}\nSource: ${sourceLabel(detail.source)}\nUploaded: ${formatDate(detail.created_at)}`
         } else {
           content = `${detail.filename}\nType: ${detail.type}\nSource: ${sourceLabel(detail.source)}`
         }
@@ -275,8 +305,9 @@ function ArtifactModal({
         setLoading(false)
 
         // Fetch preview for binary artifacts (DOCX / PPTX)
-        // PDF handled by iframe; code / text displayed directly
-        if (d.content?.startsWith("base64:") && !d.filename?.toLowerCase().endsWith(".pdf")) {
+        // PDF handled by iframe; images handled by <img>; code / text displayed directly
+        const isImageType = d.type === "image"
+        if (d.content?.startsWith("base64:") && !d.filename?.toLowerCase().endsWith(".pdf") && !isImageType) {
           setPreviewLoading(true)
           try {
             const p = await fetch(`/api/proxy/artifacts/${artifactId}/preview`)
@@ -319,6 +350,7 @@ function ArtifactModal({
   const meta = detail ? typeMeta(detail.type) : typeMeta("document")
   const isCode = detail?.type === "code"
   const isBinary = isBinaryArtifact(detail)
+  const showImagePreview = isBinary && isImageArtifact(detail)
   const showPdfFrame = isBinary && isPdf(detail)
   const showExtractedPreview = isBinary && (isDocx(detail) || isPptx(detail))
 
@@ -462,7 +494,18 @@ function ArtifactModal({
           ) : !detail ? null : activeTab === "preview" ? (
             /* ── Preview tab ── */
             <div className="h-full flex flex-col">
-              {showPdfFrame ? (
+              {showImagePreview ? (
+                /* Image — rendered natively */
+                <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/proxy/artifacts/${detail.id}/view`}
+                    alt={detail.filename}
+                    className="max-w-full max-h-full object-contain rounded-lg"
+                    style={{ maxHeight: "70vh" }}
+                  />
+                </div>
+              ) : showPdfFrame ? (
                 /* PDF — rendered natively by the browser */
                 <iframe
                   src={`/api/proxy/artifacts/${detail.id}/view`}
@@ -663,7 +706,7 @@ function DeepLinkHandler({ onOpen }: { onOpen: (id: string) => void }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const TYPE_FILTERS  = ["All Types", "document", "code", "report", "spreadsheet", "transcript"]
+const TYPE_FILTERS  = ["All Types", "document", "image", "code", "report", "spreadsheet", "transcript"]
 const SOURCE_FILTERS = ["All Sources", "chat", "agent_job", "cron", "meeting", "upload"]
 
 export default function ArtifactsPage() {

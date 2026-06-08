@@ -20,6 +20,11 @@ _BINARY_MIME = {
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".pdf":  "application/pdf",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png":  "image/png",
+    ".gif":  "image/gif",
+    ".webp": "image/webp",
 }
 
 
@@ -304,6 +309,11 @@ async def preview_artifact(
 
     raw = base64.b64decode(content[7:])
 
+    _img_exts = (".jpg", ".jpeg", ".png", ".gif", ".webp")
+    if any(filename.endswith(e) for e in _img_exts):
+        # Images are served directly via /view — return a signal so the frontend renders <img>
+        return {"text": "", "type": "image"}
+
     if filename.endswith(".pdf"):
         try:
             from ingest.parsers import pdf as _pdf_parser
@@ -411,6 +421,9 @@ async def ingest_artifact(
             or ext in _DOC_LEGACY_EXTS or detected_mime in _DOC_LEGACY_MIMES):
         content = "base64:" + base64.b64encode(content_bytes).decode()
         size_bytes = len(content_bytes)
+        # Override type for images so the UI can distinguish and render them correctly
+        if ext in _IMAGE_EXTS or detected_mime in _IMAGE_MIMES:
+            artifact_type = "image"
     else:
         result = await ingest_file(
             content_bytes=content_bytes,
