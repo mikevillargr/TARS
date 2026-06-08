@@ -1424,6 +1424,7 @@ export default function ChatPage() {
   const streamPollingRef                            = useRef<boolean>(false)  // true while recovery-polling after stream interruption
   const autoSendPendingRef                          = useRef<boolean>(false)  // true when handleAsk should auto-send
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
+  const sendingNewConvRef                           = useRef<boolean>(false)       // true while handleSend is creating a fresh conversation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSendRef                               = useRef<(overrideContent?: string, overrideArtifactId?: string) => Promise<void>>(async () => {})  // always-current handleSend
   const userLocationRef                             = useRef<{ lat: number; lng: number } | null>(null)
@@ -1465,8 +1466,14 @@ export default function ChatPage() {
     }
   }, [])
 
-  // Keep ref in sync; cancel in-flight request + poll when switching conversations
+  // Keep ref in sync; cancel in-flight request + poll when switching conversations.
+  // Skips abort/clear when handleSend is mid-flight creating a new conversation.
   useEffect(() => {
+    if (sendingNewConvRef.current) {
+      sendingNewConvRef.current = false
+      activeChatIdRef.current = activeChatId
+      return
+    }
     abortControllerRef.current?.abort()
     if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     activeChatIdRef.current = activeChatId
@@ -1752,6 +1759,7 @@ export default function ChatPage() {
       try {
         const conv = await apiPost<Conversation>("/chat/conversations")
         setConversations((prev) => [conv, ...prev])
+        sendingNewConvRef.current = true  // tell the cancel effect to skip abort/clear
         setActiveChatId(conv.id)
         chatId = conv.id
       } catch (err) {
@@ -2009,11 +2017,10 @@ export default function ChatPage() {
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
         <ArtifactLoader onArtifactLoad={(artifactId, filename) => {
           const msg = `📎 **${filename}** — [View in Artifacts](/artifacts)`
-          // Clear the current conversation view so the new one starts fresh
-          setActiveChatId(null)
-          setMessages([])
-          // Pass content and artifactId directly — avoids any closure/timing
-          // issues with React state not yet committed when this async callback fires
+          setMessages([])  // clear current conversation view
+          // Pass content + artifactId directly to avoid closure/timing issues.
+          // Don't setActiveChatId(null) here — that triggers the cancel effect which
+          // clears busy/streaming before the model response can arrive.
           handleSendRef.current(msg, artifactId)
         }} />
         <AskLoader onAsk={(q) => {
