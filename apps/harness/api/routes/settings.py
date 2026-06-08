@@ -93,6 +93,7 @@ class ModelRoutingOut(BaseModel):
     tier1: TierConfig
     tier2: TierConfig
     tier3: TierConfig
+    vision: TierConfig
 
 
 class TierUpdate(BaseModel):
@@ -104,20 +105,32 @@ class ModelRoutingUpdate(BaseModel):
     tier1: Optional[TierUpdate] = None
     tier2: Optional[TierUpdate] = None
     tier3: Optional[TierUpdate] = None
+    vision: Optional[TierUpdate] = None
 
 
 _PROVIDER_DEFAULTS = {
-    ("anthropic", "tier1"): "claude-haiku-4-5-20251001",
-    ("anthropic", "tier2"): "claude-sonnet-4-6",
-    ("anthropic", "tier3"): "claude-sonnet-4-6",
-    ("zai",       "tier1"): "glm-4.5-air",
-    ("zai",       "tier2"): "glm-4.6",
-    ("zai",       "tier3"): "glm-4.7",
+    ("anthropic", "tier1"):  "claude-haiku-4-5-20251001",
+    ("anthropic", "tier2"):  "claude-sonnet-4-6",
+    ("anthropic", "tier3"):  "claude-sonnet-4-6",
+    ("anthropic", "vision"): "claude-sonnet-4-6",
+    ("zai",       "tier1"):  "glm-4.5-air",
+    ("zai",       "tier2"):  "glm-4.6",
+    ("zai",       "tier3"):  "glm-4.7",
+    ("zai",       "vision"): "glm-4.5-air",
 }
 
 
+def _resolved_provider(tier_key: str) -> str:
+    if tier_key == "vision":
+        p = settings.vision_provider
+        if not p:
+            return "anthropic" if settings.anthropic_api_key else settings.tier3_provider
+        return p
+    return getattr(settings, f"{tier_key}_provider", "anthropic")
+
+
 def _resolved_model(tier_key: str) -> str:
-    provider = getattr(settings, f"{tier_key}_provider", "anthropic")
+    provider = _resolved_provider(tier_key)
     override = getattr(settings, f"{tier_key}_model_override", "")
     if override:
         return override
@@ -127,9 +140,10 @@ def _resolved_model(tier_key: str) -> str:
 @router.get("/model-routing", response_model=ModelRoutingOut)
 async def get_model_routing(_user_id: str = Depends(require_auth)):
     return ModelRoutingOut(
-        tier1=TierConfig(provider=settings.tier1_provider, model=_resolved_model("tier1")),
-        tier2=TierConfig(provider=settings.tier2_provider, model=_resolved_model("tier2")),
-        tier3=TierConfig(provider=settings.tier3_provider, model=_resolved_model("tier3")),
+        tier1=TierConfig(provider=settings.tier1_provider,  model=_resolved_model("tier1")),
+        tier2=TierConfig(provider=settings.tier2_provider,  model=_resolved_model("tier2")),
+        tier3=TierConfig(provider=settings.tier3_provider,  model=_resolved_model("tier3")),
+        vision=TierConfig(provider=_resolved_provider("vision"), model=_resolved_model("vision")),
     )
 
 
@@ -138,13 +152,13 @@ async def update_model_routing(
     body: ModelRoutingUpdate,
     _user_id: str = Depends(require_auth),
 ):
-    for tier_key in ("tier1", "tier2", "tier3"):
-        update: Optional[TierUpdate] = getattr(body, tier_key)
+    for tier_key in ("tier1", "tier2", "tier3", "vision"):
+        update: Optional[TierUpdate] = getattr(body, tier_key, None)
         if update is None:
             continue
         if update.provider is not None:
             if update.provider not in ("anthropic", "zai"):
-                raise HTTPException(status_code=400, detail=f"provider must be 'anthropic' or 'zai'")
+                raise HTTPException(status_code=400, detail="provider must be 'anthropic' or 'zai'")
             _set_env(f"{tier_key}_provider", update.provider)
         if update.model_override is not None:
             _set_env(f"{tier_key}_model_override", update.model_override)

@@ -46,24 +46,24 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void 
 type Provider = "anthropic" | "zai"
 
 interface TierConfig { provider: Provider; model: string }
-interface ModelRouting { tier1: TierConfig; tier2: TierConfig; tier3: TierConfig }
+interface ModelRouting { tier1: TierConfig; tier2: TierConfig; tier3: TierConfig; vision: TierConfig }
 
 const ANTHROPIC_MODELS = [
   { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (fast)" },
   { value: "claude-sonnet-4-6",         label: "Claude Sonnet 4.6" },
-  { value: "claude-opus-4-5",           label: "Claude Opus 4.5 (frontier)" },
+  { value: "claude-opus-4-8",           label: "Claude Opus 4.8 (frontier)" },
 ]
 
 const ZAI_MODELS = [
-  { value: "glm-4.5-air", label: "GLM-4.5 Air (fast)" },
+  { value: "glm-4.5-air", label: "GLM-4.5 Air (vision, fast)" },
   { value: "glm-4.5",     label: "GLM-4.5" },
   { value: "glm-4.6",     label: "GLM-4.6" },
   { value: "glm-4.7",     label: "GLM-4.7 (frontier)" },
 ]
 
 const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
-  anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-4-6", tier3: "claude-sonnet-4-6" },
-  zai:       { tier1: "glm-4.5-air",               tier2: "glm-4.6",           tier3: "glm-4.7" },
+  anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-4-6", tier3: "claude-sonnet-4-6", vision: "claude-sonnet-4-6" },
+  zai:       { tier1: "glm-4.5-air",               tier2: "glm-4.6",           tier3: "glm-4.7",           vision: "glm-4.5-air" },
 }
 
 // ─── API key types ──────────────────────────────────────────────────────────
@@ -123,9 +123,10 @@ export default function SettingsPage() {
 
   // Model routing — live from backend
   const [routing, setRouting]   = useState<ModelRouting>({
-    tier1: { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
-    tier2: { provider: "anthropic", model: "claude-sonnet-4-6" },
-    tier3: { provider: "anthropic", model: "claude-sonnet-4-6" },
+    tier1:  { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
+    tier2:  { provider: "anthropic", model: "claude-sonnet-4-6" },
+    tier3:  { provider: "anthropic", model: "claude-sonnet-4-6" },
+    vision: { provider: "anthropic", model: "claude-sonnet-4-6" },
   })
   const [routingSaving, setRoutingSaving] = useState(false)
   const [routingSaved,  setRoutingSaved]  = useState(false)
@@ -231,9 +232,10 @@ export default function SettingsPage() {
     setRoutingSaving(true)
     try {
       const body = {
-        tier1: { provider: routing.tier1.provider, model_override: routing.tier1.model },
-        tier2: { provider: routing.tier2.provider, model_override: routing.tier2.model },
-        tier3: { provider: routing.tier3.provider, model_override: routing.tier3.model },
+        tier1:  { provider: routing.tier1.provider,  model_override: routing.tier1.model },
+        tier2:  { provider: routing.tier2.provider,  model_override: routing.tier2.model },
+        tier3:  { provider: routing.tier3.provider,  model_override: routing.tier3.model },
+        vision: { provider: routing.vision.provider, model_override: routing.vision.model },
       }
       const updated = await apiPatch<ModelRouting>("/settings/model-routing", body)
       setRouting(updated)
@@ -443,9 +445,10 @@ export default function SettingsPage() {
 
           <div className="flex flex-col gap-0 rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
             {([
-              { label: "Tier 1 — Fast",      key: "tier1" as const, desc: "Simple queries, quick tasks" },
-              { label: "Tier 2 — Workhorse", key: "tier2" as const, desc: "Most day-to-day tasks" },
-              { label: "Tier 3 — Frontier",  key: "tier3" as const, desc: "Complex reasoning, deliverables" },
+              { label: "Tier 1 — Fast",      key: "tier1"  as const, desc: "Simple queries, quick tasks" },
+              { label: "Tier 2 — Workhorse", key: "tier2"  as const, desc: "Most day-to-day tasks" },
+              { label: "Tier 3 — Frontier",  key: "tier3"  as const, desc: "Complex reasoning, deliverables" },
+              { label: "Vision — Analysis",  key: "vision" as const, desc: "Image and photo analysis" },
             ] as const).map((tier, i) => {
               const cfg = routing[tier.key]
               const modelList = cfg.provider === "zai" ? ZAI_MODELS : ANTHROPIC_MODELS
