@@ -556,10 +556,13 @@ async def send_message(
     # Build the text that goes to the model (doc text prepended)
     full_text = ("\n\n".join(doc_snippets) + "\n\n" + content).strip() if doc_snippets else content
 
-    # Store plain text in DB (don't persist image bytes)
-    db_content = content or " · ".join(
-        (f"[image]" if b["type"] == "image" else "") for b in image_blocks
-    ) or "[attachment]"
+    # Store plain text in DB (don't persist image bytes).
+    # Always stamp [image] when images were attached so that follow-up turns in the same
+    # conversation are detected as vision messages and keep routing to Anthropic.
+    if image_blocks:
+        db_content = ("[image] " + content).strip() if content else "[image]"
+    else:
+        db_content = content or "[attachment]"
     user_msg = Message(
         conversation_id=conversation_id,
         role="user",

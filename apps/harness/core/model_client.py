@@ -987,13 +987,18 @@ class ModelClient:
         return _PROVIDER_DEFAULTS.get((provider, tier_key))
 
     def _has_image_content(self, messages: list) -> bool:
-        """True when any message contains an Anthropic-format image block."""
+        """True when any message contains an Anthropic-format image block OR an [image] history marker.
+        The [image] marker is stamped into DB content whenever images are attached, so that follow-up
+        turns in the same conversation still route to Anthropic (not the tier system / Z.ai).
+        """
         for m in messages:
             content = m.get("content")
             if isinstance(content, list):
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "image":
                         return True
+            elif isinstance(content, str) and "[image]" in content:
+                return True
         return False
 
     def _is_warm(self, tier: ModelTier) -> bool:
