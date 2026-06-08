@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 import { Camera, FileCode, FileSpreadsheet, FileText, Loader2, Paperclip, Send, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -74,24 +74,34 @@ export function MessageInput({ onSend, disabled }: Props) {
     setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
-  function handlePaste(e: React.ClipboardEvent) {
-    const items = Array.from(e.clipboardData.items)
-    const imageItems = items.filter((item) => item.type.startsWith("image/"))
-    if (imageItems.length === 0) return
+  // Window-level paste listener so images can be pasted from anywhere on the
+  // page — not just when the textarea is focused.
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      // Don't interfere with paste in other inputs on the page
+      const target = e.target as HTMLElement
+      const isOtherEditable =
+        target !== textareaRef.current &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+      if (isOtherEditable) return
 
-    e.preventDefault()
-    imageItems.forEach((item) => {
-      const file = item.getAsFile()
-      if (!file) return
-      const ext = item.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png"
-      const named = new File([file], `pasted-${Date.now()}.${ext}`, { type: item.type })
-      setAttachments((prev) => [...prev, named])
-    })
+      const items = Array.from(e.clipboardData?.items ?? [])
+      const imageItems = items.filter((item) => item.type.startsWith("image/"))
+      if (imageItems.length === 0) return
 
-    // If there's also plain text on the clipboard, still insert it
-    const text = e.clipboardData.getData("text")
-    if (text) setValue((prev) => prev + text)
-  }
+      e.preventDefault()
+      imageItems.forEach((item) => {
+        const file = item.getAsFile()
+        if (!file) return
+        const ext = item.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png"
+        const named = new File([file], `pasted-${Date.now()}.${ext}`, { type: item.type })
+        setAttachments((prev) => [...prev, named])
+      })
+    }
+
+    window.addEventListener("paste", onPaste)
+    return () => window.removeEventListener("paste", onPaste)
+  }, [])
 
   return (
     <div className="px-4 pb-4 pt-2">
@@ -181,7 +191,6 @@ export function MessageInput({ onSend, disabled }: Props) {
             value={value}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
             placeholder="Message TARS…"
             rows={1}
             disabled={disabled}
