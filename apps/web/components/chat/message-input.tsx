@@ -74,33 +74,33 @@ export function MessageInput({ onSend, disabled }: Props) {
     setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Window-level paste listener so images can be pasted from anywhere on the
-  // page — not just when the textarea is focused.
+  // Document-level paste listener — fires regardless of which element is focused.
   useEffect(() => {
     function onPaste(e: ClipboardEvent) {
-      // Don't interfere with paste in other inputs on the page
-      const target = e.target as HTMLElement
-      const isOtherEditable =
-        target !== textareaRef.current &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-      if (isOtherEditable) return
+      const cd = e.clipboardData
+      if (!cd) return
 
-      const items = Array.from(e.clipboardData?.items ?? [])
-      const imageItems = items.filter((item) => item.type.startsWith("image/"))
-      if (imageItems.length === 0) return
+      // Collect image files from both .files and .items (covers screenshots,
+      // web images, and files copied from the OS file manager).
+      const fromFiles = Array.from(cd.files).filter((f) => f.type.startsWith("image/"))
+      const fromItems = Array.from(cd.items)
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile())
+        .filter((f): f is File => f !== null)
+
+      const images = fromFiles.length > 0 ? fromFiles : fromItems
+      if (images.length === 0) return
 
       e.preventDefault()
-      imageItems.forEach((item) => {
-        const file = item.getAsFile()
-        if (!file) return
-        const ext = item.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png"
-        const named = new File([file], `pasted-${Date.now()}.${ext}`, { type: item.type })
+      images.forEach((f) => {
+        const ext = f.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png"
+        const named = new File([f], `pasted-${Date.now()}.${ext}`, { type: f.type })
         setAttachments((prev) => [...prev, named])
       })
     }
 
-    window.addEventListener("paste", onPaste)
-    return () => window.removeEventListener("paste", onPaste)
+    document.addEventListener("paste", onPaste)
+    return () => document.removeEventListener("paste", onPaste)
   }, [])
 
   return (
