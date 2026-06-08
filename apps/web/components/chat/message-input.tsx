@@ -74,10 +74,14 @@ export function MessageInput({ onSend, disabled }: Props) {
     setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // React synthetic onPaste on the wrapper div catches paste when any child has focus.
-  // Document listener handles paste when focus is outside the component entirely.
   function handlePastedImages(e: React.ClipboardEvent | ClipboardEvent) {
     const cd = (e as React.ClipboardEvent).clipboardData ?? (e as ClipboardEvent).clipboardData
+    // Diagnostic: log what's in the clipboard every time paste fires
+    console.log("[TARS paste]", {
+      itemCount: cd?.items?.length ?? 0,
+      fileCount: cd?.files?.length ?? 0,
+      items: cd ? Array.from(cd.items).map((i) => ({ kind: i.kind, type: i.type })) : [],
+    })
     if (!cd) return
     const images = Array.from(cd.items)
       .filter((item) => item.type.startsWith("image/"))
@@ -93,7 +97,7 @@ export function MessageInput({ onSend, disabled }: Props) {
 
   useEffect(() => {
     function onDocumentPaste(e: ClipboardEvent) {
-      if (e.defaultPrevented) return  // already handled by the React synthetic handler
+      if (e.defaultPrevented) return
       handlePastedImages(e)
     }
     document.addEventListener("paste", onDocumentPaste)
