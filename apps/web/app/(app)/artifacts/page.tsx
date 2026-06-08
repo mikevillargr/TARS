@@ -212,9 +212,9 @@ function ArtifactModal({
     setSavingBrain(true)
     try {
       let content = detail.content ?? ""
-      // Binary artifacts: extract text via /preview; PDF: use filename/title as stub
+      // Binary artifacts: extract text via /preview endpoint
       if (content.startsWith("base64:")) {
-        if (isDocx(detail) || isPptx(detail)) {
+        if (isPdf(detail) || isDocx(detail) || isPptx(detail)) {
           const p = await fetch(`/api/proxy/artifacts/${detail.id}/preview`).then(r => r.json()) as PreviewResult
           content = p.text ?? `${detail.filename}\n(No text extracted)`
         } else {

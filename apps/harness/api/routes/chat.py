@@ -462,10 +462,35 @@ async def send_message(
         )
         art_obj = art_result.scalar_one_or_none()
         if art_obj and art_obj.content:
+            import base64 as _b64
+            art_content = art_obj.content
+
+            # Binary artifacts are stored as base64 — extract text for model context
+            if art_content.startswith("base64:"):
+                _raw = _b64.b64decode(art_content[7:])
+                _ext = (art_obj.filename or "").rsplit(".", 1)[-1].lower()
+                try:
+                    if _ext == "pdf":
+                        from ingest.parsers import pdf as _pdf_p
+                        art_content = _pdf_p.extract(_raw)
+                    elif _ext == "docx":
+                        from ingest.parsers import docx as _docx_p
+                        art_content = _docx_p.extract(_raw)
+                    elif _ext in ("pptx", "ppt"):
+                        from ingest.parsers import pptx as _pptx_p
+                        art_content = _pptx_p.extract(_raw)
+                    elif _ext in ("xlsx", "xls"):
+                        from ingest.parsers import xlsx as _xlsx_p
+                        art_content = _xlsx_p.extract(_raw, filename=art_obj.filename)
+                    else:
+                        art_content = f"[Binary file: {art_obj.filename} — text extraction not supported for this format]"
+                except Exception as _e:
+                    art_content = f"[Failed to extract text from {art_obj.filename}: {_e}]"
+
             MAX_ART = 12000
-            art_text = art_obj.content
+            art_text = art_content
             if len(art_text) > MAX_ART:
-                art_text = art_text[:MAX_ART] + f"\n\n[… truncated, {len(art_obj.content):,} total chars]"
+                art_text = art_text[:MAX_ART] + f"\n\n[… truncated, {len(art_content):,} total chars]"
             doc_snippets.append(
                 f"[UPLOADED FILE: {art_obj.filename}]\n{art_text}\n\n"
                 f"Analyze this file and provide a clear summary of the key insights."

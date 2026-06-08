@@ -304,6 +304,14 @@ async def preview_artifact(
 
     raw = base64.b64decode(content[7:])
 
+    if filename.endswith(".pdf"):
+        try:
+            from ingest.parsers import pdf as _pdf_parser
+            text = _pdf_parser.extract(raw)
+            return {"text": text[:8000], "type": "text"}
+        except Exception as exc:
+            return {"text": f"(preview extraction failed: {exc})", "type": "text"}
+
     if filename.endswith(".docx"):
         try:
             import docx as _docx
@@ -344,8 +352,8 @@ async def ingest_artifact(
 ):
     """
     Upload any file and have it parsed into an Artifact.
-    Supports: PDF, DOCX, PPTX, XLSX/XLS, images (via Claude Vision),
-    and all text/code/data formats.
+    Binary office/PDF files are stored as base64 so the original can be
+    downloaded and previewed. Text/code files are stored as extracted text.
     """
     content_bytes = await file.read()
     filename = file.filename or "upload"
@@ -354,21 +362,46 @@ async def ingest_artifact(
     if not content_bytes:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    # Parse file content
-    result = await ingest_file(
-        content_bytes=content_bytes,
-        filename=filename,
-        mime_type=mime_type or None,
-    )
+    from ingest.pipeline import detect_mime, _artifact_type_from_ext
+
+    detected_mime = mime_type or detect_mime(filename, content_bytes)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    artifact_type = _artifact_type_from_ext(filename)
+
+    # Binary formats are stored as base64 — preserves the original file for
+    # download/preview. Text extraction happens on-the-fly when injected into chat.
+    _BINARY_EXTS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"}
+    _BINARY_MIMES = {
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+
+    if ext in _BINARY_EXTS or detected_mime in _BINARY_MIMES:
+        content = "base64:" + base64.b64encode(content_bytes).decode()
+        size_bytes = len(content_bytes)
+    else:
+        result = await ingest_file(
+            content_bytes=content_bytes,
+            filename=filename,
+            mime_type=detected_mime,
+        )
+        content = result["content"]
+        artifact_type = result["artifact_type"]
+        size_bytes = len(content.encode("utf-8"))
 
     artifact = Artifact(
         user_id=user_id,
         filename=filename,
-        type=result["artifact_type"],
+        type=artifact_type,
         source="upload",
-        content=result["content"],
+        content=content,
         version=1,
-        size_bytes=len(result["content"].encode("utf-8")),
+        size_bytes=size_bytes,
         tags=[],
     )
     db.add(artifact)

@@ -1424,6 +1424,8 @@ export default function ChatPage() {
   const streamPollingRef                            = useRef<boolean>(false)  // true while recovery-polling after stream interruption
   const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleSendRef                               = useRef<() => Promise<void>>(async () => {})  // always-current handleSend
   const userLocationRef                             = useRef<{ lat: number; lng: number } | null>(null)
 
   // ── Per-send geolocation helper ───────────────────────────────────
@@ -1946,6 +1948,9 @@ export default function ChatPage() {
     }
   }, [activeChatId, attachments, busy, inputValue])
 
+  // Keep ref in sync so artifact/voice callers always have the latest closure
+  handleSendRef.current = handleSend
+
   // Auto-send when pendingVoiceSend is ready and activeChatId is set
   useEffect(() => {
     if (!pendingVoiceSend || !activeChatId || busy) return
@@ -2007,6 +2012,14 @@ export default function ChatPage() {
           setInputValue(`📎 **${filename}** — [View in Artifacts](/artifacts)`)
           pendingArtifactIdRef.current = artifactId
           autoSendPendingRef.current = true
+          // Fallback: call handleSend directly after state settles in case the
+          // effect-based auto-send misses the state change on fresh page mounts
+          setTimeout(() => {
+            if (autoSendPendingRef.current) {
+              autoSendPendingRef.current = false
+              handleSendRef.current()
+            }
+          }, 0)
         }} />
         <AskLoader onAsk={(q) => {
           // Pre-fill from command palette "Ask TARS: …" and auto-send
