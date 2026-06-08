@@ -930,6 +930,7 @@ _ZAI_MODELS = {
     "glm-4.5":     "glm-4.5",
     "glm-4.6":     "glm-4.6",
     "glm-4.7":     "glm-4.7",
+    "glm-5.1":     "glm-5.1",
 }
 
 _PROVIDER_DEFAULTS = {
@@ -939,9 +940,12 @@ _PROVIDER_DEFAULTS = {
     ("anthropic", "tier3"): "claude-sonnet-4-6",
     ("anthropic", "vision"): "claude-sonnet-4-6",
     ("zai",       "tier1"): "glm-4.5-air",
-    ("zai",       "tier2"): "glm-4.6",
-    ("zai",       "tier3"): "glm-4.7",
-    ("zai",       "vision"): "glm-4.5-air",   # glm-4.5-air is multimodal
+    ("zai",       "tier2"): "glm-4.7",
+    ("zai",       "tier3"): "glm-5.1",
+    # glm-5v-turbo is Z.ai's vision model but requires their OpenAI endpoint (/api/paas/v4/),
+    # not the Anthropic-compatible endpoint (/api/anthropic) that this client uses.
+    # Vision stays on Anthropic until the OpenAI path is wired up.
+    ("zai",       "vision"): "glm-4.5-air",
 }
 
 

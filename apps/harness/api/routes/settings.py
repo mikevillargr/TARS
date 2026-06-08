@@ -114,9 +114,9 @@ _PROVIDER_DEFAULTS = {
     ("anthropic", "tier3"):  "claude-sonnet-4-6",
     ("anthropic", "vision"): "claude-sonnet-4-6",
     ("zai",       "tier1"):  "glm-4.5-air",
-    ("zai",       "tier2"):  "glm-4.6",
-    ("zai",       "tier3"):  "glm-4.7",
-    ("zai",       "vision"): "glm-4.6V",   # vision-specific model; UI forces Anthropic anyway
+    ("zai",       "tier2"):  "glm-4.7",
+    ("zai",       "tier3"):  "glm-5.1",
+    ("zai",       "vision"): "glm-4.5-air",   # vision stays on Anthropic; glm-5v-turbo needs OpenAI endpoint
 }
 
 
@@ -242,7 +242,7 @@ async def test_api_key(
             api_key=settings.zai_api_key,
             base_url=settings.zai_base_url,
         )
-        model = "glm-4.5-air"
+        model = "glm-5.1"  # test the actual tier3 model to confirm it's reachable
     else:
         raise HTTPException(status_code=400, detail="Provider must be 'anthropic' or 'zai'")
 

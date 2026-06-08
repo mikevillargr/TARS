@@ -58,12 +58,13 @@ const ZAI_MODELS = [
   { value: "glm-4.5-air", label: "GLM-4.5 Air (fast)" },
   { value: "glm-4.5",     label: "GLM-4.5" },
   { value: "glm-4.6",     label: "GLM-4.6" },
-  { value: "glm-4.7",     label: "GLM-4.7 (frontier)" },
+  { value: "glm-4.7",     label: "GLM-4.7" },
+  { value: "glm-5.1",     label: "GLM-5.1 (flagship)" },
 ]
 
 const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
   anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-4-6", tier3: "claude-sonnet-4-6", vision: "claude-sonnet-4-6" },
-  zai:       { tier1: "glm-4.5-air",               tier2: "glm-4.6",           tier3: "glm-4.7",           vision: "glm-4.6V" },
+  zai:       { tier1: "glm-4.5-air",               tier2: "glm-4.7",           tier3: "glm-5.1",           vision: "glm-4.5-air" },
 }
 
 // ─── API key types ──────────────────────────────────────────────────────────
@@ -464,7 +465,7 @@ export default function SettingsPage() {
                     <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{tier.desc}</div>
                     {isVision && (
                       <div className="text-[10px] mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
-                        Anthropic only — tested: Z.ai models don&apos;t accurately process images
+                        Anthropic only — Z.ai&apos;s vision model (glm-5v-turbo) requires their OpenAI endpoint, not yet wired
                       </div>
                     )}
                   </div>
