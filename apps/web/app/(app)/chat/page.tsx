@@ -2397,7 +2397,7 @@ export default function ChatPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={handleSend}
+                    onClick={() => handleSend()}
                     disabled={!inputValue.trim() && attachments.length === 0}
                     className="p-2 rounded-xl transition-opacity disabled:opacity-30"
                     style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
