@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
+import { Download, FileCode, FileSpreadsheet, FileText, X } from "lucide-react"
 import { ModelBadge } from "./model-badge"
 import { cn } from "@/lib/utils"
 
@@ -9,6 +10,7 @@ export interface Attachment {
   name: string
   url: string
   type: string
+  size?: number
 }
 
 export interface Message {
@@ -25,6 +27,120 @@ interface StreamingMessage {
   role: "assistant"
   content: string
   streaming: true
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+function fileTypeIcon(name: string, type: string) {
+  const ext = name.split(".").pop()?.toLowerCase() ?? ""
+  const ct = type.toLowerCase()
+  if (ct === "application/pdf" || ext === "pdf")
+    return <FileText className="size-4 text-red-400 shrink-0" />
+  if (ct.includes("spreadsheet") || ["xlsx", "xls", "csv"].includes(ext))
+    return <FileSpreadsheet className="size-4 text-green-400 shrink-0" />
+  if (ct.includes("presentation") || ext === "pptx")
+    return <FileText className="size-4 text-orange-400 shrink-0" />
+  if (["json", "yaml", "yml", "xml"].includes(ext))
+    return <FileCode className="size-4 text-purple-400 shrink-0" />
+  return <FileText className="size-4 text-muted-foreground shrink-0" />
+}
+
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 cursor-zoom-out"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+        type="button"
+      >
+        <X className="size-6" />
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  )
+}
+
+function AttachmentList({ attachments, isUser }: { attachments: Attachment[]; isUser: boolean }) {
+  const [lightbox, setLightbox] = useState<Attachment | null>(null)
+
+  return (
+    <>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {attachments.map((att, i) =>
+          att.type.startsWith("image/") ? (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setLightbox(att)}
+              className="focus:outline-none cursor-zoom-in"
+              title="View full size"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={att.url}
+                alt={att.name}
+                className="max-w-[240px] max-h-[180px] rounded-lg object-cover hover:opacity-90 transition-opacity"
+              />
+            </button>
+          ) : (
+            <div
+              key={i}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-3 py-2 text-xs",
+                isUser ? "bg-white/15" : "bg-black/10 dark:bg-white/10"
+              )}
+            >
+              {fileTypeIcon(att.name, att.type)}
+              <div className="flex flex-col min-w-0">
+                <span className="max-w-[160px] truncate font-medium leading-tight">{att.name}</span>
+                {att.size !== undefined && (
+                  <span className="text-[10px] opacity-60 leading-tight">{formatSize(att.size)}</span>
+                )}
+              </div>
+              <a
+                href={att.url}
+                download={att.name}
+                onClick={(e) => e.stopPropagation()}
+                title="Download"
+                className="ml-1 opacity-60 hover:opacity-100 transition-opacity shrink-0"
+              >
+                <Download className="size-3.5" />
+              </a>
+            </div>
+          )
+        )}
+      </div>
+
+      {lightbox && (
+        <ImageLightbox
+          src={lightbox.url}
+          alt={lightbox.name}
+          onClose={() => setLightbox(null)}
+        />
+      )}
+    </>
+  )
 }
 
 export function MessageThread({
@@ -82,35 +198,15 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
         )}
       >
         {"_attachments" in msg && msg._attachments && msg._attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {msg._attachments.map((att, i) =>
-              att.type.startsWith("image/") ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={i}
-                  src={att.url}
-                  alt={att.name}
-                  className="max-w-[240px] max-h-[180px] rounded-lg object-cover"
-                />
-              ) : (
-                <div key={i} className="flex items-center gap-1.5 bg-white/10 rounded-lg px-2 py-1 text-xs">
-                  <span>📎</span>
-                  <span className="max-w-[140px] truncate">{att.name}</span>
-                </div>
-              )
-            )}
-          </div>
+          <AttachmentList attachments={msg._attachments} isUser={isUser} />
         )}
         {msg.content && (
           <div className={cn("prose prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
             <ReactMarkdown
               components={{
-                // Strip the outer <pre> wrapper ReactMarkdown adds — prevents overflow
                 pre: ({ children }) => <>{children}</>,
-                // Handle code blocks with overflow-x: auto
                 code({ className, children }) {
                   if (className) {
-                    // Fenced code block (language-*)
                     return (
                       <pre
                         className="overflow-x-auto rounded-md my-2 p-3 text-xs font-mono"
@@ -120,7 +216,6 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
                       </pre>
                     )
                   }
-                  // Inline code
                   return (
                     <code className="px-1 py-0.5 rounded text-xs font-mono" style={{ backgroundColor: "rgba(0,0,0,0.08)" }}>
                       {children}

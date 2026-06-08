@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { Camera, Paperclip, Send, X } from "lucide-react"
+import { Camera, FileCode, FileSpreadsheet, FileText, Loader2, Paperclip, Send, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -10,9 +10,33 @@ interface Props {
   disabled?: boolean
 }
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+function FileTypeIcon({ file, className }: { file: File; className?: string }) {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
+  const ct = file.type.toLowerCase()
+
+  if (ct.startsWith("image/")) return null // thumbnails handle their own display
+
+  if (ct === "application/pdf" || ext === "pdf")
+    return <FileText className={cn("text-red-400", className)} />
+  if (ct.includes("spreadsheet") || ["xlsx", "xls", "csv"].includes(ext))
+    return <FileSpreadsheet className={cn("text-green-400", className)} />
+  if (ct.includes("presentation") || ext === "pptx")
+    return <FileText className={cn("text-orange-400", className)} />
+  if (["json", "yaml", "yml", "xml"].includes(ext))
+    return <FileCode className={cn("text-purple-400", className)} />
+  return <FileText className={cn("text-muted-foreground", className)} />
+}
+
 export function MessageInput({ onSend, disabled }: Props) {
   const [value, setValue] = useState("")
   const [attachments, setAttachments] = useState<File[]>([])
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -58,28 +82,48 @@ export function MessageInput({ onSend, disabled }: Props) {
             {attachments.map((file, i) => (
               <div
                 key={i}
-                className="flex items-center gap-1.5 bg-muted border border-border rounded-lg px-2 py-1 text-xs"
+                className={cn(
+                  "relative flex items-center gap-1.5 bg-muted border border-border rounded-lg px-2 py-1 text-xs transition-opacity",
+                  disabled && "opacity-60"
+                )}
               >
                 {file.type.startsWith("image/") ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className="size-8 rounded object-cover shrink-0"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setPreviewSrc(URL.createObjectURL(file))}
+                    className="focus:outline-none"
+                    title="Preview image"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className="size-8 rounded object-cover shrink-0 hover:opacity-80 transition-opacity cursor-zoom-in"
+                    />
+                  </button>
                 ) : (
-                  <Paperclip className="size-3 text-muted-foreground shrink-0" />
+                  <FileTypeIcon file={file} className="size-3.5 shrink-0" />
                 )}
-                <span className="max-w-[120px] truncate text-foreground">{file.name}</span>
-                <button
-                  onClick={() => removeAttachment(i)}
-                  className="text-muted-foreground hover:text-foreground ml-0.5"
-                  type="button"
-                >
-                  <X className="size-3" />
-                </button>
+                <div className="flex flex-col min-w-0">
+                  <span className="max-w-[120px] truncate text-foreground leading-tight">{file.name}</span>
+                  <span className="text-muted-foreground text-[10px] leading-tight">{formatSize(file.size)}</span>
+                </div>
+                {disabled ? (
+                  <Loader2 className="size-3 text-muted-foreground shrink-0 animate-spin ml-0.5" />
+                ) : (
+                  <button
+                    onClick={() => removeAttachment(i)}
+                    className="text-muted-foreground hover:text-foreground ml-0.5 shrink-0"
+                    type="button"
+                  >
+                    <X className="size-3" />
+                  </button>
+                )}
               </div>
             ))}
+            {disabled && (
+              <span className="self-center text-[10px] text-muted-foreground italic">Sending…</span>
+            )}
           </div>
         )}
 
@@ -133,7 +177,11 @@ export function MessageInput({ onSend, disabled }: Props) {
             onClick={submit}
             disabled={disabled || (!value.trim() && attachments.length === 0)}
           >
-            <Send className="size-3.5" />
+            {disabled ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Send className="size-3.5" />
+            )}
           </Button>
         </div>
 
@@ -143,7 +191,7 @@ export function MessageInput({ onSend, disabled }: Props) {
           id="chat-file-input"
           type="file"
           multiple
-          accept=".pdf,.docx,.txt,.md,image/*"
+          accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.json,.yaml,.yml,.xml,image/*"
           className="hidden"
           onChange={handleFiles}
         />
@@ -161,6 +209,29 @@ export function MessageInput({ onSend, disabled }: Props) {
           Enter to send · Shift+Enter for newline
         </p>
       </div>
+
+      {/* Image preview lightbox */}
+      {previewSrc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-zoom-out"
+          onClick={() => setPreviewSrc(null)}
+        >
+          <button
+            onClick={() => setPreviewSrc(null)}
+            className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+            type="button"
+          >
+            <X className="size-6" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewSrc}
+            alt="Preview"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   )
 }

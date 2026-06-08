@@ -40,6 +40,7 @@ export default function ConversationPage() {
         name: f.name,
         url: URL.createObjectURL(f),
         type: f.type,
+        size: f.size,
       }))
 
       const tempUser: Message = {
