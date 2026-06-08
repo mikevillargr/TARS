@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import React, { useState, useRef, useCallback, useEffect } from "react"
 import { Camera, FileCode, FileSpreadsheet, FileText, Loader2, Paperclip, Send, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -74,37 +74,35 @@ export function MessageInput({ onSend, disabled }: Props) {
     setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Document-level paste listener — fires regardless of which element is focused.
+  // React synthetic onPaste on the wrapper div catches paste when any child has focus.
+  // Document listener handles paste when focus is outside the component entirely.
+  function handlePastedImages(e: React.ClipboardEvent | ClipboardEvent) {
+    const cd = (e as React.ClipboardEvent).clipboardData ?? (e as ClipboardEvent).clipboardData
+    if (!cd) return
+    const images = Array.from(cd.items)
+      .filter((item) => item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f !== null)
+    if (images.length === 0) return
+    e.preventDefault()
+    images.forEach((f) => {
+      const ext = f.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png"
+      setAttachments((prev) => [...prev, new File([f], `pasted-${Date.now()}.${ext}`, { type: f.type })])
+    })
+  }
+
   useEffect(() => {
-    function onPaste(e: ClipboardEvent) {
-      const cd = e.clipboardData
-      if (!cd) return
-
-      // Collect image files from both .files and .items (covers screenshots,
-      // web images, and files copied from the OS file manager).
-      const fromFiles = Array.from(cd.files).filter((f) => f.type.startsWith("image/"))
-      const fromItems = Array.from(cd.items)
-        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
-        .map((item) => item.getAsFile())
-        .filter((f): f is File => f !== null)
-
-      const images = fromFiles.length > 0 ? fromFiles : fromItems
-      if (images.length === 0) return
-
-      e.preventDefault()
-      images.forEach((f) => {
-        const ext = f.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png"
-        const named = new File([f], `pasted-${Date.now()}.${ext}`, { type: f.type })
-        setAttachments((prev) => [...prev, named])
-      })
+    function onDocumentPaste(e: ClipboardEvent) {
+      if (e.defaultPrevented) return  // already handled by the React synthetic handler
+      handlePastedImages(e)
     }
-
-    document.addEventListener("paste", onPaste)
-    return () => document.removeEventListener("paste", onPaste)
+    document.addEventListener("paste", onDocumentPaste)
+    return () => document.removeEventListener("paste", onDocumentPaste)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
-    <div className="px-4 pb-4 pt-2">
+    <div className="px-4 pb-4 pt-2" onPaste={handlePastedImages as React.ClipboardEventHandler<HTMLDivElement>}>
       <div className="max-w-3xl mx-auto">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
