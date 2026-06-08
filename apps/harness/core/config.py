@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     tier2_model_override: str = ""
     tier3_model_override: str = ""
 
+    # Vision model — for analyzing images uploaded in chat
+    # blank vision_provider = use tier3_provider; blank vision_model_override = use provider default
+    # Anthropic default: claude-sonnet-4-6   Z.ai default: glm-4.5-air (multimodal)
+    vision_provider: str = ""
+    vision_model_override: str = ""
+
     runpod_api_key: str = ""
     runpod_endpoint_32b: str = ""
     workhorse_model: str = ""   # RunPod model name — set in .env (e.g. meta/llama-3.1-70b-instruct)

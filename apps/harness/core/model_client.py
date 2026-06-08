@@ -937,9 +937,11 @@ _PROVIDER_DEFAULTS = {
     ("anthropic", "tier1"): "claude-haiku-4-5-20251001",
     ("anthropic", "tier2"): None,              # None → use existing RunPod/fallback logic
     ("anthropic", "tier3"): "claude-sonnet-4-6",
+    ("anthropic", "vision"): "claude-sonnet-4-6",
     ("zai",       "tier1"): "glm-4.5-air",
     ("zai",       "tier2"): "glm-4.6",
     ("zai",       "tier3"): "glm-4.7",
+    ("zai",       "vision"): "glm-4.5-air",   # glm-4.5-air is multimodal
 }
 
 
@@ -984,6 +986,16 @@ class ModelClient:
             return override
         return _PROVIDER_DEFAULTS.get((provider, tier_key))
 
+    def _has_image_content(self, messages: list) -> bool:
+        """True when any message contains an Anthropic-format image block."""
+        for m in messages:
+            content = m.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "image":
+                        return True
+        return False
+
     def _is_warm(self, tier: ModelTier) -> bool:
         failed_at = self._failed_at.get(tier)
         if failed_at is None:
@@ -1008,6 +1020,19 @@ class ModelClient:
         tools: Optional[List[Dict]] = None,
         tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
+        # ── Vision: image blocks present — route to dedicated vision model ────
+        if self._has_image_content(messages):
+            _vp = settings.vision_provider or settings.tier3_provider
+            _vm = settings.vision_model_override or self._resolve_model("vision", _vp)
+            logger.info("Vision content detected — routing to %s (%s)", _vp, _vm)
+            async for event in self._stream_anthropic(
+                messages, system, max_tokens,
+                model=_vm, tools=tools, tool_executor=tool_executor,
+                client=self._client_for(_vp),
+            ):
+                yield event
+            return
+
         # ── Tier 3: frontier model ────────────────────────────────────────────
         if tier == ModelTier.TIER3:
             provider3 = settings.tier3_provider
