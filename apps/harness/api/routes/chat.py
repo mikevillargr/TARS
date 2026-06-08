@@ -91,6 +91,13 @@ class ConversationDetailOut(BaseModel):
 
 
 _IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+_HEIC_TYPES = {"image/heic", "image/heif"}
+_HEIC_EXTENSIONS = {".heic", ".heif"}
+_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+_IMAGE_EXTS_MAP = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "png": "image/png", "gif": "image/gif", "webp": "image/webp",
+}
 
 
 def _xlsx_to_text(data: bytes) -> str:
@@ -135,8 +142,24 @@ async def _process_attachment(upload: UploadFile) -> dict:
     data = await upload.read()
     ct = (upload.content_type or "").lower()
     fname = upload.filename or "file"
+    _fext_raw = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+    _fext = ("." + _fext_raw) if _fext_raw else ""
 
-    if ct.startswith("image/"):
+    # HEIC/HEIF: not supported by the Anthropic Vision API
+    if ct in _HEIC_TYPES or _fext in _HEIC_EXTENSIONS:
+        return {
+            "kind": "text",
+            "filename": fname,
+            "text": (
+                f"[Photo '{fname}' is in HEIC format. "
+                "HEIC cannot be analyzed — please export the photo as JPEG or PNG and re-attach it.]"
+            ),
+        }
+
+    # Image detection: MIME type takes priority; fall back to common extensions
+    is_image = ct.startswith("image/") or _fext in _IMAGE_EXTENSIONS
+
+    if is_image:
         media_type = ct if ct in _IMAGE_TYPES else "image/jpeg"
         return {
             "kind": "image",
@@ -464,22 +487,40 @@ async def send_message(
         if art_obj and art_obj.content:
             import base64 as _b64
             art_content = art_obj.content
+            _art_ext = (art_obj.filename or "").rsplit(".", 1)[-1].lower() if "." in (art_obj.filename or "") else ""
+            _handled_as_image = False
 
-            # Binary artifacts are stored as base64 — extract text for model context
+            # Binary artifacts are stored as base64 — extract text or send as vision
             if art_content.startswith("base64:"):
                 _raw = _b64.b64decode(art_content[7:])
-                _ext = (art_obj.filename or "").rsplit(".", 1)[-1].lower()
                 try:
-                    if _ext == "pdf":
+                    if _art_ext in _IMAGE_EXTS_MAP:
+                        # Image artifact: send directly as a vision block so Sonnet sees the actual image
+                        image_blocks.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": _IMAGE_EXTS_MAP[_art_ext],
+                                "data": _b64.b64encode(_raw).decode(),
+                            },
+                        })
+                        doc_snippets.append(f"[Analyzing uploaded image: {art_obj.filename}]")
+                        _handled_as_image = True
+                    elif _art_ext in ("heic", "heif"):
+                        art_content = (
+                            f"[Photo '{art_obj.filename}' is in HEIC format and cannot be analyzed. "
+                            "Please re-export it as JPEG or PNG and upload again.]"
+                        )
+                    elif _art_ext == "pdf":
                         from ingest.parsers import pdf as _pdf_p
                         art_content = _pdf_p.extract(_raw)
-                    elif _ext == "docx":
+                    elif _art_ext == "docx":
                         from ingest.parsers import docx as _docx_p
                         art_content = _docx_p.extract(_raw)
-                    elif _ext in ("pptx", "ppt"):
+                    elif _art_ext in ("pptx", "ppt"):
                         from ingest.parsers import pptx as _pptx_p
                         art_content = _pptx_p.extract(_raw)
-                    elif _ext in ("xlsx", "xls"):
+                    elif _art_ext in ("xlsx", "xls"):
                         from ingest.parsers import xlsx as _xlsx_p
                         art_content = _xlsx_p.extract(_raw, filename=art_obj.filename)
                     else:
@@ -487,14 +528,15 @@ async def send_message(
                 except Exception as _e:
                     art_content = f"[Failed to extract text from {art_obj.filename}: {_e}]"
 
-            MAX_ART = 12000
-            art_text = art_content
-            if len(art_text) > MAX_ART:
-                art_text = art_text[:MAX_ART] + f"\n\n[… truncated, {len(art_content):,} total chars]"
-            doc_snippets.append(
-                f"[UPLOADED FILE: {art_obj.filename}]\n{art_text}\n\n"
-                f"Analyze this file and provide a clear summary of the key insights."
-            )
+            if not _handled_as_image:
+                MAX_ART = 12000
+                art_text = art_content
+                if len(art_text) > MAX_ART:
+                    art_text = art_text[:MAX_ART] + f"\n\n[… truncated, {len(art_content):,} total chars]"
+                doc_snippets.append(
+                    f"[UPLOADED FILE: {art_obj.filename}]\n{art_text}\n\n"
+                    f"Analyze this file and provide a clear summary of the key insights."
+                )
 
     # Classify the request to pick the right model tier.
     # Images always need vision (Claude). Override wins if provided.

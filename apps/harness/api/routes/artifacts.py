@@ -368,8 +368,19 @@ async def ingest_artifact(
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     artifact_type = _artifact_type_from_ext(filename)
 
+    # HEIC/HEIF photos: reject at upload time with a clear message
+    if ext in ("heic", "heif") or detected_mime in ("image/heic", "image/heif"):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "HEIC photos cannot be analyzed directly. "
+                "Please export the photo as JPEG or PNG (in your Photos app: Share → Save as JPEG) and try again."
+            ),
+        )
+
     # Binary formats are stored as base64 — preserves the original file for
     # download/preview. Text extraction happens on-the-fly when injected into chat.
+    # Images are also stored as base64 so Sonnet can analyze them directly via vision.
     _BINARY_EXTS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"}
     _BINARY_MIMES = {
         "application/pdf",
@@ -380,8 +391,10 @@ async def ingest_artifact(
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }
+    _IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "webp"}
+    _IMAGE_MIMES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
 
-    if ext in _BINARY_EXTS or detected_mime in _BINARY_MIMES:
+    if ext in _BINARY_EXTS or detected_mime in _BINARY_MIMES or ext in _IMAGE_EXTS or detected_mime in _IMAGE_MIMES:
         content = "base64:" + base64.b64encode(content_bytes).decode()
         size_bytes = len(content_bytes)
     else:
