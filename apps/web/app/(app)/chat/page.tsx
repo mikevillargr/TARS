@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
+import { flushSync } from "react-dom"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -2006,20 +2007,17 @@ export default function ChatPage() {
       <Suspense fallback={null}>
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
         <ArtifactLoader onArtifactLoad={(artifactId, filename) => {
-          // Clean slate — new conversation; file content injected server-side
-          setActiveChatId(null)
-          setMessages([])
-          setInputValue(`📎 **${filename}** — [View in Artifacts](/artifacts)`)
+          const msg = `📎 **${filename}** — [View in Artifacts](/artifacts)`
+          // flushSync commits state synchronously so handleSendRef.current has
+          // the new inputValue closure before we call it — avoids the race where
+          // React's deferred render hasn't run yet and handleSend sees inputValue=""
+          flushSync(() => {
+            setActiveChatId(null)
+            setMessages([])
+            setInputValue(msg)
+          })
           pendingArtifactIdRef.current = artifactId
-          autoSendPendingRef.current = true
-          // Fallback: call handleSend directly after state settles in case the
-          // effect-based auto-send misses the state change on fresh page mounts
-          setTimeout(() => {
-            if (autoSendPendingRef.current) {
-              autoSendPendingRef.current = false
-              handleSendRef.current()
-            }
-          }, 0)
+          handleSendRef.current()
         }} />
         <AskLoader onAsk={(q) => {
           // Pre-fill from command palette "Ask TARS: …" and auto-send
