@@ -1353,6 +1353,10 @@ class ModelClient:
         """Stream via Z.ai's OpenAI-compatible endpoint (GLM-5.x and glm-5v-turbo)."""
         _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
 
+        # GLM-5.x uses a thinking phase that consumes tokens before the actual response.
+        # Ensure we have enough headroom (8192 minimum) so thinking doesn't exhaust the budget.
+        effective_max_tokens = max(max_tokens, 8192)
+
         current_messages = self._to_openai_messages(messages, system)
         oai_tools = self._to_openai_tools(tools) if tools else None
         total_tokens = 0
@@ -1361,7 +1365,7 @@ class ModelClient:
             for _round in range(8):
                 kwargs: Dict[str, Any] = dict(
                     model=model,
-                    max_tokens=max_tokens,
+                    max_tokens=effective_max_tokens,
                     messages=current_messages,
                     stream=True,
                 )
@@ -1405,6 +1409,11 @@ class ModelClient:
                                     accumulated_tcs[idx]["arguments"] += tc.function.arguments
 
                 if finish_reason != "tool_calls" or not accumulated_tcs:
+                    if finish_reason == "length" and not accumulated_text:
+                        # Thinking phase exhausted the token budget before generating a response.
+                        # This shouldn't happen with effective_max_tokens=8192, but guard it anyway.
+                        logger.warning("OpenAI path: %s exhausted tokens during thinking (max=%d)", model, effective_max_tokens)
+                        yield {"type": "chunk", "text": "*(Response truncated — the model exhausted its token budget during reasoning. Try a shorter or simpler request.)*"}
                     yield {"type": "done", "model": model, "tokens": total_tokens}
                     return
 
