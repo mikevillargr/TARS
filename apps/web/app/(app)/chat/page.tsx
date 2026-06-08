@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useEffect, useCallback, useRef, Suspense, useMemo, memo } from "react"
-import { flushSync } from "react-dom"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -1423,7 +1422,6 @@ export default function ChatPage() {
   const streamingCardsRef                           = useRef<Array<{ type: string; [k: string]: unknown }>>([])  // cards for finalMsg.tool_results
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
   const streamPollingRef                            = useRef<boolean>(false)  // true while recovery-polling after stream interruption
-  const autoSendPendingRef                          = useRef<boolean>(false)  // true when artifact load should auto-send
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSendRef                               = useRef<() => Promise<void>>(async () => {})  // always-current handleSend
@@ -1710,8 +1708,8 @@ export default function ChatPage() {
     }
   }
 
-  const handleSend = useCallback(async () => {
-    const content = inputValue.trim()
+  const handleSend = useCallback(async (overrideContent?: string, overrideArtifactId?: string) => {
+    const content = (overrideContent ?? inputValue).trim()
     if (busy || (!content && attachments.length === 0)) return
 
     // Show user message + loading state IMMEDIATELY — before async conversation creation
@@ -1747,7 +1745,8 @@ export default function ChatPage() {
     setStreaming({ role: "assistant", content: "", streaming: true })
 
     // Create conversation if needed (UI already shows loading state)
-    let chatId = activeChatId
+    // Artifact sends always open a fresh conversation regardless of closure state
+    let chatId = overrideArtifactId ? null : activeChatId
     if (!chatId) {
       try {
         const conv = await apiPost<Conversation>("/chat/conversations")
@@ -1770,8 +1769,9 @@ export default function ChatPage() {
 
       const fd = new FormData()
       fd.append("content", content)
-      if (pendingArtifactIdRef.current) {
-        fd.append("artifact_id", pendingArtifactIdRef.current)
+      const artifactId = overrideArtifactId ?? pendingArtifactIdRef.current
+      if (artifactId) {
+        fd.append("artifact_id", artifactId)
         pendingArtifactIdRef.current = null
       }
       if (loc) {
@@ -1961,15 +1961,6 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingVoiceSend, activeChatId])
 
-  // Auto-send when an artifact has been loaded — fires after handleSend is defined
-  useEffect(() => {
-    if (!autoSendPendingRef.current) return
-    if (!inputValue || busy) return
-    autoSendPendingRef.current = false
-    handleSend()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inputValue, busy, handleSend])
-
   // Visibility recovery: when the user returns to this tab (mobile background →
   // foreground, alt-tab, etc.) reload messages for the active conversation so
   // any response that completed while we were away appears immediately.
@@ -2008,16 +1999,12 @@ export default function ChatPage() {
         <SecondBrainLoader onLoad={(msg) => setInputValue(msg)} />
         <ArtifactLoader onArtifactLoad={(artifactId, filename) => {
           const msg = `📎 **${filename}** — [View in Artifacts](/artifacts)`
-          // flushSync commits state synchronously so handleSendRef.current has
-          // the new inputValue closure before we call it — avoids the race where
-          // React's deferred render hasn't run yet and handleSend sees inputValue=""
-          flushSync(() => {
-            setActiveChatId(null)
-            setMessages([])
-            setInputValue(msg)
-          })
-          pendingArtifactIdRef.current = artifactId
-          handleSendRef.current()
+          // Clear the current conversation view so the new one starts fresh
+          setActiveChatId(null)
+          setMessages([])
+          // Pass content and artifactId directly — avoids any closure/timing
+          // issues with React state not yet committed when this async callback fires
+          handleSendRef.current(msg, artifactId)
         }} />
         <AskLoader onAsk={(q) => {
           // Pre-fill from command palette "Ask TARS: …" and auto-send
