@@ -1425,7 +1425,7 @@ export default function ChatPage() {
   const autoSendPendingRef                          = useRef<boolean>(false)  // true when handleAsk should auto-send
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handleSendRef                               = useRef<() => Promise<void>>(async () => {})  // always-current handleSend
+  const handleSendRef                               = useRef<(overrideContent?: string, overrideArtifactId?: string) => Promise<void>>(async () => {})  // always-current handleSend
   const userLocationRef                             = useRef<{ lat: number; lng: number } | null>(null)
 
   // ── Per-send geolocation helper ───────────────────────────────────
