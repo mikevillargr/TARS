@@ -98,6 +98,10 @@ _IMAGE_EXTS_MAP = {
     "jpg": "image/jpeg", "jpeg": "image/jpeg",
     "png": "image/png", "gif": "image/gif", "webp": "image/webp",
 }
+# Image formats that look like images (image/* MIME or known extension) but
+# Anthropic Vision does NOT accept — reject with a conversion hint instead.
+_UNSUPPORTED_IMAGE_TYPES = {"image/bmp", "image/tiff", "image/x-tiff", "image/svg+xml", "image/x-bmp"}
+_UNSUPPORTED_IMAGE_EXTENSIONS = {".bmp", ".tiff", ".tif", ".svg"}
 
 
 def _xlsx_to_text(data: bytes) -> str:
@@ -156,6 +160,21 @@ async def _process_attachment(upload: UploadFile) -> dict:
             ),
         }
 
+    # BMP/TIFF/SVG: image-like but Anthropic Vision doesn't accept them
+    if ct in _UNSUPPORTED_IMAGE_TYPES or _fext in _UNSUPPORTED_IMAGE_EXTENSIONS:
+        if _fext == ".svg":
+            # SVG is XML — treat as text instead of rejecting
+            text = data.decode("utf-8", errors="replace")
+            return {"kind": "text", "filename": fname, "text": text}
+        return {
+            "kind": "text",
+            "filename": fname,
+            "text": (
+                f"[Image '{fname}' is in {_fext_raw.upper() or ct} format which cannot be analyzed. "
+                "Please convert to JPEG or PNG and re-attach it.]"
+            ),
+        }
+
     # Image detection: MIME type takes priority; fall back to common extensions
     is_image = ct.startswith("image/") or _fext in _IMAGE_EXTENSIONS
 
@@ -185,6 +204,13 @@ async def _process_attachment(upload: UploadFile) -> dict:
             import docx as _docx
             document = _docx.Document(BytesIO(data))
             text = "\n".join(p.text for p in document.paragraphs if p.text.strip())
+
+        elif ct == "application/msword" or fname.endswith(".doc"):
+            # Legacy binary .doc — no native parser; tell the model and suggest conversion
+            text = (
+                f"['{fname}' is an older .doc format (Word 97-2003). "
+                "Please save it as .docx and re-attach for full text extraction.]"
+            )
 
         elif "spreadsheetml" in ct or fname.endswith(".xlsx"):
             text = _xlsx_to_text(data)
@@ -523,6 +549,11 @@ async def send_message(
                     elif _art_ext in ("xlsx", "xls"):
                         from ingest.parsers import xlsx as _xlsx_p
                         art_content = _xlsx_p.extract(_raw, filename=art_obj.filename)
+                    elif _art_ext == "doc":
+                        art_content = (
+                            f"['{art_obj.filename}' is an older .doc format (Word 97-2003). "
+                            "Please save it as .docx and re-upload for full text extraction.]"
+                        )
                     else:
                         art_content = f"[Binary file: {art_obj.filename} — text extraction not supported for this format]"
                 except Exception as _e:

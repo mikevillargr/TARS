@@ -378,13 +378,22 @@ async def ingest_artifact(
             ),
         )
 
+    # BMP/TIFF: image-like but Anthropic Vision doesn't accept them
+    if ext in ("bmp", "tiff", "tif") or detected_mime in ("image/bmp", "image/tiff", "image/x-tiff", "image/x-bmp"):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"'{filename}' is in {ext.upper()} format which cannot be analyzed. "
+                "Please convert to JPEG or PNG and try again."
+            ),
+        )
+
     # Binary formats are stored as base64 — preserves the original file for
     # download/preview. Text extraction happens on-the-fly when injected into chat.
     # Images are also stored as base64 so Sonnet can analyze them directly via vision.
-    _BINARY_EXTS = {"pdf", "doc", "docx", "ppt", "pptx", "xls", "xlsx"}
+    _BINARY_EXTS = {"pdf", "docx", "ppt", "pptx", "xls", "xlsx"}
     _BINARY_MIMES = {
         "application/pdf",
-        "application/msword",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/vnd.ms-powerpoint",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -393,8 +402,13 @@ async def ingest_artifact(
     }
     _IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "webp"}
     _IMAGE_MIMES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
+    # Legacy .doc: stored as base64 (no text extraction), with a note when injected into chat
+    _DOC_LEGACY_EXTS = {"doc"}
+    _DOC_LEGACY_MIMES = {"application/msword"}
 
-    if ext in _BINARY_EXTS or detected_mime in _BINARY_MIMES or ext in _IMAGE_EXTS or detected_mime in _IMAGE_MIMES:
+    if (ext in _BINARY_EXTS or detected_mime in _BINARY_MIMES
+            or ext in _IMAGE_EXTS or detected_mime in _IMAGE_MIMES
+            or ext in _DOC_LEGACY_EXTS or detected_mime in _DOC_LEGACY_MIMES):
         content = "base64:" + base64.b64encode(content_bytes).decode()
         size_bytes = len(content_bytes)
     else:
