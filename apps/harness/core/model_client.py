@@ -1022,7 +1022,14 @@ class ModelClient:
     ) -> AsyncGenerator[Dict[str, Any], None]:
         # ── Vision: image blocks present — route to dedicated vision model ────
         if self._has_image_content(messages):
-            _vp = settings.vision_provider or settings.tier3_provider
+            if settings.vision_provider:
+                _vp = settings.vision_provider
+            elif settings.anthropic_api_key:
+                # Prefer Anthropic for vision even when all tiers run on Z.ai/GLM,
+                # since Anthropic's image block format is guaranteed to work.
+                _vp = "anthropic"
+            else:
+                _vp = settings.tier3_provider
             _vm = settings.vision_model_override or self._resolve_model("vision", _vp)
             logger.info("Vision content detected — routing to %s (%s)", _vp, _vm)
             async for event in self._stream_anthropic(
