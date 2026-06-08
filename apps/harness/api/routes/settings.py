@@ -116,7 +116,7 @@ _PROVIDER_DEFAULTS = {
     ("zai",       "tier1"):  "glm-4.5-air",
     ("zai",       "tier2"):  "glm-4.7",
     ("zai",       "tier3"):  "glm-5.1",
-    ("zai",       "vision"): "glm-4.5-air",   # vision stays on Anthropic; glm-5v-turbo needs OpenAI endpoint
+    ("zai",       "vision"): "glm-5v-turbo",  # OpenAI endpoint, now supported
 }
 
 
@@ -238,11 +238,23 @@ async def test_api_key(
     elif body.provider == "zai":
         if not settings.zai_api_key:
             return ApiKeyTestResult(ok=False, error="No Z.ai key configured")
-        client = _anthropic.AsyncAnthropic(
-            api_key=settings.zai_api_key,
-            base_url=settings.zai_base_url,
-        )
-        model = "glm-5.1"  # test the actual tier3 model to confirm it's reachable
+        # Test via OpenAI endpoint (glm-5.1) since that's what tier3 uses
+        from openai import AsyncOpenAI
+        t0 = time.monotonic()
+        try:
+            oai_client = AsyncOpenAI(
+                api_key=settings.zai_api_key,
+                base_url=settings.zai_openai_base_url,
+            )
+            await oai_client.chat.completions.create(
+                model="glm-5.1",
+                max_tokens=8,
+                messages=[{"role": "user", "content": "Hi"}],
+            )
+            latency = int((time.monotonic() - t0) * 1000)
+            return ApiKeyTestResult(ok=True, latency_ms=latency)
+        except Exception as exc:
+            return ApiKeyTestResult(ok=False, error=str(exc)[:200])
     else:
         raise HTTPException(status_code=400, detail="Provider must be 'anthropic' or 'zai'")
 

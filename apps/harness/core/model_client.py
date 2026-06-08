@@ -949,10 +949,16 @@ _PROVIDER_DEFAULTS = {
 }
 
 
+def _is_openai_path(model: Optional[str]) -> bool:
+    """GLM-5.x and glm-5v-turbo must use Z.ai's OpenAI-compatible endpoint."""
+    return bool(model) and (model.startswith("glm-5") or model == "glm-5v-turbo")
+
+
 class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
         self._zai: Optional[anthropic.AsyncAnthropic] = None
+        self._zai_openai = None   # openai.AsyncOpenAI, lazy-init
         self._failed_at: dict[ModelTier, Optional[float]] = {
             ModelTier.TIER2: None,
         }
@@ -965,7 +971,7 @@ class ModelClient:
 
     @property
     def zai(self):  # -> AsyncAnthropic (string to avoid shadowing the module import)
-        """Z.ai Anthropic-compatible client (GLM models)."""
+        """Z.ai Anthropic-compatible client for GLM-4.x models."""
         if not self._zai:
             import anthropic as _anthropic  # re-import in local scope to avoid shadowing
             self._zai = _anthropic.AsyncAnthropic(
@@ -974,6 +980,17 @@ class ModelClient:
             )
         return self._zai
 
+    @property
+    def zai_openai(self):
+        """Z.ai OpenAI-compatible client for GLM-5.x and glm-5v-turbo."""
+        if not self._zai_openai:
+            from openai import AsyncOpenAI
+            self._zai_openai = AsyncOpenAI(
+                api_key=settings.zai_api_key,
+                base_url=settings.zai_openai_base_url,
+            )
+        return self._zai_openai
+
     def _client_for(self, provider: str):
         return self.zai if provider == "zai" else self.anthropic
 
@@ -981,6 +998,7 @@ class ModelClient:
         """Clear cached clients so next call picks up updated API keys/config."""
         self._anthropic = None
         self._zai = None
+        self._zai_openai = None
         logger.info("ModelClient reset — API clients will re-initialise on next request")
 
     def _resolve_model(self, tier_key: str, provider: str) -> Optional[str]:
@@ -1029,31 +1047,47 @@ class ModelClient:
             if settings.vision_provider:
                 _vp = settings.vision_provider
             elif settings.anthropic_api_key:
-                # Prefer Anthropic for vision even when all tiers run on Z.ai/GLM,
-                # since Anthropic's image block format is guaranteed to work.
+                # Default to Anthropic for vision; Z.ai vision requires explicit opt-in
                 _vp = "anthropic"
             else:
                 _vp = settings.tier3_provider
             _vm = settings.vision_model_override or self._resolve_model("vision", _vp)
             logger.info("Vision content detected — routing to %s (%s)", _vp, _vm)
-            async for event in self._stream_anthropic(
-                messages, system, max_tokens,
-                model=_vm, tools=tools, tool_executor=tool_executor,
-                client=self._client_for(_vp),
-            ):
-                yield event
+            if _vp == "zai":
+                # Z.ai vision (glm-5v-turbo) requires the OpenAI-compatible endpoint
+                _vm = _vm or "glm-5v-turbo"
+                async for event in self._stream_openai(
+                    messages, system, max_tokens,
+                    model=_vm, tools=tools, tool_executor=tool_executor,
+                ):
+                    yield event
+            else:
+                async for event in self._stream_anthropic(
+                    messages, system, max_tokens,
+                    model=_vm, tools=tools, tool_executor=tool_executor,
+                    client=self._client_for(_vp),
+                ):
+                    yield event
             return
 
         # ── Tier 3: frontier model ────────────────────────────────────────────
         if tier == ModelTier.TIER3:
             provider3 = settings.tier3_provider
             model3 = self._resolve_model("tier3", provider3)
-            async for event in self._stream_anthropic(
-                messages, system, max_tokens,
-                model=model3, tools=tools, tool_executor=tool_executor,
-                client=self._client_for(provider3),
-            ):
-                yield event
+            if provider3 == "zai" and _is_openai_path(model3):
+                logger.info("Tier3 routed to Z.ai OpenAI endpoint (%s)", model3)
+                async for event in self._stream_openai(
+                    messages, system, max_tokens,
+                    model=model3, tools=tools, tool_executor=tool_executor,
+                ):
+                    yield event
+            else:
+                async for event in self._stream_anthropic(
+                    messages, system, max_tokens,
+                    model=model3, tools=tools, tool_executor=tool_executor,
+                    client=self._client_for(provider3),
+                ):
+                    yield event
             return
 
         # ── Tier 1: fast model — always available, no cold start ─────────────
@@ -1070,13 +1104,21 @@ class ModelClient:
         # ── Tier 2: workhorse — RunPod if provider=anthropic, else Z.ai ───────
         provider2 = settings.tier2_provider
         if provider2 == "zai":
-            model2 = self._resolve_model("tier2", "zai") or "glm-4.6"
-            logger.info("Tier2 routed to Z.ai (%s)", model2)
-            async for event in self._stream_anthropic(
-                messages, system, max_tokens,
-                model=model2, client=self.zai, tools=tools, tool_executor=tool_executor,
-            ):
-                yield event
+            model2 = self._resolve_model("tier2", "zai") or "glm-4.7"
+            if _is_openai_path(model2):
+                logger.info("Tier2 routed to Z.ai OpenAI endpoint (%s)", model2)
+                async for event in self._stream_openai(
+                    messages, system, max_tokens,
+                    model=model2, tools=tools, tool_executor=tool_executor,
+                ):
+                    yield event
+            else:
+                logger.info("Tier2 routed to Z.ai Anthropic endpoint (%s)", model2)
+                async for event in self._stream_anthropic(
+                    messages, system, max_tokens,
+                    model=model2, client=self.zai, tools=tools, tool_executor=tool_executor,
+                ):
+                    yield event
             return
 
         endpoint_2 = TIER_ENDPOINTS.get(ModelTier.TIER2)
@@ -1194,6 +1236,234 @@ class ModelClient:
             yield {"type": "done", "model": model, "tokens": total_input + total_output}
 
         except Exception as e:
+            yield {"type": "error", "error": str(e)}
+
+    # ─── OpenAI-compatible path (GLM-5.x, glm-5v-turbo) ─────────────────────────
+
+    @staticmethod
+    def _to_openai_tools(tools: List[Dict]) -> List[Dict]:
+        """Convert Anthropic tool definitions to OpenAI function format."""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                    "parameters": t.get("input_schema", {}),
+                },
+            }
+            for t in tools
+        ]
+
+    @staticmethod
+    def _to_openai_messages(messages: List[Dict], system: str = "") -> List[Dict]:
+        """
+        Convert Anthropic-format message list to OpenAI format.
+
+        Handles:
+        - Plain string content → unchanged
+        - User messages with image blocks → image_url content items
+        - Assistant messages with tool_use blocks → tool_calls
+        - User messages with tool_result blocks → role:tool messages
+        """
+        result: List[Dict] = []
+        if system:
+            result.append({"role": "system", "content": system})
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content")
+
+            # Simple string — pass through as-is
+            if isinstance(content, str):
+                result.append({"role": role, "content": content})
+                continue
+
+            if not isinstance(content, list):
+                result.append({"role": role, "content": str(content) if content else ""})
+                continue
+
+            # User message containing tool_result blocks → one "tool" message per result
+            if role == "user" and content and all(
+                isinstance(b, dict) and b.get("type") == "tool_result" for b in content
+            ):
+                for block in content:
+                    raw = block.get("content", "")
+                    if isinstance(raw, list):
+                        raw = " ".join(b.get("text", "") for b in raw if isinstance(b, dict))
+                    result.append({
+                        "role": "tool",
+                        "tool_call_id": block.get("tool_use_id", ""),
+                        "content": str(raw),
+                    })
+                continue
+
+            # Assistant message — may have text + tool_use blocks
+            if role == "assistant":
+                text_parts: List[str] = []
+                tool_calls: List[Dict] = []
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+                    elif block.get("type") == "tool_use":
+                        tool_calls.append({
+                            "id": block.get("id", ""),
+                            "type": "function",
+                            "function": {
+                                "name": block.get("name", ""),
+                                "arguments": json.dumps(block.get("input", {})),
+                            },
+                        })
+                out: Dict = {"role": "assistant", "content": "\n".join(text_parts) or ""}
+                if tool_calls:
+                    out["tool_calls"] = tool_calls
+                result.append(out)
+                continue
+
+            # User message with mixed text + image blocks
+            oai_content: List[Dict] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    oai_content.append({"type": "text", "text": block.get("text", "")})
+                elif block.get("type") == "image":
+                    src = block.get("source", {})
+                    if src.get("type") == "base64":
+                        url = f"data:{src['media_type']};base64,{src['data']}"
+                    else:
+                        url = src.get("url", "")
+                    oai_content.append({"type": "image_url", "image_url": {"url": url}})
+            result.append({"role": role, "content": oai_content or ""})
+
+        return result
+
+    async def _stream_openai(
+        self,
+        messages: List[Dict],
+        system: str,
+        max_tokens: int,
+        *,
+        model: str,
+        tools: Optional[List[Dict]] = None,
+        tool_executor=None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream via Z.ai's OpenAI-compatible endpoint (GLM-5.x and glm-5v-turbo)."""
+        _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
+
+        current_messages = self._to_openai_messages(messages, system)
+        oai_tools = self._to_openai_tools(tools) if tools else None
+        total_tokens = 0
+
+        try:
+            for _round in range(8):
+                kwargs: Dict[str, Any] = dict(
+                    model=model,
+                    max_tokens=max_tokens,
+                    messages=current_messages,
+                    stream=True,
+                )
+                if oai_tools:
+                    kwargs["tools"] = oai_tools
+
+                # Accumulate streaming chunks
+                accumulated_text = ""
+                accumulated_tcs: Dict[int, Dict] = {}  # index → {id, name, arguments}
+                finish_reason: Optional[str] = None
+
+                stream = await self.zai_openai.chat.completions.create(**kwargs)
+                async for chunk in stream:
+                    if not chunk.choices:
+                        # usage-only chunk that some providers emit at end
+                        if hasattr(chunk, "usage") and chunk.usage:
+                            total_tokens += (chunk.usage.total_tokens or 0)
+                        continue
+
+                    choice = chunk.choices[0]
+                    if choice.finish_reason:
+                        finish_reason = choice.finish_reason
+
+                    delta = choice.delta
+
+                    if delta.content:
+                        accumulated_text += delta.content
+                        yield {"type": "chunk", "text": delta.content}
+
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            idx = tc.index
+                            if idx not in accumulated_tcs:
+                                accumulated_tcs[idx] = {"id": "", "name": "", "arguments": ""}
+                            if tc.id:
+                                accumulated_tcs[idx]["id"] = tc.id
+                            if tc.function:
+                                if tc.function.name:
+                                    accumulated_tcs[idx]["name"] += tc.function.name
+                                if tc.function.arguments:
+                                    accumulated_tcs[idx]["arguments"] += tc.function.arguments
+
+                if finish_reason != "tool_calls" or not accumulated_tcs:
+                    yield {"type": "done", "model": model, "tokens": total_tokens}
+                    return
+
+                # Parse tool calls and emit suggestion events
+                tool_uses = []
+                for idx in sorted(accumulated_tcs.keys()):
+                    tc = accumulated_tcs[idx]
+                    try:
+                        inp = json.loads(tc["arguments"]) if tc["arguments"] else {}
+                    except json.JSONDecodeError:
+                        inp = {}
+                    tool_uses.append({"id": tc["id"], "name": tc["name"], "input": inp})
+
+                for tu in tool_uses:
+                    if tu["name"] == "propose_calendar_event":
+                        yield {"type": "calendar_suggest", "tool_use_id": tu["id"], **tu["input"]}
+                    elif tu["name"] == "propose_task":
+                        yield {"type": "task_suggest", "tool_use_id": tu["id"], **tu["input"]}
+
+                # Build assistant turn + tool results, then loop
+                asst: Dict = {
+                    "role": "assistant",
+                    "content": accumulated_text or "",
+                    "tool_calls": [
+                        {
+                            "id": tu["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tu["name"],
+                                "arguments": json.dumps(tu["input"]),
+                            },
+                        }
+                        for tu in tool_uses
+                    ],
+                }
+
+                tool_results: List[Dict] = []
+                for tu in tool_uses:
+                    if tu["name"] in _SUGGESTION_TOOLS:
+                        result_str = "Suggestion shown to user."
+                    elif tool_executor is not None:
+                        try:
+                            result_str = await tool_executor(tu["name"], tu["input"])
+                        except Exception as exc:
+                            result_str = f"Tool error ({tu['name']}): {exc}"
+                    else:
+                        result_str = "Action completed."
+                    tool_results.append({
+                        "role": "tool",
+                        "tool_call_id": tu["id"],
+                        "content": str(result_str),
+                    })
+
+                current_messages = current_messages + [asst] + tool_results
+
+            yield {"type": "done", "model": model, "tokens": total_tokens}
+
+        except Exception as e:
+            logger.error("OpenAI path error (model=%s): %s", model, e)
             yield {"type": "error", "error": str(e)}
 
     async def _stream_runpod(

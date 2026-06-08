@@ -55,16 +55,20 @@ const ANTHROPIC_MODELS = [
 ]
 
 const ZAI_MODELS = [
-  { value: "glm-4.5-air", label: "GLM-4.5 Air (fast)" },
-  { value: "glm-4.5",     label: "GLM-4.5" },
-  { value: "glm-4.6",     label: "GLM-4.6" },
-  { value: "glm-4.7",     label: "GLM-4.7" },
-  { value: "glm-5.1",     label: "GLM-5.1 (flagship)" },
+  { value: "glm-4.5-air",   label: "GLM-4.5 Air (fast)" },
+  { value: "glm-4.5",       label: "GLM-4.5" },
+  { value: "glm-4.6",       label: "GLM-4.6" },
+  { value: "glm-4.7",       label: "GLM-4.7" },
+  { value: "glm-5.1",       label: "GLM-5.1 (flagship)" },
+]
+
+const ZAI_VISION_MODELS = [
+  { value: "glm-5v-turbo", label: "GLM-5V Turbo (visual)" },
 ]
 
 const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
   anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-4-6", tier3: "claude-sonnet-4-6", vision: "claude-sonnet-4-6" },
-  zai:       { tier1: "glm-4.5-air",               tier2: "glm-4.7",           tier3: "glm-5.1",           vision: "glm-4.5-air" },
+  zai:       { tier1: "glm-4.5-air",               tier2: "glm-4.7",           tier3: "glm-5.1",           vision: "glm-5v-turbo" },
 }
 
 // ─── API key types ──────────────────────────────────────────────────────────
@@ -453,7 +457,9 @@ export default function SettingsPage() {
             ] as const).map((tier, i) => {
               const cfg = routing[tier.key]
               const isVision = tier.key === "vision"
-              const modelList = (!isVision && cfg.provider === "zai") ? ZAI_MODELS : ANTHROPIC_MODELS
+              const modelList = cfg.provider === "zai"
+                ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS)
+                : ANTHROPIC_MODELS
               return (
                 <div
                   key={tier.key}
@@ -463,31 +469,29 @@ export default function SettingsPage() {
                   <div className="min-w-0">
                     <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{tier.label}</div>
                     <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{tier.desc}</div>
-                    {isVision && (
+                    {isVision && cfg.provider === "zai" && (
                       <div className="text-[10px] mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
-                        Anthropic only — Z.ai&apos;s vision model (glm-5v-turbo) requires their OpenAI endpoint, not yet wired
+                        Routes via Z.ai OpenAI-compatible endpoint
                       </div>
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {/* Provider toggle — hidden for vision (Anthropic only) */}
-                    {!isVision && (
-                      <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
-                        {(["anthropic", "zai"] as Provider[]).map(p => (
-                          <button
-                            key={p}
-                            onClick={() => setTierProvider(tier.key, p)}
-                            className="px-2.5 py-1 font-medium transition-colors"
-                            style={{
-                              backgroundColor: cfg.provider === p ? "var(--c-moss)" : "var(--c-surface-2)",
-                              color: cfg.provider === p ? "#fff" : "var(--c-ink-faint)",
-                            }}
-                          >
-                            {p === "anthropic" ? "Anthropic" : "Z.ai"}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {/* Provider toggle */}
+                    <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
+                      {(["anthropic", "zai"] as Provider[]).map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setTierProvider(tier.key, p)}
+                          className="px-2.5 py-1 font-medium transition-colors"
+                          style={{
+                            backgroundColor: cfg.provider === p ? "var(--c-moss)" : "var(--c-surface-2)",
+                            color: cfg.provider === p ? "#fff" : "var(--c-ink-faint)",
+                          }}
+                        >
+                          {p === "anthropic" ? "Anthropic" : "Z.ai"}
+                        </button>
+                      ))}
+                    </div>
                     {/* Model dropdown */}
                     <select
                       className="input-field text-xs"

@@ -27,9 +27,10 @@ class Settings(BaseSettings):
     # Use TARS_ANTHROPIC_API_KEY to avoid collision with Claude Desktop's env var
     anthropic_api_key: str = Field(default="", alias="tars_anthropic_api_key")
 
-    # Z.ai — Anthropic-compatible API endpoint for GLM models
+    # Z.ai — dual endpoints: Anthropic-compatible (GLM-4.x) and OpenAI-compatible (GLM-5.x)
     zai_api_key: str = ""
-    zai_base_url: str = "https://api.z.ai/api/anthropic"
+    zai_base_url: str = "https://api.z.ai/api/anthropic"          # GLM-4.x
+    zai_openai_base_url: str = "https://api.z.ai/api/paas/v4/"    # GLM-5.x + vision
 
     # Per-tier provider selection: "anthropic" | "zai"
     tier1_provider: str = "anthropic"
