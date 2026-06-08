@@ -74,6 +74,25 @@ export function MessageInput({ onSend, disabled }: Props) {
     setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
+  function handlePaste(e: React.ClipboardEvent) {
+    const items = Array.from(e.clipboardData.items)
+    const imageItems = items.filter((item) => item.type.startsWith("image/"))
+    if (imageItems.length === 0) return
+
+    e.preventDefault()
+    imageItems.forEach((item) => {
+      const file = item.getAsFile()
+      if (!file) return
+      const ext = item.type.split("/")[1]?.replace("jpeg", "jpg") ?? "png"
+      const named = new File([file], `pasted-${Date.now()}.${ext}`, { type: item.type })
+      setAttachments((prev) => [...prev, named])
+    })
+
+    // If there's also plain text on the clipboard, still insert it
+    const text = e.clipboardData.getData("text")
+    if (text) setValue((prev) => prev + text)
+  }
+
   return (
     <div className="px-4 pb-4 pt-2">
       <div className="max-w-3xl mx-auto">
@@ -162,6 +181,7 @@ export function MessageInput({ onSend, disabled }: Props) {
             value={value}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder="Message TARS…"
             rows={1}
             disabled={disabled}
@@ -206,7 +226,7 @@ export function MessageInput({ onSend, disabled }: Props) {
         />
 
         <p className="text-center text-[10px] text-muted-foreground/50 mt-1.5">
-          Enter to send · Shift+Enter for newline
+          Enter to send · Shift+Enter for newline · Paste images with ⌘V
         </p>
       </div>
 
