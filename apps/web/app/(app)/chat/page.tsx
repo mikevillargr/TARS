@@ -1422,6 +1422,7 @@ export default function ChatPage() {
   const streamingCardsRef                           = useRef<Array<{ type: string; [k: string]: unknown }>>([])  // cards for finalMsg.tool_results
   const stopInitiatedRef                            = useRef<boolean>(false)  // true when user clicked Stop
   const streamPollingRef                            = useRef<boolean>(false)  // true while recovery-polling after stream interruption
+  const autoSendPendingRef                          = useRef<boolean>(false)  // true when handleAsk should auto-send
   const pendingArtifactIdRef                        = useRef<string | null>(null)  // artifact_id to inject on next send
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSendRef                               = useRef<() => Promise<void>>(async () => {})  // always-current handleSend
@@ -1960,6 +1961,15 @@ export default function ChatPage() {
     setTimeout(() => handleSend(), 0)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingVoiceSend, activeChatId])
+
+  // Auto-send when handleAsk pre-fills the input (contact chips, etc.)
+  useEffect(() => {
+    if (!autoSendPendingRef.current) return
+    if (!inputValue || busy) return
+    autoSendPendingRef.current = false
+    handleSend()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputValue, busy, handleSend])
 
   // Visibility recovery: when the user returns to this tab (mobile background →
   // foreground, alt-tab, etc.) reload messages for the active conversation so
