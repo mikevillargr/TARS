@@ -116,7 +116,7 @@ _PROVIDER_DEFAULTS = {
     ("zai",       "tier1"):  "glm-4.5-air",
     ("zai",       "tier2"):  "glm-4.6",
     ("zai",       "tier3"):  "glm-4.7",
-    ("zai",       "vision"): "glm-4.5-air",
+    ("zai",       "vision"): "glm-4.6V",   # vision-specific model; UI forces Anthropic anyway
 }
 
 
