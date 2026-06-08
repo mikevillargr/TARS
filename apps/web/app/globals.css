@@ -329,9 +329,12 @@
 .dark ::-webkit-scrollbar-thumb:hover { background: #5a5448; }
 
 /* ── Safe-area-aware bottom padding for content area on iOS PWA.
-   Tab bar is 56px tall + env(safe-area-inset-bottom) for the home indicator. */
-.pb-safe-tab {
-  padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+   Tab bar is 56px tall + env(safe-area-inset-bottom) for the home indicator.
+   Only applied below lg (1024px) where the bottom tab bar is visible. */
+@media (max-width: 1023px) {
+  .pb-safe-tab {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* Custom scrollbar */
