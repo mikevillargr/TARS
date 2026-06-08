@@ -9,7 +9,7 @@ import {
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
   Mail, Phone, PhoneCall, BriefcaseBusiness, MessageSquare, Search, UserPlus,
-  Copy, Check, ZoomIn, Brain,
+  Copy, Check, ZoomIn, Brain, FileSpreadsheet, FileCode,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete, apiUpload } from "@/lib/api-client"
@@ -27,6 +27,13 @@ interface Conversation {
   created_at: string
 }
 
+interface AttachmentMeta {
+  name: string
+  url: string
+  type: string
+  size?: number
+}
+
 interface Message {
   id: string
   role: "user" | "assistant"
@@ -35,6 +42,29 @@ interface Message {
   tool_calls?: string[]
   tool_results?: Array<{ type: string; [k: string]: unknown }>
   created_at: string
+  _attachments?: AttachmentMeta[]
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+function AttachmentFileIcon({ name, type }: { name: string; type: string }) {
+  const ext = name.split(".").pop()?.toLowerCase() ?? ""
+  const ct = type.toLowerCase()
+  if (ct === "application/pdf" || ext === "pdf")
+    return <FileText size={14} style={{ color: "#f87171", flexShrink: 0 }} />
+  if (ct.includes("spreadsheet") || ["xlsx", "xls", "csv"].includes(ext))
+    return <FileSpreadsheet size={14} style={{ color: "#4ade80", flexShrink: 0 }} />
+  if (ct.includes("presentation") || ext === "pptx")
+    return <Layout size={14} style={{ color: "#fb923c", flexShrink: 0 }} />
+  if (["json", "yaml", "yml", "xml"].includes(ext))
+    return <FileCode size={14} style={{ color: "#c084fc", flexShrink: 0 }} />
+  if (ct.includes("wordprocessingml") || ["docx", "doc"].includes(ext))
+    return <FileText size={14} style={{ color: "#60a5fa", flexShrink: 0 }} />
+  return <File size={14} style={{ color: "var(--c-ink-faint)", flexShrink: 0 }} />
 }
 
 interface StreamingMsg {
@@ -942,8 +972,12 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
   const toolCalls = !isUser && "tool_calls" in msg ? msg.tool_calls : undefined
   const modelLabel = !isUser && "model_used" in msg ? formatModelName(msg.model_used) : null
   const isStreaming = "streaming" in msg
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+
+  const attachments = "_attachments" in msg ? msg._attachments : undefined
 
   return (
+    <>
     <div className={`group flex gap-3 min-w-0 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
       <div
         className="w-8 h-8 rounded-full shrink-0 overflow-hidden"
@@ -988,6 +1022,52 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
             : { color: "var(--c-ink)", overflowWrap: "break-word" }
           }
         >
+          {attachments && attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {attachments.map((att, i) =>
+                att.type.startsWith("image/") ? (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setLightboxSrc(att.url)}
+                    className="focus:outline-none cursor-zoom-in"
+                    title="View full size"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={att.url}
+                      alt={att.name}
+                      className="max-w-[220px] max-h-[160px] rounded-lg object-cover hover:opacity-85 transition-opacity"
+                    />
+                  </button>
+                ) : (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs"
+                    style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}
+                  >
+                    <AttachmentFileIcon name={att.name} type={att.type} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="max-w-[160px] truncate font-medium" style={{ color: "var(--c-ink)" }}>{att.name}</span>
+                      {att.size !== undefined && (
+                        <span style={{ color: "var(--c-ink-faint)", fontSize: 10 }}>{formatFileSize(att.size)}</span>
+                      )}
+                    </div>
+                    <a
+                      href={att.url}
+                      download={att.name}
+                      onClick={(e) => e.stopPropagation()}
+                      title="Download"
+                      className="ml-1 shrink-0 hover:opacity-70 transition-opacity"
+                      style={{ color: "var(--c-ink-faint)" }}
+                    >
+                      <Download size={13} />
+                    </a>
+                  </div>
+                )
+              )}
+            </div>
+          )}
           <MessageContent content={msg.content} />
           {"streaming" in msg && (
             <span className="inline-flex items-center gap-0.5 ml-1 align-middle">
@@ -1011,6 +1091,30 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
         )}
       </div>
     </div>
+    {lightboxSrc && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center cursor-zoom-out"
+        style={{ backgroundColor: "rgba(0,0,0,0.85)", backdropFilter: "blur(4px)" }}
+        onClick={() => setLightboxSrc(null)}
+      >
+        <button
+          onClick={() => setLightboxSrc(null)}
+          className="absolute top-4 right-4 p-2 rounded-full transition-colors"
+          style={{ backgroundColor: "rgba(255,255,255,0.1)", color: "#fff" }}
+        >
+          <X size={20} />
+        </button>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={lightboxSrc}
+          alt=""
+          className="max-w-[90vw] max-h-[90vh] object-contain rounded-xl"
+          style={{ boxShadow: "0 0 60px rgba(0,0,0,0.5)", cursor: "default" }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
+  </>
   )
 })
 
@@ -1627,6 +1731,14 @@ export default function ChatPage() {
       role: "user",
       content,
       created_at: new Date().toISOString(),
+      ...(pendingAttachments.length > 0 && {
+        _attachments: pendingAttachments.map((f) => ({
+          name: f.name,
+          url: URL.createObjectURL(f),
+          type: f.type,
+          size: f.size,
+        })),
+      }),
     }
     setMessages((prev) => [...prev, tempUser])
     setStreaming({ role: "assistant", content: "", streaming: true })
@@ -2291,7 +2403,7 @@ export default function ChatPage() {
             </div>
 
             {/* Hidden file inputs */}
-            <input ref={fileInputRef} id="chat-attach-file" type="file" multiple accept=".pdf,.docx,.txt,.md,image/*" className="hidden" onChange={handleFileChange} />
+            <input ref={fileInputRef} id="chat-attach-file" type="file" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.json,.yaml,.yml,.xml,image/*" className="hidden" onChange={handleFileChange} />
             <input ref={cameraInputRef} id="chat-attach-camera" type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileChange} />
 
           </div>
