@@ -1359,7 +1359,7 @@ const MessageArea = memo(function MessageArea({
           ))}
         </div>
       )}
-      <div ref={messagesEndRef} />
+      <div ref={messagesEndRef} className="shrink-0" style={{ height: 160 }} />
     </div>
   )
 })
