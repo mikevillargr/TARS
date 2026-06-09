@@ -939,6 +939,9 @@ async def send_message(
                             query = (tool_input.get("query") or "").strip()
                             limit  = int(tool_input.get("limit", 25)) if name == "search_contacts" else 5
                             offset = int(tool_input.get("offset", 0))
+                            # Default: search_contacts shows cards (browsing intent), lookup_contact does not (action-resolution intent)
+                            _default_show_card = name == "search_contacts"
+                            _show_card = bool(tool_input.get("show_card", _default_show_card))
 
                             # Total unique contacts (by email) the user has
                             total_stmt = (
@@ -1038,7 +1041,7 @@ async def send_message(
                                                     "tars_context": None,
                                                     "source": "google_live",
                                                 })
-                                            if live_cards:
+                                            if live_cards and _show_card:
                                                 await _emit_card({
                                                     "type": "contact_card",
                                                     "contacts": live_cards,
@@ -1077,7 +1080,7 @@ async def send_message(
                                     "source": "local",
                                     "is_other_contact": c.is_other_contact,
                                 })
-                            if cards:
+                            if cards and _show_card:
                                 await _emit_card({
                                     "type": "contact_card",
                                     "contacts": cards,

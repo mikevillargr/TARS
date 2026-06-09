@@ -500,6 +500,14 @@ LOOKUP_CONTACT_TOOL = {
                     "Examples: 'Sarah', 'ken@growth-rocket.com', '+639171234567', 'Tim from NCH'."
                 ),
             },
+            "show_card": {
+                "type": "boolean",
+                "description": (
+                    "Whether to surface a contact card in the UI. "
+                    "Pass true only when Mike is explicitly asking about a person (who is X, contact details for X). "
+                    "Pass false (default) when resolving contact details to complete another action (send email, schedule meeting, etc.)."
+                ),
+            },
         },
         "required": ["query"],
     },
@@ -533,6 +541,14 @@ SEARCH_CONTACTS_TOOL = {
             "offset": {
                 "type": "integer",
                 "description": "Pagination offset for browsing large result sets. Default 0.",
+            },
+            "show_card": {
+                "type": "boolean",
+                "description": (
+                    "Whether to surface contact cards in the UI. "
+                    "Pass true (default) when Mike is browsing or searching contacts. "
+                    "Pass false when resolving contacts as an intermediate step for another action (send email, schedule meeting, etc.)."
+                ),
             },
         },
         "required": [],
