@@ -45,6 +45,7 @@ export interface CaptureModalProps {
   onClose: () => void
   onSaved?: (item: KnowledgeItem) => void
   defaultTab?: "url" | "document" | "file"
+  initialTitle?: string
 }
 
 const ACCEPTED_TYPES = [
@@ -70,13 +71,13 @@ function formatBytes(n: number) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-export function CaptureModal({ open, onClose, onSaved, defaultTab = "document" }: CaptureModalProps) {
+export function CaptureModal({ open, onClose, onSaved, defaultTab = "document", initialTitle = "" }: CaptureModalProps) {
   const router = useRouter()
   const [tab, setTab] = useState<"url" | "document" | "file">(defaultTab)
   // URL tab
   const [captureUrl, setCaptureUrl] = useState("")
   // Document tab
-  const [docTitle, setDocTitle] = useState("")
+  const [docTitle, setDocTitle] = useState(initialTitle)
   const [docMarkdown, setDocMarkdown] = useState("")
   // File tab
   const [selectedFile, setSelectedFile] = useState<File | null>(null)

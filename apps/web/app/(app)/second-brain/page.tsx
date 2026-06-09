@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import {
   Search, LayoutGrid, List as ListIcon,
   Link as LinkIcon, FileText, File, Mic, Plus, Menu, X, Loader2,
@@ -53,6 +54,7 @@ function typeLabel(type: string) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SecondBrainPage() {
+  const searchParams = useSearchParams()
   const { domains: domainList } = useDomains()
   const [items, setItems]                       = useState<KnowledgeItem[]>([])
   const [loading, setLoading]                   = useState(true)
@@ -65,8 +67,20 @@ export default function SecondBrainPage() {
   const [searchResults, setSearchResults]       = useState<SearchResult[] | null>(null)
   const [searching, setSearching]               = useState(false)
   const [showCapture, setShowCapture]           = useState(false)
+  const [captureInitialTitle, setCaptureInitialTitle] = useState("")
   const [tagSearch, setTagSearch]               = useState("")
   const [showAllTags, setShowAllTags]           = useState(false)
+  const captureOpenedRef = useRef(false)
+
+  useEffect(() => {
+    const capture = searchParams.get("capture")
+    const title = searchParams.get("title")
+    if (capture === "note" && !captureOpenedRef.current) {
+      captureOpenedRef.current = true
+      setCaptureInitialTitle(title ?? "")
+      setShowCapture(true)
+    }
+  }, [searchParams])
 
   const loadItems = useCallback(async () => {
     setLoading(true)
@@ -438,6 +452,7 @@ export default function SecondBrainPage() {
         open={showCapture}
         onClose={() => setShowCapture(false)}
         onSaved={(item) => setItems(prev => [item, ...prev])}
+        initialTitle={captureInitialTitle}
       />
     </div>
   )

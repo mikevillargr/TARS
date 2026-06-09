@@ -1,9 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   Video, Clock, Users, FileText, CheckSquare, Search,
   Sparkles, Calendar, RefreshCw, Loader2, BriefcaseBusiness,
+  MessageSquare, BookOpen,
 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
 
@@ -120,6 +122,7 @@ function duration(m: Meeting): string | null {
 }
 
 export default function MeetingsPage() {
+  const router = useRouter()
   const [meetings, setMeetings]   = useState<Meeting[]>([])
   const [selected, setSelected]   = useState<Meeting | null>(null)
   const [tab, setTab]             = useState<Tab>("summary")
@@ -365,7 +368,7 @@ export default function MeetingsPage() {
                       </div>
                       <div className="space-y-2">
                         {selected.action_items!.slice(0, 3).map(a => (
-                          <ActionItemRow key={a.id} item={a} onCreateTask={createTaskFromItem} creating={creatingTask === a.id} />
+                          <ActionItemRow key={a.id} item={a} onCreateTask={createTaskFromItem} creating={creatingTask === a.id} meetingTitle={selected.title} router={router} />
                         ))}
                       </div>
                     </section>
@@ -383,7 +386,7 @@ export default function MeetingsPage() {
                 <div className="max-w-3xl mx-auto px-8 py-8 space-y-3">
                   {(selected.action_items?.length ?? 0) > 0 ? (
                     selected.action_items!.map(a => (
-                      <ActionItemRow key={a.id} item={a} onCreateTask={createTaskFromItem} creating={creatingTask === a.id} />
+                      <ActionItemRow key={a.id} item={a} onCreateTask={createTaskFromItem} creating={creatingTask === a.id} meetingTitle={selected.title} router={router} />
                     ))
                   ) : (
                     <p className="text-sm italic text-center py-12" style={{ color: "var(--c-ink-muted)" }}>No action items extracted from this meeting.</p>
@@ -398,7 +401,24 @@ export default function MeetingsPage() {
   )
 }
 
-function ActionItemRow({ item, onCreateTask, creating }: { item: ActionItem; onCreateTask: (i: ActionItem) => void; creating: boolean }) {
+function ActionItemRow({
+  item, onCreateTask, creating, meetingTitle, router,
+}: {
+  item: ActionItem
+  onCreateTask: (i: ActionItem) => void
+  creating: boolean
+  meetingTitle: string
+  router: ReturnType<typeof useRouter>
+}) {
+  function openInChat() {
+    const prompt = `Unpack this action item from the meeting "${meetingTitle}": ${item.raw_text}`
+    router.push(`/chat?ask=${encodeURIComponent(prompt)}`)
+  }
+
+  function openInSecondBrain() {
+    router.push(`/second-brain?capture=note&title=${encodeURIComponent(item.raw_text)}`)
+  }
+
   return (
     <div className="card flex items-start gap-3 group">
       <div className="flex-1 min-w-0">
@@ -409,20 +429,42 @@ function ActionItemRow({ item, onCreateTask, creating }: { item: ActionItem; onC
           </div>
         )}
       </div>
-      {item.task_id ? (
-        <span className="text-[10px] font-medium shrink-0 badge badge-moss">Task created</span>
-      ) : (
+      <div className="flex items-center gap-2 shrink-0">
         <button
-          onClick={() => onCreateTask(item)}
-          disabled={creating}
-          className="text-xs font-medium shrink-0 disabled:opacity-50 transition-colors"
-          style={{ color: "var(--c-moss)" }}
-          onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
-          onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+          onClick={openInChat}
+          title="Open in Chat"
+          className="p-1 rounded transition-colors opacity-0 group-hover:opacity-100"
+          style={{ color: "var(--c-ink-muted)" }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
         >
-          {creating ? <Loader2 size={12} className="animate-spin" /> : "Create Task"}
+          <MessageSquare size={13} />
         </button>
-      )}
+        <button
+          onClick={openInSecondBrain}
+          title="Open in Second Brain"
+          className="p-1 rounded transition-colors opacity-0 group-hover:opacity-100"
+          style={{ color: "var(--c-ink-muted)" }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
+        >
+          <BookOpen size={13} />
+        </button>
+        {item.task_id ? (
+          <span className="text-[10px] font-medium badge badge-moss">Task created</span>
+        ) : (
+          <button
+            onClick={() => onCreateTask(item)}
+            disabled={creating}
+            className="text-xs font-medium disabled:opacity-50 transition-colors"
+            style={{ color: "var(--c-moss)" }}
+            onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+            onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+          >
+            {creating ? <Loader2 size={12} className="animate-spin" /> : "Create Task"}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
