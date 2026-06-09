@@ -217,6 +217,8 @@ ssh root@<your-server> "cd /opt/tars/apps/web && npm run build && cp -r .next/st
 ## Changelog
 
 ### v2.3.0
+- **GLM-5 support** — GLM-5.1 (Tier 3) and GLM-4.7 (Tier 2) wired through Z.ai's OpenAI-compatible endpoint; thinking token budget handled correctly for GLM-5.x
+- **Vision routing** — explicit vision model tier independent of the main tier config; prefers Anthropic for image analysis (Z.ai/GLM does not support vision); Vision row added to the model routing UI in Settings
 - **Calendar update/delete** — agents can now reschedule, rename, and delete calendar events via `update_calendar_event` and `delete_calendar_event` tools; event IDs are injected into context so the model can reference them directly
 - **Calendar context window** — expanded from 7 to 30 days (up to 30 events) so agents can see and act on events further out
 - **Email send fix** — 8-char truncated thread IDs from context are now expanded to full Gmail IDs before sending, resolving the 404 notFound error on replies
