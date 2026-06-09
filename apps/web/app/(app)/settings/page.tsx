@@ -72,7 +72,7 @@ const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
 }
 
 // ─── API key types ──────────────────────────────────────────────────────────
-interface ApiKeys { anthropic: string; zai: string; runpod: string; tavily: string; fireflies: string; github: string }
+interface ApiKeys { anthropic: string; zai: string; runpod: string; tavily: string; fireflies: string; github: string; always_sunny: string }
 interface KeyEntry { id: keyof ApiKeys; label: string; description: string; editValue: string; testState: "idle" | "testing" | "ok" | "error"; testMsg: string }
 
 const KEY_DEFS: { id: keyof ApiKeys; label: string; description: string }[] = [
@@ -81,7 +81,8 @@ const KEY_DEFS: { id: keyof ApiKeys; label: string; description: string }[] = [
   { id: "runpod",    label: "RunPod",       description: "GPU inference endpoints" },
   { id: "tavily",    label: "Tavily",       description: "Web search tool" },
   { id: "fireflies", label: "Fireflies",    description: "Meeting transcription" },
-  { id: "github",    label: "GitHub",       description: "PAT for agent git push and PR creation" },
+  { id: "github",       label: "GitHub",        description: "PAT for agent git push and PR creation" },
+  { id: "always_sunny", label: "AlwaysSunny",   description: "Solar + Tesla charging controller" },
 ]
 
 const DOMAIN_PALETTE = [
@@ -143,7 +144,7 @@ export default function SettingsPage() {
   const [keyEntries, setKeyEntries] = useState<KeyEntry[]>(
     KEY_DEFS.map(d => ({ ...d, editValue: "", testState: "idle", testMsg: "" }))
   )
-  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", runpod: "", tavily: "", fireflies: "", github: "" })
+  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", runpod: "", tavily: "", fireflies: "", github: "", always_sunny: "" })
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
 
   // PWA install state

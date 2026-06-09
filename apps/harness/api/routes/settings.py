@@ -195,12 +195,13 @@ async def update_model_routing(
 # ─── API keys ─────────────────────────────────────────────────────────────────
 
 class ApiKeysOut(BaseModel):
-    anthropic: str   # masked
-    zai: str         # masked
-    runpod: str      # masked
-    tavily: str      # masked
-    fireflies: str   # masked
-    github: str      # masked
+    anthropic: str     # masked
+    zai: str           # masked
+    runpod: str        # masked
+    tavily: str        # masked
+    fireflies: str     # masked
+    github: str        # masked
+    always_sunny: str  # masked
 
 
 class ApiKeyUpdate(BaseModel):
@@ -227,6 +228,7 @@ async def get_api_keys(_user_id: str = Depends(require_auth)):
         tavily=_mask(settings.tavily_api_key),
         fireflies=_mask(settings.fireflies_api_key),
         github=_mask(settings.github_token),
+        always_sunny=_mask(settings.always_sunny_api_key),
     )
 
 
@@ -236,12 +238,13 @@ async def update_api_key(
     _user_id: str = Depends(require_auth),
 ):
     env_map = {
-        "anthropic": "tars_anthropic_api_key",
-        "zai":       "zai_api_key",
-        "runpod":    "runpod_api_key",
-        "tavily":    "tavily_api_key",
-        "fireflies": "fireflies_api_key",
-        "github":    "github_token",
+        "anthropic":    "tars_anthropic_api_key",
+        "zai":          "zai_api_key",
+        "runpod":       "runpod_api_key",
+        "tavily":       "tavily_api_key",
+        "fireflies":    "fireflies_api_key",
+        "github":       "github_token",
+        "always_sunny": "always_sunny_api_key",
     }
     if body.provider not in env_map:
         raise HTTPException(status_code=400, detail="Unknown provider")
