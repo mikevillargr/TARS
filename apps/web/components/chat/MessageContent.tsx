@@ -389,20 +389,20 @@ export function MessageContent({ content }: { content: string }) {
             <h2 className="text-base font-semibold mt-3 mb-1.5 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-sm font-semibold mt-2 mb-1 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h3>
+            <h3 className="text-base md:text-sm font-semibold mt-2 mb-1 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h3>
           ),
 
           // Paragraphs
           p: ({ children }) => (
-            <p className="text-sm leading-relaxed mb-2 last:mb-0">{children}</p>
+            <p className="text-base md:text-sm leading-relaxed mb-2 last:mb-0">{children}</p>
           ),
 
           // Lists
           ul: ({ children }) => (
-            <ul className="text-sm space-y-1 my-2 pl-4 list-none">{children}</ul>
+            <ul className="text-base md:text-sm space-y-1 my-2 pl-4 list-none">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="text-sm space-y-1 my-2 pl-4 list-decimal">{children}</ol>
+            <ol className="text-base md:text-sm space-y-1 my-2 pl-4 list-decimal">{children}</ol>
           ),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           li: ({ children, ordered }: { children?: React.ReactNode; ordered?: boolean; [key: string]: any }) => (
@@ -437,7 +437,7 @@ export function MessageContent({ content }: { content: string }) {
           // Blockquote
           blockquote: ({ children }) => (
             <blockquote
-              className="my-2 pl-3 py-1 text-sm italic"
+              className="my-2 pl-3 py-1 text-base md:text-sm italic"
               style={{ borderLeft: "3px solid var(--c-moss)", color: "var(--c-ink-muted)" }}
             >
               {children}
