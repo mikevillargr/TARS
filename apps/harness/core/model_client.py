@@ -319,7 +319,9 @@ WEB_SEARCH_TOOL = {
         "news, prices, live data, or anything that requires up-to-date information beyond "
         "your training cutoff. Also use for research tasks where you need to find specific "
         "facts, articles, or external references. "
-        "Returns titles, URLs, and content snippets from the top results."
+        "Also use when Mike asks to see images, photos, or visuals of anything — this tool "
+        "returns inline images from search results which are rendered automatically in chat. "
+        "Returns titles, URLs, content snippets, and images from the top results."
     ),
     "input_schema": {
         "type": "object",
