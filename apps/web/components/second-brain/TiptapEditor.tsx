@@ -338,6 +338,9 @@ export function TiptapEditor({
       // tiptap-markdown overrides setContent to accept a markdown string
       editor.commands.setContent(content || "")
       contentSet.current = true
+      if (onWordCount) {
+        onWordCount(editor.getText().split(/\s+/).filter(Boolean).length)
+      }
     }
   }, [editor, content, resetKey])
 
