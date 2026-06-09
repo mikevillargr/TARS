@@ -25,7 +25,7 @@ type Handler = (n: TarsNotification) => void
 export function useNotifications(onNotification: Handler) {
   const wsRef = useRef<TarsWebSocket | null>(null)
   const handlerRef = useRef(onNotification)
-  handlerRef.current = onNotification
+  useEffect(() => { handlerRef.current = onNotification })
 
   const connect = useCallback(async () => {
     if (wsRef.current) {
