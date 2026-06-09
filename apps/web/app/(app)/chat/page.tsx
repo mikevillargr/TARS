@@ -1910,6 +1910,12 @@ export default function ChatPage() {
               if (chatId === activeChatIdRef.current) {
                 setMessages((prev) => [...prev.filter((m) => m.id !== tempUser.id), tempUser, finalMsg])
                 setStreaming(null)
+                setCalendarSuggestions([])
+                setTaskSuggestions([])
+                setArtifactNotifications([])
+                setContactResults([])
+                setPlaceResults([])
+                setEmailDrafts([])
               }
               // Refresh conversation list to pick up the title (generated async after done)
               apiGet<Conversation[]>("/chat/conversations").then(setConversations).catch(console.error)
