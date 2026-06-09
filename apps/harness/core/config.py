@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379"
 
     tars_username: str = "mike"
+    tars_email: str = ""
     tars_password_hash: str = ""
     jwt_secret: str = "change_me_in_production"
     session_secret: str = "change_me_in_production"

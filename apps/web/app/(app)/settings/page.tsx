@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X } from "lucide-react"
+import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X, Lock } from "lucide-react"
 import { apiGet, apiPatch, apiPost, apiDelete } from "@/lib/api-client"
 import { useDomains, invalidateDomains, type Domain } from "@/hooks/useDomains"
 
@@ -72,23 +72,17 @@ const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
 }
 
 // ─── API key types ──────────────────────────────────────────────────────────
-interface ApiKeys { anthropic: string; zai: string; runpod: string }
-interface KeyEntry { id: keyof ApiKeys; provider: string; editValue: string; testState: "idle" | "testing" | "ok" | "error"; testMsg: string }
+interface ApiKeys { anthropic: string; zai: string; runpod: string; tavily: string; fireflies: string; github: string }
+interface KeyEntry { id: keyof ApiKeys; label: string; description: string; editValue: string; testState: "idle" | "testing" | "ok" | "error"; testMsg: string }
 
-const INITIAL_NOTIFICATIONS = [
-  { id: "chat",   label: "Chat responses",   push: true,  email: false, inApp: true },
-  { id: "tasks",  label: "Task updates",      push: true,  email: true,  inApp: true },
-  { id: "meet",   label: "Meetings",          push: false, email: true,  inApp: true },
-  { id: "agent",  label: "Agent jobs",        push: true,  email: false, inApp: true },
-  { id: "digest", label: "Email digest",      push: false, email: false, inApp: true },
-  { id: "cron",   label: "Cron failures",     push: true,  email: true,  inApp: true },
+const KEY_DEFS: { id: keyof ApiKeys; label: string; description: string }[] = [
+  { id: "anthropic", label: "Anthropic",    description: "Claude models — Haiku, Sonnet, Opus" },
+  { id: "zai",       label: "Z.ai (GLM)",   description: "GLM models via Z.ai API" },
+  { id: "runpod",    label: "RunPod",       description: "GPU inference endpoints" },
+  { id: "tavily",    label: "Tavily",       description: "Web search tool" },
+  { id: "fireflies", label: "Fireflies",    description: "Meeting transcription" },
+  { id: "github",    label: "GitHub",       description: "PAT for agent git push and PR creation" },
 ]
-
-const KEY_LABELS: Record<string, string> = {
-  anthropic: "Anthropic",
-  zai:       "Z.ai (GLM)",
-  runpod:    "RunPod",
-}
 
 const DOMAIN_PALETTE = [
   "#6B7280", "#3B82F6", "#8B5CF6", "#10B981",
@@ -124,7 +118,16 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("Asia/Manila")
   const [tzSaved, setTzSaved]   = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
-  const [notifs, setNotifs]     = useState(INITIAL_NOTIFICATIONS)
+
+  // Password change
+  const [currentPw, setCurrentPw]   = useState("")
+  const [newPw, setNewPw]           = useState("")
+  const [confirmPw, setConfirmPw]   = useState("")
+  const [pwSaving, setPwSaving]     = useState(false)
+  const [pwError, setPwError]       = useState("")
+  const [pwSaved, setPwSaved]       = useState(false)
+  const [showCurrentPw, setShowCurrentPw] = useState(false)
+  const [showNewPw, setShowNewPw]   = useState(false)
 
   // Model routing — live from backend
   const [routing, setRouting]   = useState<ModelRouting>({
@@ -137,12 +140,10 @@ export default function SettingsPage() {
   const [routingSaved,  setRoutingSaved]  = useState(false)
 
   // API keys — masked values from backend + local edit state
-  const [keyEntries, setKeyEntries] = useState<KeyEntry[]>([
-    { id: "anthropic", provider: "Anthropic", editValue: "", testState: "idle", testMsg: "" },
-    { id: "zai",       provider: "Z.ai (GLM)", editValue: "", testState: "idle", testMsg: "" },
-    { id: "runpod",    provider: "RunPod",     editValue: "", testState: "idle", testMsg: "" },
-  ])
-  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", runpod: "" })
+  const [keyEntries, setKeyEntries] = useState<KeyEntry[]>(
+    KEY_DEFS.map(d => ({ ...d, editValue: "", testState: "idle", testMsg: "" }))
+  )
+  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", runpod: "", tavily: "", fireflies: "", github: "" })
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
 
   // PWA install state
@@ -213,8 +214,27 @@ export default function SettingsPage() {
     }
   }
 
-  const toggleNotif = (id: string, field: "push" | "email" | "inApp") => {
-    setNotifs(prev => prev.map(n => n.id === id ? { ...n, [field]: !n[field] } : n))
+  async function savePassword() {
+    setPwError("")
+    if (newPw !== confirmPw) { setPwError("Passwords do not match"); return }
+    if (newPw.length < 8) { setPwError("Password must be at least 8 characters"); return }
+    setPwSaving(true)
+    try {
+      const res = await apiPost<{ ok: boolean }>("/settings/change-password", {
+        current_password: currentPw,
+        new_password: newPw,
+      })
+      if (res.ok) {
+        setCurrentPw(""); setNewPw(""); setConfirmPw("")
+        setPwSaved(true)
+        setTimeout(() => setPwSaved(false), 2000)
+      }
+    } catch (err: unknown) {
+      const msg = (err as { message?: string })?.message ?? "Failed"
+      setPwError(msg.includes("400") ? "Current password is incorrect" : "Failed to update password")
+    } finally {
+      setPwSaving(false)
+    }
   }
 
   const toggleKeyVisibility = (id: string) => {
@@ -259,7 +279,8 @@ export default function SettingsPage() {
     if (!entry?.editValue) return
     try {
       await apiPatch("/settings/api-keys", { provider: id, key: entry.editValue })
-      setMaskedKeys(prev => ({ ...prev, [id]: "•".repeat(entry.editValue.length - 6) + entry.editValue.slice(-6) }))
+      const val = entry.editValue
+      setMaskedKeys(prev => ({ ...prev, [id]: "•".repeat(Math.max(0, val.length - 6)) + val.slice(-6) }))
       setKeyEntries(prev => prev.map(k => k.id === id ? { ...k, editValue: "" } : k))
     } catch (err) {
       console.error(err)
@@ -510,43 +531,77 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* ── Notifications ── */}
+        {/* ── Security ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
           <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
-            Notifications
+            Security
           </h2>
-          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
-            {/* Header row */}
-            <div
-              className="grid px-4 py-2"
-              style={{
-                gridTemplateColumns: "1fr 44px 44px 44px",
-                backgroundColor: "var(--c-surface-2)",
-                borderBottom: "1px solid var(--c-border-faint)",
-              }}
-            >
-              {["", "Push", "Email", "App"].map(h => (
-                <span key={h} className="text-[0.6rem] font-semibold uppercase tracking-wider text-center" style={{ color: "var(--c-ink-faint)" }}>
-                  {h}
-                </span>
-              ))}
-            </div>
-            {notifs.map((notif, i) => (
-              <div
-                key={notif.id}
-                className="grid items-center px-4 py-2.5"
-                style={{
-                  gridTemplateColumns: "1fr 44px 44px 44px",
-                  borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
-                  backgroundColor: "var(--c-surface)",
-                }}
-              >
-                <span className="text-sm pr-2" style={{ color: "var(--c-ink)" }}>{notif.label}</span>
-                <span className="flex justify-center"><Toggle enabled={notif.push}  onChange={() => toggleNotif(notif.id, "push")} /></span>
-                <span className="flex justify-center"><Toggle enabled={notif.email} onChange={() => toggleNotif(notif.id, "email")} /></span>
-                <span className="flex justify-center"><Toggle enabled={notif.inApp} onChange={() => toggleNotif(notif.id, "inApp")} /></span>
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--c-ink-muted)" }}>Current Password</label>
+              <div className="relative">
+                <input
+                  type={showCurrentPw ? "text" : "password"}
+                  className="input-field w-full pr-8"
+                  value={currentPw}
+                  onChange={e => setCurrentPw(e.target.value)}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPw(p => !p)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5"
+                  style={{ color: "var(--c-ink-faint)" }}
+                >
+                  {showCurrentPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
               </div>
-            ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--c-ink-muted)" }}>New Password</label>
+                <div className="relative">
+                  <input
+                    type={showNewPw ? "text" : "password"}
+                    className="input-field w-full pr-8"
+                    value={newPw}
+                    onChange={e => setNewPw(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPw(p => !p)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5"
+                    style={{ color: "var(--c-ink-faint)" }}
+                  >
+                    {showNewPw ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--c-ink-muted)" }}>Confirm New Password</label>
+                <input
+                  type="password"
+                  className="input-field w-full"
+                  value={confirmPw}
+                  onChange={e => setConfirmPw(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </div>
+            </div>
+          </div>
+          {pwError && (
+            <p className="text-xs" style={{ color: "var(--c-rose)" }}>{pwError}</p>
+          )}
+          <div className="flex justify-end">
+            <button
+              onClick={savePassword}
+              disabled={pwSaving || !currentPw || !newPw || !confirmPw}
+              className="btn-primary flex items-center gap-1.5 disabled:opacity-40"
+              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+            >
+              {pwSaving ? <Loader2 size={13} className="animate-spin" /> : pwSaved ? <><Check size={13} /> Changed</> : <><Lock size={13} /> Change Password</>}
+            </button>
           </div>
         </section>
 
@@ -715,7 +770,10 @@ export default function SettingsPage() {
                 <div key={k.id} className="rounded-lg px-3 py-3 flex flex-col gap-2"
                   style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border-faint)" }}>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-semibold" style={{ color: "var(--c-ink)" }}>{KEY_LABELS[k.id]}</div>
+                    <div>
+                      <div className="text-xs font-semibold" style={{ color: "var(--c-ink)" }}>{k.label}</div>
+                      <div className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{k.description}</div>
+                    </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {/* Test button (Anthropic + Z.ai only) */}
                       {canTest && (

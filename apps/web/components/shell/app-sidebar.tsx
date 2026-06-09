@@ -1,10 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
-  Mail, Clock, Plug, Database, Settings, Archive, Sun, Moon, Monitor,
+  Mail, Clock, Plug, Database, Settings, Archive, Sun, Moon, Monitor, LogOut,
 } from "lucide-react"
 import {
   Sidebar,
@@ -58,7 +58,13 @@ function TarsLogo() {
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { mode, toggle: toggleTheme } = useTheme()
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" })
+    router.push("/login")
+  }
   const { hasUnread } = useNotificationContext()
   const onChat = pathname.startsWith("/chat")
 
@@ -144,10 +150,19 @@ export function AppSidebar() {
           <Avatar className="size-8">
             <AvatarFallback className="text-xs bg-sidebar-accent text-sidebar-accent-foreground">MV</AvatarFallback>
           </Avatar>
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
             <span className="text-sm font-medium text-sidebar-foreground truncate">Mike Villar</span>
             <span className="text-xs text-sidebar-foreground/50 truncate">CEO, Growth Rocket</span>
           </div>
+          <button
+            onClick={handleLogout}
+            className="p-1.5 rounded-lg transition-colors hover:bg-[var(--c-surface-raised)] shrink-0"
+            style={{ color: "var(--c-ink-muted)" }}
+            title="Logout"
+            aria-label="Logout"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </SidebarFooter>
     </Sidebar>

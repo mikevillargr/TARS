@@ -3,13 +3,14 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import bcrypt
 from dotenv import set_key as dotenv_set_key
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.auth import require_auth
+from core.auth import require_auth, verify_password
 from core.config import settings
 from db.models import User
 from db.session import get_db
@@ -80,6 +81,27 @@ async def update_settings(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     return SettingsOut(name=user.name, timezone=user.timezone or "Asia/Manila")
+
+
+# ─── Change password ─────────────────────────────────────────────────────────
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    _user_id: str = Depends(require_auth),
+):
+    if not settings.tars_password_hash or not verify_password(body.current_password, settings.tars_password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    new_hash = bcrypt.hashpw(body.new_password.encode(), bcrypt.gensalt()).decode()
+    _set_env("tars_password_hash", new_hash)
+    return {"ok": True}
 
 
 # ─── Model routing ────────────────────────────────────────────────────────────
@@ -176,10 +198,13 @@ class ApiKeysOut(BaseModel):
     anthropic: str   # masked
     zai: str         # masked
     runpod: str      # masked
+    tavily: str      # masked
+    fireflies: str   # masked
+    github: str      # masked
 
 
 class ApiKeyUpdate(BaseModel):
-    provider: str   # "anthropic" | "zai" | "runpod"
+    provider: str   # "anthropic" | "zai" | "runpod" | "tavily" | "fireflies" | "github"
     key: str
 
 
@@ -199,6 +224,9 @@ async def get_api_keys(_user_id: str = Depends(require_auth)):
         anthropic=_mask(settings.anthropic_api_key),
         zai=_mask(settings.zai_api_key),
         runpod=_mask(settings.runpod_api_key),
+        tavily=_mask(settings.tavily_api_key),
+        fireflies=_mask(settings.fireflies_api_key),
+        github=_mask(settings.github_token),
     )
 
 
@@ -211,12 +239,15 @@ async def update_api_key(
         "anthropic": "tars_anthropic_api_key",
         "zai":       "zai_api_key",
         "runpod":    "runpod_api_key",
+        "tavily":    "tavily_api_key",
+        "fireflies": "fireflies_api_key",
+        "github":    "github_token",
     }
     if body.provider not in env_map:
         raise HTTPException(status_code=400, detail="Unknown provider")
 
     _set_env(env_map[body.provider], body.key)
-    if body.provider in ("anthropic", "zai"):
+    if body.provider in ("anthropic", "zai", "runpod"):
         from core.model_client import get_model_client
         get_model_client().reset()
 

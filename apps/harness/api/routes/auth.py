@@ -18,7 +18,12 @@ class LoginResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest):
-    if body.username != settings.tars_username:
+    identifier = body.username.strip().lower()
+    valid = {settings.tars_username.lower()}
+    if settings.tars_email:
+        valid.add(settings.tars_email.lower())
+
+    if identifier not in valid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not settings.tars_password_hash or not verify_password(body.password, settings.tars_password_hash):
