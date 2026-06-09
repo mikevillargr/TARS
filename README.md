@@ -4,7 +4,7 @@ An AI operating system that runs your life. Chat, tasks, meetings, knowledge, sc
 
 Built on Next.js 16 + FastAPI with a three-tier model routing architecture. Installable as a PWA. Every module is live and connected.
 
-**Current version: v2.2.0**
+**Current version: v2.3.0**
 
 ---
 
@@ -72,6 +72,8 @@ Profile, model routing config with live switching between Anthropic and Z.ai (GL
 | `create_task` | Create a task with title, priority, and due date |
 | `propose_task` | Suggest a task for user approval before creating |
 | `create_calendar_event` | Create a Google Calendar event |
+| `update_calendar_event` | Reschedule, rename, or edit an existing event |
+| `delete_calendar_event` | Remove an event from Google Calendar |
 | `propose_calendar_event` | Suggest an event for user approval |
 | `save_memory` | Persist a fact to episodic memory |
 | `read_email` | Fetch recent emails from Gmail |
@@ -213,6 +215,11 @@ ssh root@<your-server> "cd /opt/tars/apps/web && npm run build && cp -r .next/st
 - **PATCH** — bug fixes only
 
 ## Changelog
+
+### v2.3.0
+- **Calendar update/delete** — agents can now reschedule, rename, and delete calendar events via `update_calendar_event` and `delete_calendar_event` tools; event IDs are injected into context so the model can reference them directly
+- **Calendar context window** — expanded from 7 to 30 days (up to 30 events) so agents can see and act on events further out
+- **Email send fix** — 8-char truncated thread IDs from context are now expanded to full Gmail IDs before sending, resolving the 404 notFound error on replies
 
 ### v2.2.0
 - **Strava connector** — full OAuth, activity list with date-range filtering, pagination, and multi-page fetching; four chat tools (activities, single activity, stats, zones)
