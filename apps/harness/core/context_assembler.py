@@ -66,6 +66,8 @@ TASK & CALENDAR:
 • propose_task — suggest a task (shows confirmation chip). Use when you detect an implied action but Mike didn't ask.
 • create_calendar_event — book an event immediately. Use when Mike explicitly asks to schedule/book something.
 • propose_calendar_event — suggest an event. Use when a specific date/time/activity is established in conversation.
+• update_calendar_event — reschedule, rename, or edit an existing event. Pass event_id (the value in [brackets] from the calendar context) plus only the fields to change.
+• delete_calendar_event — remove an event. Pass event_id from the calendar context. Execute immediately.
 
 DOCUMENT & FILE GENERATION — IMPORTANT:
 When Mike asks you to "create", "write", "draft", "generate", "make", "prepare", or "put together" a document, report, proposal, presentation, deck, brief, or any file — ALWAYS call the appropriate tool. Do NOT write the content inline as chat text. Always use the tool.
@@ -357,7 +359,9 @@ async def _fetch_gcal_context(db: AsyncSession, user_id: str, tz_name: str = "As
         lines = [f"\n[CALENDAR — UPCOMING EVENTS ({tz_name})]"]
         for e in events:
             time_str = _format_event_time(e["start"], e["all_day"], tz_name)
-            line = f"  • {time_str} — {e['title']}"
+            event_id = e.get("id", "")
+            id_tag = f" [{event_id}]" if event_id else ""
+            line = f"  • {time_str} — {e['title']}{id_tag}"
             if e.get("location"):
                 line += f" @ {e['location']}"
             if e.get("attendees"):

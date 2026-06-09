@@ -18,6 +18,7 @@ from core.model_client import (
     get_model_client, ModelClient, ModelTier,
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
+    UPDATE_CALENDAR_EVENT_TOOL, DELETE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
@@ -700,6 +701,8 @@ async def send_message(
     tools = [
         CREATE_TASK_TOOL,
         CREATE_CALENDAR_EVENT_TOOL,
+        UPDATE_CALENDAR_EVENT_TOOL,
+        DELETE_CALENDAR_EVENT_TOOL,
         PROPOSE_CALENDAR_EVENT_TOOL,
         PROPOSE_TASK_TOOL,
         SAVE_MEMORY_TOOL,
@@ -811,6 +814,87 @@ async def send_message(
                         except Exception as exc:
                             log.warning("create_calendar_event failed: %s", exc)
                             return f"Failed to create calendar event: {exc}"
+
+                    if name == "update_calendar_event":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Connector
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Google Calendar",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Google Calendar not connected."
+
+                            from connectors.google_calendar import GoogleCalendarClient
+                            from datetime import datetime, timedelta
+                            import asyncio as _asyncio
+
+                            gcal = GoogleCalendarClient(conn.auth)
+                            event_id = tool_input["event_id"]
+                            fields: dict = {}
+                            if tool_input.get("title"):
+                                fields["summary"] = tool_input["title"]
+                            if tool_input.get("datetime_iso"):
+                                start_dt = datetime.fromisoformat(tool_input["datetime_iso"])
+                                duration = tool_input.get("duration_min", 60)
+                                end_dt = start_dt + timedelta(minutes=duration)
+                                tz_str = str(start_dt.tzinfo or "UTC")
+                                fields["start"] = {"dateTime": start_dt.isoformat(), "timeZone": tz_str}
+                                fields["end"] = {"dateTime": end_dt.isoformat(), "timeZone": tz_str}
+                            elif tool_input.get("duration_min"):
+                                # duration change without new start — not supported without fetching existing
+                                return "To change duration, provide the new start time too (datetime_iso + duration_min)."
+                            if tool_input.get("description") is not None:
+                                fields["description"] = tool_input["description"]
+                            if tool_input.get("location") is not None:
+                                fields["location"] = tool_input["location"]
+                            if tool_input.get("attendees") is not None:
+                                fields["attendees"] = [{"email": e} for e in tool_input["attendees"]]
+
+                            if not fields:
+                                return "No changes specified."
+
+                            loop = _asyncio.get_event_loop()
+                            result = await loop.run_in_executor(
+                                None, lambda: gcal.patch_event(event_id, **fields)
+                            )
+                            title = result.get("summary", tool_input.get("title", "event"))
+                            link = result.get("htmlLink", "")
+                            return f"Updated '{title}'." + (f" View: {link}" if link else "")
+                        except Exception as exc:
+                            log.warning("update_calendar_event failed: %s", exc)
+                            return f"Failed to update calendar event: {exc}"
+
+                    if name == "delete_calendar_event":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Connector
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Google Calendar",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Google Calendar not connected."
+
+                            from connectors.google_calendar import GoogleCalendarClient
+                            import asyncio as _asyncio
+
+                            gcal = GoogleCalendarClient(conn.auth)
+                            event_id = tool_input["event_id"]
+                            loop = _asyncio.get_event_loop()
+                            await loop.run_in_executor(None, lambda: gcal.delete_event(event_id))
+                            title = tool_input.get("title", "event")
+                            return f"Deleted '{title}' from calendar."
+                        except Exception as exc:
+                            log.warning("delete_calendar_event failed: %s", exc)
+                            return f"Failed to delete calendar event: {exc}"
 
                     if name == "save_memory":
                         try:

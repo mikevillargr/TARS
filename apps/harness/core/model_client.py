@@ -96,6 +96,46 @@ CREATE_CALENDAR_EVENT_TOOL = {
     },
 }
 
+UPDATE_CALENDAR_EVENT_TOOL = {
+    "name": "update_calendar_event",
+    "description": (
+        "Update an existing Google Calendar event. Use when the user asks to reschedule, "
+        "rename, change the time, location, duration, attendees, or description of an event. "
+        "Pass only the fields that should change — unspecified fields are left as-is. "
+        "The event_id is shown in brackets in the calendar context, e.g. [abc12345]."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "event_id": {"type": "string", "description": "The event ID from the calendar context (the value in brackets)"},
+            "title": {"type": "string", "description": "New event title"},
+            "datetime_iso": {"type": "string", "description": "New start time in ISO 8601 with timezone offset"},
+            "duration_min": {"type": "integer", "description": "New duration in minutes"},
+            "description": {"type": "string", "description": "New description or agenda"},
+            "location": {"type": "string", "description": "New location or video link"},
+            "attendees": {"type": "array", "items": {"type": "string"}, "description": "Full attendee email list (replaces existing list)"},
+        },
+        "required": ["event_id"],
+    },
+}
+
+DELETE_CALENDAR_EVENT_TOOL = {
+    "name": "delete_calendar_event",
+    "description": (
+        "Delete a Google Calendar event. Use when the user asks to cancel, remove, or delete "
+        "a specific event. The event_id is shown in brackets in the calendar context, e.g. [abc12345]. "
+        "Execute immediately — do not ask for confirmation."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "event_id": {"type": "string", "description": "The event ID from the calendar context (the value in brackets)"},
+            "title": {"type": "string", "description": "Event title — for confirmation message only, not used in the API call"},
+        },
+        "required": ["event_id"],
+    },
+}
+
 CREATE_TASK_TOOL = {
     "name": "create_task",
     "description": (

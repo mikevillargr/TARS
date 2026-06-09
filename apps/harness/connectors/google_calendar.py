@@ -70,6 +70,7 @@ class GoogleCalendarClient:
             all_day = "date" in start and "dateTime" not in start
             attendees = [a.get("displayName") or a.get("email", "") for a in e.get("attendees", [])]
             summaries.append({
+                "id": e.get("id", ""),
                 "title": e.get("summary", "Untitled"),
                 "start": start_str,
                 "end": end_str,
@@ -85,9 +86,15 @@ class GoogleCalendarClient:
             calendarId=calendar_id, body=event_body
         ).execute()
 
-    def update_event(self, event_id: str, calendar_id: str = "primary", **event_body) -> dict:
-        return self._service.events().update(
-            calendarId=calendar_id, eventId=event_id, body=event_body
+    def patch_event(self, event_id: str, calendar_id: str = "primary", **fields) -> dict:
+        """Partial update — only supplied fields are changed."""
+        return self._service.events().patch(
+            calendarId=calendar_id, eventId=event_id, body=fields
+        ).execute()
+
+    def delete_event(self, event_id: str, calendar_id: str = "primary") -> None:
+        self._service.events().delete(
+            calendarId=calendar_id, eventId=event_id
         ).execute()
 
 
