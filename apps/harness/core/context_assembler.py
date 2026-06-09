@@ -351,12 +351,12 @@ async def _fetch_gcal_context(db: AsyncSession, user_id: str, tz_name: str = "As
         from connectors.google_calendar import GoogleCalendarClient
         loop = asyncio.get_event_loop()
         client = GoogleCalendarClient(conn.auth)
-        events = await loop.run_in_executor(None, lambda: client.get_upcoming_summary(days=7, max_results=15))
+        events = await loop.run_in_executor(None, lambda: client.get_upcoming_summary(days=30, max_results=30))
 
         if not events:
             return "\n[CALENDAR — UPCOMING]\nNo events in the next 7 days.\n"
 
-        lines = [f"\n[CALENDAR — UPCOMING EVENTS ({tz_name})]"]
+        lines = [f"\n[CALENDAR — UPCOMING EVENTS, next 30 days ({tz_name})]"]
         for e in events:
             time_str = _format_event_time(e["start"], e["all_day"], tz_name)
             event_id = e.get("id", "")
