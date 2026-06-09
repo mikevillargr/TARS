@@ -72,17 +72,19 @@ const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
 }
 
 // ─── API key types ──────────────────────────────────────────────────────────
-interface ApiKeys { anthropic: string; zai: string; runpod: string; tavily: string; fireflies: string; github: string; always_sunny: string }
-interface KeyEntry { id: keyof ApiKeys; label: string; description: string; editValue: string; testState: "idle" | "testing" | "ok" | "error"; testMsg: string }
+interface ApiKeys { anthropic: string; zai: string; runpod: string; tavily: string; fireflies: string; github: string; always_sunny: string; tessie: string; tessie_vin: string }
+interface KeyEntry { id: keyof ApiKeys; label: string; description: string; editValue: string; testState: "idle" | "testing" | "ok" | "error"; testMsg: string; isPlainText?: boolean }
 
-const KEY_DEFS: { id: keyof ApiKeys; label: string; description: string }[] = [
-  { id: "anthropic", label: "Anthropic",    description: "Claude models — Haiku, Sonnet, Opus" },
-  { id: "zai",       label: "Z.ai (GLM)",   description: "GLM models via Z.ai API" },
-  { id: "runpod",    label: "RunPod",       description: "GPU inference endpoints" },
-  { id: "tavily",    label: "Tavily",       description: "Web search tool" },
-  { id: "fireflies", label: "Fireflies",    description: "Meeting transcription" },
-  { id: "github",       label: "GitHub",        description: "PAT for agent git push and PR creation" },
-  { id: "always_sunny", label: "AlwaysSunny",   description: "Solar + Tesla charging controller" },
+const KEY_DEFS: { id: keyof ApiKeys; label: string; description: string; isPlainText?: boolean }[] = [
+  { id: "anthropic",    label: "Anthropic",    description: "Claude models — Haiku, Sonnet, Opus" },
+  { id: "zai",          label: "Z.ai (GLM)",   description: "GLM models via Z.ai API" },
+  { id: "runpod",       label: "RunPod",       description: "GPU inference endpoints" },
+  { id: "tavily",       label: "Tavily",       description: "Web search tool" },
+  { id: "fireflies",    label: "Fireflies",    description: "Meeting transcription" },
+  { id: "github",       label: "GitHub",       description: "PAT for agent git push and PR creation" },
+  { id: "tessie",       label: "Tessie",       description: "Tesla vehicle control — full API" },
+  { id: "tessie_vin",   label: "Tesla VIN",    description: "Your Tesla vehicle identification number", isPlainText: true },
+  { id: "always_sunny", label: "AlwaysSunny",  description: "Solar + home battery controller" },
 ]
 
 const DOMAIN_PALETTE = [
@@ -144,7 +146,7 @@ export default function SettingsPage() {
   const [keyEntries, setKeyEntries] = useState<KeyEntry[]>(
     KEY_DEFS.map(d => ({ ...d, editValue: "", testState: "idle", testMsg: "" }))
   )
-  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", runpod: "", tavily: "", fireflies: "", github: "", always_sunny: "" })
+  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", runpod: "", tavily: "", fireflies: "", github: "", always_sunny: "", tessie: "", tessie_vin: "" })
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
 
   // PWA install state
@@ -801,19 +803,21 @@ export default function SettingsPage() {
                   {/* Current key (masked) + show/hide */}
                   <div className="flex items-center gap-2">
                     <div className="flex-1 text-[11px] font-mono truncate" style={{ color: "var(--c-ink-faint)" }}>
-                      {visibleKeys[k.id] ? (k.editValue || masked) : masked}
+                      {k.isPlainText ? (k.editValue || masked) : (visibleKeys[k.id] ? (k.editValue || masked) : masked)}
                     </div>
-                    <button onClick={() => toggleKeyVisibility(k.id)} className="p-1 rounded shrink-0"
-                      style={{ color: "var(--c-ink-faint)" }}>
-                      {visibleKeys[k.id] ? <EyeOff size={13} /> : <Eye size={13} />}
-                    </button>
+                    {!k.isPlainText && (
+                      <button onClick={() => toggleKeyVisibility(k.id)} className="p-1 rounded shrink-0"
+                        style={{ color: "var(--c-ink-faint)" }}>
+                        {visibleKeys[k.id] ? <EyeOff size={13} /> : <Eye size={13} />}
+                      </button>
+                    )}
                   </div>
 
                   {/* New key input + Save */}
                   <div className="flex items-center gap-2">
                     <input
-                      type="password"
-                      placeholder="Paste new key to update…"
+                      type={k.isPlainText ? "text" : "password"}
+                      placeholder={k.isPlainText ? "Enter value…" : "Paste new key to update…"}
                       value={k.editValue}
                       onChange={e => setKeyEntries(prev => prev.map(x => x.id === k.id ? { ...x, editValue: e.target.value, testState: "idle", testMsg: "" } : x))}
                       className="input-field flex-1 text-xs font-mono"

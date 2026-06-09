@@ -885,81 +885,170 @@ GET_STRAVA_ZONES_TOOL = {
 GET_TESLA_STATUS_TOOL = {
     "name": "get_tesla_status",
     "description": (
-        "Fetch the current status of Mike's Tesla and home solar system via AlwaysSunny. "
-        "Returns: solar production (W), household demand, grid import/export, home battery %, "
-        "Tesla battery %, charging state, charging amps/kW, target SOC, active session stats "
-        "(kWh added, solar %, session start), charging strategy, and whether the car is at home. "
-        "Use when Mike asks about his Tesla charge level, solar output, whether the car is charging, "
-        "current solar surplus, home battery level, or any real-time energy question."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {},
-        "required": [],
-    },
-}
-
-CONTROL_TESLA_CHARGING_TOOL = {
-    "name": "control_tesla_charging",
-    "description": (
-        "Control Mike's Tesla charging via AlwaysSunny. "
-        "Actions: start charging, stop charging, set charging amps (0–32A), or update settings "
-        "(target_soc, charging_strategy, ai_enabled, default_charging_amps). "
-        "Use when Mike asks to start/stop charging, change the charging rate, set a target SOC, "
-        "switch charging strategy (solar/departure/immediate), or enable/disable AI control. "
-        "Always fetch get_tesla_status first if you need context on current state."
+        "Fetch the full real-time state of Mike's Tesla via Tessie. "
+        "Returns: battery %, charging state, charging amps/kW, charge limit, estimated range, "
+        "climate state (interior temp, HVAC on/off, seat heater levels, defrost), "
+        "door/trunk/window lock state, sentry mode, valet mode, odometer, software version, "
+        "GPS location, and whether the car is online/asleep. "
+        "Use for ANY question about current Tesla state: charge level, range, temperature, "
+        "is it locked, where is it, is it charging, battery health, software update, etc. "
+        "Always call this before issuing commands that depend on current state."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "action": {
+            "use_cache": {
+                "type": "boolean",
+                "description": "Use cached state (faster, default true). Set false to force a live fetch.",
+            },
+        },
+        "required": [],
+    },
+}
+
+TESLA_COMMAND_TOOL = {
+    "name": "tesla_command",
+    "description": (
+        "Execute any command on Mike's Tesla via Tessie. "
+        "Covers all vehicle controls: locks, climate, charging, trunks, windows, "
+        "sentry mode, valet mode, lights, horn, HomeLink, remote start, sunroof, and more. "
+        "\n\nAvailable commands:\n"
+        "• LOCKS: lock, unlock\n"
+        "• TRUNKS: activate_front_trunk, activate_rear_trunk, open_tonneau, close_tonneau\n"
+        "• WINDOWS: vent_windows, close_windows\n"
+        "• SUNROOF: vent_sunroof, close_sunroof\n"
+        "• CLIMATE: start_climate, stop_climate, set_temperatures (temperature=°C), "
+        "set_seat_heat (seat=0-5, level=0-3), set_seat_cool (seat=0-5, level=0-3), "
+        "start_max_defrost, stop_max_defrost, "
+        "start_steering_wheel_heater, stop_steering_wheel_heater, "
+        "set_cabin_overheat_protection (on=true/false, fan_only=true/false), "
+        "set_cop_temp (cop_temp=Low/Medium/High), "
+        "set_bioweapon_mode (on=true/false), "
+        "set_climate_keeper_mode (mode=off/keep/dog/camp)\n"
+        "• CHARGING: start_charging, stop_charging, "
+        "set_charge_limit (percent=50-100), "
+        "set_charging_amps (amps=1-48), "
+        "open_charge_port, close_charge_port\n"
+        "• ALERTS: flash, honk\n"
+        "• MODES: enable_sentry, disable_sentry, "
+        "enable_valet, disable_valet, "
+        "enable_low_power_mode, disable_low_power_mode, "
+        "enable_keep_accessory_power_mode, disable_keep_accessory_power_mode\n"
+        "• OTHER: wake (wake sleeping car), remote_start, trigger_homelink\n"
+        "\nUse when Mike asks to lock/unlock, start climate, set a temperature, "
+        "charge/stop charging, change charge limit, open trunk, honk, flash, "
+        "enable sentry, or control any other vehicle feature."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "command": {
                 "type": "string",
-                "enum": ["start_charging", "stop_charging", "set_charging_amps", "update_settings"],
-                "description": "The control action to execute.",
+                "description": "The command slug to execute (see list above).",
+                "enum": [
+                    "wake",
+                    "lock", "unlock",
+                    "activate_front_trunk", "activate_rear_trunk",
+                    "open_tonneau", "close_tonneau",
+                    "vent_windows", "close_windows",
+                    "vent_sunroof", "close_sunroof",
+                    "start_climate", "stop_climate",
+                    "set_temperatures",
+                    "set_seat_heat", "set_seat_cool",
+                    "start_max_defrost", "stop_max_defrost",
+                    "start_steering_wheel_heater", "stop_steering_wheel_heater",
+                    "set_cabin_overheat_protection", "set_cop_temp",
+                    "set_bioweapon_mode", "set_climate_keeper_mode",
+                    "start_charging", "stop_charging",
+                    "set_charge_limit", "set_charging_amps",
+                    "open_charge_port", "close_charge_port",
+                    "flash", "honk",
+                    "trigger_homelink", "remote_start",
+                    "enable_sentry", "disable_sentry",
+                    "enable_valet", "disable_valet",
+                    "enable_low_power_mode", "disable_low_power_mode",
+                    "enable_keep_accessory_power_mode", "disable_keep_accessory_power_mode",
+                ],
+            },
+            "temperature": {
+                "type": "number",
+                "description": "Target cabin temperature in °C. Required for set_temperatures.",
+            },
+            "seat": {
+                "type": "integer",
+                "description": "Seat index for set_seat_heat/cool: 0=driver, 1=passenger, 2=rear-left, 3=rear-center, 4=rear-right, 5=third-row.",
+            },
+            "level": {
+                "type": "integer",
+                "description": "Heat/cool level: 0=off, 1=low, 2=medium, 3=high.",
+            },
+            "percent": {
+                "type": "integer",
+                "description": "Charge limit percentage (50–100). Required for set_charge_limit.",
             },
             "amps": {
                 "type": "integer",
-                "description": "Charging amps (0–32). Required when action is set_charging_amps.",
+                "description": "Charging current in amps (1–48). Required for set_charging_amps.",
             },
-            "settings": {
-                "type": "object",
-                "description": (
-                    "Settings to update. Required when action is update_settings. "
-                    "Keys: target_soc (integer %), charging_strategy ('solar'|'departure'|'immediate'), "
-                    "ai_enabled ('true'|'false'), default_charging_amps (integer)."
-                ),
+            "on": {
+                "type": "boolean",
+                "description": "Enable (true) or disable (false). Used by set_cabin_overheat_protection, set_bioweapon_mode.",
+            },
+            "fan_only": {
+                "type": "boolean",
+                "description": "Fan-only mode for cabin overheat protection (no AC).",
+            },
+            "cop_temp": {
+                "type": "string",
+                "enum": ["Low", "Medium", "High"],
+                "description": "Cabin overheat protection threshold. Used by set_cop_temp.",
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["off", "keep", "dog", "camp"],
+                "description": "Climate keeper mode. Used by set_climate_keeper_mode.",
             },
         },
-        "required": ["action"],
+        "required": ["command"],
     },
 }
 
 GET_TESLA_SESSIONS_TOOL = {
     "name": "get_tesla_sessions",
     "description": (
-        "Fetch Tesla charging session history from AlwaysSunny. "
-        "Each session shows: start/end time, duration, kWh added, solar kWh, grid kWh, "
-        "solar percentage, start SOC, and end SOC. "
-        "Use when Mike asks about past charging sessions, total energy added, solar efficiency, "
-        "how much he charged last week, or wants to review charging history."
+        "Fetch Tesla drive and charging history via Tessie. "
+        "Use data_type='drives' for trip history (distance, duration, energy used, start/end locations). "
+        "Use data_type='charges' for charging sessions (kWh added, charge time, start/end SOC, cost, location). "
+        "Use data_type='battery_health' for degradation over time. "
+        "Use when Mike asks about recent trips, how much he drove, charging history, "
+        "energy costs, range stats, or battery degradation."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
+            "data_type": {
+                "type": "string",
+                "enum": ["drives", "charges", "battery_health"],
+                "description": "What to fetch: drives, charges, or battery health over time.",
+            },
             "limit": {
                 "type": "integer",
-                "description": "Number of sessions to return (1–100). Default 10.",
+                "description": "Number of records to return (1–100). Default 10.",
             },
-            "min_solar_pct": {
-                "type": "number",
-                "description": "Only return sessions where solar % was at least this value (0–100).",
+            "from_ts": {
+                "type": "string",
+                "description": "ISO 8601 start timestamp for filtering (e.g. '2025-01-01T00:00:00').",
             },
-            "min_kwh": {
-                "type": "number",
-                "description": "Only return sessions where at least this many kWh were added.",
+            "to_ts": {
+                "type": "string",
+                "description": "ISO 8601 end timestamp for filtering.",
+            },
+            "superchargers_only": {
+                "type": "boolean",
+                "description": "For charges: only return Supercharger sessions.",
             },
         },
-        "required": [],
+        "required": ["data_type"],
     },
 }
 

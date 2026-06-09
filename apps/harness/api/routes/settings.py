@@ -202,10 +202,12 @@ class ApiKeysOut(BaseModel):
     fireflies: str     # masked
     github: str        # masked
     always_sunny: str  # masked
+    tessie: str        # masked
+    tessie_vin: str    # plain (not sensitive, but stored same way)
 
 
 class ApiKeyUpdate(BaseModel):
-    provider: str   # "anthropic" | "zai" | "runpod" | "tavily" | "fireflies" | "github"
+    provider: str   # "anthropic" | "zai" | "runpod" | "tavily" | "fireflies" | "github" | "tessie" | "tessie_vin"
     key: str
 
 
@@ -229,6 +231,8 @@ async def get_api_keys(_user_id: str = Depends(require_auth)):
         fireflies=_mask(settings.fireflies_api_key),
         github=_mask(settings.github_token),
         always_sunny=_mask(settings.always_sunny_api_key),
+        tessie=_mask(settings.tessie_api_key),
+        tessie_vin=settings.tessie_vin or "",
     )
 
 
@@ -245,6 +249,8 @@ async def update_api_key(
         "fireflies":    "fireflies_api_key",
         "github":       "github_token",
         "always_sunny": "always_sunny_api_key",
+        "tessie":       "tessie_api_key",
+        "tessie_vin":   "tessie_vin",
     }
     if body.provider not in env_map:
         raise HTTPException(status_code=400, detail="Unknown provider")

@@ -28,7 +28,7 @@ from core.model_client import (
     CREATE_AGENT_JOB_TOOL,
     GET_STRAVA_ACTIVITIES_TOOL, GET_STRAVA_ACTIVITY_TOOL,
     GET_STRAVA_STATS_TOOL, GET_STRAVA_ZONES_TOOL,
-    GET_TESLA_STATUS_TOOL, CONTROL_TESLA_CHARGING_TOOL, GET_TESLA_SESSIONS_TOOL,
+    GET_TESLA_STATUS_TOOL, TESLA_COMMAND_TOOL, GET_TESLA_SESSIONS_TOOL,
     GENERATE_CHART_TOOL,
 )
 from core.context_assembler import assemble
@@ -729,7 +729,7 @@ async def send_message(
         GET_STRAVA_STATS_TOOL,
         GET_STRAVA_ZONES_TOOL,
         GET_TESLA_STATUS_TOOL,
-        CONTROL_TESLA_CHARGING_TOOL,
+        TESLA_COMMAND_TOOL,
         GET_TESLA_SESSIONS_TOOL,
         # generate_chart only sent to Anthropic — Z.ai/GLM refuses the tool and
         # outputs "environment not configured". With Z.ai, the code-block fallback
@@ -1994,113 +1994,159 @@ async def send_message(
                             log.warning("Strava tool '%s' failed: %s", name, exc)
                             return f"Strava error: {exc}"
 
-                    if name in ("get_tesla_status", "control_tesla_charging", "get_tesla_sessions"):
+                    if name in ("get_tesla_status", "tesla_command", "get_tesla_sessions"):
                         try:
                             from core.config import settings as _settings
-                            from connectors.always_sunny import AlwaysSunnyClient as _ASClient
+                            from connectors.tessie import TessieClient as _Tessie
                             import asyncio as _asyncio
+                            import json as _json
 
-                            if not _settings.always_sunny_api_key:
-                                return "AlwaysSunny is not configured. Add ALWAYS_SUNNY_API_KEY to the environment."
+                            if not _settings.tessie_api_key:
+                                return "Tessie is not configured. Add TESSIE_API_KEY in Settings → API Keys."
+                            if not _settings.tessie_vin:
+                                return "Tesla VIN not configured. Add TESSIE_VIN in Settings → API Keys."
 
-                            _as = _ASClient(
-                                _settings.always_sunny_api_key,
-                                _settings.always_sunny_base_url,
-                            )
+                            _tc = _Tessie(_settings.tessie_api_key, _settings.tessie_vin)
                             loop = _asyncio.get_event_loop()
 
                             if name == "get_tesla_status":
-                                ctx = await loop.run_in_executor(None, _as.get_context)
-                                st = ctx.get("status", {})
-                                sess = ctx.get("active_session")
-                                loc = ctx.get("location", {})
-                                lines = [
-                                    "AlwaysSunny / Tesla Status:",
-                                    f"  Mode: {st.get('mode', '?')}",
-                                    f"  Solar: {st.get('solar_w', 0):,} W",
-                                    f"  Household demand: {st.get('household_demand_w', 0):,} W",
-                                    f"  Grid import: {st.get('grid_import_w', 0):,} W",
-                                    f"  Home battery: {st.get('battery_soc', '?')}%",
-                                    f"  Tesla battery: {st.get('tesla_soc', '?')}% (target {st.get('target_soc', '?')}%)",
-                                    f"  Charging state: {st.get('charging_state', '?')}",
-                                    f"  Charging rate: {st.get('tesla_charging_amps', 0)} A / {st.get('tesla_charging_kw', 0)} kW",
-                                    f"  Plugged in: {st.get('charge_port_connected', False)}",
-                                    f"  AI control: {st.get('ai_enabled', False)}",
-                                    f"  Car at home: {loc.get('is_home', '?')}",
-                                ]
-                                if sess:
-                                    lines += [
-                                        "Active session:",
-                                        f"  Started: {sess.get('started_at') or '?'}",
-                                        f"  kWh added: {sess.get('kwh_added') or 0:.2f}",
-                                        f"  Solar %: {sess.get('solar_pct') or 0:.1f}%",
-                                    ]
+                                use_cache = tool_input.get("use_cache", True)
+                                data = await loop.run_in_executor(None, lambda: _tc.get_state(use_cache))
+
+                                charge = data.get("charge_state", {})
+                                climate = data.get("climate_state", {})
+                                vehicle = data.get("vehicle_state", {})
+                                drive = data.get("drive_state", {})
+
+                                lines = [f"Tesla ({data.get('display_name', 'Model 3')}) — {data.get('state', '?')}:"]
+
+                                # Battery & charging
+                                lines.append(f"  Battery: {charge.get('battery_level', '?')}%")
+                                est_range = charge.get('est_battery_range', 0)
+                                lines.append(f"  Est. range: {est_range * 1.60934:.0f} km")
+                                lines.append(f"  Charging state: {charge.get('charging_state', '?')}")
+                                if charge.get('charging_state') not in ('Disconnected', None):
+                                    lines.append(f"  Charge limit: {charge.get('charge_limit_soc', '?')}%")
+                                    lines.append(f"  Charge rate: {charge.get('charge_amps_actual', 0)} A / {charge.get('charger_power', 0)} kW")
+                                    mins_to_full = charge.get('minutes_to_full_charge', 0)
+                                    if mins_to_full:
+                                        lines.append(f"  Time to full: {mins_to_full // 60}h {mins_to_full % 60}m")
+
+                                # Climate
+                                inside = climate.get('inside_temp')
+                                outside = climate.get('outside_temp')
+                                if inside is not None:
+                                    lines.append(f"  Interior temp: {inside}°C (outside: {outside}°C)")
+                                lines.append(f"  Climate: {'on' if climate.get('is_climate_on') else 'off'}")
+                                if climate.get('is_climate_on'):
+                                    lines.append(f"  Set temp: {climate.get('driver_temp_setting', '?')}°C")
+                                if climate.get('defrost_mode'):
+                                    lines.append("  Max defrost: active")
+
+                                # Security & locks
+                                lines.append(f"  Locked: {vehicle.get('locked')}")
+                                lines.append(f"  Sentry: {'on' if vehicle.get('sentry_mode') else 'off'}")
+                                if vehicle.get('valet_mode'):
+                                    lines.append("  Valet mode: on")
+                                odo = vehicle.get('odometer', 0)
+                                lines.append(f"  Odometer: {odo * 1.60934:,.0f} km")
+                                sw = vehicle.get('car_version', '?')
+                                lines.append(f"  Software: {sw}")
+
+                                # Location
+                                if drive.get('latitude'):
+                                    speed = drive.get('speed')
+                                    loc_line = f"  Location: {drive.get('latitude'):.4f}, {drive.get('longitude'):.4f}"
+                                    if speed:
+                                        loc_line += f" @ {speed * 1.60934:.0f} km/h"
+                                    lines.append(loc_line)
+
                                 return "\n".join(lines)
 
-                            if name == "control_tesla_charging":
-                                action = tool_input["action"]
-                                if action == "set_charging_amps":
-                                    amps = int(tool_input.get("amps", 0))
+                            if name == "tesla_command":
+                                cmd = tool_input.get("command", "")
+                                if not cmd:
+                                    return "No command specified."
+
+                                extra: dict = {}
+                                for key in ("temperature", "seat", "level", "percent", "amps",
+                                            "on", "fan_only", "cop_temp", "mode"):
+                                    if key in tool_input:
+                                        extra[key] = tool_input[key]
+
+                                if cmd == "wake":
+                                    result = await loop.run_in_executor(None, _tc.wake)
+                                else:
                                     result = await loop.run_in_executor(
-                                        None, lambda: _as.command("set_charging_amps", {"amps": amps})
+                                        None, lambda: _tc.command(cmd, extra or None)
                                     )
-                                    return result.get("message", f"Set charging to {amps} A.")
-                                elif action == "start_charging":
-                                    result = await loop.run_in_executor(
-                                        None, lambda: _as.command("start_charging", {})
-                                    )
-                                    return result.get("message", "Charging started.")
-                                elif action == "stop_charging":
-                                    result = await loop.run_in_executor(
-                                        None, lambda: _as.command("stop_charging", {})
-                                    )
-                                    return result.get("message", "Charging stopped.")
-                                elif action == "update_settings":
-                                    new_settings = tool_input.get("settings", {})
-                                    result = await loop.run_in_executor(
-                                        None, lambda: _as.command("update_settings", new_settings)
-                                    )
-                                    return result.get("message", f"Settings updated: {new_settings}")
-                                return f"Unknown action: {action}"
+
+                                if isinstance(result, dict):
+                                    res_val = result.get("result")
+                                    if res_val is True:
+                                        return f"Done — {cmd} executed successfully."
+                                    if isinstance(res_val, str):
+                                        return f"{cmd}: {res_val}"
+                                    return f"{cmd} result: {_json.dumps(result)[:300]}"
+                                return f"{cmd} executed."
 
                             if name == "get_tesla_sessions":
+                                data_type = tool_input.get("data_type", "charges")
                                 limit = min(int(tool_input.get("limit", 10)), 100)
-                                min_solar = tool_input.get("min_solar_pct")
-                                min_kwh = tool_input.get("min_kwh")
-                                # Only pass min_solar_pct server-side; min_kwh filter is
-                                # buggy on the AlwaysSunny server (returns 500), so filter client-side.
-                                data = await loop.run_in_executor(
-                                    None,
-                                    lambda: _as.get_sessions(
-                                        limit=limit,
-                                        min_solar_pct=float(min_solar) if min_solar is not None else None,
-                                    ),
-                                )
-                                sessions = data.get("sessions", [])
-                                # Client-side min_kwh filter
-                                if min_kwh is not None:
-                                    sessions = [s for s in sessions if (s.get("kwh_added") or 0) >= float(min_kwh)]
-                                if not sessions:
-                                    return "No charging sessions found matching your criteria."
-                                lines = [f"Tesla charging sessions ({len(sessions)}):"]
-                                for s in sessions:
-                                    start = (s.get("started_at") or "")[:16].replace("T", " ")
-                                    end = (s.get("ended_at") or "")[:16].replace("T", " ")
-                                    kwh = s.get("kwh_added") or 0
-                                    solar_pct = s.get("solar_pct") or 0
-                                    start_soc = s.get("start_soc") or "?"
-                                    end_soc = s.get("end_soc") or "?"
-                                    lines.append(
-                                        f"• {start} → {end} | "
-                                        f"{kwh:.1f} kWh | "
-                                        f"{solar_pct:.0f}% solar | "
-                                        f"SOC {start_soc}% → {end_soc}%"
+                                from_ts = tool_input.get("from_ts")
+                                to_ts = tool_input.get("to_ts")
+
+                                if data_type == "drives":
+                                    data = await loop.run_in_executor(
+                                        None, lambda: _tc.get_drives(limit, from_ts, to_ts)
                                     )
-                                return "\n".join(lines)
+                                    records = data if isinstance(data, list) else data.get("results", [])
+                                    if not records:
+                                        return "No drives found."
+                                    lines = [f"Tesla drives ({len(records)}):"]
+                                    for d in records:
+                                        start = (d.get("started_at") or "")[:16].replace("T", " ")
+                                        end = (d.get("ended_at") or "")[:16].replace("T", " ")
+                                        lines.append(
+                                            f"• {start} → {end} | "
+                                            f"{d.get('distance', 0):.1f} km | "
+                                            f"{d.get('duration_minutes', 0):.0f} min | "
+                                            f"{d.get('energy_used', 0):.1f} kWh"
+                                        )
+                                    return "\n".join(lines)
+
+                                elif data_type == "charges":
+                                    superchargers_only = tool_input.get("superchargers_only", False)
+                                    data = await loop.run_in_executor(
+                                        None, lambda: _tc.get_charges(limit, from_ts, to_ts, "Asia/Manila", superchargers_only)
+                                    )
+                                    records = data if isinstance(data, list) else data.get("results", [])
+                                    if not records:
+                                        return "No charging sessions found."
+                                    lines = [f"Tesla charges ({len(records)}):"]
+                                    for c in records:
+                                        start = (c.get("started_at") or "")[:16].replace("T", " ")
+                                        end = (c.get("ended_at") or "")[:16].replace("T", " ")
+                                        kwh = c.get("energy_added", c.get("charge_energy_added", 0))
+                                        lines.append(
+                                            f"• {start} → {end} | "
+                                            f"+{kwh:.1f} kWh | "
+                                            f"SOC {c.get('battery_level_start', '?')}% → {c.get('battery_level_end', c.get('battery_level', '?'))}% | "
+                                            f"{c.get('charger_type', '?')}"
+                                        )
+                                    return "\n".join(lines)
+
+                                elif data_type == "battery_health":
+                                    data = await loop.run_in_executor(
+                                        None, lambda: _tc.get_battery_health(from_ts, to_ts)
+                                    )
+                                    return f"Battery health data: {_json.dumps(data)[:800]}"
+
+                                return f"Unknown data_type: {data_type}"
 
                         except Exception as exc:
                             log.warning("Tesla tool '%s' failed: %s", name, exc)
-                            return f"AlwaysSunny error: {exc}"
+                            return f"Tessie error: {exc}"
 
                     if name == "generate_chart":
                         import subprocess as _subprocess

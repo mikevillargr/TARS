@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     always_sunny_api_key: str = ""
     always_sunny_base_url: str = "http://76.13.191.149"
 
+    # Tessie — full Tesla vehicle control API
+    tessie_api_key: str = ""
+    tessie_vin: str = ""
+
     github_token: str = ""   # PAT for agent git push + gh pr create
 
     claude_code_path: str = "/usr/local/bin/claude"
