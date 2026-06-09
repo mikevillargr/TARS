@@ -350,6 +350,14 @@ async def preview_artifact(
         except Exception as exc:
             return {"text": f"(preview extraction failed: {exc})", "type": "text"}
 
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        try:
+            from ingest.parsers import xlsx as _xlsx_parser
+            text = _xlsx_parser.extract(raw, filename=filename)
+            return {"text": text[:16000], "type": "text"}
+        except Exception as exc:
+            return {"text": f"(preview extraction failed: {exc})", "type": "text"}
+
     # Unknown binary (shouldn't normally reach here for DOCX/PPTX/PDF)
     return {"text": "", "type": "binary"}
 

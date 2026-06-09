@@ -98,6 +98,11 @@ function isPptx(detail: ArtifactDetail | null) {
   return detail?.filename?.toLowerCase().endsWith(".pptx") ?? false
 }
 
+function isXlsx(detail: ArtifactDetail | null) {
+  const name = detail?.filename?.toLowerCase() ?? ""
+  return name.endsWith(".xlsx") || name.endsWith(".xls")
+}
+
 function isImageArtifact(detail: ArtifactDetail | null) {
   return detail?.type === "image"
 }
@@ -242,7 +247,7 @@ function ArtifactModal({
       let content = detail.content ?? ""
       // Binary artifacts: extract text via /preview endpoint
       if (content.startsWith("base64:")) {
-        if (isPdf(detail) || isDocx(detail) || isPptx(detail)) {
+        if (isPdf(detail) || isDocx(detail) || isPptx(detail) || isXlsx(detail)) {
           const p = await fetch(`/api/proxy/artifacts/${detail.id}/preview`).then(r => r.json()) as PreviewResult
           content = p.text ?? `${detail.filename}\n(No text extracted)`
         } else if (isImageArtifact(detail)) {
@@ -352,7 +357,7 @@ function ArtifactModal({
   const isBinary = isBinaryArtifact(detail)
   const showImagePreview = isBinary && isImageArtifact(detail)
   const showPdfFrame = isBinary && isPdf(detail)
-  const showExtractedPreview = isBinary && (isDocx(detail) || isPptx(detail))
+  const showExtractedPreview = isBinary && (isDocx(detail) || isPptx(detail) || isXlsx(detail))
 
   return (
     <Dialog open={artifactId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
