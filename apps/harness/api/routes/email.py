@@ -47,6 +47,21 @@ async def confirm_send(
         from connectors.gmail import GmailClient
         gclient = GmailClient(conn.auth)
         loop = asyncio.get_event_loop()
+
+        thread_id = req.thread_id
+        # Model context uses 8-char prefix IDs — expand to full Gmail thread ID
+        if thread_id and len(thread_id) == 8:
+            candidates = await loop.run_in_executor(
+                None,
+                lambda: gclient.list_threads(query="in:inbox", max_results=20),
+            )
+            match = next((t["id"] for t in candidates if t["id"].startswith(thread_id)), None)
+            if match:
+                thread_id = match
+            else:
+                log.warning("confirm_send: could not expand 8-char thread_id %s; sending without thread", thread_id)
+                thread_id = None
+
         result = await loop.run_in_executor(
             None,
             lambda: gclient.send_email(
@@ -54,7 +69,7 @@ async def confirm_send(
                 subject=req.subject,
                 body=req.body,
                 cc=req.cc,
-                thread_id=req.thread_id,
+                thread_id=thread_id,
             ),
         )
         return {"ok": True, "message": result}
