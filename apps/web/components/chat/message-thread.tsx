@@ -83,6 +83,10 @@ function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClos
   )
 }
 
+function proxyImageUrl(url: string): string {
+  return `/api/proxy/image-proxy?url=${encodeURIComponent(url)}`
+}
+
 function SearchImagesCard({ images, query }: { images: string[]; query?: string }) {
   const [lightbox, setLightbox] = useState<string | null>(null)
 
@@ -95,13 +99,13 @@ function SearchImagesCard({ images, query }: { images: string[]; query?: string 
           <button
             key={i}
             type="button"
-            onClick={() => setLightbox(url)}
+            onClick={() => setLightbox(proxyImageUrl(url))}
             className="shrink-0 focus:outline-none cursor-zoom-in rounded-lg overflow-hidden"
             style={{ border: "1px solid rgba(255,255,255,0.08)" }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={url}
+              src={proxyImageUrl(url)}
               alt={query ? `Image for: ${query}` : "Search result"}
               className="h-28 w-auto max-w-[200px] object-cover hover:opacity-90 transition-opacity"
               onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = "none" }}
