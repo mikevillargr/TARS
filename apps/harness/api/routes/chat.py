@@ -2031,9 +2031,9 @@ async def send_message(
                                 if sess:
                                     lines += [
                                         "Active session:",
-                                        f"  Started: {sess.get('started_at', '?')}",
-                                        f"  kWh added: {sess.get('kwh_added', 0):.2f}",
-                                        f"  Solar %: {sess.get('solar_pct', 0):.1f}%",
+                                        f"  Started: {sess.get('started_at') or '?'}",
+                                        f"  kWh added: {sess.get('kwh_added') or 0:.2f}",
+                                        f"  Solar %: {sess.get('solar_pct') or 0:.1f}%",
                                     ]
                                 return "\n".join(lines)
 
@@ -2067,26 +2067,34 @@ async def send_message(
                                 limit = min(int(tool_input.get("limit", 10)), 100)
                                 min_solar = tool_input.get("min_solar_pct")
                                 min_kwh = tool_input.get("min_kwh")
+                                # Only pass min_solar_pct server-side; min_kwh filter is
+                                # buggy on the AlwaysSunny server (returns 500), so filter client-side.
                                 data = await loop.run_in_executor(
                                     None,
                                     lambda: _as.get_sessions(
                                         limit=limit,
                                         min_solar_pct=float(min_solar) if min_solar is not None else None,
-                                        min_kwh=float(min_kwh) if min_kwh is not None else None,
                                     ),
                                 )
                                 sessions = data.get("sessions", [])
+                                # Client-side min_kwh filter
+                                if min_kwh is not None:
+                                    sessions = [s for s in sessions if (s.get("kwh_added") or 0) >= float(min_kwh)]
                                 if not sessions:
                                     return "No charging sessions found matching your criteria."
-                                lines = [f"Tesla charging sessions ({len(sessions)} of {data.get('count', len(sessions))}):"]
+                                lines = [f"Tesla charging sessions ({len(sessions)}):"]
                                 for s in sessions:
                                     start = (s.get("started_at") or "")[:16].replace("T", " ")
                                     end = (s.get("ended_at") or "")[:16].replace("T", " ")
+                                    kwh = s.get("kwh_added") or 0
+                                    solar_pct = s.get("solar_pct") or 0
+                                    start_soc = s.get("start_soc") or "?"
+                                    end_soc = s.get("end_soc") or "?"
                                     lines.append(
                                         f"• {start} → {end} | "
-                                        f"{s.get('kwh_added', 0):.1f} kWh | "
-                                        f"{s.get('solar_pct', 0):.0f}% solar | "
-                                        f"SOC {s.get('start_soc', '?')}% → {s.get('end_soc', '?')}%"
+                                        f"{kwh:.1f} kWh | "
+                                        f"{solar_pct:.0f}% solar | "
+                                        f"SOC {start_soc}% → {end_soc}%"
                                     )
                                 return "\n".join(lines)
 

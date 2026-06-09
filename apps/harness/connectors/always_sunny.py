@@ -33,14 +33,12 @@ class AlwaysSunnyClient:
         return self._post("/api/ai/command", {"action": action, "params": params or {}})
 
     def get_sessions(self, limit: int = 10, offset: int = 0,
-                     min_solar_pct: Optional[float] = None,
-                     min_kwh: Optional[float] = None) -> Dict:
-        """Fetch charging session history with optional filters."""
+                     min_solar_pct: Optional[float] = None) -> Dict:
+        """Fetch charging session history with optional filters.
+        Note: min_kwh filter is applied client-side (server-side returns 500)."""
         params: Dict = {"limit": min(limit, 100), "offset": offset}
         if min_solar_pct is not None:
             params["min_solar_pct"] = min_solar_pct
-        if min_kwh is not None:
-            params["min_kwh"] = min_kwh
         return self._get("/api/ai/sessions", params=params)
 
     def submit_recommendation(self, amps: int, reasoning: str,
