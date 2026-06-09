@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     # Options: tiny, tiny.en, small, small.en, medium, medium.en, large-v3
     whisper_model: str = "small"
 
+    # AlwaysSunny — solar + Tesla charging controller
+    always_sunny_api_key: str = ""
+    always_sunny_base_url: str = "http://76.13.191.149"
+
     github_token: str = ""   # PAT for agent git push + gh pr create
 
     claude_code_path: str = "/usr/local/bin/claude"

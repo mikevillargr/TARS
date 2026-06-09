@@ -882,6 +882,87 @@ GET_STRAVA_ZONES_TOOL = {
     },
 }
 
+GET_TESLA_STATUS_TOOL = {
+    "name": "get_tesla_status",
+    "description": (
+        "Fetch the current status of Mike's Tesla and home solar system via AlwaysSunny. "
+        "Returns: solar production (W), household demand, grid import/export, home battery %, "
+        "Tesla battery %, charging state, charging amps/kW, target SOC, active session stats "
+        "(kWh added, solar %, session start), charging strategy, and whether the car is at home. "
+        "Use when Mike asks about his Tesla charge level, solar output, whether the car is charging, "
+        "current solar surplus, home battery level, or any real-time energy question."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
+
+CONTROL_TESLA_CHARGING_TOOL = {
+    "name": "control_tesla_charging",
+    "description": (
+        "Control Mike's Tesla charging via AlwaysSunny. "
+        "Actions: start charging, stop charging, set charging amps (0–32A), or update settings "
+        "(target_soc, charging_strategy, ai_enabled, default_charging_amps). "
+        "Use when Mike asks to start/stop charging, change the charging rate, set a target SOC, "
+        "switch charging strategy (solar/departure/immediate), or enable/disable AI control. "
+        "Always fetch get_tesla_status first if you need context on current state."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["start_charging", "stop_charging", "set_charging_amps", "update_settings"],
+                "description": "The control action to execute.",
+            },
+            "amps": {
+                "type": "integer",
+                "description": "Charging amps (0–32). Required when action is set_charging_amps.",
+            },
+            "settings": {
+                "type": "object",
+                "description": (
+                    "Settings to update. Required when action is update_settings. "
+                    "Keys: target_soc (integer %), charging_strategy ('solar'|'departure'|'immediate'), "
+                    "ai_enabled ('true'|'false'), default_charging_amps (integer)."
+                ),
+            },
+        },
+        "required": ["action"],
+    },
+}
+
+GET_TESLA_SESSIONS_TOOL = {
+    "name": "get_tesla_sessions",
+    "description": (
+        "Fetch Tesla charging session history from AlwaysSunny. "
+        "Each session shows: start/end time, duration, kWh added, solar kWh, grid kWh, "
+        "solar percentage, start SOC, and end SOC. "
+        "Use when Mike asks about past charging sessions, total energy added, solar efficiency, "
+        "how much he charged last week, or wants to review charging history."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "limit": {
+                "type": "integer",
+                "description": "Number of sessions to return (1–100). Default 10.",
+            },
+            "min_solar_pct": {
+                "type": "number",
+                "description": "Only return sessions where solar % was at least this value (0–100).",
+            },
+            "min_kwh": {
+                "type": "number",
+                "description": "Only return sessions where at least this many kWh were added.",
+            },
+        },
+        "required": [],
+    },
+}
+
 GENERATE_CHART_TOOL = {
     "name": "generate_chart",
     "description": (

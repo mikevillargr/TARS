@@ -65,6 +65,16 @@ def list_connectors() -> List[ConnectorStatus]:
             },
         ),
         ConnectorStatus(
+            id="always_sunny",
+            name="AlwaysSunny",
+            status="connected" if settings.always_sunny_api_key else "disconnected",
+            capabilities=["read", "write"],
+            metadata={
+                "description": "Solar energy + Tesla charging controller",
+                "auth_type": "api_key",
+            },
+        ),
+        ConnectorStatus(
             id="garmin",
             name="Garmin Connect",
             status="disconnected",  # upgraded in route if garth_tokens in config
