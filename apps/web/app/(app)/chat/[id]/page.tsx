@@ -16,6 +16,7 @@ interface StreamingMsg {
   role: "assistant"
   content: string
   streaming: true
+  cards?: Record<string, unknown>[]
 }
 
 export default function ConversationPage() {
@@ -69,6 +70,7 @@ export default function ConversationPage() {
         const decoder = new TextDecoder()
         let buffer = ""
         let accumulated = ""
+        const accumulatedCards: Record<string, unknown>[] = []
 
         while (true) {
           const { done, value } = await reader.read()
@@ -86,15 +88,30 @@ export default function ConversationPage() {
               const evt = JSON.parse(raw)
               if (evt.type === "chunk") {
                 accumulated += evt.text
-                setStreaming({ role: "assistant", content: accumulated, streaming: true })
+                setStreaming({ role: "assistant", content: accumulated, streaming: true, cards: accumulatedCards })
+              } else if (
+                evt.type === "search_images" ||
+                evt.type === "chart_image" ||
+                evt.type === "place_card" ||
+                evt.type === "contact_card" ||
+                evt.type === "artifact_created"
+              ) {
+                accumulatedCards.push(evt)
+                setStreaming((prev) =>
+                  prev ? { ...prev, cards: [...accumulatedCards] } : prev
+                )
               } else if (evt.type === "done") {
+                // Use evt.content when available — backend may have modified content
+                // post-stream (e.g. chart code blocks replaced with inline images).
+                const finalContent = (typeof evt.content === "string" && evt.content) ? evt.content : accumulated
                 const finalMsg: Message = {
                   id: `done-${Date.now()}`,
                   role: "assistant",
-                  content: accumulated,
+                  content: finalContent,
                   model_used: evt.model,
                   tokens_used: evt.tokens,
                   created_at: new Date().toISOString(),
+                  tool_results: accumulatedCards.length > 0 ? accumulatedCards : undefined,
                 }
                 setMessages((prev) => [...prev.filter((m) => m.id !== tempUser.id), tempUser, finalMsg])
                 setStreaming(null)

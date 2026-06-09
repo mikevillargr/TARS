@@ -1454,10 +1454,22 @@ async def send_message(
                                         "search_depth": depth,
                                         "max_results": 6,
                                         "include_answer": True,
+                                        "include_images": True,
                                     },
                                 )
                                 resp.raise_for_status()
                                 data = resp.json()
+
+                            # Extract image URLs — Tavily returns either strings or {url, description} objects
+                            _raw_images = data.get("images", [])
+                            images: list[str] = []
+                            for _img in _raw_images[:4]:
+                                if isinstance(_img, str) and _img.startswith("http"):
+                                    images.append(_img)
+                                elif isinstance(_img, dict) and isinstance(_img.get("url"), str):
+                                    images.append(_img["url"])
+                            if images:
+                                await _emit_card({"type": "search_images", "query": query, "images": images})
 
                             lines = [f"Search: {query}\n"]
                             if data.get("answer"):
@@ -2051,7 +2063,7 @@ plt.close('all')
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
-                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image"):
+                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
                         tool_results.append(event)
                         await queue.put(sse_event(event))
                     elif event["type"] == "done":

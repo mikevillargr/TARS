@@ -21,12 +21,14 @@ export interface Message {
   tokens_used?: number
   created_at: string
   _attachments?: Attachment[]
+  tool_results?: Record<string, unknown>[]
 }
 
 interface StreamingMessage {
   role: "assistant"
   content: string
   streaming: true
+  cards?: Record<string, unknown>[]
 }
 
 function formatSize(bytes: number): string {
@@ -78,6 +80,39 @@ function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClos
         onClick={(e) => e.stopPropagation()}
       />
     </div>
+  )
+}
+
+function SearchImagesCard({ images, query }: { images: string[]; query?: string }) {
+  const [lightbox, setLightbox] = useState<string | null>(null)
+
+  if (images.length === 0) return null
+
+  return (
+    <>
+      <div className="flex gap-2 overflow-x-auto pb-1 mb-2" style={{ scrollbarWidth: "thin" }}>
+        {images.map((url, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => setLightbox(url)}
+            className="shrink-0 focus:outline-none cursor-zoom-in rounded-lg overflow-hidden"
+            style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={query ? `Image for: ${query}` : "Search result"}
+              className="h-28 w-auto max-w-[200px] object-cover hover:opacity-90 transition-opacity"
+              onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = "none" }}
+            />
+          </button>
+        ))}
+      </div>
+      {lightbox && (
+        <ImageLightbox src={lightbox} alt={query ?? "Search result"} onClose={() => setLightbox(null)} />
+      )}
+    </>
   )
 }
 
@@ -183,9 +218,31 @@ export function MessageThread({
   )
 }
 
+function ToolResultCards({ cards }: { cards: Record<string, unknown>[] }) {
+  return (
+    <>
+      {cards.map((card, i) => {
+        if (card.type === "search_images" && Array.isArray(card.images)) {
+          return (
+            <SearchImagesCard
+              key={i}
+              images={card.images as string[]}
+              query={typeof card.query === "string" ? card.query : undefined}
+            />
+          )
+        }
+        return null
+      })}
+    </>
+  )
+}
+
 function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
   const isUser = msg.role === "user"
   const isStreaming = "streaming" in msg
+  const cards = isStreaming
+    ? (msg.cards ?? [])
+    : ("tool_results" in msg ? (msg.tool_results ?? []) : [])
 
   return (
     <div className={cn("flex min-w-0", isUser ? "justify-end" : "justify-start")}>
@@ -200,9 +257,13 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
         {"_attachments" in msg && msg._attachments && msg._attachments.length > 0 && (
           <AttachmentList attachments={msg._attachments} isUser={isUser} />
         )}
+
+        {!isUser && cards.length > 0 && <ToolResultCards cards={cards} />}
+
         {msg.content && (
           <div className={cn("prose prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
             <ReactMarkdown
+              urlTransform={(url: string) => url}
               components={{
                 pre: ({ children }) => <>{children}</>,
                 code({ className, children }) {
@@ -222,6 +283,17 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
                     </code>
                   )
                 },
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                img: (props: any) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={props.src}
+                    alt={props.alt || ""}
+                    className="rounded-lg my-2"
+                    style={{ maxWidth: "100%" }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
+                  />
+                ),
               }}
             >
               {msg.content}
