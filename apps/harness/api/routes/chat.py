@@ -1443,6 +1443,8 @@ async def send_message(
                             if not _settings.tavily_api_key:
                                 return "Web search is not configured (missing TAVILY_API_KEY)."
                             import httpx as _httpx
+                            import base64 as _b64
+                            import asyncio as _asyncio
                             query = tool_input["query"]
                             depth = tool_input.get("search_depth", "basic")
                             async with _httpx.AsyncClient(timeout=15.0) as _hx:
@@ -1460,27 +1462,50 @@ async def send_message(
                                 resp.raise_for_status()
                                 data = resp.json()
 
-                            # Extract image URLs — Tavily returns either strings or {url, description} objects
-                            _raw_images = data.get("images", [])
-                            images: list[str] = []
-                            for _img in _raw_images[:4]:
-                                if isinstance(_img, str) and _img.startswith("http"):
-                                    images.append(_img)
-                                elif isinstance(_img, dict) and isinstance(_img.get("url"), str):
-                                    images.append(_img["url"])
-                            if images:
-                                await _emit_card({"type": "search_images", "query": query, "images": images})
+                                # Extract image URLs — Tavily returns strings or {url, description} objects
+                                _raw_images = data.get("images", [])
+                                _image_urls: list[str] = []
+                                for _img in _raw_images[:5]:
+                                    if isinstance(_img, str) and _img.startswith("http"):
+                                        _image_urls.append(_img)
+                                    elif isinstance(_img, dict) and isinstance(_img.get("url"), str):
+                                        _image_urls.append(_img["url"])
 
-                            lines = [f"Search: {query}\n"]
-                            if data.get("answer"):
-                                lines.append(f"Summary: {data['answer']}\n")
-                            for r in data.get("results", []):
-                                lines.append(f"• {r['title']}")
-                                lines.append(f"  {r['url']}")
-                                if r.get("content"):
-                                    lines.append(f"  {r['content'][:300]}")
-                                lines.append("")
-                            return "\n".join(lines)
+                                if _image_urls:
+                                    # Proxy images server-side → base64 data URIs.
+                                    # Direct browser loading fails for social media URLs (hotlink protection).
+                                    async def _fetch_as_data_uri(url: str) -> "str | None":
+                                        try:
+                                            r = await _hx.get(
+                                                url, timeout=5.0, follow_redirects=True,
+                                                headers={
+                                                    "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1)",
+                                                    "Referer": "https://www.google.com/",
+                                                },
+                                            )
+                                            ct = r.headers.get("content-type", "")
+                                            if r.status_code == 200 and ct.startswith("image/") and len(r.content) <= 500_000:
+                                                media_type = ct.split(";")[0].strip()
+                                                return f"data:{media_type};base64,{_b64.b64encode(r.content).decode()}"
+                                        except Exception:
+                                            pass
+                                        return None
+
+                                    _proxied = await _asyncio.gather(*[_fetch_as_data_uri(u) for u in _image_urls])
+                                    _data_uris = [img for img in _proxied if img][:4]
+                                    if _data_uris:
+                                        await _emit_card({"type": "search_images", "query": query, "images": _data_uris})
+
+                                lines = [f"Search: {query}\n"]
+                                if data.get("answer"):
+                                    lines.append(f"Summary: {data['answer']}\n")
+                                for r in data.get("results", []):
+                                    lines.append(f"• {r['title']}")
+                                    lines.append(f"  {r['url']}")
+                                    if r.get("content"):
+                                        lines.append(f"  {r['content'][:300]}")
+                                    lines.append("")
+                                return "\n".join(lines)
                         except Exception as exc:
                             log.warning("web_search tool failed: %s", exc)
                             return f"Web search failed: {exc}"
