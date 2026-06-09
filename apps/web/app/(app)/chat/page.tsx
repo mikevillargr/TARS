@@ -993,7 +993,7 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
       </div>
 
       {/* Column: no items-start/end so children stretch to column width (needed for code scroll) */}
-      <div className={`flex flex-col min-w-0 max-w-[80%] ${isUser ? "items-end" : ""}`}>
+      <div className={`flex flex-col min-w-0 max-w-[93%] md:max-w-[80%] ${isUser ? "items-end" : ""}`}>
         {/* Always show "TARS" as the sender name for assistant messages */}
         {!isUser && (
           <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>
@@ -1016,7 +1016,7 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
         )}
 
         <div
-          className={`p-4 rounded-2xl min-w-0 ${isUser ? "" : "w-full"}`}
+          className={`p-3 md:p-4 rounded-2xl min-w-0 ${isUser ? "" : "w-full"}`}
           style={isUser
             ? { backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)", overflowWrap: "break-word" }
             : { color: "var(--c-ink)", overflowWrap: "break-word" }
@@ -1259,7 +1259,7 @@ const MessageArea = memo(function MessageArea({
     || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
     || emailDrafts.length > 0
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 pb-28 space-y-6">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-24 md:p-6 md:pb-28 space-y-6">
       {allMessages.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
           <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>TARS</p>

@@ -211,7 +211,7 @@ export function MessageThread({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6">
+    <div className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-4 md:px-4 md:py-6">
       <div className="max-w-3xl mx-auto space-y-6">
         {all.map((msg, i) => (
           <MessageBubble key={"id" in msg ? msg.id : `stream-${i}`} msg={msg} />
@@ -252,7 +252,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
     <div className={cn("flex min-w-0", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "min-w-0 max-w-[80%] rounded-2xl px-4 py-3 text-sm overflow-hidden",
+          "min-w-0 max-w-[93%] md:max-w-[80%] rounded-2xl px-3 py-2.5 md:px-4 md:py-3 overflow-hidden",
           isUser
             ? "bg-primary text-primary-foreground rounded-br-sm"
             : "bg-muted text-foreground rounded-bl-sm"
@@ -265,7 +265,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
         {!isUser && cards.length > 0 && <ToolResultCards cards={cards} />}
 
         {msg.content && (
-          <div className={cn("prose prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
+          <div className={cn("prose md:prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
             <ReactMarkdown
               urlTransform={(url: string) => url}
               components={{
