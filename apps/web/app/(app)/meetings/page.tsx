@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   Video, Clock, Users, FileText, CheckSquare, Search,
   Sparkles, Calendar, RefreshCw, Loader2, BriefcaseBusiness,
-  MessageSquare, BookOpen,
+  MessageSquare, Brain,
 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
 
@@ -429,40 +429,41 @@ function ActionItemRow({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          onClick={openInChat}
-          title="Open in Chat"
-          className="p-1 rounded transition-colors opacity-0 group-hover:opacity-100"
-          style={{ color: "var(--c-ink-muted)" }}
-          onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
-          onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
-        >
-          <MessageSquare size={13} />
-        </button>
-        <button
-          onClick={openInSecondBrain}
-          title="Open in Second Brain"
-          className="p-1 rounded transition-colors opacity-0 group-hover:opacity-100"
-          style={{ color: "var(--c-ink-muted)" }}
-          onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
-          onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
-        >
-          <BookOpen size={13} />
-        </button>
+      <div className="flex items-center gap-1 shrink-0">
         {item.task_id ? (
           <span className="text-[10px] font-medium badge badge-moss">Task created</span>
         ) : (
-          <button
-            onClick={() => onCreateTask(item)}
-            disabled={creating}
-            className="text-xs font-medium disabled:opacity-50 transition-colors"
-            style={{ color: "var(--c-moss)" }}
-            onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
-            onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
-          >
-            {creating ? <Loader2 size={12} className="animate-spin" /> : "Create Task"}
-          </button>
+          <>
+            <button
+              onClick={openInChat}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ color: "var(--c-ink-muted)" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
+            >
+              <MessageSquare size={11} />Chat
+            </button>
+            <button
+              onClick={openInSecondBrain}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ color: "var(--c-ink-muted)" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
+            >
+              <Brain size={11} />Second Brain
+            </button>
+            <button
+              onClick={() => onCreateTask(item)}
+              disabled={creating}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+              style={{ color: "var(--c-moss)" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "var(--c-moss-dark, var(--c-moss))")}
+              onMouseLeave={e => (e.currentTarget.style.color = "var(--c-moss)")}
+            >
+              {creating ? <Loader2 size={11} className="animate-spin" /> : <CheckSquare size={11} />}
+              {creating ? "Creating…" : "Create Task"}
+            </button>
+          </>
         )}
       </div>
     </div>
