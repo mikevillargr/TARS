@@ -2017,8 +2017,10 @@ async def send_message(
                                 climate = data.get("climate_state", {})
                                 vehicle = data.get("vehicle_state", {})
                                 drive = data.get("drive_state", {})
+                                cfg = data.get("vehicle_config", {})
 
-                                lines = [f"Tesla ({data.get('display_name', 'Model 3')}) — {data.get('state', '?')}:"]
+                                model_name = f"Tesla {cfg.get('model', 'Model Y')}"
+                                lines = [f"{model_name} — {data.get('state', '?')}:"]
 
                                 # Battery & charging
                                 lines.append(f"  Battery: {charge.get('battery_level', '?')}%")
@@ -2027,7 +2029,7 @@ async def send_message(
                                 lines.append(f"  Charging state: {charge.get('charging_state', '?')}")
                                 if charge.get('charging_state') not in ('Disconnected', None):
                                     lines.append(f"  Charge limit: {charge.get('charge_limit_soc', '?')}%")
-                                    lines.append(f"  Charge rate: {charge.get('charge_amps_actual', 0)} A / {charge.get('charger_power', 0)} kW")
+                                    lines.append(f"  Charge rate: {charge.get('charger_actual_current', charge.get('charge_amps_actual', 0))} A / {charge.get('charger_power', 0)} kW")
                                     mins_to_full = charge.get('minutes_to_full_charge', 0)
                                     if mins_to_full:
                                         lines.append(f"  Time to full: {mins_to_full // 60}h {mins_to_full % 60}m")
@@ -2053,13 +2055,50 @@ async def send_message(
                                 sw = vehicle.get('car_version', '?')
                                 lines.append(f"  Software: {sw}")
 
-                                # Location
-                                if drive.get('latitude'):
+                                # Location — reverse-geocode and emit map card
+                                lat = drive.get('latitude')
+                                lng = drive.get('longitude')
+                                if lat and lng:
                                     speed = drive.get('speed')
-                                    loc_line = f"  Location: {drive.get('latitude'):.4f}, {drive.get('longitude'):.4f}"
+                                    active_dest = drive.get('active_route_destination')
+
+                                    # Reverse-geocode to readable address
+                                    address = None
+                                    try:
+                                        from connectors.places import PlacesClient as _Places
+                                        _pc = _Places()
+                                        geo = await loop.run_in_executor(
+                                            None, lambda: _pc.reverse_geocode(lat, lng)
+                                        )
+                                        address = geo.get("address") if geo else None
+                                    except Exception:
+                                        pass
+
+                                    loc_label = address or f"{lat:.4f}, {lng:.4f}"
+                                    loc_line = f"  Location: {loc_label}"
                                     if speed:
-                                        loc_line += f" @ {speed * 1.60934:.0f} km/h"
+                                        loc_line += f" — moving at {speed:.0f} km/h"
+                                    if active_dest:
+                                        mins = drive.get('active_route_minutes_to_arrival', 0)
+                                        loc_line += f"\n  Navigating to: {active_dest} ({mins:.0f} min away)"
                                     lines.append(loc_line)
+
+                                    # Emit place_card so the map renders in chat
+                                    card_name = model_name
+                                    if speed and speed > 0:
+                                        card_name += f" · {speed:.0f} km/h"
+                                    await _emit_card({
+                                        "type": "place_card",
+                                        "places": [{
+                                            "name":     card_name,
+                                            "address":  address or "",
+                                            "lat":      lat,
+                                            "lng":      lng,
+                                            "category": "car",
+                                            "source":   "tesla",
+                                            "is_saved": False,
+                                        }],
+                                    })
 
                                 return "\n".join(lines)
 
