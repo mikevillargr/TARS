@@ -162,7 +162,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
   // Notification handler — audio chime + browser notification only (no toast)
   const soundOnRef = useRef(soundOn)
-  soundOnRef.current = soundOn
+  useEffect(() => { soundOnRef.current = soundOn })
 
   useEffect(() => {
     const unsub = subscribe((notif) => {

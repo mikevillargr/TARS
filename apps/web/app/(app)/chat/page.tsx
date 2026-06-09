@@ -1959,7 +1959,7 @@ export default function ChatPage() {
   }, [activeChatId, attachments, busy, inputValue])
 
   // Keep ref in sync so artifact/voice callers always have the latest closure
-  handleSendRef.current = handleSend
+  useEffect(() => { handleSendRef.current = handleSend })
 
   // Auto-send when pendingVoiceSend is ready and activeChatId is set
   useEffect(() => {
