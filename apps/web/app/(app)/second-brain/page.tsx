@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import {
   Search, LayoutGrid, List as ListIcon,
@@ -53,8 +53,20 @@ function typeLabel(type: string) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function SecondBrainPage() {
+// Reads ?capture=note&title=... and fires a callback — must be inside Suspense
+function CaptureParamsLoader({ onCapture }: { onCapture: (title: string) => void }) {
   const searchParams = useSearchParams()
+  const firedRef = useRef(false)
+  useEffect(() => {
+    if (searchParams.get("capture") === "note" && !firedRef.current) {
+      firedRef.current = true
+      onCapture(searchParams.get("title") ?? "")
+    }
+  }, [searchParams, onCapture])
+  return null
+}
+
+export default function SecondBrainPage() {
   const { domains: domainList } = useDomains()
   const [items, setItems]                       = useState<KnowledgeItem[]>([])
   const [loading, setLoading]                   = useState(true)
@@ -70,17 +82,11 @@ export default function SecondBrainPage() {
   const [captureInitialTitle, setCaptureInitialTitle] = useState("")
   const [tagSearch, setTagSearch]               = useState("")
   const [showAllTags, setShowAllTags]           = useState(false)
-  const captureOpenedRef = useRef(false)
 
-  useEffect(() => {
-    const capture = searchParams.get("capture")
-    const title = searchParams.get("title")
-    if (capture === "note" && !captureOpenedRef.current) {
-      captureOpenedRef.current = true
-      setCaptureInitialTitle(title ?? "")
-      setShowCapture(true)
-    }
-  }, [searchParams])
+  const handleCaptureParam = useCallback((title: string) => {
+    setCaptureInitialTitle(title)
+    setShowCapture(true)
+  }, [])
 
   const loadItems = useCallback(async () => {
     setLoading(true)
@@ -272,6 +278,10 @@ export default function SecondBrainPage() {
 
   return (
     <div className="flex flex-1 overflow-hidden bg-canvas relative">
+      <Suspense fallback={null}>
+        <CaptureParamsLoader onCapture={handleCaptureParam} />
+      </Suspense>
+
       {/* Desktop sidebar */}
       <div className="hidden md:flex flex-col w-52 shrink-0 border-r" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
         {sidebarContent}
