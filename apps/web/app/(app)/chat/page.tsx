@@ -1858,11 +1858,22 @@ export default function ChatPage() {
               }
             } else if (evt.type === "place_card") {
               if (chatId === activeChatIdRef.current && Array.isArray(evt.places) && evt.places.length > 0) {
-                streamingCardsRef.current.push({ type: "place_card", places: evt.places })
-                setPlaceResults(prev => [...prev, {
-                  tool_use_id: `place-${Date.now()}-${Math.random()}`,
-                  places: evt.places,
-                } as PlaceResultSet])
+                // Deduplicate: filter out any place whose exact lat/lng is already accumulated
+                const seenCoords = new Set(
+                  streamingCardsRef.current
+                    .filter(c => c.type === "place_card")
+                    .flatMap(c => (c.places as PlaceResult[]).map((p: PlaceResult) => `${p.lat},${p.lng}`))
+                )
+                const newPlaces = (evt.places as PlaceResult[]).filter(
+                  (p: PlaceResult) => !seenCoords.has(`${p.lat},${p.lng}`)
+                )
+                if (newPlaces.length > 0) {
+                  streamingCardsRef.current.push({ type: "place_card", places: newPlaces })
+                  setPlaceResults(prev => [...prev, {
+                    tool_use_id: `place-${Date.now()}-${Math.random()}`,
+                    places: newPlaces,
+                  } as PlaceResultSet])
+                }
               }
             } else if (evt.type === "chart_image") {
               if (chatId === activeChatIdRef.current) {
