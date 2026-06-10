@@ -119,13 +119,13 @@ function AiBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) {
       }}
     >
       <div
-        className="flex items-center gap-0.5 rounded-lg shadow-lg border px-1.5 py-1"
-        style={{ background: "#1a1714", borderColor: "#3a3530" }}
+        className="flex items-center gap-0.5 rounded-lg shadow-lg border px-1.5 py-1 overflow-x-auto"
+        style={{ background: "#1a1714", borderColor: "#3a3530", maxWidth: "min(480px, 92vw)" }}
       >
         {enhancing ? (
-          <div className="flex items-center gap-2 px-2 py-0.5">
+          <div className="flex items-center gap-2 px-2 py-0.5 shrink-0">
             <Loader2 size={12} className="animate-spin" style={{ color: "#2d5a4f" }} />
-            <span className="text-[11px]" style={{ color: "#948a7b" }}>Enhancing…</span>
+            <span className="text-[11px] whitespace-nowrap" style={{ color: "#948a7b" }}>Enhancing…</span>
           </div>
         ) : (
           <>
@@ -134,26 +134,26 @@ function AiBubbleMenu({ editor }: { editor: ReturnType<typeof useEditor> }) {
                 key={id}
                 onClick={() => handleAIAction(id)}
                 title={label}
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors hover:bg-white/10"
+                className="flex shrink-0 items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium whitespace-nowrap transition-colors hover:bg-white/10"
                 style={{ color: "#e5e0d8" }}
               >
                 <Icon size={11} />
                 {label}
               </button>
             ))}
-            <div className="w-px h-4 mx-0.5" style={{ background: "#3a3530" }} />
+            <div className="w-px h-4 mx-0.5 shrink-0" style={{ background: "#3a3530" }} />
             <input
               value={customPrompt}
               onChange={e => setCustomPrompt(e.target.value)}
               onKeyDown={e => e.key === "Enter" && customPrompt.trim() && handleAIAction("custom")}
               placeholder="Custom…"
-              className="text-[11px] bg-transparent border-none outline-none w-20 px-1"
+              className="text-[11px] bg-transparent border-none outline-none w-16 min-w-0 px-1"
               style={{ color: "#e5e0d8" }}
             />
             {customPrompt.trim() && (
               <button
                 onClick={() => handleAIAction("custom")}
-                className="p-1 rounded-md hover:bg-white/10"
+                className="shrink-0 p-1 rounded-md hover:bg-white/10"
                 style={{ color: "#2d5a4f" }}
               >
                 <ChevronRight size={12} />
