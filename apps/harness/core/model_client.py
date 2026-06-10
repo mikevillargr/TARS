@@ -545,9 +545,9 @@ SEARCH_CONTACTS_TOOL = {
             "show_card": {
                 "type": "boolean",
                 "description": (
-                    "Whether to surface contact cards in the UI. "
-                    "Pass true (default) when Mike is browsing or searching contacts. "
-                    "Pass false when resolving contacts as an intermediate step for another action (send email, schedule meeting, etc.)."
+                    "Whether to surface contact cards in the UI. Default false. "
+                    "Pass true ONLY when Mike is explicitly browsing contacts (e.g. 'show me contacts at NCH', 'who do I know at Acme'). "
+                    "Never pass true when resolving a contact to complete another action (draft email, schedule meeting, create task, etc.)."
                 ),
             },
         },
