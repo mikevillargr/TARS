@@ -80,10 +80,12 @@ class Settings(BaseSettings):
     # Options: tiny, tiny.en, small, small.en, medium, medium.en, large-v3
     whisper_model: str = "small"
 
-    # Kokoro TTS (remsky/Kokoro-FastAPI — OpenAI-compatible /v1/audio/speech)
-    # kokoro:8880 on internal Docker network; http://localhost:8881 for local dev
-    kokoro_url: str = "http://localhost:8881"
-    kokoro_voice: str = "af_bella"   # see /v1/voices for all options
+    # Kokoro TTS (kokoro-onnx embedded in harness process)
+    # Model files at this path — downloaded once from GitHub releases
+    # wget -P /opt/tars/models https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+    # wget -P /opt/tars/models https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+    kokoro_model_dir: str = "/opt/tars/models"
+    kokoro_voice: str = "af_bella"   # see GET /api/tts/voices for all options
 
     # AlwaysSunny — solar + Tesla charging controller
     always_sunny_api_key: str = ""

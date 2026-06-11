@@ -29,19 +29,6 @@ services:
       timeout: 3s
       retries: 5
 
-  kokoro:
-    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.2
-    restart: unless-stopped
-    ports:
-      - "8881:8880"
-    environment:
-      - KOKORO_DEFAULT_VOICE=${KOKORO_VOICE:-af_bella}
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8880/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
 
 volumes:
   postgres_data:
