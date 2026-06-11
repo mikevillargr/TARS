@@ -216,13 +216,11 @@ object RokidSdkManager {
         }
     }
 
-    /** Wake glasses display from standby. */
+    /** Wake glasses display from standby.
+     *  The glasses app handles waking its own screen on receiving a wake_signal JSON message.
+     *  No CXR-M SDK call is needed from the phone side. */
     fun wakeDisplay() {
-        try {
-            cxrApi?.wakeDevice()
-        } catch (e: Exception) {
-            Log.d(TAG, "wakeDisplay: ${e.message}")
-        }
+        Log.d(TAG, "wakeDisplay: wake handled by glasses-side wake_signal handler")
     }
 
     /** Restore previous connection from saved socketUuid + macAddress. */
