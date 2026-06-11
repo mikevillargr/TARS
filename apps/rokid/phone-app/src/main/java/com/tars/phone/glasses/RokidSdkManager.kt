@@ -267,10 +267,12 @@ object RokidSdkManager {
 
     /** Send a JSON message to the glasses. */
     fun send(json: String) {
+        if (!isConnected) return
+        val api = cxrApi ?: return
         try {
             val caps = Caps()
             caps.write(json)
-            cxrApi?.sendCustomCmd("command", caps)
+            api.sendCustomCmd("command", caps)
         } catch (e: Exception) {
             Log.e(TAG, "send failed: ${e.message}")
         }

@@ -5,11 +5,9 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
-import android.os.ParcelUuid
 import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -110,7 +108,12 @@ class GlassesConnectionManager(private val context: Context) {
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
-            val name = try { device.name ?: "Rokid Device" } catch (_: SecurityException) { "Rokid Device" }
+            val name = try { device.name } catch (_: SecurityException) { null } ?: return
+            // Show Rokid devices and any device whose name looks like glasses hardware
+            if (!name.contains("Rokid", ignoreCase = true) &&
+                !name.contains("AR", ignoreCase = true) &&
+                !name.startsWith("G") // Rokid AR Lite sometimes advertises as "G-xxxx"
+            ) return
             val discovered = DiscoveredDevice(name, device.address, result.rssi, device)
             val current = _discoveredDevices.value.toMutableList()
             val idx = current.indexOfFirst { it.address == device.address }
@@ -138,11 +141,12 @@ class GlassesConnectionManager(private val context: Context) {
         _discoveredDevices.value = emptyList()
         _connectionState.value = ConnectionState.Scanning
         bleScanner = bluetoothAdapter.bluetoothLeScanner
-        val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(ROKID_SERVICE_UUID)).build()
+        // Scan without UUID filter — Rokid AR Lite may not include its service UUID
+        // in the advertisement packet. Filter by name in onScanResult instead.
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         try {
-            bleScanner?.startScan(listOf(filter), settings, scanCallback)
-            Log.i(TAG, "BLE scan started for Rokid UUID")
+            bleScanner?.startScan(null, settings, scanCallback)
+            Log.i(TAG, "BLE scan started (no UUID filter)")
         } catch (e: SecurityException) {
             _connectionState.value = ConnectionState.Error("Missing Bluetooth permissions")
         }
