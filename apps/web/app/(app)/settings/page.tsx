@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X, Lock } from "lucide-react"
+import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X, Lock, Volume2, Play } from "lucide-react"
 import { apiGet, apiPatch, apiPost, apiDelete } from "@/lib/api-client"
 import { useDomains, invalidateDomains, type Domain } from "@/hooks/useDomains"
 
@@ -157,6 +157,13 @@ export default function SettingsPage() {
   const [showIOSInstructions, setShowIOSInstructions] = useState(false)
   const [installDone, setInstallDone]       = useState(false)
 
+  // Voice / TTS
+  const [ttsVoice, setTtsVoice]   = useState<string>(() => localStorage.getItem("tars-voice") ?? "af_bella")
+  const [ttsSpeed, setTtsSpeed]   = useState<number>(() => parseFloat(localStorage.getItem("tars-voice-speed") ?? "1.0"))
+  const [voiceList, setVoiceList] = useState<string[]>([])
+  const [ttsSaved, setTtsSaved]   = useState(false)
+  const [ttsPreviewState, setTtsPreviewState] = useState<"idle" | "loading" | "playing">("idle")
+
   // Domains
   const { domains, reload: reloadDomains } = useDomains()
   const [newDomainName, setNewDomainName]   = useState("")
@@ -179,6 +186,10 @@ export default function SettingsPage() {
     apiGet<ApiKeys>("/settings/api-keys")
       .then(d => setMaskedKeys(d))
       .catch(console.error)
+
+    apiGet<{ voices: string[] }>("/tts/voices")
+      .then(d => setVoiceList(d.voices))
+      .catch(() => {/* TTS optional — fail silently */})
   }, [])
 
   // PWA detection
@@ -302,6 +313,34 @@ export default function SettingsPage() {
       ))
     } catch {
       setKeyEntries(prev => prev.map(k => k.id === id ? { ...k, testState: "error", testMsg: "Request failed" } : k))
+    }
+  }
+
+  function saveTtsSettings() {
+    localStorage.setItem("tars-voice", ttsVoice)
+    localStorage.setItem("tars-voice-speed", String(ttsSpeed))
+    setTtsSaved(true)
+    setTimeout(() => setTtsSaved(false), 2000)
+  }
+
+  async function previewVoice() {
+    setTtsPreviewState("loading")
+    try {
+      const res = await fetch("/api/proxy/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "TARS online. Ready to assist.", voice: ttsVoice, speed: ttsSpeed }),
+      })
+      if (!res.ok) { setTtsPreviewState("idle"); return }
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const audio = new Audio(url)
+      setTtsPreviewState("playing")
+      audio.onended = () => { URL.revokeObjectURL(url); setTtsPreviewState("idle") }
+      audio.onerror = () => { URL.revokeObjectURL(url); setTtsPreviewState("idle") }
+      audio.play().catch(() => setTtsPreviewState("idle"))
+    } catch {
+      setTtsPreviewState("idle")
     }
   }
 
@@ -531,6 +570,122 @@ export default function SettingsPage() {
                 </div>
               )
             })}
+          </div>
+        </section>
+
+        {/* ── Voice ── */}
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+              Voice
+            </h2>
+            {ttsSaved && (
+              <span className="text-xs flex items-center gap-1" style={{ color: "var(--c-moss)" }}>
+                <Check size={12} /> Saved
+              </span>
+            )}
+          </div>
+          <p className="text-xs" style={{ color: "var(--c-ink-muted)" }}>
+            TARS speaks responses when you use voice input. Choose a voice and speed here.
+          </p>
+
+          <div className="flex flex-col gap-3">
+            {/* Voice selector */}
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--c-ink-muted)" }}>Voice</label>
+              <div className="flex gap-2">
+                <select
+                  className="input-field flex-1"
+                  value={ttsVoice}
+                  onChange={e => setTtsVoice(e.target.value)}
+                >
+                  {voiceList.length === 0 ? (
+                    <option value={ttsVoice}>{ttsVoice}</option>
+                  ) : (
+                    (() => {
+                      const GROUPS: Record<string, string> = {
+                        af: "American English — Female",
+                        am: "American English — Male",
+                        bf: "British English — Female",
+                        bm: "British English — Male",
+                        ef: "Spanish — Female",
+                        em: "Spanish — Male",
+                        ff: "French — Female",
+                        hf: "Hindi — Female",
+                        hm: "Hindi — Male",
+                        "if": "Italian — Female",
+                        im: "Italian — Male",
+                        jf: "Japanese — Female",
+                        jm: "Japanese — Male",
+                        pf: "Portuguese — Female",
+                        pm: "Portuguese — Male",
+                        zf: "Chinese — Female",
+                        zm: "Chinese — Male",
+                      }
+                      const grouped: Record<string, string[]> = {}
+                      for (const v of voiceList) {
+                        const prefix = v.slice(0, 2)
+                        if (!grouped[prefix]) grouped[prefix] = []
+                        grouped[prefix].push(v)
+                      }
+                      return Object.entries(grouped).map(([prefix, voices]) => (
+                        <optgroup key={prefix} label={GROUPS[prefix] ?? prefix.toUpperCase()}>
+                          {voices.map(v => (
+                            <option key={v} value={v}>{v.split("_")[1]}</option>
+                          ))}
+                        </optgroup>
+                      ))
+                    })()
+                  )}
+                </select>
+                <button
+                  onClick={previewVoice}
+                  disabled={ttsPreviewState === "loading" || ttsPreviewState === "playing"}
+                  className="btn-secondary flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                  style={{ padding: "0.375rem 0.75rem", fontSize: "0.8125rem" }}
+                  title="Preview this voice"
+                >
+                  {ttsPreviewState === "loading"
+                    ? <Loader2 size={13} className="animate-spin" />
+                    : ttsPreviewState === "playing"
+                    ? <Volume2 size={13} className="animate-pulse" style={{ color: "var(--c-moss)" }} />
+                    : <Play size={13} />
+                  }
+                  <span className="hidden sm:inline">Preview</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Speed slider */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-medium" style={{ color: "var(--c-ink-muted)" }}>Speed</label>
+                <span className="text-xs font-mono" style={{ color: "var(--c-ink-faint)" }}>{ttsSpeed.toFixed(1)}×</span>
+              </div>
+              <input
+                type="range"
+                min={0.5} max={2.0} step={0.1}
+                value={ttsSpeed}
+                onChange={e => setTtsSpeed(parseFloat(e.target.value))}
+                className="w-full"
+                style={{ accentColor: "var(--c-moss)" }}
+              />
+              <div className="flex justify-between text-[10px] mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
+                <span>0.5× slow</span>
+                <span>1.0× normal</span>
+                <span>2.0× fast</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={saveTtsSettings}
+              className="btn-primary flex items-center gap-1.5"
+              style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+            >
+              {ttsSaved ? <><Check size={13} /> Saved</> : "Save Voice Settings"}
+            </button>
           </div>
         </section>
 
