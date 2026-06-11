@@ -1,9 +1,9 @@
 package com.tars.glasses
 
 import android.os.Bundle
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.lifecycle.lifecycleScope
 import com.tars.glasses.input.GestureHandler
 import com.tars.glasses.service.PhoneConnectionService
 import com.tars.glasses.ui.HudScreen
@@ -11,34 +11,33 @@ import com.tars.glasses.ui.HudSize
 import com.tars.glasses.ui.HudChatEntry
 import com.tars.glasses.ui.theme.TarsGlassesTheme
 import com.tars.shared.*
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
-/**
- * Main activity for the glasses HUD.
- *
- * Receives messages from the phone via PhoneConnectionService (Rokid CXR SDK
- * or debug WebSocket), maintains display state, handles touchpad gestures.
- */
 class HudActivity : ComponentActivity() {
 
     private lateinit var phoneService: PhoneConnectionService
     private lateinit var gestureHandler: GestureHandler
 
-    // ── Display state (driven by TARS streaming events) ───────────────────────
     private val messages = mutableListOf<HudChatEntry>()
     private var streamingId: String? = null
     private var streamingContent = ""
     private var isThinking = false
     private var connectionStatus = "TARS"
     private var hudSize = HudSize.FULL
-    private var selectedMenuIndex = -1  // -1 = chat focus
+    private var selectedMenuIndex = -1
     private var fontSize = 13
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        phoneService = PhoneConnectionService(this) { json -> handlePhoneMessage(json) }
+        // Set debugMode = true when running on emulator, false on hardware
+        val debugMode = android.os.Build.FINGERPRINT.contains("generic")
+
+        phoneService = PhoneConnectionService(
+            context = this,
+            onMessage = ::handlePhoneMessage,
+            debugMode = debugMode,
+        )
+
         gestureHandler = GestureHandler(
             onSwipeForward = ::onSwipeForward,
             onSwipeBackward = ::onSwipeBackward,
@@ -48,7 +47,6 @@ class HudActivity : ComponentActivity() {
         )
 
         phoneService.start()
-
         renderHud()
     }
 
@@ -57,87 +55,70 @@ class HudActivity : ComponentActivity() {
         phoneService.stop()
     }
 
-    // ── Incoming messages from phone (TARS streaming events) ─────────────────
+    // Route all touch events through GestureHandler before normal dispatch
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (gestureHandler.onTouchEvent(ev)) return true
+        return super.dispatchTouchEvent(ev)
+    }
+
+    // ── Incoming messages from phone ──────────────────────────────────────────
 
     private fun handlePhoneMessage(json: String) {
         val type = extractMessageType(json) ?: return
-
-        when (type) {
-            "chat_message" -> {
-                val msg = ChatMessage.fromJson(json)
-                // Finalize any streaming entry for this id
-                if (msg.role == "assistant" && streamingId == msg.id) {
-                    streamingId = null
+        runOnUiThread {
+            when (type) {
+                "chat_message" -> {
+                    val msg = ChatMessage.fromJson(json)
+                    if (msg.role == "assistant" && streamingId == msg.id) {
+                        streamingId = null
+                        streamingContent = ""
+                        isThinking = false
+                    }
+                    messages.add(HudChatEntry(msg.id, msg.role, msg.content))
+                }
+                "agent_thinking" -> {
+                    val t = AgentThinking.fromJson(json)
+                    streamingId = t.id
+                    isThinking = true
                     streamingContent = ""
-                    isThinking = false
                 }
-                messages.add(HudChatEntry(msg.id, msg.role, msg.content))
-                renderHud()
-            }
-
-            "agent_thinking" -> {
-                val thinking = AgentThinking.fromJson(json)
-                streamingId = thinking.id
-                isThinking = true
-                streamingContent = ""
-                renderHud()
-            }
-
-            "chat_stream" -> {
-                val chunk = ChatStream.fromJson(json)
-                if (streamingId == null) streamingId = chunk.id
-                if (chunk.id == streamingId) {
-                    isThinking = false
-                    streamingContent += chunk.chunk
-                    renderHud()
+                "chat_stream" -> {
+                    val chunk = ChatStream.fromJson(json)
+                    if (streamingId == null) streamingId = chunk.id
+                    if (chunk.id == streamingId) {
+                        isThinking = false
+                        streamingContent += chunk.chunk
+                    }
+                }
+                "chat_stream_end" -> {
+                    // Final chat_message follows — clears streaming state above
+                }
+                "connection_update" -> {
+                    val update = ConnectionUpdate.fromJson(json)
+                    connectionStatus = update.sessionName ?: "TARS"
+                }
+                "wake_signal" -> {
+                    phoneService.send(WakeAck().toJson())
                 }
             }
-
-            "chat_stream_end" -> {
-                val end = ChatStreamEnd.fromJson(json)
-                if (end.id == streamingId) {
-                    // chat_message with final content follows — handled above
-                    isThinking = false
-                }
-                renderHud()
-            }
-
-            "connection_update" -> {
-                val update = ConnectionUpdate.fromJson(json)
-                connectionStatus = update.sessionName ?: "TARS"
-                renderHud()
-            }
-
-            "wake_signal" -> {
-                // Wake the display and ack immediately
-                phoneService.send(WakeAck().toJson())
-                renderHud()
-            }
+            renderHud()
         }
     }
 
-    // ── Touchpad gestures ────────────────────────────────────────────────────
+    // ── Gestures ──────────────────────────────────────────────────────────────
 
     private fun onSwipeForward() {
-        if (selectedMenuIndex >= 0) {
-            selectedMenuIndex = (selectedMenuIndex - 1).coerceAtLeast(0)
-        }
-        // else: scroll handled by LazyColumn gesture
+        if (selectedMenuIndex >= 0) selectedMenuIndex = (selectedMenuIndex - 1).coerceAtLeast(0)
         renderHud()
     }
 
     private fun onSwipeBackward() {
-        if (selectedMenuIndex >= 0) {
-            selectedMenuIndex = (selectedMenuIndex + 1).coerceAtMost(3)
-        }
+        if (selectedMenuIndex >= 0) selectedMenuIndex = (selectedMenuIndex + 1).coerceAtMost(3)
         renderHud()
     }
 
     private fun onTap() {
-        if (selectedMenuIndex >= 0) {
-            executeMenuAction(selectedMenuIndex)
-        }
-        // else: scroll to bottom handled by LazyColumn state
+        if (selectedMenuIndex >= 0) executeMenuAction(selectedMenuIndex)
         renderHud()
     }
 
@@ -147,7 +128,6 @@ class HudActivity : ComponentActivity() {
     }
 
     private fun onLongPress() {
-        // Request voice input from phone
         phoneService.send("""{"type":"start_voice"}""")
     }
 
@@ -155,24 +135,17 @@ class HudActivity : ComponentActivity() {
         when (index) {
             0 -> phoneService.send("""{"type":"capture_photo"}""")
             1 -> phoneService.send("""{"type":"list_sessions"}""")
-            2 -> {
-                hudSize = when (hudSize) {
-                    HudSize.FULL -> HudSize.BOTTOM_HALF
-                    HudSize.BOTTOM_HALF -> HudSize.TOP_HALF
-                    HudSize.TOP_HALF -> HudSize.FULL
-                }
+            2 -> hudSize = when (hudSize) {
+                HudSize.FULL -> HudSize.BOTTOM_HALF
+                HudSize.BOTTOM_HALF -> HudSize.TOP_HALF
+                HudSize.TOP_HALF -> HudSize.FULL
             }
-            3 -> {
-                // Cycle font size: Compact(11) → Normal(13) → Comfortable(15) → Large(17)
-                fontSize = when (fontSize) {
-                    11 -> 13; 13 -> 15; 15 -> 17; else -> 11
-                }
-            }
+            3 -> fontSize = when (fontSize) { 11 -> 13; 13 -> 15; 15 -> 17; else -> 11 }
         }
         renderHud()
     }
 
-    // ── Render ───────────────────────────────────────────────────────────────
+    // ── Render ────────────────────────────────────────────────────────────────
 
     private fun renderHud() {
         setContent {

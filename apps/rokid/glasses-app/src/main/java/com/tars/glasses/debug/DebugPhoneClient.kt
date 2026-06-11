@@ -5,59 +5,65 @@ import okhttp3.*
 import okio.ByteString
 
 /**
- * Debug replacement for PhoneConnectionService.
+ * Debug replacement for the CXR-S Bluetooth bridge.
  *
- * In debug builds, the phone emulator starts a WebSocket server on port 8081.
- * The glasses emulator auto-connects here instead of using the CXR SDK.
+ * When running on an emulator, the phone emulator starts a WebSocket server on
+ * port 8081. The glasses emulator connects here instead of using Bluetooth.
  *
- * Usage:
- *   1. Run phone AVD (MainActivity will start debug WS server on :8081)
- *   2. Run glasses AVD — it connects to 10.0.2.2:8081 (Android emulator host)
- *   3. Messages flow exactly as they would on hardware
+ * To enable: pass debugMode=true to PhoneConnectionService (auto-detected when
+ * Build.FINGERPRINT contains "generic" — i.e. AVD).
  *
- * To enable in debug builds, replace PhoneConnectionService with this class
- * in HudActivity:
- *   if (BuildConfig.DEBUG) DebugPhoneClient(onMessage).also { it.connect() }
- *   else PhoneConnectionService(context, onMessage)
+ * Setup:
+ *   adb -s <glasses-emulator> reverse tcp:8081 tcp:8081
+ *   (or the phone emulator exposes it at 10.0.2.2:8081)
  */
-class DebugPhoneClient(
-    private val onMessage: (String) -> Unit,
-    private val serverUrl: String = "ws://10.0.2.2:8081",
-) {
+class DebugPhoneClient {
+
     companion object {
         private const val TAG = "DebugPhoneClient"
+        const val DEFAULT_HOST = "10.0.2.2"
+        const val DEFAULT_PORT = 8081
     }
 
-    private val client = OkHttpClient()
+    var onMessageFromPhone: ((String) -> Unit)? = null
+    var onConnected: (() -> Unit)? = null
+    var onDisconnected: (() -> Unit)? = null
+
+    private val httpClient = OkHttpClient()
     private var ws: WebSocket? = null
 
-    fun connect() {
-        Log.i(TAG, "Connecting to debug phone server at $serverUrl")
-        val request = Request.Builder().url(serverUrl).build()
-        ws = client.newWebSocket(request, object : WebSocketListener() {
+    fun connect(host: String = DEFAULT_HOST, port: Int = DEFAULT_PORT) {
+        val url = "ws://$host:$port"
+        Log.i(TAG, "Connecting to debug phone server: $url")
+        val request = Request.Builder().url(url).build()
+        ws = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(TAG, "Debug connection established")
+                Log.i(TAG, "Debug connection open")
+                onConnected?.invoke()
             }
-
             override fun onMessage(webSocket: WebSocket, text: String) {
-                onMessage(text)
+                onMessageFromPhone?.invoke(text)
             }
-
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                onMessage(bytes.utf8())
+                onMessageFromPhone?.invoke(bytes.utf8())
             }
-
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.i(TAG, "Debug connection closed: $code $reason")
+                onDisconnected?.invoke()
+            }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "Debug connection failed: ${t.message}")
+                onDisconnected?.invoke()
             }
         })
     }
 
-    fun send(json: String) {
+    fun sendToPhone(json: String) {
         ws?.send(json)
     }
 
     fun disconnect() {
         ws?.close(1000, "Debug disconnect")
+        ws = null
     }
 }

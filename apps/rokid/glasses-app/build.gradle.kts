@@ -3,6 +3,12 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+// Rokid CXR-S SDK (glasses side) — download from developer.rokid.com
+// Place the AAR at glasses-app/libs/rokid-cxr-s-sdk.aar
+repositories {
+    flatDir { dirs("libs") }
+}
+
 android {
     namespace = "com.tars.glasses"
     compileSdk = 35
@@ -54,4 +60,8 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.lifecycle.runtime.ktx)
+
+    // Rokid CXR-S SDK (glasses side)
+    // Download from developer.rokid.com → place at glasses-app/libs/rokid-cxr-s-sdk.aar
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 }

@@ -1,18 +1,24 @@
 package com.tars.phone.glasses
 
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Manages the Bluetooth CXR-M SDK connection to Rokid glasses.
+ * Manages the full Bluetooth lifecycle with Rokid glasses via RokidSdkManager.
  *
- * In DEBUG builds this is replaced by DebugGlassesServer (local WebSocket).
- *
- * Public interface mirrors clawsses' GlassesConnectionManager so the
- * bridge service works identically for both targets.
+ * Usage:
+ *   1. start() — initializes SDK and tries to reconnect to saved glasses
+ *   2. scan() → returns BluetoothDevice list from paired devices
+ *   3. connect(device) — initiates Bluetooth init with a scanned device
+ *   4. After onConnected, send() works
  */
 class GlassesConnectionManager(private val context: Context) {
 
@@ -20,35 +26,83 @@ class GlassesConnectionManager(private val context: Context) {
         private const val TAG = "GlassesConnectionManager"
     }
 
-    private val _incomingMessages = MutableSharedFlow<String>(extraBufferCapacity = 64)
-
-    /** Messages sent from glasses to phone (user_input, session actions, wake_ack, etc.) */
-    val incomingMessages: SharedFlow<String> = _incomingMessages.asSharedFlow()
-
-    private var rokidSdkManager: RokidSdkManager? = null
-
-    fun start() {
-        rokidSdkManager = RokidSdkManager(context) { json ->
-            _incomingMessages.tryEmit(json)
-        }
-        rokidSdkManager?.init()
-        Log.i(TAG, "Glasses connection manager started")
+    sealed class GlassesState {
+        object Disconnected : GlassesState()
+        object Connecting : GlassesState()
+        data class Connected(val deviceName: String?) : GlassesState()
+        data class Error(val message: String) : GlassesState()
     }
 
-    fun stop() {
-        rokidSdkManager?.release()
-        rokidSdkManager = null
+    private val _state = MutableStateFlow<GlassesState>(GlassesState.Disconnected)
+    val state: StateFlow<GlassesState> = _state.asStateFlow()
+
+    private val _incomingMessages = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    val incomingMessages: SharedFlow<String> = _incomingMessages.asSharedFlow()
+
+    val isConnected: Boolean get() = RokidSdkManager.isConnected
+
+    fun start() {
+        if (!RokidSdkManager.initialize(context)) {
+            _state.value = GlassesState.Error("Rokid SDK init failed — check local.properties credentials")
+            return
+        }
+
+        RokidSdkManager.onGlassesConnected = {
+            Log.i(TAG, "Glasses connected")
+            _state.value = GlassesState.Connected(null)
+        }
+        RokidSdkManager.onGlassesDisconnected = {
+            Log.i(TAG, "Glasses disconnected")
+            _state.value = GlassesState.Disconnected
+            // Auto-reconnect to saved device
+            RokidSdkManager.reconnectSaved()
+        }
+        RokidSdkManager.onMessageFromGlasses = { json ->
+            _incomingMessages.tryEmit(json)
+        }
+        RokidSdkManager.onBluetoothFailed = { error ->
+            Log.e(TAG, "Bluetooth failed: $error")
+            _state.value = GlassesState.Error(error)
+        }
+
+        // Try reconnecting to a previously paired device immediately
+        if (RokidSdkManager.reconnectSaved()) {
+            _state.value = GlassesState.Connecting
+        }
+    }
+
+    /** Connect to a specific Bluetooth device (from the scan results in Settings). */
+    fun connect(device: BluetoothDevice) {
+        _state.value = GlassesState.Connecting
+        RokidSdkManager.initBluetooth(device)
+    }
+
+    /** Returns paired Bluetooth devices for display in the Settings UI. */
+    fun getPairedDevices(): List<BluetoothDevice> {
+        return try {
+            BluetoothAdapter.getDefaultAdapter()?.bondedDevices?.toList() ?: emptyList()
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Bluetooth permission not granted")
+            emptyList()
+        }
     }
 
     /** Send a JSON message from phone to glasses. */
     fun send(json: String) {
-        rokidSdkManager?.send(json) ?: Log.w(TAG, "send: no glasses connected")
+        if (!isConnected) {
+            Log.w(TAG, "send: glasses not connected")
+            return
+        }
+        RokidSdkManager.send(json)
     }
 
-    /** Wake glasses display via CXR SDK. */
+    /** Wake glasses display from standby before delivering content. */
     fun wakeDisplay() {
-        rokidSdkManager?.wakeDisplay()
+        RokidSdkManager.wakeDisplay()
     }
 
-    val isConnected: Boolean get() = rokidSdkManager?.isConnected == true
+    fun stop() {
+        RokidSdkManager.release()
+        _state.value = GlassesState.Disconnected
+    }
 }

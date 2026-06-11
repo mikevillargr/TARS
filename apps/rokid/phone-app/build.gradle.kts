@@ -9,6 +9,12 @@ val localProperties = java.util.Properties().apply {
     if (f.exists()) load(f.inputStream())
 }
 
+// Rokid CXR-M SDK (phone side) — download from developer.rokid.com
+// Place the AAR at phone-app/libs/rokid-cxr-m-sdk.aar
+repositories {
+    flatDir { dirs("libs") }
+}
+
 android {
     namespace = "com.tars.phone"
     compileSdk = 35
@@ -70,4 +76,8 @@ dependencies {
     // Lifecycle
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.viewmodel.compose)
+
+    // Rokid CXR-M SDK (phone side)
+    // Download from developer.rokid.com → place at phone-app/libs/rokid-cxr-m-sdk.aar
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 }
