@@ -145,17 +145,11 @@ class ApkInstaller(private val context: Context) {
             _installState.value = InstallState.Error("Not connected to glasses. Connect via Bluetooth first.")
             return
         }
-        _installState.value = InstallState.CheckingConnection
+        _installState.value = InstallState.PreparingApk
         installJob = scope.launch {
             try {
-                // Fast path: if the HUD is already installed, just launch it over Bluetooth.
-                // openApp() uses the BT control channel ("Sys" cmd) — no WiFi P2P, no LTE conflict.
-                _installState.value = InstallState.Launching("Checking glasses for HUD…")
-                if (tryLaunchOverBluetooth()) {
-                    _installState.value = InstallState.Success("HUD already installed — launched on glasses!")
-                    return@launch
-                }
-                // Not installed (or launch failed) → fall back to the P2P upload path.
+                // "Install" always transfers the bundled APK via P2P so code changes actually
+                // reach the glasses. (Use the separate "Launch" button for the BT-only fast path.)
                 withTimeout(OPERATION_TIMEOUT_MS * 3) { doSdkInstall() }
             } catch (e: TimeoutCancellationException) {
                 _installState.value = InstallState.Error("Installation timed out.")

@@ -102,10 +102,12 @@ class PhoneConnectionService(
             override fun onRokidAccountChanged(account: String?) {}
         })
 
-        // Subscribe to messages from the phone app
-        // Phone sends via RokidSdkManager.send() → caps.write(json) → msgType="command"
-        // Here we subscribe to "terminal" which is what clawsses uses for chat messages
-        cxrBridge?.subscribe(MSG_TYPE_TERMINAL, object : CXRServiceBridge.MsgCallback {
+        // Subscribe to messages from the phone app.
+        // The phone sends via RokidSdkManager.send() → CxrApi.sendCustomCmd("command", caps),
+        // which routes through CxrController.request(..., "command", ...) — so the wire topic
+        // is "command". We subscribe to "command" (the real channel) AND "terminal" (clawsses
+        // legacy) so we catch the phone's messages regardless of which path the SDK uses.
+        val msgCallback = object : CXRServiceBridge.MsgCallback {
             override fun onReceive(msgType: String?, caps: Caps?, data: ByteArray?) {
                 val message = when {
                     data != null && data.isNotEmpty() -> String(data, Charsets.UTF_8)
@@ -115,11 +117,14 @@ class PhoneConnectionService(
                     else -> ""
                 }
                 if (message.isNotEmpty()) {
+                    Log.d(TAG, "from phone [$msgType]: ${message.take(120)}")
                     markConnected("Phone (message)")
                     onMessage(message)
                 }
             }
-        })
+        }
+        cxrBridge?.subscribe(MSG_TYPE_COMMAND, msgCallback)
+        cxrBridge?.subscribe(MSG_TYPE_TERMINAL, msgCallback)
 
         startConnectionProbe()
     }

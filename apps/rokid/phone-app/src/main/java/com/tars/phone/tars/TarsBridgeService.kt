@@ -37,6 +37,7 @@ class TarsBridgeService : Service() {
     lateinit var glassesManager: GlassesConnectionManager
     lateinit var wakeSignalManager: WakeSignalManager
     lateinit var authManager: TarsAuthManager
+    lateinit var voiceInput: VoiceInputManager
 
     override fun onCreate() {
         super.onCreate()
@@ -44,6 +45,23 @@ class TarsBridgeService : Service() {
         glassesManager = GlassesConnectionManager.getInstance(this)
         wakeSignalManager = WakeSignalManager(glassesManager)
         authManager = TarsAuthManager(this)
+        voiceInput = VoiceInputManager(
+            context = this,
+            onResult = { text ->
+                Log.i(TAG, "voice → TARS: $text")
+                tarsClient.sendUserInput(text)
+            },
+            onError = { reason ->
+                Log.w(TAG, "voice error: $reason")
+                // Surface a one-off assistant note on the HUD (no streaming id conflict).
+                val note = ChatMessage(
+                    id = java.util.UUID.randomUUID().toString(),
+                    role = "assistant",
+                    content = "[$reason]",
+                )
+                glassesManager.send(note.toJson())
+            },
+        )
 
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification())
@@ -66,6 +84,7 @@ class TarsBridgeService : Service() {
         super.onDestroy()
         tarsClient.destroy()
         glassesManager.stop()
+        voiceInput.destroy()
         scope.cancel()
     }
 
@@ -96,7 +115,10 @@ class TarsBridgeService : Service() {
                             // TTS toggle handled locally (ElevenLabs runs on phone)
                         }
                         "start_voice" -> {
-                            // Voice input handled by VoiceCommandHandler — see that module
+                            // Glasses long-press → capture speech on the phone mic, then
+                            // send the transcript to TARS as a user_input. The harness echoes
+                            // the user turn and streams the reply back to the HUD.
+                            voiceInput.start()
                         }
                     }
                 } catch (e: Exception) {

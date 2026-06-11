@@ -1,9 +1,13 @@
 package com.tars.phone
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -27,6 +31,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         authManager = TarsAuthManager(this)
+
+        // Mic permission for glasses long-press → voice input (SpeechRecognizer on the phone).
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* best effort */ }
+                .launch(Manifest.permission.RECORD_AUDIO)
+        }
 
         // Start bridge service on launch if credentials exist
         if (authManager.getSavedCredentials() != null) {
