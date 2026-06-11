@@ -93,7 +93,7 @@ class TarsAuthManager(context: Context) {
                 ?: throw Exception("Empty response from TARS")
 
             val json = JSONObject(responseBody)
-            json.getString("access_token").also {
+            json.getString("token").also {
                 Log.i(TAG, "Logged in to TARS at $host:$port as $username")
             }
         }

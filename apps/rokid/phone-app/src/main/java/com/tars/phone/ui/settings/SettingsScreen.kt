@@ -7,8 +7,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.tars.phone.glasses.ApkInstaller
 import com.tars.phone.tars.TarsAuthManager
 import com.tars.phone.tars.TarsClient
 import kotlinx.coroutines.launch
@@ -19,8 +21,11 @@ fun SettingsScreen(
     authManager: TarsAuthManager,
     onConnected: (TarsClient.TarsConfig) -> Unit,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val creds = remember { authManager.getSavedCredentials() }
+    val apkInstaller = remember { ApkInstaller(context) }
+    val installState by apkInstaller.installState.collectAsState()
 
     var host by remember { mutableStateOf(creds?.host ?: "") }
     var port by remember { mutableStateOf(creds?.port?.toString() ?: "8000") }
@@ -153,6 +158,53 @@ fun SettingsScreen(
                 "Currently configured: ${creds.host}:${creds.port} (${creds.username})",
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+
+        HorizontalDivider()
+        Text("Glasses", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "Install the TARS HUD app onto your Rokid AR Lite.\nRequires Bluetooth connection to glasses.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+
+        val installing = installState is ApkInstaller.InstallState.Uploading ||
+                         installState is ApkInstaller.InstallState.Installing ||
+                         installState is ApkInstaller.InstallState.InitializingWifiP2P ||
+                         installState is ApkInstaller.InstallState.PreparingApk
+
+        Button(
+            onClick = { apkInstaller.installGlassesApp() },
+            enabled = !installing,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (installing) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            val label = when (val s = installState) {
+                is ApkInstaller.InstallState.InitializingWifiP2P -> "Connecting WiFi P2P…"
+                is ApkInstaller.InstallState.PreparingApk -> "Preparing APK…"
+                is ApkInstaller.InstallState.Uploading -> s.message
+                is ApkInstaller.InstallState.Installing -> s.message
+                is ApkInstaller.InstallState.Success -> "Installed ✓"
+                is ApkInstaller.InstallState.Error -> "Retry Install"
+                else -> "Install to Glasses"
+            }
+            Text(label)
+        }
+
+        when (val s = installState) {
+            is ApkInstaller.InstallState.Success -> Text(
+                s.message,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            is ApkInstaller.InstallState.Error -> Text(
+                s.message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            else -> {}
         }
     }
 }

@@ -69,6 +69,65 @@ object RokidSdkManager {
     var onPhotoResult: ((ByteArray?) -> Unit)? = null
 
     val isConnected: Boolean get() = isBluetoothConnectedState
+    val isReady: Boolean get() = isInitialized
+
+    private var isWifiP2PConnectedState = false
+    val isWifiP2PConnected: Boolean get() = isWifiP2PConnectedState
+
+    // APK install callbacks (set by ApkInstaller)
+    var onApkUploadSucceed: (() -> Unit)? = null
+    var onApkUploadFailed: (() -> Unit)? = null
+    var onApkInstallSucceed: (() -> Unit)? = null
+    var onApkInstallFailed: (() -> Unit)? = null
+
+    private val wifiP2PCallback = object : WifiP2PStatusCallback {
+        override fun onConnected() {
+            Log.i(TAG, "WiFi P2P connected")
+            isWifiP2PConnectedState = true
+        }
+        override fun onDisconnected() {
+            Log.i(TAG, "WiFi P2P disconnected")
+            isWifiP2PConnectedState = false
+        }
+        override fun onFailed(code: ValueUtil.CxrWifiErrorCode?) {
+            Log.e(TAG, "WiFi P2P failed: $code")
+            isWifiP2PConnectedState = false
+        }
+        override fun onP2pDeviceAvailable(p0: String?, p1: String?, p2: String?) {
+            Log.d(TAG, "WiFi P2P device available: $p0")
+        }
+    }
+
+    private val apkStatusCallback = object : ApkStatusCallback {
+        override fun onUploadApkSucceed() {
+            Log.i(TAG, "APK upload succeeded")
+            onApkUploadSucceed?.invoke()
+        }
+        override fun onUploadApkFailed() {
+            Log.e(TAG, "APK upload failed")
+            onApkUploadFailed?.invoke()
+        }
+        override fun onInstallApkSucceed() {
+            Log.i(TAG, "APK install succeeded")
+            onApkInstallSucceed?.invoke()
+        }
+        override fun onInstallApkFailed() {
+            Log.e(TAG, "APK install failed")
+            onApkInstallFailed?.invoke()
+        }
+        override fun onUninstallApkSucceed() {
+            Log.d(TAG, "APK uninstall succeeded")
+        }
+        override fun onUninstallApkFailed() {
+            Log.d(TAG, "APK uninstall failed")
+        }
+        override fun onOpenAppSucceed() {
+            Log.d(TAG, "APK open app succeeded")
+        }
+        override fun onOpenAppFailed() {
+            Log.d(TAG, "APK open app failed")
+        }
+    }
 
     // ── Bluetooth lifecycle callback ──────────────────────────────────────────
 
@@ -214,6 +273,31 @@ object RokidSdkManager {
         } catch (e: Exception) {
             Log.e(TAG, "send failed: ${e.message}")
         }
+    }
+
+    fun initWifiP2P(): Boolean = try {
+        cxrApi?.initWifiP2P2(true, wifiP2PCallback)
+        true
+    } catch (e: Exception) {
+        Log.e(TAG, "initWifiP2P failed: ${e.message}")
+        false
+    }
+
+    fun deinitWifiP2P() {
+        try {
+            cxrApi?.deinitWifiP2P()
+            isWifiP2PConnectedState = false
+        } catch (e: Exception) {
+            Log.e(TAG, "deinitWifiP2P failed: ${e.message}")
+        }
+    }
+
+    fun startUploadApk(apkPath: String): Boolean = try {
+        cxrApi?.startUploadApk(apkPath, apkStatusCallback)
+        true
+    } catch (e: Exception) {
+        Log.e(TAG, "startUploadApk failed: ${e.message}")
+        false
     }
 
     /** Wake glasses display from standby.
