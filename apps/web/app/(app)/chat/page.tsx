@@ -10,6 +10,7 @@ import {
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
   Mail, Phone, PhoneCall, BriefcaseBusiness, MessageSquare, Search, UserPlus,
   Copy, Check, ZoomIn, Brain, FileSpreadsheet, FileCode,
+  Volume2, VolumeX,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete, apiUpload } from "@/lib/api-client"
@@ -17,6 +18,7 @@ import AgentStatusChip from "@/components/agent-jobs/AgentStatusChip"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
+import { useTtsPlayback } from "@/hooks/useTtsPlayback"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useNotificationContext } from "@/context/NotificationContext"
 
@@ -1404,7 +1406,16 @@ export default function ChatPage() {
   // Set to the transcript text by mobile voice-new-chat; cleared after auto-send fires
   const [pendingVoiceSend, setPendingVoiceSend]     = useState<string | null>(null)
   const voice = useVoiceInput()
+  const tts   = useTtsPlayback()
   const confirm = useConfirm()
+  // true when the current/last send came from the mic (triggers auto-TTS response)
+  const lastInputWasVoiceRef = useRef(false)
+  // persistent voice-mode toggle — when on, TTS plays for all responses
+  const [voiceMode, setVoiceMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    return localStorage.getItem("tars-voice-mode") === "true"
+  })
+  const voiceModeRef = useRef(voiceMode)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
   const fileInputRef                                = useRef<HTMLInputElement>(null)
@@ -1428,6 +1439,12 @@ export default function ChatPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleSendRef                               = useRef<(overrideContent?: string, overrideArtifactId?: string) => Promise<void>>(async () => {})  // always-current handleSend
   const userLocationRef                             = useRef<{ lat: number; lng: number } | null>(null)
+
+  // Keep voiceModeRef in sync with state and persist to localStorage
+  useEffect(() => {
+    voiceModeRef.current = voiceMode
+    localStorage.setItem("tars-voice-mode", String(voiceMode))
+  }, [voiceMode])
 
   // ── Per-send geolocation helper ───────────────────────────────────
   // Called at message send time — high-accuracy fix, cached for 60 s so consecutive
@@ -1649,6 +1666,7 @@ export default function ChatPage() {
 
   function handleStop() {
     stopInitiatedRef.current = true
+    tts.stop()
     abortControllerRef.current?.abort()
     // Clear any recovery poll that may be running after a stream interruption
     if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
@@ -1682,6 +1700,7 @@ export default function ChatPage() {
     if (voice.state !== "idle" && voice.state !== "error") return
     voice.start((text) => {
       if (!text) return
+      lastInputWasVoiceRef.current = true
       setInputValue(text)
       setPendingVoiceSend(text)   // auto-send via the useEffect below
     })
@@ -1719,6 +1738,11 @@ export default function ChatPage() {
   const handleSend = useCallback(async (overrideContent?: string, overrideArtifactId?: string) => {
     const content = (overrideContent ?? inputValue).trim()
     if (busy || (!content && attachments.length === 0)) return
+
+    // Capture and reset voice flag — true only when user sent via mic
+    const isTtsEnabled = lastInputWasVoiceRef.current || voiceModeRef.current
+    lastInputWasVoiceRef.current = false
+    if (isTtsEnabled) tts.stop()  // stop any previous playback before new response
 
     // Show user message + loading state IMMEDIATELY — before async conversation creation
     stopInitiatedRef.current = false
@@ -1829,6 +1853,8 @@ export default function ChatPage() {
               if (chatId === activeChatIdRef.current) {
                 setStreaming({ role: "assistant", content: accumulated, streaming: true })
               }
+              // Feed incremental text to TTS — sentences are queued as they complete
+              if (isTtsEnabled) tts.feedText(evt.text)
             } else if (evt.type === "calendar_suggest") {
               if (chatId === activeChatIdRef.current) {
                 streamingCardsRef.current.push(evt as { type: string; [k: string]: unknown })
@@ -1904,6 +1930,8 @@ export default function ChatPage() {
                 }])
               }
             } else if (evt.type === "done") {
+              // Flush any remaining text in the TTS buffer
+              if (isTtsEnabled) tts.flushBuffer()
               // Prefer backend's final content over accumulated stream text.
               // The backend may have modified the content post-stream (e.g.
               // replacing a matplotlib code block with an inline rendered image).
@@ -1973,7 +2001,7 @@ export default function ChatPage() {
       if (!stopInitiatedRef.current) setBusy(false)
       // If stop was initiated, handleStop already called setBusy(false)
     }
-  }, [activeChatId, attachments, busy, inputValue])
+  }, [activeChatId, attachments, busy, inputValue, tts])
 
   // Keep ref in sync so artifact/voice callers always have the latest closure
   useEffect(() => { handleSendRef.current = handleSend })
@@ -2406,6 +2434,35 @@ export default function ChatPage() {
                         style={{ backgroundColor: "var(--c-rose)", opacity: 0.2 }} />
                     )}
                   </button>
+
+                  {/* Voice mode toggle — when on, all responses are spoken */}
+                  <button
+                    title={voiceMode ? "Voice mode on — click to mute" : "Voice mode off — click to enable"}
+                    onClick={() => setVoiceMode(v => !v)}
+                    className="p-1.5 rounded-lg transition-colors"
+                    style={{
+                      color: voiceMode ? "var(--c-moss)" : "var(--c-ink-faint)",
+                      backgroundColor: voiceMode ? "var(--c-moss-soft)" : "transparent",
+                    }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.backgroundColor = voiceMode ? "var(--c-moss-soft)" : "var(--c-surface-2)"}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = voiceMode ? "var(--c-moss-soft)" : "transparent"}
+                  >
+                    {voiceMode ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                  </button>
+
+                  {/* TTS stop button — visible while synthesizing or playing */}
+                  {(tts.isPlaying || tts.isSynthesizing) && (
+                    <button
+                      title="Stop speaking"
+                      onClick={() => tts.stop()}
+                      className="p-1.5 rounded-lg transition-colors relative"
+                      style={{ color: "var(--c-amber)" }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
+                    >
+                      <Volume2 size={16} className="animate-pulse" />
+                    </button>
+                  )}
                 </div>
 
                 {busy ? (
