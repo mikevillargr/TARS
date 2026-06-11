@@ -11,6 +11,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.tars.phone.glasses.ApkInstaller
+import com.tars.phone.glasses.GlassesConnectionManager
+import com.tars.phone.glasses.RokidSdkManager
 import com.tars.phone.tars.TarsAuthManager
 import com.tars.phone.tars.TarsClient
 import kotlinx.coroutines.launch
@@ -26,6 +28,15 @@ fun SettingsScreen(
     val creds = remember { authManager.getSavedCredentials() }
     val apkInstaller = remember { ApkInstaller(context) }
     val installState by apkInstaller.installState.collectAsState()
+
+    val glassesManager = remember { GlassesConnectionManager(context) }
+    val glassesState by glassesManager.connectionState.collectAsState()
+    val discoveredDevices by glassesManager.discoveredDevices.collectAsState()
+    val wifiP2PConnected by glassesManager.wifiP2PConnected.collectAsState()
+
+    DisposableEffect(Unit) {
+        onDispose { glassesManager.stop() }
+    }
 
     var host by remember { mutableStateOf(creds?.host ?: "") }
     var port by remember { mutableStateOf(creds?.port?.toString() ?: "8000") }
@@ -162,8 +173,21 @@ fun SettingsScreen(
 
         HorizontalDivider()
         Text("Glasses", style = MaterialTheme.typography.titleSmall)
+
+        GlassesSection(
+            state = glassesState,
+            discoveredDevices = discoveredDevices,
+            wifiP2PConnected = wifiP2PConnected,
+            onStartScanning = { glassesManager.startScanning() },
+            onStopScanning = { glassesManager.stopScanning() },
+            onConnectDevice = { glassesManager.connectToDevice(it) },
+            onDisconnect = { glassesManager.disconnect() },
+            onCancelReconnect = { glassesManager.cancelReconnect() },
+            onRetryReconnect = { glassesManager.retryReconnectNow() },
+        )
+
         Text(
-            "Install the TARS HUD app onto your Rokid AR Lite.\nRequires Bluetooth connection to glasses.",
+            "Install the TARS HUD app onto your Rokid AR Lite.\nConnect to glasses first, then tap Install.",
             style = MaterialTheme.typography.bodySmall,
         )
 

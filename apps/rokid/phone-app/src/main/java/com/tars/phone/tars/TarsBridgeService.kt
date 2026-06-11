@@ -48,8 +48,6 @@ class TarsBridgeService : Service() {
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification())
 
-        // Start glasses connection listener
-        glassesManager.start()
         bridgeGlassesToTars()
         bridgeTarsToGlasses()
     }

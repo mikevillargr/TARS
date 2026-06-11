@@ -70,6 +70,7 @@ object RokidSdkManager {
 
     val isConnected: Boolean get() = isBluetoothConnectedState
     val isReady: Boolean get() = isInitialized
+    fun hasSavedConnectionInfo(): Boolean = !savedSocketUuid.isNullOrEmpty() && !savedMacAddress.isNullOrEmpty()
 
     private var isWifiP2PConnectedState = false
     val isWifiP2PConnected: Boolean get() = isWifiP2PConnectedState
