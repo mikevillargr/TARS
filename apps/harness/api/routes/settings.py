@@ -40,6 +40,8 @@ def _mask(key: str, show: int = 6) -> str:
 class SettingsOut(BaseModel):
     name: str
     timezone: str
+    tts_voice: str = "af_bella"
+    tts_speed: float = 1.0
 
     class Config:
         from_attributes = True
@@ -48,6 +50,18 @@ class SettingsOut(BaseModel):
 class SettingsUpdate(BaseModel):
     name: Optional[str] = None
     timezone: Optional[str] = None
+    tts_voice: Optional[str] = None
+    tts_speed: Optional[float] = None
+
+
+def _settings_out(user: User) -> SettingsOut:
+    prefs = user.preferences or {}
+    return SettingsOut(
+        name=user.name,
+        timezone=user.timezone or "Asia/Manila",
+        tts_voice=prefs.get("tts_voice", "af_bella"),
+        tts_speed=float(prefs.get("tts_speed", 1.0)),
+    )
 
 
 @router.get("", response_model=SettingsOut)
@@ -59,7 +73,7 @@ async def get_settings(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return SettingsOut(name=user.name, timezone=user.timezone or "Asia/Manila")
+    return _settings_out(user)
 
 
 @router.patch("", response_model=SettingsOut)
@@ -68,19 +82,32 @@ async def update_settings(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    updates: dict = {}
-    if body.name is not None:
-        updates["name"] = body.name
-    if body.timezone is not None:
-        updates["timezone"] = body.timezone
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
-    if updates:
-        await db.execute(sa_update(User).where(User.id == user_id).values(**updates))
+    col_updates: dict = {}
+    if body.name is not None:
+        col_updates["name"] = body.name
+    if body.timezone is not None:
+        col_updates["timezone"] = body.timezone
+
+    pref_updates: dict = {}
+    if body.tts_voice is not None:
+        pref_updates["tts_voice"] = body.tts_voice
+    if body.tts_speed is not None:
+        pref_updates["tts_speed"] = body.tts_speed
+
+    if col_updates or pref_updates:
+        if pref_updates:
+            col_updates["preferences"] = {**(user.preferences or {}), **pref_updates}
+        await db.execute(sa_update(User).where(User.id == user_id).values(**col_updates))
         await db.commit()
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    return SettingsOut(name=user.name, timezone=user.timezone or "Asia/Manila")
+    return _settings_out(user)
 
 
 # ─── Change password ─────────────────────────────────────────────────────────

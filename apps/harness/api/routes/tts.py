@@ -25,9 +25,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import require_auth
 from core.config import settings
+from db.models import User
+from db.session import get_db
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -368,6 +372,7 @@ class TtsRequest(BaseModel):
 async def synthesize(
     req: TtsRequest,
     user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
 ):
     """Synthesize text to WAV audio via Kokoro ONNX."""
     text = _prepare_text(req.text)
@@ -376,10 +381,20 @@ async def synthesize(
     if len(text) > 4000:
         raise HTTPException(status_code=400, detail="text too long (max 4000 chars)")
 
-    voice = req.voice or settings.kokoro_voice
+    # Voice priority: request body → user's saved preference → env default
+    if req.voice:
+        voice = req.voice
+        source = "request"
+    else:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        prefs = (user.preferences or {}) if user else {}
+        voice = prefs.get("tts_voice") or settings.kokoro_voice
+        source = "saved" if prefs.get("tts_voice") else "default"
+
     speed = float(req.speed or 1.0)
     lang  = _lang_for_voice(voice)
-    log.info("TTS: voice=%s lang=%s speed=%s", voice, lang, speed)
+    log.info("TTS: voice=%s (%s) lang=%s speed=%s", voice, source, lang, speed)
 
     try:
         def _synth() -> bytes:

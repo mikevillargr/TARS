@@ -191,11 +191,18 @@ export default function SettingsPage() {
       .then(d => setVoiceList(d.voices))
       .catch(() => {/* TTS optional — fail silently */})
 
-    // Read TTS prefs from localStorage (only available client-side)
-    const savedVoice = localStorage.getItem("tars-voice")
-    const savedSpeed = localStorage.getItem("tars-voice-speed")
-    if (savedVoice) setTtsVoice(savedVoice)
-    if (savedSpeed) setTtsSpeed(parseFloat(savedSpeed))
+    // Load TTS prefs from server (source of truth), fall back to localStorage
+    apiGet<{ name: string; timezone: string; tts_voice: string; tts_speed: number }>("/settings")
+      .then(d => {
+        if (d.tts_voice) { setTtsVoice(d.tts_voice); localStorage.setItem("tars-voice", d.tts_voice) }
+        if (d.tts_speed) { setTtsSpeed(d.tts_speed); localStorage.setItem("tars-voice-speed", String(d.tts_speed)) }
+      })
+      .catch(() => {
+        const savedVoice = localStorage.getItem("tars-voice")
+        const savedSpeed = localStorage.getItem("tars-voice-speed")
+        if (savedVoice) setTtsVoice(savedVoice)
+        if (savedSpeed) setTtsSpeed(parseFloat(savedSpeed))
+      })
   }, [])
 
   // PWA detection
@@ -322,7 +329,13 @@ export default function SettingsPage() {
     }
   }
 
-  function saveTtsSettings() {
+  async function saveTtsSettings() {
+    // Save to server (source of truth) + mirror to localStorage for instant reads
+    try {
+      await apiPatch("/settings", { tts_voice: ttsVoice, tts_speed: ttsSpeed })
+    } catch (err) {
+      console.error("Failed to save TTS settings to server:", err)
+    }
     localStorage.setItem("tars-voice", ttsVoice)
     localStorage.setItem("tars-voice-speed", String(ttsSpeed))
     setTtsSaved(true)
