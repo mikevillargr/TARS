@@ -200,7 +200,8 @@ fun SettingsScreen(
         )
 
         Text(
-            "Install the TARS HUD app onto your Rokid AR Lite.\nConnect to glasses first, then tap Install.",
+            "If the HUD is already installed, tap Launch — it starts over Bluetooth, no WiFi needed.\n" +
+            "First-time install transfers the app over WiFi Direct.",
             style = MaterialTheme.typography.bodySmall,
         )
 
@@ -208,27 +209,46 @@ fun SettingsScreen(
                          installState is ApkInstaller.InstallState.Installing ||
                          installState is ApkInstaller.InstallState.InitializingWifiP2P ||
                          installState is ApkInstaller.InstallState.PreparingApk ||
+                         installState is ApkInstaller.InstallState.CheckingConnection ||
                          installState is ApkInstaller.InstallState.Launching
         val glassesConnected = glassesState is GlassesConnectionManager.ConnectionState.Connected
 
+        // Launch HUD over Bluetooth — the fast, reliable path when already installed.
         Button(
+            onClick = { apkInstaller.launchGlassesApp() },
+            enabled = !installing && glassesConnected,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (installState is ApkInstaller.InstallState.Launching) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                if (installState is ApkInstaller.InstallState.Launching)
+                    (installState as ApkInstaller.InstallState.Launching).message
+                else "Launch HUD on Glasses"
+            )
+        }
+
+        // Install (first-time): transfers APK via WiFi Direct, then launches.
+        OutlinedButton(
             onClick = { requestInstallPermissionsAndInstall() },
             enabled = !installing && glassesConnected,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            if (installing) {
+            if (installing && installState !is ApkInstaller.InstallState.Launching) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
             }
             val label = when (val s = installState) {
+                is ApkInstaller.InstallState.CheckingConnection -> "Checking glasses…"
                 is ApkInstaller.InstallState.InitializingWifiP2P -> s.message
                 is ApkInstaller.InstallState.PreparingApk -> "Preparing APK…"
                 is ApkInstaller.InstallState.Uploading -> s.message
                 is ApkInstaller.InstallState.Installing -> s.message
-                is ApkInstaller.InstallState.Launching -> s.message
-                is ApkInstaller.InstallState.Success -> "Installed ✓"
+                is ApkInstaller.InstallState.Success -> "Done ✓"
                 is ApkInstaller.InstallState.Error -> "Retry Install"
-                else -> "Install to Glasses"
+                else -> "Install to Glasses (first time)"
             }
             Text(label)
         }

@@ -57,6 +57,44 @@ class ApkInstaller(private val context: Context) {
         }
     }
 
+    /**
+     * Launch the HUD on the glasses over Bluetooth (no WiFi P2P).
+     * Returns true if the glasses confirmed the app opened.
+     * Used both as a standalone "Launch" action and as a fast-path:
+     * if the app is already installed, we skip the flaky P2P upload entirely.
+     */
+    private suspend fun tryLaunchOverBluetooth(timeoutMs: Long = 8000L): Boolean {
+        var opened = false
+        var failed = false
+        RokidSdkManager.onApkOpenSucceed = { opened = true }
+        RokidSdkManager.onApkOpenFailed = { failed = true }
+        if (!RokidSdkManager.openApp(GLASSES_PACKAGE, GLASSES_ACTIVITY)) return false
+        var waited = 0
+        while (!opened && !failed && waited < timeoutMs) { delay(250); waited += 250 }
+        return opened
+    }
+
+    /** Standalone: just launch the already-installed HUD over Bluetooth. */
+    fun launchGlassesApp() {
+        if (!canStartInstall()) return
+        if (!RokidSdkManager.isReady || !RokidSdkManager.isConnected) {
+            _installState.value = InstallState.Error("Connect to glasses via Bluetooth first.")
+            return
+        }
+        installJob = scope.launch {
+            _installState.value = InstallState.Launching("Launching HUD on glasses…")
+            val ok = tryLaunchOverBluetooth()
+            _installState.value = if (ok) {
+                InstallState.Success("HUD launched on glasses!")
+            } else {
+                InstallState.Error(
+                    "Couldn't launch the HUD. It may not be installed yet — tap Install to Glasses.",
+                    canRetry = true
+                )
+            }
+        }
+    }
+
     fun installViaAdb(host: String, port: Int = DEFAULT_ADB_PORT) {
         if (!canStartInstall()) return
         _installState.value = InstallState.CheckingConnection
@@ -107,10 +145,18 @@ class ApkInstaller(private val context: Context) {
             _installState.value = InstallState.Error("Not connected to glasses. Connect via Bluetooth first.")
             return
         }
-        _installState.value = InstallState.PreparingApk
+        _installState.value = InstallState.CheckingConnection
         installJob = scope.launch {
             try {
-                withTimeout(OPERATION_TIMEOUT_MS * 2) { doSdkInstall() }
+                // Fast path: if the HUD is already installed, just launch it over Bluetooth.
+                // openApp() uses the BT control channel ("Sys" cmd) — no WiFi P2P, no LTE conflict.
+                _installState.value = InstallState.Launching("Checking glasses for HUD…")
+                if (tryLaunchOverBluetooth()) {
+                    _installState.value = InstallState.Success("HUD already installed — launched on glasses!")
+                    return@launch
+                }
+                // Not installed (or launch failed) → fall back to the P2P upload path.
+                withTimeout(OPERATION_TIMEOUT_MS * 3) { doSdkInstall() }
             } catch (e: TimeoutCancellationException) {
                 _installState.value = InstallState.Error("Installation timed out.")
             } catch (e: CancellationException) {
@@ -142,31 +188,20 @@ class ApkInstaller(private val context: Context) {
         }
 
         if (!RokidSdkManager.isWifiP2PConnected) {
-            // LTE/5G coexistence on Samsung phones can transiently block 2.4GHz P2P channels.
-            // The SDK has its own ~30s connect timeout, so each attempt waits 35s to let that
-            // process complete fully before we give up and retry once more.
-            val maxAttempts = 2
-            var p2pReady = false
-            for (attempt in 1..maxAttempts) {
-                _installState.value = InstallState.InitializingWifiP2P(
-                    if (maxAttempts > 1 && attempt > 1) "Connecting WiFi P2P… (retry $attempt/$maxAttempts)"
-                    else "Connecting WiFi P2P…"
-                )
-                if (attempt > 1) { RokidSdkManager.deinitWifiP2P(); delay(1000) }
-                if (!RokidSdkManager.initWifiP2P()) {
-                    Log.w(TAG, "initWifiP2P returned false on attempt $attempt")
-                    continue
-                }
-                var waited = 0
-                while (!RokidSdkManager.isWifiP2PConnected && waited < 35_000) {
-                    delay(500); waited += 500
-                }
-                if (RokidSdkManager.isWifiP2PConnected) { p2pReady = true; break }
-                Log.w(TAG, "WiFi P2P attempt $attempt/$maxAttempts timed out")
+            // The SDK internally retries the P2P connect up to 10× over ~30s (WIFI_MAX_RETRY_COUNT).
+            // We init ONCE and let that internal retry run — calling deinit/reinit ourselves only
+            // resets the SDK's retry counter and tears down its in-progress negotiation.
+            // Samsung LTE/2.4GHz coexistence can still block it; the shifting AVOID-FREQ window
+            // means a later retry often succeeds, so we wait out the full internal cycle (~45s).
+            _installState.value = InstallState.InitializingWifiP2P("Connecting WiFi link to glasses…")
+            if (!RokidSdkManager.initWifiP2P()) throw Exception("Failed to start WiFi P2P.")
+            var waited = 0
+            while (!RokidSdkManager.isWifiP2PConnected && waited < 50_000) {
+                delay(500); waited += 500
             }
-            if (!p2pReady) throw Exception(
-                "Couldn't establish the WiFi Direct link to the glasses.\n" +
-                "Make sure WiFi is on, the glasses are awake, then tap Install again."
+            if (!RokidSdkManager.isWifiP2PConnected) throw Exception(
+                "The glasses' WiFi Direct link didn't come up (phone radio was busy on those channels).\n" +
+                "Tap Install to Glasses to try again — it usually connects within a couple of tries."
             )
         }
 
@@ -187,21 +222,12 @@ class ApkInstaller(private val context: Context) {
             if (RokidSdkManager.isConnected) RokidSdkManager.deinitWifiP2P()
         }
 
-        // Installed APKs don't auto-start. Launch the HUD on the glasses.
+        // Installed APKs don't auto-start. Launch the HUD over Bluetooth.
         _installState.value = InstallState.Launching()
-        var openComplete = false
-        var openFailed = false
-        RokidSdkManager.onApkOpenSucceed = { openComplete = true }
-        RokidSdkManager.onApkOpenFailed = { openFailed = true }
         delay(1500) // let the package manager on glasses settle after install
-        RokidSdkManager.openApp(GLASSES_PACKAGE, GLASSES_ACTIVITY)
+        val launched = tryLaunchOverBluetooth(timeoutMs = 15000L)
 
-        var openWaited = 0
-        while (!openComplete && !openFailed && openWaited < 15000) {
-            delay(500); openWaited += 500
-        }
-
-        _installState.value = if (openComplete) {
+        _installState.value = if (launched) {
             InstallState.Success("Installed and launched on glasses!")
         } else {
             // Install definitely worked; launch is best-effort.
