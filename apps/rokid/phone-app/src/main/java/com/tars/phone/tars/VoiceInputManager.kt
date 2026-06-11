@@ -2,8 +2,10 @@ package com.tars.phone.tars
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.speech.RecognitionListener
@@ -34,6 +36,38 @@ class VoiceInputManager(
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
     private val tone by lazy { ToneGenerator(AudioManager.STREAM_MUSIC, 80) }
+    private val audioManager by lazy { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+
+    /**
+     * The Rokid glasses register as a Bluetooth SCO headset, so Android routes mic
+     * capture to the glasses' mic — which doesn't feed the recognizer. Force the
+     * phone's built-in mic for the duration of recognition.
+     */
+    private fun forcePhoneMic() {
+        try {
+            @Suppress("DEPRECATION")
+            audioManager.stopBluetoothSco()
+            @Suppress("DEPRECATION")
+            audioManager.isBluetoothScoOn = false
+            @Suppress("DEPRECATION")
+            audioManager.mode = AudioManager.MODE_NORMAL
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val builtIn = audioManager.availableCommunicationDevices
+                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+                if (builtIn != null) audioManager.setCommunicationDevice(builtIn)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "forcePhoneMic failed: ${e.message}")
+        }
+    }
+
+    private fun releasePhoneMic() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                audioManager.clearCommunicationDevice()
+            }
+        } catch (_: Exception) {}
+    }
 
     val isListening: Boolean get() = listening
 
@@ -60,11 +94,13 @@ class VoiceInputManager(
             }
             listening = true
             try {
+                forcePhoneMic()
                 sr.startListening(intent)
                 beep(ToneGenerator.TONE_PROP_BEEP)
-                Log.i(TAG, "listening…")
+                Log.i(TAG, "listening… (phone mic forced)")
             } catch (e: Exception) {
                 listening = false
+                releasePhoneMic()
                 onError("Couldn't start the mic: ${e.message}")
             }
         }
@@ -99,6 +135,7 @@ class VoiceInputManager(
 
         override fun onError(error: Int) {
             listening = false
+            releasePhoneMic()
             val reason = when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH,
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Didn't catch that"
@@ -115,6 +152,7 @@ class VoiceInputManager(
 
         override fun onResults(results: android.os.Bundle?) {
             listening = false
+            releasePhoneMic()
             val text = results
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
