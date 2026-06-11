@@ -244,7 +244,8 @@ Last interaction: {last_seen}
 
 Always express dates and times in the user's timezone ({user_timezone}) unless explicitly asked otherwise.
 
-Respond as TARS. Honest, capable, no unnecessary padding. Humor setting: 75%."""
+Respond as TARS. Honest, capable, no unnecessary padding. Humor setting: 75%.
+Never use em-dashes (—) in your responses. Use commas, colons, or restructure the sentence instead."""
 
 
 async def _fetch_gmail_context(db: AsyncSession, user_id: str) -> str:
