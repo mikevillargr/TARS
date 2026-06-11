@@ -335,6 +335,25 @@ def _prepare_text(text: str) -> str:
     return text.strip()
 
 
+# ── Voice → espeak language code mapping ──────────────────────────────────────
+
+_VOICE_LANG: dict[str, str] = {
+    "af": "en-us", "am": "en-us",   # American English
+    "bf": "en-gb", "bm": "en-gb",   # British English
+    "ef": "es",    "em": "es",       # Spanish
+    "ff": "fr-fr",                   # French
+    "hf": "hi",    "hm": "hi",       # Hindi
+    "if": "it",    "im": "it",       # Italian
+    "jf": "ja",    "jm": "ja",       # Japanese
+    "pf": "pt-br", "pm": "pt-br",   # Portuguese
+    "zf": "zh",    "zm": "zh",       # Chinese
+}
+
+
+def _lang_for_voice(voice: str) -> str:
+    return _VOICE_LANG.get(voice[:2], "en-us")
+
+
 # ── Request model ──────────────────────────────────────────────────────────────
 
 class TtsRequest(BaseModel):
@@ -359,13 +378,15 @@ async def synthesize(
 
     voice = req.voice or settings.kokoro_voice
     speed = float(req.speed or 1.0)
+    lang  = _lang_for_voice(voice)
+    log.info("TTS: voice=%s lang=%s speed=%s", voice, lang, speed)
 
     try:
         def _synth() -> bytes:
             import soundfile as sf
             kokoro  = _get_kokoro()
             samples, sample_rate = kokoro.create(
-                text, voice=voice, speed=speed, lang="en-us"
+                text, voice=voice, speed=speed, lang=lang
             )
             buf = io.BytesIO()
             sf.write(buf, samples, sample_rate, format="WAV")

@@ -410,6 +410,34 @@ export default function SettingsPage() {
     setEditDomainColor(d.color)
   }
 
+  // Compute grouped voice options outside JSX for reliable controlled-select behavior
+  const VOICE_GROUPS: Record<string, string> = {
+    af: "American English — Female", am: "American English — Male",
+    bf: "British English — Female",  bm: "British English — Male",
+    ef: "Spanish — Female",          em: "Spanish — Male",
+    ff: "French — Female",
+    hf: "Hindi — Female",            hm: "Hindi — Male",
+    "if": "Italian — Female",        im: "Italian — Male",
+    jf: "Japanese — Female",         jm: "Japanese — Male",
+    pf: "Portuguese — Female",       pm: "Portuguese — Male",
+    zf: "Chinese — Female",          zm: "Chinese — Male",
+  }
+  const voiceOptions = voiceList.length === 0
+    ? <option value={ttsVoice}>{ttsVoice}</option>
+    : (() => {
+        const grouped: Record<string, string[]> = {}
+        for (const v of voiceList) {
+          const pfx = v.slice(0, 2)
+          if (!grouped[pfx]) grouped[pfx] = []
+          grouped[pfx].push(v)
+        }
+        return Object.entries(grouped).map(([pfx, voices]) => (
+          <optgroup key={pfx} label={VOICE_GROUPS[pfx] ?? pfx.toUpperCase()}>
+            {voices.map(v => <option key={v} value={v}>{v.slice(v.indexOf("_") + 1)}</option>)}
+          </optgroup>
+        ))
+      })()
+
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: "var(--c-canvas)" }}>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
@@ -605,44 +633,7 @@ export default function SettingsPage() {
                   value={ttsVoice}
                   onChange={e => setTtsVoice(e.target.value)}
                 >
-                  {voiceList.length === 0 ? (
-                    <option value={ttsVoice}>{ttsVoice}</option>
-                  ) : (
-                    (() => {
-                      const GROUPS: Record<string, string> = {
-                        af: "American English — Female",
-                        am: "American English — Male",
-                        bf: "British English — Female",
-                        bm: "British English — Male",
-                        ef: "Spanish — Female",
-                        em: "Spanish — Male",
-                        ff: "French — Female",
-                        hf: "Hindi — Female",
-                        hm: "Hindi — Male",
-                        "if": "Italian — Female",
-                        im: "Italian — Male",
-                        jf: "Japanese — Female",
-                        jm: "Japanese — Male",
-                        pf: "Portuguese — Female",
-                        pm: "Portuguese — Male",
-                        zf: "Chinese — Female",
-                        zm: "Chinese — Male",
-                      }
-                      const grouped: Record<string, string[]> = {}
-                      for (const v of voiceList) {
-                        const prefix = v.slice(0, 2)
-                        if (!grouped[prefix]) grouped[prefix] = []
-                        grouped[prefix].push(v)
-                      }
-                      return Object.entries(grouped).map(([prefix, voices]) => (
-                        <optgroup key={prefix} label={GROUPS[prefix] ?? prefix.toUpperCase()}>
-                          {voices.map(v => (
-                            <option key={v} value={v}>{v.split("_")[1]}</option>
-                          ))}
-                        </optgroup>
-                      ))
-                    })()
-                  )}
+                  {voiceOptions}
                 </select>
                 <button
                   onClick={previewVoice}
