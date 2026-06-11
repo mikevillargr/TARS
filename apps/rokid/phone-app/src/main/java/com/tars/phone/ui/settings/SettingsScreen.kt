@@ -207,7 +207,8 @@ fun SettingsScreen(
         val installing = installState is ApkInstaller.InstallState.Uploading ||
                          installState is ApkInstaller.InstallState.Installing ||
                          installState is ApkInstaller.InstallState.InitializingWifiP2P ||
-                         installState is ApkInstaller.InstallState.PreparingApk
+                         installState is ApkInstaller.InstallState.PreparingApk ||
+                         installState is ApkInstaller.InstallState.Launching
         val glassesConnected = glassesState is GlassesConnectionManager.ConnectionState.Connected
 
         Button(
@@ -224,6 +225,7 @@ fun SettingsScreen(
                 is ApkInstaller.InstallState.PreparingApk -> "Preparing APK…"
                 is ApkInstaller.InstallState.Uploading -> s.message
                 is ApkInstaller.InstallState.Installing -> s.message
+                is ApkInstaller.InstallState.Launching -> s.message
                 is ApkInstaller.InstallState.Success -> "Installed ✓"
                 is ApkInstaller.InstallState.Error -> "Retry Install"
                 else -> "Install to Glasses"

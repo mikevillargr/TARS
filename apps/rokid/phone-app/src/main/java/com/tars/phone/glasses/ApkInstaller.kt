@@ -21,6 +21,8 @@ class ApkInstaller(private val context: Context) {
         private const val GLASSES_APP_ASSET = "glasses-app-release.apk"
         private const val DEFAULT_ADB_PORT = 5555
         private const val OPERATION_TIMEOUT_MS = 60_000L
+        private const val GLASSES_PACKAGE = "com.tars.glasses"
+        private const val GLASSES_ACTIVITY = "com.tars.glasses.HudActivity"
     }
 
     sealed class InstallState {
@@ -30,6 +32,7 @@ class ApkInstaller(private val context: Context) {
         object PreparingApk : InstallState()
         data class Uploading(val message: String = "Uploading APK...") : InstallState()
         data class Installing(val message: String = "Installing...") : InstallState()
+        data class Launching(val message: String = "Launching HUD on glasses…") : InstallState()
         data class Success(val message: String = "Installation complete!") : InstallState()
         data class Error(val message: String, val canRetry: Boolean = true) : InstallState()
     }
@@ -139,30 +142,31 @@ class ApkInstaller(private val context: Context) {
         }
 
         if (!RokidSdkManager.isWifiP2PConnected) {
-            // LTE/5G coexistence on Samsung phones blocks 2.4GHz P2P channels intermittently.
-            // Retry up to 3 times; each attempt waits 15s before giving up and re-trying.
-            val maxAttempts = 3
+            // LTE/5G coexistence on Samsung phones can transiently block 2.4GHz P2P channels.
+            // The SDK has its own ~30s connect timeout, so each attempt waits 35s to let that
+            // process complete fully before we give up and retry once more.
+            val maxAttempts = 2
             var p2pReady = false
             for (attempt in 1..maxAttempts) {
                 _installState.value = InstallState.InitializingWifiP2P(
-                    "Connecting WiFi P2P… (attempt $attempt/$maxAttempts)"
+                    if (maxAttempts > 1 && attempt > 1) "Connecting WiFi P2P… (retry $attempt/$maxAttempts)"
+                    else "Connecting WiFi P2P…"
                 )
-                RokidSdkManager.deinitWifiP2P()
-                delay(800)
+                if (attempt > 1) { RokidSdkManager.deinitWifiP2P(); delay(1000) }
                 if (!RokidSdkManager.initWifiP2P()) {
                     Log.w(TAG, "initWifiP2P returned false on attempt $attempt")
                     continue
                 }
                 var waited = 0
-                while (!RokidSdkManager.isWifiP2PConnected && waited < 15_000) {
+                while (!RokidSdkManager.isWifiP2PConnected && waited < 35_000) {
                     delay(500); waited += 500
                 }
                 if (RokidSdkManager.isWifiP2PConnected) { p2pReady = true; break }
                 Log.w(TAG, "WiFi P2P attempt $attempt/$maxAttempts timed out")
             }
             if (!p2pReady) throw Exception(
-                "WiFi P2P failed after $maxAttempts attempts.\n" +
-                "Turn off mobile data on your phone, then tap Install again."
+                "Couldn't establish the WiFi Direct link to the glasses.\n" +
+                "Make sure WiFi is on, the glasses are awake, then tap Install again."
             )
         }
 
@@ -178,9 +182,30 @@ class ApkInstaller(private val context: Context) {
         if (installError != null) throw Exception(installError)
         if (!installComplete) throw Exception("Installation did not complete.")
 
-        _installState.value = InstallState.Success("Glasses app installed via SDK!")
+        // Tear down WiFi P2P now that transfer is done — keeps Bluetooth control channel clean.
         withContext(Dispatchers.Main) {
             if (RokidSdkManager.isConnected) RokidSdkManager.deinitWifiP2P()
+        }
+
+        // Installed APKs don't auto-start. Launch the HUD on the glasses.
+        _installState.value = InstallState.Launching()
+        var openComplete = false
+        var openFailed = false
+        RokidSdkManager.onApkOpenSucceed = { openComplete = true }
+        RokidSdkManager.onApkOpenFailed = { openFailed = true }
+        delay(1500) // let the package manager on glasses settle after install
+        RokidSdkManager.openApp(GLASSES_PACKAGE, GLASSES_ACTIVITY)
+
+        var openWaited = 0
+        while (!openComplete && !openFailed && openWaited < 15000) {
+            delay(500); openWaited += 500
+        }
+
+        _installState.value = if (openComplete) {
+            InstallState.Success("Installed and launched on glasses!")
+        } else {
+            // Install definitely worked; launch is best-effort.
+            InstallState.Success("Installed! If the HUD didn't open, restart the glasses.")
         }
     }
 

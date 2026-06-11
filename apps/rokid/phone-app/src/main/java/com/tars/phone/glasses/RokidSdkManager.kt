@@ -9,6 +9,7 @@ import com.rokid.cxr.client.extend.CxrApi
 import com.rokid.cxr.client.extend.callbacks.ApkStatusCallback
 import com.rokid.cxr.client.extend.callbacks.BluetoothStatusCallback
 import com.rokid.cxr.client.extend.callbacks.WifiP2PStatusCallback
+import com.rokid.cxr.client.extend.infos.RKAppInfo
 import com.rokid.cxr.client.extend.listeners.AiEventListener
 import com.rokid.cxr.client.extend.listeners.BrightnessUpdateListener
 import com.rokid.cxr.client.extend.listeners.CustomCmdListener
@@ -80,6 +81,8 @@ object RokidSdkManager {
     var onApkUploadFailed: (() -> Unit)? = null
     var onApkInstallSucceed: (() -> Unit)? = null
     var onApkInstallFailed: (() -> Unit)? = null
+    var onApkOpenSucceed: (() -> Unit)? = null
+    var onApkOpenFailed: (() -> Unit)? = null
 
     private val wifiP2PCallback = object : WifiP2PStatusCallback {
         override fun onConnected() {
@@ -123,10 +126,12 @@ object RokidSdkManager {
             Log.d(TAG, "APK uninstall failed")
         }
         override fun onOpenAppSucceed() {
-            Log.d(TAG, "APK open app succeeded")
+            Log.i(TAG, "Open app succeeded")
+            onApkOpenSucceed?.invoke()
         }
         override fun onOpenAppFailed() {
-            Log.d(TAG, "APK open app failed")
+            Log.e(TAG, "Open app failed")
+            onApkOpenFailed?.invoke()
         }
     }
 
@@ -300,6 +305,15 @@ object RokidSdkManager {
         true
     } catch (e: Exception) {
         Log.e(TAG, "startUploadApk failed: ${e.message}")
+        false
+    }
+
+    /** Launch an installed app on the glasses. onApkOpenSucceed/Failed fire on result. */
+    fun openApp(packageName: String, activityName: String): Boolean = try {
+        cxrApi?.openApp(RKAppInfo(packageName, activityName), apkStatusCallback)
+        true
+    } catch (e: Exception) {
+        Log.e(TAG, "openApp failed: ${e.message}")
         false
     }
 
