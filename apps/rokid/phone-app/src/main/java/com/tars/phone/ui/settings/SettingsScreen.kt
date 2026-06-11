@@ -29,14 +29,10 @@ fun SettingsScreen(
     val apkInstaller = remember { ApkInstaller(context) }
     val installState by apkInstaller.installState.collectAsState()
 
-    val glassesManager = remember { GlassesConnectionManager(context) }
+    val glassesManager = remember { GlassesConnectionManager.getInstance(context) }
     val glassesState by glassesManager.connectionState.collectAsState()
     val discoveredDevices by glassesManager.discoveredDevices.collectAsState()
     val wifiP2PConnected by glassesManager.wifiP2PConnected.collectAsState()
-
-    DisposableEffect(Unit) {
-        onDispose { glassesManager.stop() }
-    }
 
     var host by remember { mutableStateOf(creds?.host ?: "") }
     var port by remember { mutableStateOf(creds?.port?.toString() ?: "8000") }

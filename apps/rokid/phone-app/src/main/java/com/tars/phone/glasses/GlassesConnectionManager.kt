@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
-class GlassesConnectionManager(private val context: Context) {
+class GlassesConnectionManager private constructor(context: Context) {
 
     companion object {
         private const val TAG = "GlassesConnection"
@@ -26,6 +26,14 @@ class GlassesConnectionManager(private val context: Context) {
         private const val RECONNECT_BASE_DELAY_MS = 1000L
         private const val RECONNECT_MAX_DELAY_MS = 60000L
         private const val RECONNECT_TIMEOUT_MS = 10000L
+        private const val CONNECT_TIMEOUT_MS = 20000L
+
+        @Volatile private var instance: GlassesConnectionManager? = null
+
+        fun getInstance(context: Context): GlassesConnectionManager =
+            instance ?: synchronized(this) {
+                instance ?: GlassesConnectionManager(context.applicationContext).also { instance = it }
+            }
     }
 
     data class DiscoveredDevice(
@@ -44,6 +52,8 @@ class GlassesConnectionManager(private val context: Context) {
         data class Error(val message: String) : ConnectionState()
     }
 
+    private val appContext = context.applicationContext
+
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
@@ -56,13 +66,15 @@ class GlassesConnectionManager(private val context: Context) {
     private val _incomingMessages = MutableSharedFlow<String>(extraBufferCapacity = 64)
     val incomingMessages: SharedFlow<String> = _incomingMessages.asSharedFlow()
 
-    private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    private val bluetoothManager = appContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val bluetoothAdapter: BluetoothAdapter? = bluetoothManager?.adapter
     private var bleScanner: BluetoothLeScanner? = null
 
-    private val reconnectScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var reconnectJob: Job? = null
+    private var connectTimeoutJob: Job? = null
     private var userInitiatedDisconnect = false
+    private var isActivelyConnecting = false   // true only during user-initiated connect
     private var reconnectAttempts = 0
     private var currentReconnectDelayMs = RECONNECT_BASE_DELAY_MS
 
@@ -79,6 +91,8 @@ class GlassesConnectionManager(private val context: Context) {
 
     private fun setupSdkCallbacks() {
         RokidSdkManager.onGlassesConnected = {
+            connectTimeoutJob?.cancel()
+            isActivelyConnecting = false
             _connectionState.value = ConnectionState.Connected("Rokid Glasses")
             reconnectAttempts = 0
             currentReconnectDelayMs = RECONNECT_BASE_DELAY_MS
@@ -93,7 +107,12 @@ class GlassesConnectionManager(private val context: Context) {
         }
         RokidSdkManager.onBluetoothFailed = { error ->
             Log.e(TAG, "Bluetooth failed: $error")
-            if (!userInitiatedDisconnect && RokidSdkManager.hasSavedConnectionInfo()) {
+            connectTimeoutJob?.cancel()
+            if (isActivelyConnecting) {
+                // User-initiated connect failed — show error, don't auto-reconnect
+                isActivelyConnecting = false
+                _connectionState.value = ConnectionState.Error("Connection failed: $error\nMake sure glasses are in pairing mode.")
+            } else if (!userInitiatedDisconnect && RokidSdkManager.hasSavedConnectionInfo()) {
                 scheduleReconnect()
             } else {
                 _connectionState.value = ConnectionState.Error("Bluetooth failed: $error")
@@ -101,7 +120,7 @@ class GlassesConnectionManager(private val context: Context) {
         }
         RokidSdkManager.onMessageFromGlasses = { json ->
             onMessageFromGlasses?.invoke(json)
-            reconnectScope.launch { _incomingMessages.emit(json) }
+            scope.launch { _incomingMessages.emit(json) }
         }
     }
 
@@ -109,10 +128,9 @@ class GlassesConnectionManager(private val context: Context) {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
             val device = result.device
             val name = try { device.name } catch (_: SecurityException) { null } ?: return
-            // Show Rokid devices and any device whose name looks like glasses hardware
             if (!name.contains("Rokid", ignoreCase = true) &&
                 !name.contains("AR", ignoreCase = true) &&
-                !name.startsWith("G") // Rokid AR Lite sometimes advertises as "G-xxxx"
+                !name.startsWith("G")
             ) return
             val discovered = DiscoveredDevice(name, device.address, result.rssi, device)
             val current = _discoveredDevices.value.toMutableList()
@@ -133,7 +151,7 @@ class GlassesConnectionManager(private val context: Context) {
             return
         }
         if (!RokidSdkManager.isReady) {
-            if (!RokidSdkManager.initialize(context)) {
+            if (!RokidSdkManager.initialize(appContext)) {
                 _connectionState.value = ConnectionState.Error("Failed to initialize Rokid SDK")
                 return
             }
@@ -141,12 +159,10 @@ class GlassesConnectionManager(private val context: Context) {
         _discoveredDevices.value = emptyList()
         _connectionState.value = ConnectionState.Scanning
         bleScanner = bluetoothAdapter.bluetoothLeScanner
-        // Scan without UUID filter — Rokid AR Lite may not include its service UUID
-        // in the advertisement packet. Filter by name in onScanResult instead.
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         try {
             bleScanner?.startScan(null, settings, scanCallback)
-            Log.i(TAG, "BLE scan started (no UUID filter)")
+            Log.i(TAG, "BLE scan started")
         } catch (e: SecurityException) {
             _connectionState.value = ConnectionState.Error("Missing Bluetooth permissions")
         }
@@ -164,13 +180,28 @@ class GlassesConnectionManager(private val context: Context) {
     fun connectToDevice(device: DiscoveredDevice) {
         stopScanning()
         userInitiatedDisconnect = false
+        isActivelyConnecting = true
         _connectionState.value = ConnectionState.Connecting
         Log.i(TAG, "Connecting to ${device.name} (${device.address})")
         RokidSdkManager.initBluetooth(device.device)
+
+        // Safety timeout — if SDK never calls back, unblock the UI
+        connectTimeoutJob?.cancel()
+        connectTimeoutJob = scope.launch {
+            delay(CONNECT_TIMEOUT_MS)
+            if (_connectionState.value is ConnectionState.Connecting) {
+                Log.e(TAG, "Connection timed out")
+                isActivelyConnecting = false
+                _connectionState.value = ConnectionState.Error(
+                    "Connection timed out.\nFold right leg and triple-click camera to enter pairing mode, then try again."
+                )
+            }
+        }
     }
 
     fun disconnect() {
         userInitiatedDisconnect = true
+        connectTimeoutJob?.cancel()
         resetReconnect()
         RokidSdkManager.release()
         _connectionState.value = ConnectionState.Disconnected
@@ -182,7 +213,7 @@ class GlassesConnectionManager(private val context: Context) {
         reconnectAttempts = 0
         currentReconnectDelayMs = RECONNECT_BASE_DELAY_MS
         _connectionState.value = ConnectionState.Connecting
-        reconnectScope.launch {
+        scope.launch {
             if (RokidSdkManager.reconnectSaved()) {
                 delay(RECONNECT_TIMEOUT_MS)
                 val s = _connectionState.value
@@ -208,7 +239,7 @@ class GlassesConnectionManager(private val context: Context) {
         val attempt = reconnectAttempts + 1
         val delay = currentReconnectDelayMs
         _connectionState.value = ConnectionState.Reconnecting(attempt, delay)
-        reconnectJob = reconnectScope.launch {
+        reconnectJob = scope.launch {
             delay(delay)
             reconnectAttempts = attempt
             currentReconnectDelayMs = (currentReconnectDelayMs * 1.5).toLong().coerceAtMost(RECONNECT_MAX_DELAY_MS)
@@ -231,5 +262,5 @@ class GlassesConnectionManager(private val context: Context) {
 
     fun send(json: String) = RokidSdkManager.send(json)
     fun wakeDisplay() = RokidSdkManager.wakeDisplay()
-    fun stop() { stopScanning(); reconnectScope.cancel() }
+    fun stop() { stopScanning() }   // singleton — don't cancel scope
 }

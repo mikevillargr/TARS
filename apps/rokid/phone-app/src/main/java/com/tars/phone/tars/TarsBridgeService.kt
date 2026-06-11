@@ -41,7 +41,7 @@ class TarsBridgeService : Service() {
     override fun onCreate() {
         super.onCreate()
         tarsClient = TarsClient()
-        glassesManager = GlassesConnectionManager(this)
+        glassesManager = GlassesConnectionManager.getInstance(this)
         wakeSignalManager = WakeSignalManager(glassesManager)
         authManager = TarsAuthManager(this)
 
