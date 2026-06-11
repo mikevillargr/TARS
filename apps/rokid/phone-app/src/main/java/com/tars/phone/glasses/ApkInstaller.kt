@@ -26,7 +26,7 @@ class ApkInstaller(private val context: Context) {
     sealed class InstallState {
         object Idle : InstallState()
         object CheckingConnection : InstallState()
-        object InitializingWifiP2P : InstallState()
+        data class InitializingWifiP2P(val message: String = "Connecting WiFi P2P…") : InstallState()
         object PreparingApk : InstallState()
         data class Uploading(val message: String = "Uploading APK...") : InstallState()
         data class Installing(val message: String = "Installing...") : InstallState()
@@ -139,13 +139,31 @@ class ApkInstaller(private val context: Context) {
         }
 
         if (!RokidSdkManager.isWifiP2PConnected) {
-            _installState.value = InstallState.InitializingWifiP2P
-            if (!RokidSdkManager.initWifiP2P()) throw Exception("Failed to initialize WiFi P2P.")
-            var waited = 0
-            while (!RokidSdkManager.isWifiP2PConnected && waited < 30000) {
-                delay(500); waited += 500
+            // LTE/5G coexistence on Samsung phones blocks 2.4GHz P2P channels intermittently.
+            // Retry up to 3 times; each attempt waits 15s before giving up and re-trying.
+            val maxAttempts = 3
+            var p2pReady = false
+            for (attempt in 1..maxAttempts) {
+                _installState.value = InstallState.InitializingWifiP2P(
+                    "Connecting WiFi P2P… (attempt $attempt/$maxAttempts)"
+                )
+                RokidSdkManager.deinitWifiP2P()
+                delay(800)
+                if (!RokidSdkManager.initWifiP2P()) {
+                    Log.w(TAG, "initWifiP2P returned false on attempt $attempt")
+                    continue
+                }
+                var waited = 0
+                while (!RokidSdkManager.isWifiP2PConnected && waited < 15_000) {
+                    delay(500); waited += 500
+                }
+                if (RokidSdkManager.isWifiP2PConnected) { p2pReady = true; break }
+                Log.w(TAG, "WiFi P2P attempt $attempt/$maxAttempts timed out")
             }
-            if (!RokidSdkManager.isWifiP2PConnected) throw Exception("WiFi P2P timed out. Ensure WiFi is on.")
+            if (!p2pReady) throw Exception(
+                "WiFi P2P failed after $maxAttempts attempts.\n" +
+                "Turn off mobile data on your phone, then tap Install again."
+            )
         }
 
         _installState.value = InstallState.Uploading("Uploading ${apkFile.length() / 1024} KB via WiFi P2P...")

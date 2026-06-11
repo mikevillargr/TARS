@@ -220,7 +220,7 @@ fun SettingsScreen(
                 Spacer(Modifier.width(8.dp))
             }
             val label = when (val s = installState) {
-                is ApkInstaller.InstallState.InitializingWifiP2P -> "Connecting WiFi P2P…"
+                is ApkInstaller.InstallState.InitializingWifiP2P -> s.message
                 is ApkInstaller.InstallState.PreparingApk -> "Preparing APK…"
                 is ApkInstaller.InstallState.Uploading -> s.message
                 is ApkInstaller.InstallState.Installing -> s.message
