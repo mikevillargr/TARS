@@ -22,6 +22,7 @@ from api.routes import image_proxy as image_proxy_route
 from api.routes import search as search_route
 from api.routes import transcribe as transcribe_route
 from api.routes import notifications as notifications_route
+from api.routes import rokid as rokid_route
 from core.config import settings
 
 log = logging.getLogger(__name__)
@@ -239,3 +240,4 @@ app.include_router(transcribe_route.router, prefix="/api")
 app.include_router(notifications_route.router, prefix="/api/notifications")
 app.include_router(domains_route.router, prefix="/api/domains")
 app.include_router(image_proxy_route.router, prefix="/api")
+app.include_router(rokid_route.router, prefix="/api/rokid")

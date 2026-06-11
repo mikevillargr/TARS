@@ -469,7 +469,7 @@ tars/
 │   │   └── public/manifest.json  # PWA + share target
 │   │
 │   └── harness/                # FastAPI
-│       ├── api/routes/         # one file per component
+│       ├── api/routes/         # one file per component (+ rokid.py = Rokid WS bridge)
 │       ├── core/
 │       │   ├── router.py       # tier classification
 │       │   ├── context_assembler.py
@@ -503,6 +503,12 @@ tars/
 │           ├── models.py       # SQLAlchemy
 │           ├── migrations/     # Alembic
 │           └── session.py
+│
+├── apps/
+│   └── rokid/                  # Android — Rokid glasses HUD
+│       ├── shared/             # Protocol.kt — phone↔glasses wire format
+│       ├── phone-app/          # Android companion: TarsClient (JWT WS) + Rokid CXR SDK bridge
+│       └── glasses-app/        # HUD app: Jetpack Compose on 480x640 green micro-LED
 │
 ├── packages/
 │   ├── types/                  # shared TypeScript types
@@ -797,6 +803,7 @@ v1.0.0  Session 9 complete - polish, PWA, full production deploy
 | 7 | Document ingest | PDF/PPTX/DOCX parsers, chunking pipeline, Second Brain full UI | ✅ Done |
 | 8 | Calendar | Google Calendar sync, Calendar view, event type color coding | ✅ Done |
 | 9 | Polish + Deploy | PWA manifest + share target, push notifications, Settings, deploy to KVM4 | 🔄 In Progress |
+| 10 | Rokid Glasses | `/api/rokid/ws` WebSocket bridge, Android phone-app (TarsClient), glasses HUD (Jetpack Compose on 480×640 green micro-LED) | 🔄 In Progress |
 
 ---
 
