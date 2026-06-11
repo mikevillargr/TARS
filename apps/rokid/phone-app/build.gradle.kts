@@ -3,16 +3,9 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
-// Inject Rokid SDK credentials from local.properties
 val localProperties = java.util.Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) load(f.inputStream())
-}
-
-// Rokid CXR-M SDK (phone side) — download from developer.rokid.com
-// Place the AAR at phone-app/libs/rokid-cxr-m-sdk.aar
-repositories {
-    flatDir { dirs("libs") }
 }
 
 android {
@@ -21,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "com.tars.phone"
-        minSdk = 26
+        minSdk = 28   // Rokid CXR-M SDK requirement
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
@@ -77,7 +70,6 @@ dependencies {
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.viewmodel.compose)
 
-    // Rokid CXR-M SDK (phone side)
-    // Download from developer.rokid.com → place at phone-app/libs/rokid-cxr-m-sdk.aar
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
+    // Rokid CXR-M SDK — phone side (fetched from Rokid Maven)
+    implementation("com.rokid.cxr:client-m:1.0.1-20250812.080117-2")
 }
