@@ -239,7 +239,8 @@ async def _stream_to_glasses(
       error   → error chunk + chat_stream_end
       tool_call → brief [tool…] inline annotation on HUD
     """
-    form_data = {"message": text or " "}
+    # The chat endpoint expects the user text in the "content" form field.
+    form_data = {"content": text or " "}
     if image_b64:
         form_data["image_base64"] = image_b64
 
@@ -249,7 +250,7 @@ async def _stream_to_glasses(
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=10.0)) as client:
             async with client.stream(
                 "POST",
-                f"{_HARNESS_BASE}/api/chat/{conv_id}/messages",
+                f"{_HARNESS_BASE}/api/chat/conversations/{conv_id}/messages",
                 headers={"Authorization": f"Bearer {token}"},
                 data=form_data,
             ) as resp:
@@ -279,7 +280,8 @@ async def _stream_to_glasses(
                     ev_type = event.get("type")
 
                     if ev_type == "chunk":
-                        chunk = event.get("content", "")
+                        # The chat endpoint emits chunk text in the "text" field.
+                        chunk = event.get("text") or event.get("content", "")
                         if chunk:
                             full_content += chunk
                             await send_fn({
@@ -303,12 +305,14 @@ async def _stream_to_glasses(
 
                     elif ev_type == "done":
                         await send_fn({"type": "chat_stream_end", "id": msg_id})
-                        if full_content:
+                        # Prefer streamed text; fall back to the full content on the done event.
+                        final = full_content or event.get("content", "")
+                        if final:
                             await send_fn({
                                 "type": "chat_message",
                                 "id": msg_id,
                                 "role": "assistant",
-                                "content": full_content,
+                                "content": final,
                                 "timestamp": _now_ms(),
                             })
                         return

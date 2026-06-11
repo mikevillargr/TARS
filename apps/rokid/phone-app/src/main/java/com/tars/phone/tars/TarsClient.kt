@@ -125,7 +125,8 @@ class TarsClient {
             Log.w(TAG, "sendRaw: not connected, dropping: ${json.take(80)}")
             return
         }
-        socket.send(json)
+        val ok = socket.send(json)
+        Log.i(TAG, "→ TARS (queued=$ok): ${json.take(120)}")
     }
 
     private fun openWebSocket(config: TarsConfig) {
@@ -140,6 +141,7 @@ class TarsClient {
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                Log.i(TAG, "← TARS: ${text.take(160)}")
                 scope.launch {
                     // Emit to glasses bridge — GlassesConnectionManager subscribes here
                     _incomingMessages.emit(text)

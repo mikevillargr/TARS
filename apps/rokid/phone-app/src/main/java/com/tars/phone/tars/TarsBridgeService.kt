@@ -70,6 +70,10 @@ class TarsBridgeService : Service() {
         createNotificationChannel()
         startForeground(NOTIF_ID, buildNotification())
 
+        // After an app reinstall the in-process SDK state is fresh — re-attach to the
+        // already-paired glasses so forwards aren't dropped with btConnected=false.
+        glassesManager.tryAutoReconnect()
+
         bridgeGlassesToTars()
         bridgeTarsToGlasses()
     }
@@ -116,9 +120,10 @@ class TarsBridgeService : Service() {
     /** Glasses → TARS: relay input and session commands */
     private fun bridgeGlassesToTars() {
         scope.launch {
-            glassesManager.incomingMessages.collectLatest { json ->
+            glassesManager.incomingMessages.collect { json ->
                 try {
-                    val type = extractMessageType(json) ?: return@collectLatest
+                    val type = extractMessageType(json) ?: return@collect
+                    Log.i(TAG, "glasses→ [$type]")
                     when (type) {
                         "user_input" -> {
                             val input = UserInput.fromJson(json)
@@ -154,9 +159,12 @@ class TarsBridgeService : Service() {
     /** TARS → Glasses: relay all harness messages to the HUD */
     private fun bridgeTarsToGlasses() {
         scope.launch {
-            tarsClient.incomingMessages.collectLatest { json ->
+            // collect (NOT collectLatest) — every message must be forwarded; collectLatest
+            // would cancel an in-flight forward when the next stream chunk arrives.
+            tarsClient.incomingMessages.collect { json ->
                 try {
-                    val type = extractMessageType(json) ?: return@collectLatest
+                    val type = extractMessageType(json) ?: return@collect
+                    if (type == "ping") return@collect
 
                     // Wake glasses before delivering content
                     when (type) {
@@ -171,7 +179,8 @@ class TarsBridgeService : Service() {
                         }
                     }
 
-                    // Forward to glasses
+                    val glassesConnected = glassesManager.isConnected
+                    Log.i(TAG, "forward→glasses [$type] (btConnected=$glassesConnected)")
                     glassesManager.send(json)
 
                 } catch (e: Exception) {

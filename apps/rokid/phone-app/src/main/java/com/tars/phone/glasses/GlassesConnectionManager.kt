@@ -199,6 +199,30 @@ class GlassesConnectionManager private constructor(context: Context) {
         }
     }
 
+    /**
+     * Re-establish the glasses link from saved connection info if we're not already
+     * connected. Used by TarsBridgeService on startup — after an app reinstall the
+     * in-process SDK state is fresh (disconnected) even though the glasses are paired.
+     */
+    fun tryAutoReconnect() {
+        if (RokidSdkManager.isConnected) {
+            _connectionState.value = ConnectionState.Connected("Rokid Glasses")
+            return
+        }
+        if (!RokidSdkManager.isReady && !RokidSdkManager.initialize(appContext)) {
+            Log.w(TAG, "tryAutoReconnect: SDK init failed")
+            return
+        }
+        if (!RokidSdkManager.hasSavedConnectionInfo()) {
+            Log.i(TAG, "tryAutoReconnect: no saved glasses — connect once via Settings")
+            return
+        }
+        userInitiatedDisconnect = false
+        _connectionState.value = ConnectionState.Connecting
+        Log.i(TAG, "tryAutoReconnect: reconnecting to saved glasses")
+        RokidSdkManager.reconnectSaved()
+    }
+
     fun disconnect() {
         userInitiatedDisconnect = true
         connectTimeoutJob?.cancel()
