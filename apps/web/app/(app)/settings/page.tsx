@@ -158,8 +158,8 @@ export default function SettingsPage() {
   const [installDone, setInstallDone]       = useState(false)
 
   // Voice / TTS
-  const [ttsVoice, setTtsVoice]   = useState<string>(() => localStorage.getItem("tars-voice") ?? "af_bella")
-  const [ttsSpeed, setTtsSpeed]   = useState<number>(() => parseFloat(localStorage.getItem("tars-voice-speed") ?? "1.0"))
+  const [ttsVoice, setTtsVoice]   = useState<string>("af_bella")
+  const [ttsSpeed, setTtsSpeed]   = useState<number>(1.0)
   const [voiceList, setVoiceList] = useState<string[]>([])
   const [ttsSaved, setTtsSaved]   = useState(false)
   const [ttsPreviewState, setTtsPreviewState] = useState<"idle" | "loading" | "playing">("idle")
@@ -190,6 +190,12 @@ export default function SettingsPage() {
     apiGet<{ voices: string[] }>("/tts/voices")
       .then(d => setVoiceList(d.voices))
       .catch(() => {/* TTS optional — fail silently */})
+
+    // Read TTS prefs from localStorage (only available client-side)
+    const savedVoice = localStorage.getItem("tars-voice")
+    const savedSpeed = localStorage.getItem("tars-voice-speed")
+    if (savedVoice) setTtsVoice(savedVoice)
+    if (savedSpeed) setTtsSpeed(parseFloat(savedSpeed))
   }, [])
 
   // PWA detection
