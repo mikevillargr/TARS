@@ -1,5 +1,9 @@
 package com.tars.phone.ui.settings
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -33,6 +37,19 @@ fun SettingsScreen(
     val glassesState by glassesManager.connectionState.collectAsState()
     val discoveredDevices by glassesManager.discoveredDevices.collectAsState()
     val wifiP2PConnected by glassesManager.wifiP2PConnected.collectAsState()
+
+    val installPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.all { it }) apkInstaller.installGlassesApp()
+    }
+    fun requestInstallPermissionsAndInstall() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            installPermissionLauncher.launch(arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES))
+        } else {
+            apkInstaller.installGlassesApp()
+        }
+    }
 
     var host by remember { mutableStateOf(creds?.host ?: "") }
     var port by remember { mutableStateOf(creds?.port?.toString() ?: "8000") }
@@ -191,10 +208,11 @@ fun SettingsScreen(
                          installState is ApkInstaller.InstallState.Installing ||
                          installState is ApkInstaller.InstallState.InitializingWifiP2P ||
                          installState is ApkInstaller.InstallState.PreparingApk
+        val glassesConnected = glassesState is GlassesConnectionManager.ConnectionState.Connected
 
         Button(
-            onClick = { apkInstaller.installGlassesApp() },
-            enabled = !installing,
+            onClick = { requestInstallPermissionsAndInstall() },
+            enabled = !installing && glassesConnected,
             modifier = Modifier.fillMaxWidth(),
         ) {
             if (installing) {
