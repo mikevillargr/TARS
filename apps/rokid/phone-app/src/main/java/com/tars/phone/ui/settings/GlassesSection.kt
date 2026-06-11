@@ -1,5 +1,9 @@
 package com.tars.phone.ui.settings
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,10 +30,21 @@ fun GlassesSection(
     onRetryReconnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val btPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+    } else {
+        arrayOf(Manifest.permission.BLUETOOTH, Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.all { it }) onStartScanning()
+    }
+
     Column(modifier = modifier.fillMaxWidth()) {
         when (state) {
             is GlassesConnectionManager.ConnectionState.Disconnected ->
-                DisconnectedContent(onStartScanning)
+                DisconnectedContent { permissionLauncher.launch(btPermissions) }
             is GlassesConnectionManager.ConnectionState.Scanning ->
                 ScanningContent(discoveredDevices, onStopScanning, onConnectDevice)
             is GlassesConnectionManager.ConnectionState.Connecting ->
@@ -39,7 +54,7 @@ fun GlassesSection(
             is GlassesConnectionManager.ConnectionState.Connected ->
                 ConnectedContent(state.deviceName, wifiP2PConnected, onDisconnect)
             is GlassesConnectionManager.ConnectionState.Error ->
-                ErrorContent(state.message, onStartScanning)
+                ErrorContent(state.message) { permissionLauncher.launch(btPermissions) }
         }
     }
 }
