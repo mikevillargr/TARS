@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v5 (post-sessions 1–8, live on production)
+> Last updated: June 2026 — v2.5.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -335,7 +335,13 @@ Chat, Tasks, Meetings, Calendar, Second Brain, Agent Jobs, Artifacts, Cron Manag
 - Tool call chips inline (e.g. "Queried Gmail", "Created Task")
 - Context bar showing active Mnemon injections
 - Streaming/thinking indicator, focus mode
-- Input: text, attach, voice, send
+- Composer layout (mobile-first, Option A):
+  - Right side: mic when input is empty (replaces send — ChatGPT/WhatsApp pattern), send when text is present, stop-generating square when response is streaming
+  - Left side: `+` button collapses to utility tray (attach file, camera, voice mode toggle); green dot on `+` when voice mode is active
+  - TTS speaking state: floating amber "TARS is speaking" pill above composer with pulsing AudioLines icon and stop square — appears when `isPlaying || isSynthesizing`
+- Kokoro TTS: responses are streamed sentence-by-sentence via `/api/proxy/tts`; `useTtsPlayback` hook manages synthesis queue and audio playback
+- Voice input: `useVoiceInput` hook handles microphone recording, VAD silence detection, and transcription
+- Voice mode toggle: enables TTS for all responses in the current conversation (persisted per-session)
 
 **2. Tasks**
 - Kanban: Inbox / Todo / In Progress / Done / Snoozed
@@ -425,6 +431,7 @@ Prompt Jobs tab:
 - PWA install prompt
 - API key management
 - Cron default schedule config
+- Voice section: voice selector (alloy, echo, fable, onyx, nova, shimmer), speed slider (0.5×–2.0×), preview button; preferences persisted server-side via `/api/proxy/settings` so they work across browser and PWA contexts
 
 ---
 
@@ -461,7 +468,9 @@ tars/
 │   │   ├── context/
 │   │   │   └── NotificationContext.tsx  # global WS notification state
 │   │   ├── hooks/
-│   │   │   └── useNotifications.ts      # WebSocket notification hook
+│   │   │   ├── useNotifications.ts      # WebSocket notification hook
+│   │   │   ├── useTtsPlayback.ts        # Kokoro TTS synthesis queue + audio playback
+│   │   │   └── useVoiceInput.ts         # Microphone recording, VAD, transcription
 │   │   ├── lib/
 │   │   │   ├── api-client.ts
 │   │   │   ├── websocket.ts             # TarsWebSocket (localhost:3000→8000 in dev)
@@ -626,17 +635,18 @@ The production server has fail2ban. **Hammering repeated SSH connection attempts
 3. **Deployment commands** (run once, no loops):
 ```bash
 # Pull latest
-ssh root@72.60.234.180 "cd /opt/tars && git pull origin main"
+ssh tars "cd /opt/tars && git pull origin main"
 
 # Run migrations
-ssh root@72.60.234.180 "cd /opt/tars/apps/harness && source .venv/bin/activate && python3 -m alembic upgrade head"
+ssh tars "cd /opt/tars/apps/harness && source .venv/bin/activate && python3 -m alembic upgrade head"
 
 # Restart harness
-ssh root@72.60.234.180 "pm2 restart tars-harness"
+ssh tars "pm2 restart tars-harness"
 
 # Build and deploy web
-ssh root@72.60.234.180 "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && mkdir -p .next/standalone/apps/web/public && cp -r public/* .next/standalone/apps/web/public/ && pm2 restart tars-web"
+ssh tars "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && mkdir -p .next/standalone/apps/web/public && cp -r public/* .next/standalone/apps/web/public/ && pm2 restart tars-web"
 ```
+Note: `ssh tars` is an alias in `~/.ssh/config` on the dev machine. Never use the raw IP directly.
 
 ---
 
@@ -770,6 +780,10 @@ v0.6.0  Session 6 complete - agent jobs + artifacts
 v0.7.0  Session 7 complete - document ingest
 v0.8.0  Session 8 complete - calendar
 v1.0.0  Session 9 complete - polish, PWA, full production deploy
+...
+v2.4.6  (latest before this session) — Rokid glasses HUD + TTS improvements
+v2.5.0  Session 9 continued — Kokoro TTS voice settings, chat composer redesign (mic-on-right),
+        TTS stop bug fix (AbortController Set), amber speaking pill, header mic enlarged
 ```
 
 ---
@@ -810,7 +824,7 @@ v1.0.0  Session 9 complete - polish, PWA, full production deploy
 | 6 | Agent Jobs + Artifacts | Claude Code subprocess executor, supervised approval flow, Agent Jobs UI, Artifacts view + auto-save hook | ✅ Done |
 | 7 | Document ingest | PDF/PPTX/DOCX parsers, chunking pipeline, Second Brain full UI | ✅ Done |
 | 8 | Calendar | Google Calendar sync, Calendar view, event type color coding | ✅ Done |
-| 9 | Polish + Deploy | PWA manifest + share target, push notifications, Settings, deploy to KVM4 | 🔄 In Progress |
+| 9 | Polish + Deploy | PWA manifest + share target, push notifications, Settings (incl. Voice section), Kokoro TTS embedded, chat composer redesign (mic-on-right), deploy to KVM4 | 🔄 In Progress |
 | 10 | Rokid Glasses | `/api/rokid/ws` WebSocket bridge, Android phone-app (TarsClient), glasses HUD (Jetpack Compose on 480×640 green micro-LED) | 🔄 In Progress |
 
 ---
