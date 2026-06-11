@@ -89,7 +89,23 @@ fun MainScreen(
     authManager: TarsAuthManager,
     onOpenSettings: () -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val creds = remember { authManager.getSavedCredentials() }
+    var draft by remember { mutableStateOf("") }
+
+    fun startVoice() {
+        context.startForegroundService(
+            Intent(context, TarsBridgeService::class.java).setAction(TarsBridgeService.ACTION_START_VOICE)
+        )
+    }
+    fun sendText(text: String) {
+        if (text.isBlank()) return
+        context.startForegroundService(
+            Intent(context, TarsBridgeService::class.java)
+                .setAction(TarsBridgeService.ACTION_SEND_TEXT)
+                .putExtra(TarsBridgeService.EXTRA_TEXT, text.trim())
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -112,20 +128,51 @@ fun MainScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("TARS Bridge", style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
             if (creds != null) {
                 Text(
                     "Connected to ${creds.host}:${creds.port}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Running in background — put on your Rokid glasses.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
                 Text("Not configured — open Settings to connect.", style = MaterialTheme.typography.bodyMedium)
             }
+
+            Spacer(Modifier.height(32.dp))
+
+            // Talk to TARS — captures on the phone mic, streams the reply to the glasses HUD.
+            Button(
+                onClick = { startVoice() },
+                enabled = creds != null,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+            ) {
+                Text("🎤  Talk to TARS", style = MaterialTheme.typography.titleMedium)
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Text("— or type —", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    placeholder = { Text("Message TARS…") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { sendText(draft); draft = "" },
+                    enabled = creds != null && draft.isNotBlank(),
+                ) { Text("Send") }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            Text(
+                "Replies stream to the Rokid HUD. On the glasses, long-press the temple touchpad to talk hands-free.",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

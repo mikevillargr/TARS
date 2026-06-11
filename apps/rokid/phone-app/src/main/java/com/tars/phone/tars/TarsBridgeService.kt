@@ -29,9 +29,13 @@ class TarsBridgeService : Service() {
         private const val TAG = "TarsBridgeService"
         private const val NOTIF_CHANNEL = "tars_bridge"
         private const val NOTIF_ID = 1001
+        const val ACTION_START_VOICE = "com.tars.phone.START_VOICE"
+        const val ACTION_SEND_TEXT = "com.tars.phone.SEND_TEXT"
+        const val EXTRA_TEXT = "text"
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var tarsConnected = false
 
     lateinit var tarsClient: TarsClient
     lateinit var glassesManager: GlassesConnectionManager
@@ -71,11 +75,30 @@ class TarsBridgeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val credentials = authManager.getSavedCredentials()
-        if (credentials != null) {
-            tarsClient.connect(authManager.getTarsClientConfig(credentials))
-        } else {
-            Log.w(TAG, "No TARS credentials saved — open Settings to configure")
+        when (intent?.action) {
+            ACTION_START_VOICE -> {
+                Log.i(TAG, "ACTION_START_VOICE — starting phone mic capture")
+                voiceInput.start()
+                return START_STICKY
+            }
+            ACTION_SEND_TEXT -> {
+                val text = intent.getStringExtra(EXTRA_TEXT)?.trim().orEmpty()
+                if (text.isNotEmpty()) {
+                    Log.i(TAG, "ACTION_SEND_TEXT → TARS: $text")
+                    tarsClient.sendUserInput(text)
+                }
+                return START_STICKY
+            }
+        }
+        // Default start / restart: ensure the TARS connection is up (once).
+        if (!tarsConnected) {
+            val credentials = authManager.getSavedCredentials()
+            if (credentials != null) {
+                tarsClient.connect(authManager.getTarsClientConfig(credentials))
+                tarsConnected = true
+            } else {
+                Log.w(TAG, "No TARS credentials saved — open Settings to configure")
+            }
         }
         return START_STICKY
     }
