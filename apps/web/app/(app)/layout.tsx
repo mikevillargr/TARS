@@ -294,7 +294,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
             <button
               onClick={handleHeaderMicTap}
               disabled={voice.state === "transcribing"}
-              className="sm:hidden p-2 rounded-lg relative"
+              className="sm:hidden p-2.5 rounded-xl relative"
               style={{
                 color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-muted)",
                 opacity: voice.state === "transcribing" ? 0.5 : 1,
@@ -302,8 +302,8 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
               title={voice.state === "recording" ? "Tap to stop" : "New voice chat"}
             >
               {voice.state === "transcribing"
-                ? <Loader2 size={18} className="animate-spin" />
-                : <Mic size={18} className={voice.state === "recording" ? "animate-pulse" : ""} />
+                ? <Loader2 size={22} className="animate-spin" />
+                : <Mic size={22} className={voice.state === "recording" ? "animate-pulse" : ""} />
               }
               {voice.state === "recording" && (
                 <span className="absolute inset-0 rounded-lg animate-ping"

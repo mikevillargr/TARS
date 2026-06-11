@@ -10,7 +10,7 @@ import {
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
   Mail, Phone, PhoneCall, BriefcaseBusiness, MessageSquare, Search, UserPlus,
   Copy, Check, ZoomIn, Brain, FileSpreadsheet, FileCode,
-  Volume2, VolumeX,
+  Volume2, VolumeX, AudioLines,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiDelete, apiUpload } from "@/lib/api-client"
@@ -1410,6 +1410,7 @@ export default function ChatPage() {
   const confirm = useConfirm()
   // true when the current/last send came from the mic (triggers auto-TTS response)
   const lastInputWasVoiceRef = useRef(false)
+  const [showUtilities, setShowUtilities] = useState(false)
   // persistent voice-mode toggle — when on, TTS plays for all responses
   const [voiceMode, setVoiceMode] = useState<boolean>(() => {
     if (typeof window === "undefined") return false
@@ -1473,6 +1474,7 @@ export default function ChatPage() {
     const picked = Array.from(e.target.files ?? [])
     setAttachments(prev => [...prev, ...picked])
     e.target.value = ""
+    setShowUtilities(false)
   }
 
   // Cancel any in-flight fetch or poll on unmount
@@ -2360,6 +2362,26 @@ export default function ChatPage() {
               </div>
             )}
 
+            {/* TARS speaking — amber pill floats above the composer */}
+            {(tts.isPlaying || tts.isSynthesizing) && (
+              <div className="flex justify-end mb-1.5 px-1">
+                <button
+                  title="Stop speaking"
+                  onClick={() => tts.stop()}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-opacity hover:opacity-75"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--c-amber) 15%, transparent)",
+                    color: "var(--c-amber)",
+                    border: "1px solid color-mix(in srgb, var(--c-amber) 30%, transparent)",
+                  }}
+                >
+                  <AudioLines size={12} className="animate-pulse" />
+                  TARS is speaking
+                  <Square size={8} strokeWidth={0} fill="currentColor" />
+                </button>
+              </div>
+            )}
+
             {/* Floating composer pill */}
             <div
               className="rounded-2xl transition-shadow"
@@ -2390,81 +2412,79 @@ export default function ChatPage() {
                 disabled={busy}
               />
 
-              <div className="flex items-center justify-between px-2 pb-2">
-                <div className="flex gap-0.5" style={{ color: "var(--c-ink-faint)" }}>
-                  <label
-                    htmlFor="chat-attach-file"
-                    title="Attach file"
-                    className="p-1.5 rounded-lg transition-colors cursor-pointer"
-                    style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                  >
-                    <Paperclip size={16} />
-                  </label>
-                  <label
-                    htmlFor="chat-attach-camera"
-                    title="Take photo"
-                    className="p-1.5 rounded-lg transition-colors cursor-pointer"
-                    style={busy ? { opacity: 0.4, pointerEvents: "none" } : {}}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
-                  >
-                    <Camera size={16} />
-                  </label>
-                  <button
-                    title={voice.state === "recording" ? "Stop recording" : voice.state === "transcribing" ? "Transcribing…" : "Voice input"}
-                    onClick={handleMicClick}
-                    disabled={voice.state === "transcribing" || busy}
-                    className="p-1.5 rounded-lg transition-colors relative"
-                    style={{
-                      color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink-faint)",
-                      opacity: voice.state === "transcribing" || busy ? 0.4 : 1,
-                    }}
-                    onMouseEnter={e => { if (voice.state !== "recording") (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
-                  >
-                    {voice.state === "transcribing"
-                      ? <Loader2 size={16} className="animate-spin" />
-                      : <Mic size={16} className={voice.state === "recording" ? "animate-pulse" : ""} />
-                    }
-                    {/* Pulsing ring when recording */}
-                    {voice.state === "recording" && (
-                      <span className="absolute inset-0 rounded-lg animate-ping"
-                        style={{ backgroundColor: "var(--c-rose)", opacity: 0.2 }} />
-                    )}
-                  </button>
-
-                  {/* Voice mode toggle — when on, all responses are spoken */}
-                  <button
-                    title={voiceMode ? "Voice mode on — click to mute" : "Voice mode off — click to enable"}
-                    onClick={() => setVoiceMode(v => !v)}
-                    className="p-1.5 rounded-lg transition-colors"
-                    style={{
-                      color: voiceMode ? "var(--c-moss)" : "var(--c-ink-faint)",
-                      backgroundColor: voiceMode ? "var(--c-moss-soft)" : "transparent",
-                    }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.backgroundColor = voiceMode ? "var(--c-moss-soft)" : "var(--c-surface-2)"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = voiceMode ? "var(--c-moss-soft)" : "transparent"}
-                  >
-                    {voiceMode ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                  </button>
-
-                  {/* TTS stop button — visible while synthesizing or playing */}
-                  {(tts.isPlaying || tts.isSynthesizing) && (
+              <div className="flex items-center gap-2 px-2 pb-2">
+                {/* Left: + button (collapsed) or utility tray (expanded) */}
+                {showUtilities ? (
+                  <div className="flex items-center gap-0.5">
+                    <label
+                      htmlFor="chat-attach-file"
+                      title="Attach file"
+                      className="p-1.5 rounded-lg transition-colors cursor-pointer"
+                      style={busy ? { opacity: 0.4, pointerEvents: "none", color: "var(--c-ink-faint)" } : { color: "var(--c-ink-faint)" }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                    >
+                      <Paperclip size={16} />
+                    </label>
+                    <label
+                      htmlFor="chat-attach-camera"
+                      title="Take photo"
+                      className="p-1.5 rounded-lg transition-colors cursor-pointer"
+                      style={busy ? { opacity: 0.4, pointerEvents: "none", color: "var(--c-ink-faint)" } : { color: "var(--c-ink-faint)" }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--c-surface-2)")}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                    >
+                      <Camera size={16} />
+                    </label>
                     <button
-                      title="Stop speaking"
-                      onClick={() => tts.stop()}
-                      className="p-1.5 rounded-lg transition-colors relative"
-                      style={{ color: "var(--c-amber)" }}
+                      title={voiceMode ? "Voice mode on — click to mute" : "Voice mode off — click to enable"}
+                      onClick={() => setVoiceMode(v => !v)}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{
+                        color: voiceMode ? "var(--c-moss)" : "var(--c-ink-faint)",
+                        backgroundColor: voiceMode ? "var(--c-moss-soft)" : "transparent",
+                      }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.backgroundColor = voiceMode ? "var(--c-moss-soft)" : "var(--c-surface-2)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = voiceMode ? "var(--c-moss-soft)" : "transparent"}
+                    >
+                      {voiceMode ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                    </button>
+                    <button
+                      onClick={() => setShowUtilities(false)}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{ color: "var(--c-ink-faint)" }}
                       onMouseEnter={e => (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)"}
                       onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
                     >
-                      <Volume2 size={16} className="animate-pulse" />
+                      <X size={16} />
                     </button>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowUtilities(true)}
+                    disabled={busy}
+                    className="p-1.5 rounded-lg transition-colors relative"
+                    style={{
+                      color: voiceMode ? "var(--c-moss)" : "var(--c-ink-faint)",
+                      opacity: busy ? 0.4 : 1,
+                    }}
+                    title="Attach or toggle voice mode"
+                    onMouseEnter={e => { if (!busy) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"}
+                  >
+                    <Plus size={16} />
+                    {voiceMode && (
+                      <span
+                        className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full"
+                        style={{ backgroundColor: "var(--c-moss)" }}
+                      />
+                    )}
+                  </button>
+                )}
 
+                <div className="flex-1" />
+
+                {/* Right: stop generating | mic (empty/recording) | send (has text) */}
                 {busy ? (
                   <button
                     onClick={handleStop}
@@ -2475,6 +2495,31 @@ export default function ChatPage() {
                     onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                   >
                     <Square size={13} strokeWidth={0} fill="currentColor" />
+                  </button>
+                ) : voice.state === "recording" || (!inputValue.trim() && attachments.length === 0) ? (
+                  <button
+                    title={voice.state === "recording" ? "Stop recording" : voice.state === "transcribing" ? "Transcribing…" : "Voice input"}
+                    onClick={handleMicClick}
+                    disabled={voice.state === "transcribing"}
+                    className="p-2.5 rounded-xl transition-colors relative"
+                    style={{
+                      backgroundColor: voice.state === "recording"
+                        ? "color-mix(in srgb, var(--c-rose) 15%, transparent)"
+                        : "var(--c-surface-2)",
+                      color: voice.state === "recording" ? "var(--c-rose)" : "var(--c-ink)",
+                      opacity: voice.state === "transcribing" ? 0.5 : 1,
+                    }}
+                    onMouseEnter={e => { if (voice.state !== "recording") (e.currentTarget as HTMLElement).style.opacity = "0.75" }}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
+                  >
+                    {voice.state === "transcribing"
+                      ? <Loader2 size={22} className="animate-spin" />
+                      : <Mic size={22} className={voice.state === "recording" ? "animate-pulse" : ""} />
+                    }
+                    {voice.state === "recording" && (
+                      <span className="absolute inset-0 rounded-xl animate-ping"
+                        style={{ backgroundColor: "var(--c-rose)", opacity: 0.15 }} />
+                    )}
                   </button>
                 ) : (
                   <button

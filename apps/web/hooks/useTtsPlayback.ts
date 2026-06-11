@@ -36,13 +36,14 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
 
-  const bufferRef       = useRef("")
-  const audioQueueRef   = useRef<Blob[]>([])
-  const synthCountRef   = useRef(0)    // in-flight synthesis requests
-  const playingRef      = useRef(false) // true while an Audio element is active
-  const stopRef         = useRef(false)
-  const activeAudioRef  = useRef<HTMLAudioElement | null>(null)
-  const activeFetchRef  = useRef<AbortController | null>(null)
+  const bufferRef            = useRef("")
+  const audioQueueRef        = useRef<Blob[]>([])
+  const synthCountRef        = useRef(0)    // in-flight synthesis requests
+  const playingRef           = useRef(false) // true while an Audio element is active
+  const stopRef              = useRef(false)
+  const activeAudioRef       = useRef<HTMLAudioElement | null>(null)
+  // Track every in-flight AbortController so stop() can cancel all concurrent synth requests
+  const activeControllersRef = useRef<Set<AbortController>>(new Set())
 
   // Called whenever synthesis or playback finishes to see if we can clear state
   const checkDone = useCallback(() => {
@@ -84,13 +85,17 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
     setIsPlaying(true)
 
     const ctrl = new AbortController()
-    activeFetchRef.current = ctrl
+    activeControllersRef.current.add(ctrl)
+
+    // Read preferences at call time so changes in Settings take effect immediately
+    const voice = typeof window !== "undefined" ? (localStorage.getItem("tars-voice") ?? undefined) : undefined
+    const speed = typeof window !== "undefined" ? parseFloat(localStorage.getItem("tars-voice-speed") ?? "1.0") : 1.0
 
     try {
       const res = await fetch("/api/proxy/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, voice, speed }),
         signal: ctrl.signal,
       })
       if (!res.ok || stopRef.current) return
@@ -102,7 +107,7 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
     } catch {
       // silence — network error, 503 (Kokoro down), or intentional abort
     } finally {
-      activeFetchRef.current = null
+      activeControllersRef.current.delete(ctrl)
       synthCountRef.current = Math.max(0, synthCountRef.current - 1)
       if (synthCountRef.current === 0) setIsSynthesizing(false)
       checkDone()
@@ -129,8 +134,10 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
 
   const stop = useCallback(() => {
     stopRef.current = true
-    activeFetchRef.current?.abort()
-    activeFetchRef.current = null
+    // Abort every in-flight synthesis request — previously only the last one was tracked,
+    // causing earlier sentences to continue playing after stop was clicked
+    for (const ctrl of activeControllersRef.current) ctrl.abort()
+    activeControllersRef.current.clear()
     if (activeAudioRef.current) {
       activeAudioRef.current.pause()
       activeAudioRef.current = null
