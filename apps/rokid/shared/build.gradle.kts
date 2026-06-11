@@ -4,17 +4,21 @@ plugins {
 }
 
 android {
-    namespace = "com.tars.shared"
-    compileSdk = 35
+    namespace = "com.clawsses.shared"
+    compileSdk = 34
 
-    defaultConfig { minSdk = 28 }
+    defaultConfig {
+        minSdk = 28
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 }
 
 dependencies {

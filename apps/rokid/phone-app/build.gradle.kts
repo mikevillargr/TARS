@@ -6,33 +6,42 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Load Rokid credentials from local.properties (needed for SN verification)
 val localProperties = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) load(f.inputStream())
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        load(localPropertiesFile.inputStream())
+    }
 }
 
 android {
-    namespace = "com.tars.phone"
-    compileSdk = 35
+    namespace = "com.clawsses.phone"
+    compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.tars.phone"
-        minSdk = 28
-        targetSdk = 35
+        applicationId = "com.clawsses.phone"
+        minSdk = 28  // Required by CXR-M SDK
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
 
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Rokid credentials for SN verification during Bluetooth connection
+        // clientSecret = AES key used to decrypt snEncryptContent (from .lc file)
+        // accessKey = rokidAccount identifier
         buildConfigField("String", "ROKID_CLIENT_SECRET", "\"${localProperties.getProperty("rokid.clientSecret", "")}\"")
         buildConfigField("String", "ROKID_ACCESS_KEY", "\"${localProperties.getProperty("rokid.accessKey", "")}\"")
     }
 
-    buildFeatures {
-        compose = true
-        buildConfig = true
-    }
-
     buildTypes {
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
     }
 
     compileOptions {
@@ -40,49 +49,83 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildFeatures {
+        compose = true
+        viewBinding = true
+        buildConfig = true
+    }
 
     packaging {
         resources {
-            excludes += listOf("META-INF/LICENSE.md", "META-INF/LICENSE-notice.md", "META-INF/NOTICE.md")
+            excludes += listOf(
+                "META-INF/LICENSE.md",
+                "META-INF/LICENSE-notice.md",
+                "META-INF/NOTICE.md"
+            )
         }
     }
 }
 
-// Bundle glasses APK into phone-app assets so the phone can push it to glasses over WiFi
+// Bundle glasses-app APK into phone-app assets so it can be installed via SDK/ADB
+// Builds glasses-app debug APK and copies it as "glasses-app-release.apk" in assets
 val bundleGlassesApk by tasks.registering(Copy::class) {
     dependsOn(":glasses-app:assembleDebug")
     from("${project(":glasses-app").buildDir}/outputs/apk/debug/glasses-app-debug.apk")
     into("src/main/assets")
     rename { "glasses-app-release.apk" }
 }
-tasks.named("preBuild") { dependsOn(bundleGlassesApk) }
+
+tasks.named("preBuild") {
+    dependsOn(bundleGlassesApk)
+}
 
 dependencies {
     implementation(project(":shared"))
 
-    // Rokid CXR-M SDK — phone side
+    // Rokid CXR-M SDK (Phone side)
     implementation("com.rokid.cxr:client-m:1.0.8")
 
-    // Compose
+    // Android Core
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
     implementation("androidx.activity:activity-compose:1.8.2")
+
+    // Jetpack Compose
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // Networking
+    // Networking for WebSocket/SSH
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 
-    // ADB-over-WiFi for glasses APK installation
+    // Speech Recognition
+    implementation("androidx.core:core-ktx:1.12.0")
+
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // ADB over WiFi for APK installation on glasses
     implementation("dev.mobile:dadb:1.2.10")
 
-    // Coroutines + Lifecycle
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
-    implementation("androidx.core:core-ktx:1.12.0")
+    // Ed25519 signing (Android's bundled BouncyCastle doesn't include EdDSA)
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
