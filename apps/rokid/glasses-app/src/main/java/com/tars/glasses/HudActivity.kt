@@ -1,7 +1,9 @@
 package com.tars.glasses
 
 import android.os.Bundle
+import android.util.Log
 import android.view.MotionEvent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.tars.glasses.input.GestureHandler
@@ -26,8 +28,19 @@ class HudActivity : ComponentActivity() {
     private var selectedMenuIndex = -1
     private var fontSize = 13
 
+    // Debug: visible on the HUD so we can confirm messages arrive without glasses logs.
+    private var rxCount = 0
+    private var lastRx = "—"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Keep the micro-LED on and show over lock/standby so streamed content is visible.
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+        )
 
         // Set debugMode = true when running on emulator, false on hardware
         val debugMode = android.os.Build.FINGERPRINT.contains("generic")
@@ -65,7 +78,10 @@ class HudActivity : ComponentActivity() {
 
     private fun handlePhoneMessage(json: String) {
         val type = extractMessageType(json) ?: return
+        Log.i("HudActivity", "rx [$type]: ${json.take(120)}")
         runOnUiThread {
+            rxCount++
+            lastRx = type
             when (type) {
                 "chat_message" -> {
                     val msg = ChatMessage.fromJson(json)
@@ -154,7 +170,7 @@ class HudActivity : ComponentActivity() {
                     messages = messages.toList(),
                     streamingContent = streamingContent,
                     isThinking = isThinking,
-                    connectionStatus = connectionStatus,
+                    connectionStatus = "$connectionStatus · rx:$rxCount $lastRx",
                     hudSize = hudSize,
                     selectedMenuIndex = selectedMenuIndex,
                     fontSize = fontSize,
