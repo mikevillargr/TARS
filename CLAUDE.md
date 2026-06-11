@@ -468,47 +468,55 @@ tars/
 │   │   │   └── push-notifications.ts
 │   │   └── public/manifest.json  # PWA + share target
 │   │
-│   └── harness/                # FastAPI
-│       ├── api/routes/         # one file per component (+ rokid.py = Rokid WS bridge)
-│       ├── core/
-│       │   ├── router.py       # tier classification
-│       │   ├── context_assembler.py
-│       │   ├── model_client.py # Ollama + Anthropic unified
-│       │   └── streaming.py
-│       ├── memory/
-│       │   ├── mnemon.py
-│       │   ├── second_brain.py
-│       │   ├── embeddings.py
-│       │   └── chunker.py
-│       ├── connectors/
-│       │   ├── base.py         # Connector interface
-│       │   ├── gmail.py
-│       │   ├── google_calendar.py
-│       │   ├── fireflies.py
-│       │   └── registry.py
-│       ├── agents/
-│       │   ├── executor.py     # Claude Code subprocess
-│       │   ├── job_manager.py
-│       │   └── approval.py
-│       ├── jobs/
-│       │   ├── scheduler.py        # connector cron loops + 60s prompt cron checker
-│       │   ├── prompt_cron.py      # prompt cron executor (always Tier 3)
-│       │   ├── meeting_processor.py
-│       │   └── people_sync.py
-│       ├── ingest/
-│       │   ├── pipeline.py
-│       │   ├── parsers/        # pdf, pptx, docx, url
-│       │   └── enricher.py
-│       └── db/
-│           ├── models.py       # SQLAlchemy
-│           ├── migrations/     # Alembic
-│           └── session.py
-│
-├── apps/
-│   └── rokid/                  # Android — Rokid glasses HUD
-│       ├── shared/             # Protocol.kt — phone↔glasses wire format
-│       ├── phone-app/          # Android companion: TarsClient (JWT WS) + Rokid CXR SDK bridge
-│       └── glasses-app/        # HUD app: Jetpack Compose on 480x640 green micro-LED
+│   ├── harness/                # FastAPI
+│   │   ├── api/routes/         # one file per component
+│   │   │   └── rokid.py        # WebSocket bridge: /api/rokid/ws — SSE→glasses protocol
+│   │   ├── core/
+│   │   │   ├── router.py       # tier classification
+│   │   │   ├── context_assembler.py
+│   │   │   ├── model_client.py # Ollama + Anthropic unified
+│   │   │   └── streaming.py
+│   │   ├── memory/
+│   │   │   ├── mnemon.py
+│   │   │   ├── second_brain.py
+│   │   │   ├── embeddings.py
+│   │   │   └── chunker.py
+│   │   ├── connectors/
+│   │   │   ├── base.py         # Connector interface
+│   │   │   ├── gmail.py
+│   │   │   ├── google_calendar.py
+│   │   │   ├── fireflies.py
+│   │   │   └── registry.py
+│   │   ├── agents/
+│   │   │   ├── executor.py     # Claude Code subprocess
+│   │   │   ├── job_manager.py
+│   │   │   └── approval.py
+│   │   ├── jobs/
+│   │   │   ├── scheduler.py        # connector cron loops + 60s prompt cron checker
+│   │   │   ├── prompt_cron.py      # prompt cron executor (always Tier 3)
+│   │   │   ├── meeting_processor.py
+│   │   │   └── people_sync.py
+│   │   ├── ingest/
+│   │   │   ├── pipeline.py
+│   │   │   ├── parsers/        # pdf, pptx, docx, url
+│   │   │   └── enricher.py
+│   │   └── db/
+│   │       ├── models.py       # SQLAlchemy
+│   │       ├── migrations/     # Alembic
+│   │       └── session.py
+│   │
+│   └── rokid/                  # Android — Rokid glasses HUD (Kotlin, separate Gradle project)
+│       ├── shared/             # Protocol.kt — phone↔glasses JSON wire format
+│       ├── phone-app/          # Android companion app
+│       │   ├── tars/           # TarsClient (JWT WS), TarsAuthManager, TarsBridgeService
+│       │   └── glasses/        # RokidSdkManager (CXR-M), GlassesConnectionManager, WakeSignalManager
+│       ├── glasses-app/        # HUD app running on Rokid AR Lite
+│       │   ├── ui/HudScreen.kt # Jetpack Compose — 480×640 green micro-LED
+│       │   ├── service/        # PhoneConnectionService (CXR-S bridge)
+│       │   └── input/          # GestureHandler (temple touchpad)
+│       ├── settings.gradle.kts # Includes Rokid Maven repo with credentials from local.properties
+│       └── local.properties    # NOT committed — rokid.clientSecret, rokid.accessKey,
+│                               # rokid.maven.username, rokid.maven.password
 │
 ├── packages/
 │   ├── types/                  # shared TypeScript types
@@ -823,6 +831,73 @@ Pending corrections to apply in MP:
 - Calendar: new view added (see component spec above)
 - Artifacts: new view added (see component spec above)
 - Review remaining views: EmailDigest, CronManager, Connectors, MemoryBrowser, Settings
+
+---
+
+## 16. Rokid Glasses Integration
+
+Stream TARS responses token-by-token onto Rokid AR Lite glasses.
+
+### Architecture
+
+```
+TARS Harness ──── ws /api/rokid/ws?token=<jwt> ──── Android Phone ──── Bluetooth (CXR-M SDK) ──── Rokid Glasses
+    │                                                      │                                            │
+rokid.py                                         TarsBridgeService                              HudScreen.kt
+Proxies chat SSE                                 TarsClient (JWT WS)                        480×640 green HUD
+→ glasses wire format                            GlassesConnectionManager                   Jetpack Compose
+                                                 WakeSignalManager
+```
+
+### Key files
+
+| File | Purpose |
+|---|---|
+| `apps/harness/api/routes/rokid.py` | FastAPI WebSocket — proxies TARS SSE to glasses protocol |
+| `apps/rokid/phone-app/tars/TarsClient.kt` | JWT WebSocket client connecting to TARS harness |
+| `apps/rokid/phone-app/tars/TarsAuthManager.kt` | Login → JWT, persists to SharedPreferences |
+| `apps/rokid/phone-app/tars/TarsBridgeService.kt` | Foreground service bridging TARS ↔ glasses |
+| `apps/rokid/phone-app/glasses/RokidSdkManager.kt` | Rokid CXR-M SDK (Bluetooth to glasses) |
+| `apps/rokid/phone-app/glasses/WakeSignalManager.kt` | Wakes display before streaming content |
+| `apps/rokid/glasses-app/ui/HudScreen.kt` | Composable HUD — green monochrome, JetBrains Mono |
+| `apps/rokid/glasses-app/service/PhoneConnectionService.kt` | CXR-S SDK (receives from phone) |
+| `apps/rokid/glasses-app/input/GestureHandler.kt` | Temple touchpad gesture recognition |
+| `apps/rokid/shared/Protocol.kt` | JSON wire format shared between phone↔glasses |
+
+### Phone↔glasses protocol (wire-compatible with clawsses)
+
+Phone → Glasses: `connection_update`, `session_list`, `chat_message`, `agent_thinking`, `chat_stream`, `chat_stream_end`, `wake_signal`
+Glasses → Phone: `user_input`, `list_sessions`, `switch_session`, `create_session`, `wake_ack`, `start_voice`
+
+### SDK dependencies
+
+Both pulled from `https://maven.rokid.com/repository/maven-public/` (requires Rokid developer account).
+
+| SDK | Module | Side |
+|---|---|---|
+| CXR-M | `com.rokid.cxr:client-m:1.0.8` | Phone app |
+| CXR-S | `com.rokid.cxr:cxr-service-bridge:1.0` | Glasses app |
+
+### local.properties (apps/rokid/ — never committed)
+
+```properties
+rokid.clientSecret=your-client-secret      # from developer.rokid.com app
+rokid.accessKey=your-access-key            # from developer.rokid.com app
+rokid.maven.username=your@email.com        # Rokid account login
+rokid.maven.password=yourpassword          # Rokid account login
+```
+
+### Debug / emulator mode
+
+No hardware or SDK credentials needed. Set `debugMode = true` in HudActivity (auto-detected via `Build.FINGERPRINT.contains("generic")`). Phone emulator starts WebSocket server on port 8081; glasses emulator connects to `10.0.2.2:8081`. Full streaming flow works end-to-end.
+
+### Status
+
+- Harness WebSocket endpoint: done
+- Android phone-app (TarsClient, bridge service, settings UI): done
+- Android glasses-app (HUD, gestures, CXR-S bridge): done
+- Rokid developer account + app creation: pending (required for BT pairing + Maven)
+- Physical hardware testing: pending
 
 ---
 

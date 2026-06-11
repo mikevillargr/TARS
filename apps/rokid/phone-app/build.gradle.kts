@@ -1,9 +1,12 @@
+import java.util.Properties
+
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val localProperties = java.util.Properties().apply {
+val localProperties = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) load(f.inputStream())
 }
@@ -14,28 +17,22 @@ android {
 
     defaultConfig {
         applicationId = "com.tars.phone"
-        minSdk = 28   // Rokid CXR-M SDK requirement
+        minSdk = 28
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "ROKID_CLIENT_SECRET", "\"${localProperties["rokid.clientSecret"] ?: ""}\"")
-        buildConfigField("String", "ROKID_ACCESS_KEY", "\"${localProperties["rokid.accessKey"] ?: ""}\"")
+        buildConfigField("String", "ROKID_CLIENT_SECRET", "\"${localProperties.getProperty("rokid.clientSecret", "")}\"")
+        buildConfigField("String", "ROKID_ACCESS_KEY", "\"${localProperties.getProperty("rokid.accessKey", "")}\"")
     }
 
     buildFeatures {
-        buildConfig = true
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
+        buildConfig = true
     }
 
     buildTypes {
-        release {
-            isMinifyEnabled = false
-        }
+        release { isMinifyEnabled = false }
     }
 
     compileOptions {
@@ -43,33 +40,46 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlinOptions { jvmTarget = "17" }
+
+    packaging {
+        resources {
+            excludes += listOf("META-INF/LICENSE.md", "META-INF/LICENSE-notice.md", "META-INF/NOTICE.md")
+        }
     }
 }
+
+// Bundle glasses APK into phone-app assets so the phone can push it to glasses over WiFi
+val bundleGlassesApk by tasks.registering(Copy::class) {
+    dependsOn(":glasses-app:assembleDebug")
+    from("${project(":glasses-app").buildDir}/outputs/apk/debug/glasses-app-debug.apk")
+    into("src/main/assets")
+    rename { "glasses-app-release.apk" }
+}
+tasks.named("preBuild") { dependsOn(bundleGlassesApk) }
 
 dependencies {
     implementation(project(":shared"))
 
+    // Rokid CXR-M SDK — phone side
+    implementation("com.rokid.cxr:client-m:1.0.8")
+
     // Compose
-    implementation(platform(libs.compose.bom))
-    implementation(libs.compose.ui)
-    implementation(libs.compose.material3)
-    implementation(libs.compose.ui.tooling.preview)
-    implementation(libs.activity.compose)
-    debugImplementation(libs.compose.ui.tooling)
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Networking
-    implementation(libs.okhttp)
-    implementation(libs.gson)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.code.gson:gson:2.10.1")
 
-    // Coroutines
-    implementation(libs.kotlinx.coroutines.android)
-
-    // Lifecycle
-    implementation(libs.lifecycle.runtime.ktx)
-    implementation(libs.lifecycle.viewmodel.compose)
-
-    // Rokid CXR-M SDK — phone side (fetched from Rokid Maven)
-    implementation("com.rokid.cxr:client-m:1.0.1-20250812.080117-2")
+    // Coroutines + Lifecycle
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
+    implementation("androidx.core:core-ktx:1.12.0")
 }

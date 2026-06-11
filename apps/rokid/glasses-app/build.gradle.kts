@@ -1,6 +1,7 @@
 plugins {
-    alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -9,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "com.tars.glasses"
-        minSdk = 28   // Rokid CXR-S SDK requirement
+        minSdk = 28
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
@@ -17,16 +18,11 @@ android {
 
     buildFeatures {
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
+        buildConfig = true
     }
 
     buildTypes {
-        release {
-            isMinifyEnabled = false
-        }
+        release { isMinifyEnabled = false }
     }
 
     compileOptions {
@@ -34,27 +30,34 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlinOptions { jvmTarget = "17" }
+
+    lint {
+        // PhoneConnectionService is a helper class, not a bound Android Service
+        disable += "Instantiatable"
     }
 }
 
 dependencies {
     implementation(project(":shared"))
 
-    // Compose — targeting 480x640 monochrome micro-LED HUD
-    implementation(platform(libs.compose.bom))
-    implementation(libs.compose.ui)
-    implementation(libs.compose.material3)
-    implementation(libs.compose.ui.tooling.preview)
-    implementation(libs.activity.compose)
-    debugImplementation(libs.compose.ui.tooling)
+    // Rokid CXR-S SDK — glasses side
+    implementation("com.rokid.cxr:cxr-service-bridge:1.0")
 
-    implementation(libs.okhttp)
-    implementation(libs.gson)
-    implementation(libs.kotlinx.coroutines.android)
-    implementation(libs.lifecycle.runtime.ktx)
+    // Compose
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // Rokid CXR-S SDK — glasses side (fetched from Rokid Maven)
-    implementation("com.rokid.cxr:cxr-service-bridge:1.0-20250519.061355-45")
+    // Coroutines + Lifecycle
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    implementation("androidx.core:core-ktx:1.12.0")
+
+    // WebSocket (debug emulator only)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.code.gson:gson:2.10.1")
 }
