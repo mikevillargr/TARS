@@ -275,6 +275,7 @@ fun MainScreen() {
             // TARS sends the final assistant chat_message AFTER chat_stream_end,
             // so this (not stream-end) is the reliable trigger for Kokoro TTS.
             if (msg.role == "assistant" && msg.content.isNotBlank()) {
+                android.util.Log.i("MainScreen", "TTS trigger: assistant message (${msg.content.length} chars), enabled=${ttsSettingsManager.isEnabled.value}")
                 ttsPlaybackManager.onMessageComplete(msg.content)
             }
         }

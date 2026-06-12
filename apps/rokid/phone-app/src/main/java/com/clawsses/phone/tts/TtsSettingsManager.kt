@@ -23,7 +23,8 @@ class TtsSettingsManager(context: Context) {
     private val _selectedVoiceName = MutableStateFlow(prefs.getString(KEY_VOICE_NAME, null))
     val selectedVoiceName: StateFlow<String?> = _selectedVoiceName.asStateFlow()
 
-    private val _isEnabled = MutableStateFlow(prefs.getBoolean(KEY_ENABLED, false))
+    // Default ON — Kokoro speaking TARS replies is core to the glasses experience.
+    private val _isEnabled = MutableStateFlow(prefs.getBoolean(KEY_ENABLED, true))
     val isEnabled: StateFlow<Boolean> = _isEnabled.asStateFlow()
 
     private val _speed = MutableStateFlow(prefs.getFloat(KEY_SPEED, DEFAULT_SPEED))

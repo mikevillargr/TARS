@@ -950,28 +950,21 @@ class HudActivity : ComponentActivity() {
     }
 
     /**
-     * Append voice text to the staging area and show it.
-     * Also clears voice UI state to prevent race condition with voice state collector.
+     * Auto-submit recognized voice text straight to TARS — no staging/confirm step.
+     * (Originally this staged the text with a Send action awaiting a tap; for a
+     * voice-first assistant the extra gesture is friction, so we submit directly.
+     * Any staged photos are attached by submitInput as usual.)
      */
     private fun stageVoiceText(text: String) {
-        Log.d(GlassesApp.TAG, "Staging voice text: ${text.take(100)}")
-        // Use atomic update to avoid race with concurrent state changes
+        Log.d(GlassesApp.TAG, "Auto-sending voice text: ${text.take(100)}")
         hudState.update { current ->
-            val newStagingText = if (current.stagingText.isEmpty()) {
-                text
-            } else {
-                "${current.stagingText} $text"
-            }
             current.copy(
-                stagingText = newStagingText,
-                showInputStaging = true,
-                focusedArea = ChatFocusArea.INPUT,
-                inputActionIndex = current.photoThumbnails.size + 1,  // Default to Send
-                scrollTrigger = current.scrollTrigger + 1,
+                inputText = text,
                 voiceState = VoiceInputState.Idle,
                 voiceText = ""
             )
         }
+        submitInput()
     }
 
     private fun handleVoiceResult(result: GlassesVoiceHandler.VoiceResult) {
