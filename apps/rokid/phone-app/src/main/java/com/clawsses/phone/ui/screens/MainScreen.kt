@@ -214,6 +214,11 @@ fun MainScreen() {
                     voiceName = ttsSettingsManager.selectedVoiceName.value
                 )
                 glassesManager.sendRawMessage(ttsStateMsg.toJson())
+                // Bring the HUD to the foreground — the glasses' system UI takes
+                // over after sleep/folding, leaving the HUD backgrounded.
+                if (!glassesManager.debugModeEnabled.value) {
+                    RokidSdkManager.openApp("com.clawsses.glasses", "com.clawsses.glasses.HudActivity")
+                }
             }
             is GlassesConnectionManager.ConnectionState.Disconnected -> {
                 // Only stop the service if we're truly disconnected (no saved pairing to reconnect to).

@@ -306,6 +306,22 @@ private fun ConnectedContent(
 
     Spacer(Modifier.height(12.dp))
 
+    // Recovery: bring the HUD back to the foreground if the glasses' system UI
+    // took over (sleep, folding, app switch). Pure Bluetooth — instant.
+    Button(
+        onClick = {
+            com.clawsses.phone.glasses.RokidSdkManager.openApp(
+                "com.clawsses.glasses",
+                "com.clawsses.glasses.HudActivity"
+            )
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text("Launch HUD on Glasses")
+    }
+
+    Spacer(Modifier.height(12.dp))
+
     // Connection details
     Row(
         modifier = Modifier.fillMaxWidth(),

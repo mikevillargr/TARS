@@ -368,7 +368,12 @@ class ApkInstaller(private val context: Context) {
         // control channel (no WiFi needed), after letting the package manager
         // on the glasses settle. Also clean up the legacy TARS HUD if present.
         _installState.value = InstallState.Installing("Launching HUD on glasses…")
-        delay(1500)
+        // Clean up the legacy TARS HUD FIRST — uninstalling after launch shoves
+        // the freshly opened HUD into the background on the glasses.
+        withContext(Dispatchers.Main) {
+            RokidSdkManager.uninstallApp(OLD_GLASSES_PACKAGE)
+        }
+        delay(2500) // let install + uninstall settle on the glasses
         var opened = false
         RokidSdkManager.onApkOpenSucceed = { opened = true }
         withContext(Dispatchers.Main) {
@@ -377,10 +382,6 @@ class ApkInstaller(private val context: Context) {
         var openWait = 0
         while (!opened && openWait < 10_000) {
             delay(500); openWait += 500
-        }
-        // Clean up the legacy TARS HUD afterwards (best-effort, non-blocking).
-        withContext(Dispatchers.Main) {
-            RokidSdkManager.uninstallApp(OLD_GLASSES_PACKAGE)
         }
 
         _installState.value = InstallState.Success(
