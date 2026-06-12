@@ -601,10 +601,13 @@ object RokidSdkManager {
         }
 
         return try {
-            var truncated = if (command.length > 500) command.take(500) + "..." else command
-            caps.write(truncated)
+            // Send the FULL message — the CXR SDK fragments large payloads natively
+            // (nativeSend/sendFragment). The previous 500-char truncation corrupted
+            // any larger JSON (session_list, photo_result thumbnails), which is why
+            // those silently failed while small chat chunks worked.
+            caps.write(command)
             cxrApi?.sendCustomCmd("terminal", caps)
-            Log.d(TAG, "Sent to glasses: ${command.take(50)}...")
+            Log.d(TAG, "Sent to glasses (${command.length} chars): ${command.take(50)}...")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Error sending message to glasses", e)
