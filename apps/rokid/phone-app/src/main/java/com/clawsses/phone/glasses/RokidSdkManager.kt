@@ -1042,12 +1042,19 @@ object RokidSdkManager {
     }
 
     /**
-     * Turn the display off NOW (brightness 0) without touching lastKnownBrightness,
-     * so the next wake (new stream/message) restores the user's level.
+     * Turn the display fully OFF now via the SDK's Sys_Screen_Off command (not
+     * just brightness 0 — that leaves the panel powered/glowing). lastKnownBrightness
+     * is preserved so the next wake (new stream/message, or wakeGlassesScreen)
+     * restores the user's level.
      */
     fun forceDisplayOff(): ValueUtil.CxrStatus? {
-        Log.i(TAG, "forceDisplayOff (wake restores brightness $lastKnownBrightness)")
-        return cxrApi?.setGlassBrightness(0)
+        Log.i(TAG, "forceDisplayOff via notifyGlassScreenOff (wake restores brightness $lastKnownBrightness)")
+        return try {
+            cxrApi?.notifyGlassScreenOff()
+        } catch (e: Exception) {
+            Log.e(TAG, "notifyGlassScreenOff failed, falling back to brightness 0", e)
+            cxrApi?.setGlassBrightness(0)
+        }
     }
 
     fun wakeGlassesScreen(): Boolean {

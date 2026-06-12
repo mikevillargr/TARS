@@ -244,6 +244,8 @@ data class ChatHudState(
     // Brightness adjust mode (swipe to change, tap to dismiss)
     val showBrightnessAdjust: Boolean = false,
     val brightnessValue: Int = 9,    // 1..15
+    // Display turned off via gesture — the next interaction wakes it
+    val displayOff: Boolean = false,
     // Pending interactive card awaiting Confirm/Dismiss (email_draft etc.)
     val pendingCardTitle: String? = null,
     val pendingCardBody: String? = null,
@@ -820,6 +822,13 @@ private fun TopBar(
                 text = "\u25CF",
                 color = if (isConnected) HudColors.green else HudColors.error,
                 fontSize = (statusFontSize.value + 2).sp
+            )
+            // Build tag \u2014 confirms which glasses build is actually running
+            Text(
+                text = com.clawsses.glasses.GlassesApp.BUILD_TAG,
+                color = HudColors.dimText,
+                fontSize = (statusFontSize.value - 1).coerceAtLeast(7f).sp,
+                fontFamily = fontFamily
             )
             if (isRecording) {
                 // Blinking REC indicator while glasses video recording is active

@@ -443,6 +443,14 @@ class HudActivity : ComponentActivity() {
 
         Log.d(GlassesApp.TAG, "Gesture: $gesture, Area: ${current.focusedArea}")
 
+        // Display is off — any interaction wakes it (and is otherwise consumed)
+        if (current.displayOff) {
+            Log.d(GlassesApp.TAG, "Interaction while display off → wake")
+            phoneConnection.sendToPhone("""{"type":"wake_display"}""")
+            hudState.value = current.copy(displayOff = false)
+            return
+        }
+
         // If overlays are open, handle gestures for them
         if (current.showBrightnessAdjust) {
             handleBrightnessGesture(gesture)
@@ -722,7 +730,9 @@ class HudActivity : ComponentActivity() {
         val current = hudState.value
         when (gesture) {
             Gesture.SWIPE_FORWARD, Gesture.SWIPE_BACKWARD -> {
-                val delta = if (gesture == Gesture.SWIPE_FORWARD) 2 else -2
+                // User-facing: forward swipe brightens, backward dims.
+                // (Flipped from the initial mapping, which felt reversed.)
+                val delta = if (gesture == Gesture.SWIPE_FORWARD) -2 else 2
                 val newValue = (current.brightnessValue + delta).coerceIn(1, 15)
                 if (newValue != current.brightnessValue) {
                     brightnessLevel = newValue
@@ -1698,6 +1708,9 @@ class HudActivity : ComponentActivity() {
                     val bufferedCount = msg.optInt("bufferedCount", 0)
                     Log.i(GlassesApp.TAG, "Wake signal received: reason=$reason, buffered=$bufferedCount")
 
+                    // New content woke the display — clear any manual-off flag
+                    hudState.update { it.copy(displayOff = false) }
+
                     // Show wake notification briefly
                     showWakeNotification(reason)
 
@@ -1722,6 +1735,12 @@ class HudActivity : ComponentActivity() {
                     val recording = msg.optBoolean("recording", false)
                     hudState.update { current -> current.copy(isRecording = recording) }
                     Log.d(GlassesApp.TAG, "Video recording: $recording")
+                }
+
+                "display_state" -> {
+                    val on = msg.optBoolean("on", true)
+                    hudState.update { current -> current.copy(displayOff = !on) }
+                    Log.d(GlassesApp.TAG, "Display state: on=$on")
                 }
 
                 "card" -> {

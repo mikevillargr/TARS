@@ -135,7 +135,14 @@ object MediaSync {
         return staging.walkTopDown().firstOrNull { it.isFile && it.name == baseName }
     }
 
-    /** Copy a synced file into MediaStore (Pictures/TARS or Movies/TARS). */
+    /**
+     * Copy a synced media file into the camera roll under DCIM/TARS.
+     *
+     * DCIM is the only tree Samsung Gallery (and most galleries) always scan into
+     * the main timeline — Movies/Pictures subfolders often hide in a Files app.
+     * Non-media sidecar files (e.g. .txt metadata the SDK ships alongside videos)
+     * are skipped.
+     */
     private fun publishToGallery(context: Context, file: File): Boolean {
         if (!file.exists() || file.length() == 0L) {
             Log.w(TAG, "publishToGallery: missing/empty ${file.name}")
@@ -143,22 +150,30 @@ object MediaSync {
         }
         val name = file.name.lowercase()
         val isVideo = name.endsWith(".mp4") || name.endsWith(".mov") || name.endsWith(".3gp")
-        val (collection, dir, mime) = if (isVideo) {
-            Triple(
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                Environment.DIRECTORY_MOVIES + "/TARS",
-                "video/mp4",
-            )
-        } else {
-            Triple(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                Environment.DIRECTORY_PICTURES + "/TARS",
-                if (name.endsWith(".webp")) "image/webp" else "image/jpeg",
-            )
+        val isImage = name.endsWith(".jpg") || name.endsWith(".jpeg") ||
+                      name.endsWith(".png") || name.endsWith(".webp")
+        if (!isVideo && !isImage) {
+            Log.d(TAG, "Skipping non-media ${file.name}")
+            file.delete()
+            return false
         }
+
+        // Clean up the SDK's prefixed name (savePath is used as a filename prefix,
+        // so files arrive like "glasses_mediavid-20260611-...mp4").
+        val cleanName = file.name.removePrefix("glasses_media").ifEmpty { file.name }
+            .let { if (it.startsWith("vid") || it.startsWith("pic")) "tars-$it" else it }
+
+        val (collection, mime) = if (isVideo) {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI to "video/mp4"
+        } else {
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI to
+                if (name.endsWith(".webp")) "image/webp"
+                else if (name.endsWith(".png")) "image/png" else "image/jpeg"
+        }
+        val dir = Environment.DIRECTORY_DCIM + "/TARS"
         return try {
             val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+                put(MediaStore.MediaColumns.DISPLAY_NAME, cleanName)
                 put(MediaStore.MediaColumns.MIME_TYPE, mime)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, dir)
             }
@@ -167,7 +182,7 @@ object MediaSync {
                 file.inputStream().use { it.copyTo(out) }
             }
             file.delete() // staging copy no longer needed
-            Log.i(TAG, "Published ${file.name} → $dir")
+            Log.i(TAG, "Published $cleanName → $dir")
             true
         } catch (e: Exception) {
             Log.e(TAG, "publishToGallery failed for ${file.name}", e)

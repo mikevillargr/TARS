@@ -499,6 +499,7 @@ fun MainScreen() {
                         android.util.Log.i("MainScreen", "Glasses requested display off")
                         ttsPlaybackManager.stop()  // sleeping should also silence
                         RokidSdkManager.forceDisplayOff()
+                        glassesManager.sendRawMessage("""{"type":"display_state","on":false}""")
                     }
                     "main_action" -> {
                         // Main-view double-tap on the glasses: stop TTS if speaking,
@@ -509,7 +510,13 @@ fun MainScreen() {
                         } else {
                             android.util.Log.i("MainScreen", "main_action → display off")
                             RokidSdkManager.forceDisplayOff()
+                            glassesManager.sendRawMessage("""{"type":"display_state","on":false}""")
                         }
+                    }
+                    "wake_display" -> {
+                        android.util.Log.i("MainScreen", "Glasses requested wake")
+                        RokidSdkManager.wakeGlassesScreen()
+                        glassesManager.sendRawMessage("""{"type":"display_state","on":true}""")
                     }
                     "video_record" -> {
                         val action = json.optString("action", "")
