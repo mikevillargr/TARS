@@ -167,6 +167,11 @@ fun MainScreen() {
 
         // Try to auto-reconnect to previously paired glasses on startup
         glassesManager.tryAutoReconnectOnStartup()
+
+        // Auto-connect to TARS on startup when credentials are saved
+        if (openClawToken.isNotEmpty()) {
+            connectToTars()
+        }
     }
 
     // Fetch session list when OpenClaw connects
@@ -993,12 +998,21 @@ fun ConnectionStatusBar(
             horizontalArrangement = Arrangement.End,
             modifier = Modifier.weight(1f)
         ) {
-            if (openClawState is OpenClawClient.ConnectionState.Disconnected) {
+            if (openClawState is OpenClawClient.ConnectionState.Disconnected ||
+                openClawState is OpenClawClient.ConnectionState.Error
+            ) {
+                if (openClawState is OpenClawClient.ConnectionState.Error) {
+                    Text(
+                        text = (openClawState as OpenClawClient.ConnectionState.Error).message.take(28),
+                        fontSize = 11.sp,
+                        color = Color.Red
+                    )
+                }
                 TextButton(
                     onClick = onConnectOpenClaw,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Text("Connect", fontSize = 12.sp)
+                    Text(if (openClawState is OpenClawClient.ConnectionState.Error) "Retry" else "Connect", fontSize = 12.sp)
                 }
             } else {
                 Text(

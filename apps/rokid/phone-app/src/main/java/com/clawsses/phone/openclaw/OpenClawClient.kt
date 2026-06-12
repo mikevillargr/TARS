@@ -126,6 +126,7 @@ class OpenClawClient(
      */
     suspend fun login(host: String, port: Int, username: String, password: String): String? =
         withContext(Dispatchers.IO) {
+            _connectionState.value = ConnectionState.Authenticating
             val secure = inferTls(port)
             val url = "${schemeFor(secure, ws = false)}://$host:$port/api/auth/login"
             val payload = JsonObject().apply {
