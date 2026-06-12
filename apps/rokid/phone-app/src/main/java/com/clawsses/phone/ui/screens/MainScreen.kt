@@ -497,7 +497,19 @@ fun MainScreen() {
                     }
                     "display_off" -> {
                         android.util.Log.i("MainScreen", "Glasses requested display off")
+                        ttsPlaybackManager.stop()  // sleeping should also silence
                         RokidSdkManager.forceDisplayOff()
+                    }
+                    "main_action" -> {
+                        // Main-view double-tap on the glasses: stop TTS if speaking,
+                        // otherwise turn the display off.
+                        if (ttsPlaybackManager.isSpeaking) {
+                            android.util.Log.i("MainScreen", "main_action → stop TTS")
+                            ttsPlaybackManager.stop()
+                        } else {
+                            android.util.Log.i("MainScreen", "main_action → display off")
+                            RokidSdkManager.forceDisplayOff()
+                        }
                     }
                     "video_record" -> {
                         val action = json.optString("action", "")

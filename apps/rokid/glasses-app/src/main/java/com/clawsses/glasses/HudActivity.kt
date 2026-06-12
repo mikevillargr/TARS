@@ -444,6 +444,10 @@ class HudActivity : ComponentActivity() {
         Log.d(GlassesApp.TAG, "Gesture: $gesture, Area: ${current.focusedArea}")
 
         // If overlays are open, handle gestures for them
+        if (current.showBrightnessAdjust) {
+            handleBrightnessGesture(gesture)
+            return
+        }
         if (current.pendingPhoto != null) {
             handlePhotoActionGesture(gesture)
             return
@@ -489,8 +493,9 @@ class HudActivity : ComponentActivity() {
             Gesture.SWIPE_FORWARD -> scrollUp()
             Gesture.SWIPE_BACKWARD -> {
                 val current = hudState.value
-                val maxScroll = maxOf(0, current.messages.size - 1)
-                if (current.scrollPosition >= maxScroll && current.isScrolledToEnd) {
+                // isScrolledToEnd is pixel-accurate (LazyListState) — the index-based
+                // scrollPosition is stale under viewport paging.
+                if (current.isScrolledToEnd) {
                     // Push through: CONTENT → INPUT (if staging or photos) → MENU
                     if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {
                         // Default focus on last visible item in combined row
@@ -509,8 +514,6 @@ class HudActivity : ComponentActivity() {
                             menuBarIndex = 0
                         )
                     }
-                } else if (current.scrollPosition >= maxScroll) {
-                    scrollToBottom()
                 } else {
                     scrollDown()
                 }
@@ -534,10 +537,11 @@ class HudActivity : ComponentActivity() {
                         inputActionIndex = lastIndex
                     )
                 } else {
-                    hudState.value = current.copy(
-                        focusedArea = ChatFocusArea.MENU,
-                        menuBarIndex = 0
-                    )
+                    // Main-view double-tap: the phone decides — stops TTS if it's
+                    // speaking, otherwise turns the display off. (Menu is reached
+                    // by swiping down past the bottom of the chat.)
+                    Log.d(GlassesApp.TAG, "Main double-tap → main_action")
+                    phoneConnection.sendToPhone("""{"type":"main_action"}""")
                 }
             }
             Gesture.LONG_PRESS -> startVoice()
@@ -709,6 +713,32 @@ class HudActivity : ComponentActivity() {
     private fun handleExitConfirmGesture(gesture: Gesture) {
         // Exit path removed — clear the overlay if it ever appears.
         hudState.value = hudState.value.copy(showExitConfirm = false)
+    }
+
+    // ============== Brightness Adjust Gestures ==============
+
+    /** Swipe forward = brighter, backward = dimmer (applied live); tap closes. */
+    private fun handleBrightnessGesture(gesture: Gesture) {
+        val current = hudState.value
+        when (gesture) {
+            Gesture.SWIPE_FORWARD, Gesture.SWIPE_BACKWARD -> {
+                val delta = if (gesture == Gesture.SWIPE_FORWARD) 2 else -2
+                val newValue = (current.brightnessValue + delta).coerceIn(1, 15)
+                if (newValue != current.brightnessValue) {
+                    brightnessLevel = newValue
+                    hudState.value = current.copy(brightnessValue = newValue)
+                    phoneConnection.sendToPhone("""{"type":"set_brightness","value":$newValue}""")
+                    Log.d(GlassesApp.TAG, "Brightness → $newValue")
+                }
+            }
+            Gesture.TAP, Gesture.DOUBLE_TAP -> {
+                hudState.value = current.copy(
+                    showBrightnessAdjust = false,
+                    focusedArea = ChatFocusArea.CONTENT
+                )
+            }
+            Gesture.LONG_PRESS -> { /* ignore */ }
+        }
     }
 
     // ============== Photo Action Gestures (post-capture overlay) ==============
@@ -1027,14 +1057,12 @@ class HudActivity : ComponentActivity() {
                 )
             }
             MoreMenuItem.BRIGHTNESS -> {
-                // Cycle Low(4) → Med(9) → High(14); phone applies via CXR SDK
-                brightnessLevel = when {
-                    brightnessLevel < 6 -> 9
-                    brightnessLevel < 12 -> 14
-                    else -> 4
-                }
-                phoneConnection.sendToPhone("""{"type":"set_brightness","value":$brightnessLevel}""")
-                Log.d(GlassesApp.TAG, "Brightness cycle → $brightnessLevel")
+                // Open the swipe-to-adjust brightness overlay
+                hudState.value = current.copy(
+                    showMoreMenu = false,
+                    showBrightnessAdjust = true,
+                    brightnessValue = brightnessLevel
+                )
             }
             MoreMenuItem.VOICE -> {
                 // Toggle TTS and notify phone

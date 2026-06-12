@@ -32,6 +32,9 @@ class TtsPlaybackManager(
     private var speakJob: Job? = null
     private var mediaPlayer: MediaPlayer? = null
 
+    /** True while a reply is being synthesized/spoken (queue active). */
+    val isSpeaking: Boolean get() = speakJob?.isActive == true
+
     /**
      * Speak the given text via Kokoro on the TARS server.
      * Stops any current playback first.

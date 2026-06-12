@@ -241,6 +241,9 @@ data class ChatHudState(
     // Freshly captured photo awaiting Analyze/Keep/Discard (in-glasses preview)
     val pendingPhoto: Bitmap? = null,
     val photoActionIndex: Int = 0,   // 0 = Analyze, 1 = Keep, 2 = Discard
+    // Brightness adjust mode (swipe to change, tap to dismiss)
+    val showBrightnessAdjust: Boolean = false,
+    val brightnessValue: Int = 9,    // 1..15
     // Pending interactive card awaiting Confirm/Dismiss (email_draft etc.)
     val pendingCardTitle: String? = null,
     val pendingCardBody: String? = null,
@@ -579,6 +582,81 @@ fun HudScreen(
                     fontFamily = monoFontFamily
                 )
             }
+        }
+
+        // Brightness adjust (swipe up/down, tap to dismiss)
+        AnimatedVisibility(
+            visible = state.showBrightnessAdjust,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            BrightnessAdjustOverlay(
+                value = state.brightnessValue,
+                fontFamily = monoFontFamily
+            )
+        }
+    }
+}
+
+/** Swipe-to-adjust brightness: 15-segment bar, applied live via the phone. */
+@Composable
+private fun BrightnessAdjustOverlay(
+    value: Int,  // 1..15
+    fontFamily: FontFamily,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.9f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = "☀ BRIGHTNESS",
+                color = HudColors.green,
+                fontSize = 14.sp,
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                repeat(15) { i ->
+                    Box(
+                        modifier = Modifier
+                            .width(10.dp)
+                            .height(22.dp)
+                            .background(
+                                if (i < value) HudColors.green else HudColors.green.copy(alpha = 0.15f),
+                                RoundedCornerShape(2.dp)
+                            )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "$value / 15",
+                color = HudColors.primaryText,
+                fontSize = 12.sp,
+                fontFamily = fontFamily
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = "Swipe to adjust · Tap when done",
+                color = HudColors.dimText,
+                fontSize = 9.sp,
+                fontFamily = fontFamily,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
