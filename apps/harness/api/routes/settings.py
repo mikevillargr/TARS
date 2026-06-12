@@ -162,7 +162,7 @@ _PROVIDER_DEFAULTS = {
     ("anthropic", "tier2"):  "claude-sonnet-4-6",
     ("anthropic", "tier3"):  "claude-sonnet-4-6",
     ("anthropic", "vision"): "claude-sonnet-4-6",
-    ("zai",       "tier1"):  "glm-4.5-air",
+    ("zai",       "tier1"):  "glm-4.5-flash",   # free
     ("zai",       "tier2"):  "glm-4.7",
     ("zai",       "tier3"):  "glm-5.1",
     ("zai",       "vision"): "glm-5v-turbo",  # OpenAI endpoint, now supported

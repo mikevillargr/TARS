@@ -1154,11 +1154,28 @@ def _tier2_cold_model(messages: list) -> Optional[str]:
 
 
 _ZAI_MODELS = {
-    "glm-4.5-air": "glm-4.5-air",
-    "glm-4.5":     "glm-4.5",
-    "glm-4.6":     "glm-4.6",
-    "glm-4.7":     "glm-4.7",
-    "glm-5.1":     "glm-5.1",
+    # Free text models (Anthropic-compatible endpoint)
+    "glm-4.5-flash":       "glm-4.5-flash",
+    "glm-4.7-flash":       "glm-4.7-flash",
+    # Budget / standard text (Anthropic-compatible endpoint)
+    "glm-4-32b-0414-128k": "glm-4-32b-0414-128k",
+    "glm-4.5-airx":        "glm-4.5-airx",
+    "glm-4.7-flashx":      "glm-4.7-flashx",
+    "glm-4.5-air":         "glm-4.5-air",
+    "glm-4.5":             "glm-4.5",
+    "glm-4.5-x":           "glm-4.5-x",
+    "glm-4.6":             "glm-4.6",
+    "glm-4.7":             "glm-4.7",
+    # Frontier text (OpenAI-compatible endpoint)
+    "glm-5":               "glm-5",
+    "glm-5-turbo":         "glm-5-turbo",
+    "glm-5.1":             "glm-5.1",
+    # Vision — GLM-4.x via Anthropic endpoint, GLM-5.x via OpenAI endpoint
+    "glm-4.6v-flash":      "glm-4.6v-flash",    # free
+    "glm-4.6v-flashx":     "glm-4.6v-flashx",
+    "glm-4.5v":            "glm-4.5v",
+    "glm-4.6v":            "glm-4.6v",
+    "glm-5v-turbo":        "glm-5v-turbo",       # OpenAI endpoint
 }
 
 _PROVIDER_DEFAULTS = {
@@ -1167,13 +1184,10 @@ _PROVIDER_DEFAULTS = {
     ("anthropic", "tier2"): None,              # None → use existing RunPod/fallback logic
     ("anthropic", "tier3"): "claude-sonnet-4-6",
     ("anthropic", "vision"): "claude-sonnet-4-6",
-    ("zai",       "tier1"): "glm-4.5-air",
+    ("zai",       "tier1"): "glm-4.5-flash",   # free
     ("zai",       "tier2"): "glm-4.7",
     ("zai",       "tier3"): "glm-5.1",
-    # glm-5v-turbo is Z.ai's vision model but requires their OpenAI endpoint (/api/paas/v4/),
-    # not the Anthropic-compatible endpoint (/api/anthropic) that this client uses.
-    # Vision stays on Anthropic until the OpenAI path is wired up.
-    ("zai",       "vision"): "glm-4.5-air",
+    ("zai",       "vision"): "glm-5v-turbo",   # OpenAI endpoint
 }
 
 
