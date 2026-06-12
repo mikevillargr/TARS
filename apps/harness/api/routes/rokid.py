@@ -119,6 +119,7 @@ async def rokid_ws(
                 for c in convs
             ],
             "currentSessionKey": current_id,
+            "unreadSessionKeys": [],
         }
 
     # ── Initial handshake ─────────────────────────────────────────────────────

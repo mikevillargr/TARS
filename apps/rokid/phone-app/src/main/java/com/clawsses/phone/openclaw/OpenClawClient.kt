@@ -224,35 +224,39 @@ class OpenClawClient(
 
     // ── Incoming frames (TARS → app) ──────────────────────────────────────────
 
+    @Suppress("USELESS_ELVIS") // Gson bypasses Kotlin null-safety: "non-null" fields CAN be null
     private fun route(json: String) {
-        val type = try {
-            JsonParser.parseString(json).asJsonObject.get("type")?.asString
-        } catch (e: Exception) { null } ?: return
+        // Never let a malformed frame kill the WebSocket — log and move on.
+        try {
+            val type = JsonParser.parseString(json).asJsonObject.get("type")?.asString ?: return
 
-        when (type) {
-            "connection_update" -> {
-                val u = ConnectionUpdate.fromJson(json)
-                u.sessionId?.let { _currentSessionKey.value = it }
-                _connectionState.value = ConnectionState.Connected
-                onConnectionUpdate?.invoke(u)
+            when (type) {
+                "connection_update" -> {
+                    val u = ConnectionUpdate.fromJson(json)
+                    u.sessionId?.let { _currentSessionKey.value = it }
+                    _connectionState.value = ConnectionState.Connected
+                    onConnectionUpdate?.invoke(u)
+                }
+                "session_list" -> {
+                    val s = SessionListUpdate.fromJson(json)
+                    _sessionList.value = s.sessions ?: emptyList()
+                    _unreadSessions.value = (s.unreadSessionKeys ?: emptyList()).toSet()
+                    s.currentSessionKey?.let { _currentSessionKey.value = it }
+                    onSessionList?.invoke(s)
+                }
+                "chat_message" -> {
+                    val m = ChatMessage.fromJson(json)
+                    _chatMessages.value = _chatMessages.value + m
+                    onChatMessage?.invoke(m)
+                }
+                "agent_thinking" -> onAgentThinking?.invoke(AgentThinking.fromJson(json))
+                "chat_stream" -> onChatStream?.invoke(ChatStream.fromJson(json))
+                "chat_stream_end" -> onChatStreamEnd?.invoke(ChatStreamEnd.fromJson(json))
+                "ping" -> { /* keepalive */ }
+                else -> Log.d(TAG, "unhandled frame: $type")
             }
-            "session_list" -> {
-                val s = SessionListUpdate.fromJson(json)
-                _sessionList.value = s.sessions
-                _unreadSessions.value = s.unreadSessionKeys.toSet()
-                s.currentSessionKey?.let { _currentSessionKey.value = it }
-                onSessionList?.invoke(s)
-            }
-            "chat_message" -> {
-                val m = ChatMessage.fromJson(json)
-                _chatMessages.value = _chatMessages.value + m
-                onChatMessage?.invoke(m)
-            }
-            "agent_thinking" -> onAgentThinking?.invoke(AgentThinking.fromJson(json))
-            "chat_stream" -> onChatStream?.invoke(ChatStream.fromJson(json))
-            "chat_stream_end" -> onChatStreamEnd?.invoke(ChatStreamEnd.fromJson(json))
-            "ping" -> { /* keepalive */ }
-            else -> Log.d(TAG, "unhandled frame: $type")
+        } catch (e: Exception) {
+            Log.e(TAG, "frame handling error (${json.take(80)}): ${e.message}")
         }
     }
 
