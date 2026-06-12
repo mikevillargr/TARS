@@ -67,10 +67,12 @@ object MediaSync {
                 val started = RokidSdkManager.startMediaSync(
                     savePath = staging.absolutePath,
                     onFile = { name ->
-                        val f = File(staging, name)
-                        if (publishToGallery(appCtx, f)) {
+                        val f = resolveSyncedFile(staging, name)
+                        if (f != null && publishToGallery(appCtx, f)) {
                             count++
                             onStatus("Synced $count file${if (count == 1) "" else "s"}…")
+                        } else {
+                            Log.w(TAG, "onFile couldn't resolve '$name' yet (will sweep at end)")
                         }
                     },
                     onFinished = { finished = true },
@@ -84,6 +86,17 @@ object MediaSync {
                 var waited = 0
                 while (!finished && !failed && waited < 300_000) {
                     delay(500); waited += 500
+                }
+
+                // Sweep: publish anything left in staging that per-file callbacks
+                // missed (the SDK may save into subdirs or report odd names).
+                delay(1000)
+                staging.walkTopDown().filter { it.isFile }.forEach { f ->
+                    Log.i(TAG, "Sweep found: ${f.relativeTo(staging)} (${f.length()} bytes)")
+                    if (publishToGallery(appCtx, f)) {
+                        count++
+                        onStatus("Synced $count file${if (count == 1) "" else "s"}…")
+                    }
                 }
 
                 // 3. Tear down P2P (Bluetooth control channel stays up)
@@ -107,6 +120,19 @@ object MediaSync {
                 isSyncing = false
             }
         }
+    }
+
+    /**
+     * The SDK reports synced files inconsistently — bare name, relative path,
+     * or absolute path, sometimes under media-type subdirs. Resolve defensively.
+     */
+    private fun resolveSyncedFile(staging: File, name: String): File? {
+        val direct = File(name)
+        if (direct.isAbsolute && direct.exists()) return direct
+        val inStaging = File(staging, name)
+        if (inStaging.exists()) return inStaging
+        val baseName = name.substringAfterLast('/')
+        return staging.walkTopDown().firstOrNull { it.isFile && it.name == baseName }
     }
 
     /** Copy a synced file into MediaStore (Pictures/TARS or Movies/TARS). */

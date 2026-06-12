@@ -238,6 +238,9 @@ data class ChatHudState(
     val pageScrollTrigger: Int = 0,
     // Video recording indicator (red dot in top bar)
     val isRecording: Boolean = false,
+    // Freshly captured photo awaiting Analyze/Keep/Discard (in-glasses preview)
+    val pendingPhoto: Bitmap? = null,
+    val photoActionIndex: Int = 0,   // 0 = Analyze, 1 = Keep, 2 = Discard
     // Pending interactive card awaiting Confirm/Dismiss (email_draft etc.)
     val pendingCardTitle: String? = null,
     val pendingCardBody: String? = null,
@@ -560,6 +563,102 @@ fun HudScreen(
                 body = state.pendingCardBody ?: "",
                 selectedIndex = state.cardActionIndex,
                 fontFamily = monoFontFamily
+            )
+        }
+
+        // Post-capture photo preview with Analyze/Keep/Discard
+        AnimatedVisibility(
+            visible = state.pendingPhoto != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            state.pendingPhoto?.let { bmp ->
+                PhotoActionOverlay(
+                    photo = bmp,
+                    selectedIndex = state.photoActionIndex,
+                    fontFamily = monoFontFamily
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Shown immediately after a capture: photo preview + Analyze / Keep / Discard.
+ * Swipe selects, tap executes, double-tap keeps & dismisses.
+ */
+@Composable
+private fun PhotoActionOverlay(
+    photo: Bitmap,
+    selectedIndex: Int,  // 0 = Analyze, 1 = Keep, 2 = Discard
+    fontFamily: FontFamily,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.95f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "PHOTO CAPTURED",
+                color = HudColors.green,
+                fontSize = 12.sp,
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Image(
+                bitmap = photo.asImageBitmap(),
+                contentDescription = "Captured photo",
+                modifier = Modifier
+                    .fillMaxWidth(0.7f)
+                    .border(1.dp, HudColors.green, RoundedCornerShape(4.dp))
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf("⌕ Analyze", "＋ Keep", "✕ Discard").forEachIndexed { i, label ->
+                    val selected = selectedIndex == i
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (selected) HudColors.green.copy(alpha = 0.3f) else Color.Transparent,
+                                RoundedCornerShape(4.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (selected) HudColors.green else HudColors.dimText,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (selected) HudColors.green else HudColors.dimText,
+                            fontSize = 11.sp,
+                            fontFamily = fontFamily,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Swipe to choose · Tap to run",
+                color = HudColors.dimText,
+                fontSize = 9.sp,
+                fontFamily = fontFamily,
+                textAlign = TextAlign.Center
             )
         }
     }

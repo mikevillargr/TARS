@@ -1,7 +1,6 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
-
 package com.clawsses.phone.ui.settings
 
+import android.media.MediaPlayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,24 +13,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.RadioButtonChecked
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -41,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,57 +43,87 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.clawsses.phone.tts.ElevenLabsClient
 import com.clawsses.phone.tts.TtsSettingsManager
 import com.clawsses.phone.tts.Voice
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 
+/**
+ * Voice settings for Kokoro TTS running on the TARS server — mirrors the
+ * TARS web app's Voice section: voice picker, speed (0.5×–2.0×), preview.
+ * No API key — auth rides the TARS login.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TtsSection(
     ttsSettingsManager: TtsSettingsManager,
     elevenLabsClient: ElevenLabsClient,
     modifier: Modifier = Modifier,
 ) {
-    val apiKey by ttsSettingsManager.apiKey.collectAsState()
+    val context = LocalContext.current
     val selectedVoiceId by ttsSettingsManager.selectedVoiceId.collectAsState()
     val selectedVoiceName by ttsSettingsManager.selectedVoiceName.collectAsState()
     val isEnabled by ttsSettingsManager.isEnabled.collectAsState()
     val speed by ttsSettingsManager.speed.collectAsState()
 
-    var localApiKey by remember(apiKey) { mutableStateOf(apiKey) }
-    var showApiKey by remember { mutableStateOf(false) }
     var showVoiceSheet by remember { mutableStateOf(false) }
-
     var voices by remember { mutableStateOf<List<Voice>>(emptyList()) }
     var isLoadingVoices by remember { mutableStateOf(false) }
     var voicesError by remember { mutableStateOf<String?>(null) }
+    var fetchTrigger by remember { mutableIntStateOf(0) }
+    var isPreviewing by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
-    val hasApiKey = localApiKey.isNotBlank()
-    val hasVoice = selectedVoiceId != null
-    val isConfigured = hasApiKey && hasVoice && isEnabled
+    // Fetch Kokoro voices from the TARS server (retry via fetchTrigger)
+    LaunchedEffect(fetchTrigger) {
+        isLoadingVoices = true
+        voicesError = null
+        elevenLabsClient.getVoices("")
+            .onSuccess { fetched ->
+                voices = fetched
+                isLoadingVoices = false
+            }
+            .onFailure { error ->
+                voicesError = error.message
+                isLoadingVoices = false
+            }
+    }
 
-    // Fetch voices when API key changes and is valid
-    LaunchedEffect(apiKey) {
-        if (apiKey.isNotBlank()) {
-            isLoadingVoices = true
-            voicesError = null
-            elevenLabsClient.getVoices(apiKey)
-                .onSuccess { fetchedVoices ->
-                    voices = fetchedVoices
-                    isLoadingVoices = false
+    fun playPreview() {
+        if (isPreviewing) return
+        isPreviewing = true
+        scope.launch(Dispatchers.IO) {
+            try {
+                val result = elevenLabsClient.synthesize(
+                    "", selectedVoiceId,
+                    "Hello Mike, TARS here. This is how I sound.",
+                    speed.toDouble()
+                )
+                result.onSuccess { input ->
+                    val f = File.createTempFile("tts_preview_", ".wav", context.cacheDir)
+                    FileOutputStream(f).use { out -> input.use { it.copyTo(out) } }
+                    withContext(Dispatchers.Main) {
+                        MediaPlayer().apply {
+                            setDataSource(f.absolutePath)
+                            setOnCompletionListener { release(); f.delete(); isPreviewing = false }
+                            setOnErrorListener { _, _, _ -> release(); f.delete(); isPreviewing = false; true }
+                            prepare()
+                            start()
+                        }
+                    }
+                }.onFailure {
+                    isPreviewing = false
                 }
-                .onFailure { error ->
-                    voicesError = error.message
-                    isLoadingVoices = false
-                }
-        } else {
-            voices = emptyList()
+            } catch (e: Exception) {
+                isPreviewing = false
+            }
         }
     }
 
@@ -113,7 +138,7 @@ fun TtsSection(
                     .fillMaxWidth()
                     .padding(16.dp),
             ) {
-                // Header row with icon and enable switch
+                // Header: icon, status, enable switch
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -121,327 +146,151 @@ fun TtsSection(
                     Icon(
                         Icons.Default.RecordVoiceOver,
                         contentDescription = null,
-                        tint = if (isConfigured) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (isEnabled) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp),
                     )
                     Spacer(Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
+                        Text("Voice Responses", style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "Voice Responses",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                        Text(
-                            when {
-                                !hasApiKey -> "API key required"
-                                !hasVoice -> "Select a voice"
-                                isEnabled -> "Active - ${selectedVoiceName ?: "Unknown"}"
-                                else -> "Disabled"
-                            },
+                            if (isEnabled) "Kokoro · ${selectedVoiceName ?: "TARS default voice"}"
+                            else "Disabled",
                             style = MaterialTheme.typography.bodySmall,
-                            color = when {
-                                isConfigured -> Color(0xFF4CAF50)
-                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                            color = if (isEnabled) Color(0xFF4CAF50)
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     Switch(
                         checked = isEnabled,
-                        onCheckedChange = { enabled ->
-                            ttsSettingsManager.setEnabled(enabled)
-                        },
-                        enabled = hasApiKey && hasVoice,
+                        onCheckedChange = { ttsSettingsManager.setEnabled(it) },
                     )
                 }
 
                 Spacer(Modifier.height(16.dp))
 
-                // API Key input field
-                OutlinedTextField(
-                    value = localApiKey,
-                    onValueChange = { newKey ->
-                        localApiKey = newKey
-                        ttsSettingsManager.setApiKey(newKey)
-                    },
+                // Voice picker row
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    tonalElevation = 2.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = !isLoadingVoices) {
+                            if (voices.isEmpty()) fetchTrigger++ else showVoiceSheet = true
+                        },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Default.GraphicEq,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            when {
+                                isLoadingVoices -> "Loading voices…"
+                                voicesError != null -> "Couldn't load voices — tap to retry"
+                                selectedVoiceName != null -> selectedVoiceName!!
+                                else -> "Voice: TARS default (tap to choose)"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                            color = if (voicesError != null) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (isLoadingVoices) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        } else if (voicesError != null) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Retry", modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Speed slider (0.5× – 2.0×, like the TARS web app)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Speed", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "%.2f×".format(speed),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Slider(
+                    value = speed,
+                    onValueChange = { ttsSettingsManager.setSpeed(it) },
+                    valueRange = TtsSettingsManager.MIN_SPEED..TtsSettingsManager.MAX_SPEED,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("ElevenLabs API Key") },
-                    placeholder = { Text("xi-...") },
-                    singleLine = true,
-                    visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    trailingIcon = {
-                        Row {
-                            IconButton(onClick = { showApiKey = !showApiKey }) {
-                                Icon(
-                                    if (showApiKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (showApiKey) "Hide API key" else "Show API key",
-                                )
-                            }
-                            if (localApiKey.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    localApiKey = ""
-                                    ttsSettingsManager.setApiKey("")
-                                }) {
-                                    Icon(
-                                        Icons.Default.Close,
-                                        contentDescription = "Clear API key",
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    supportingText = {
-                        when {
-                            voicesError != null -> Text(
-                                "Invalid API key",
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            hasApiKey -> Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = Color(0xFF4CAF50),
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    "API key saved",
-                                    color = Color(0xFF4CAF50),
-                                )
-                            }
-                            else -> Text("Required for ElevenLabs voice synthesis")
-                        }
-                    },
                 )
 
-                // Voice selector (only show when API key is set)
-                if (hasApiKey) {
-                    Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        tonalElevation = 2.dp,
+                // Preview
+                OutlinedButton(
+                    onClick = { playPreview() },
+                    enabled = !isPreviewing,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (isPreviewing) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (isPreviewing) "Playing…" else "Preview voice")
+                }
+            }
+        }
+    }
+
+    // Voice selection bottom sheet — flat list of Kokoro voice names
+    if (showVoiceSheet && voices.isNotEmpty()) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showVoiceSheet = false },
+            sheetState = sheetState,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Text(
+                    "Select Voice",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                HorizontalDivider(thickness = 0.5.dp)
+            }
+            LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
+                items(voices) { voice ->
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = !isLoadingVoices && voices.isNotEmpty()) {
-                                showVoiceSheet = true
-                            },
+                            .clickable {
+                                ttsSettingsManager.setSelectedVoice(voice.voiceId, voice.name)
+                                showVoiceSheet = false
+                            }
+                            .padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Voice",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    when {
-                                        isLoadingVoices -> "Loading voices..."
-                                        voicesError != null -> "Error loading voices"
-                                        selectedVoiceName != null -> selectedVoiceName!!
-                                        voices.isNotEmpty() -> "Select a voice"
-                                        else -> "No voices available"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            if (isLoadingVoices) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                            } else {
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Speed slider (only show when API key is set)
-                if (hasApiKey) {
-                    Spacer(Modifier.height(12.dp))
-
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "Speed",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                "%.2f\u00D7".format(speed),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Slider(
-                            value = speed,
-                            onValueChange = { ttsSettingsManager.setSpeed(it) },
-                            valueRange = TtsSettingsManager.MIN_SPEED..TtsSettingsManager.MAX_SPEED,
-                            modifier = Modifier.fillMaxWidth(),
+                        Text(
+                            voice.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                "Slower",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                "Faster",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (voice.voiceId == selectedVoiceId) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = MaterialTheme.colorScheme.primary,
                             )
                         }
                     }
                 }
-
-                // Info text
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "ElevenLabs provides high-quality AI voice synthesis to read assistant responses aloud.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                item { Spacer(Modifier.height(24.dp)) }
             }
         }
-    }
-
-    // Voice selection bottom sheet
-    if (showVoiceSheet && voices.isNotEmpty()) {
-        VoiceBottomSheet(
-            voices = voices,
-            selectedVoiceId = selectedVoiceId,
-            onSelect = { voice ->
-                ttsSettingsManager.setSelectedVoice(voice.voiceId, voice.name)
-                showVoiceSheet = false
-            },
-            onDismiss = { showVoiceSheet = false },
-        )
-    }
-}
-
-@Composable
-private fun VoiceBottomSheet(
-    voices: List<Voice>,
-    selectedVoiceId: String?,
-    onSelect: (Voice) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    // Group voices by category
-    val premade = voices.filter { it.category == "premade" || it.category == null }
-    val cloned = voices.filter { it.category == "cloned" }
-    val generated = voices.filter { it.category == "generated" }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp),
-        ) {
-            Text(
-                "Select Voice",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            HorizontalDivider(thickness = 0.5.dp)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        LazyColumn(
-            modifier = Modifier.padding(horizontal = 16.dp),
-        ) {
-            if (premade.isNotEmpty()) {
-                item {
-                    Text(
-                        "Premade Voices",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
-                items(premade) { voice ->
-                    VoiceRow(voice, voice.voiceId == selectedVoiceId, onSelect)
-                }
-            }
-
-            if (cloned.isNotEmpty()) {
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Cloned Voices",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
-                items(cloned) { voice ->
-                    VoiceRow(voice, voice.voiceId == selectedVoiceId, onSelect)
-                }
-            }
-
-            if (generated.isNotEmpty()) {
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Generated Voices",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp),
-                    )
-                }
-                items(generated) { voice ->
-                    VoiceRow(voice, voice.voiceId == selectedVoiceId, onSelect)
-                }
-            }
-
-            item { Spacer(Modifier.height(32.dp)) }
-        }
-    }
-}
-
-@Composable
-private fun VoiceRow(
-    voice: Voice,
-    isSelected: Boolean,
-    onSelect: (Voice) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onSelect(voice) }
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = if (isSelected) MaterialTheme.colorScheme.primary else Color.Gray,
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            voice.name,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
-            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-        )
     }
 }

@@ -1041,6 +1041,15 @@ object RokidSdkManager {
         return cxrApi?.setGlassBrightness(level)
     }
 
+    /**
+     * Turn the display off NOW (brightness 0) without touching lastKnownBrightness,
+     * so the next wake (new stream/message) restores the user's level.
+     */
+    fun forceDisplayOff(): ValueUtil.CxrStatus? {
+        Log.i(TAG, "forceDisplayOff (wake restores brightness $lastKnownBrightness)")
+        return cxrApi?.setGlassBrightness(0)
+    }
+
     fun wakeGlassesScreen(): Boolean {
         if (!isInitialized || !isBluetoothConnectedState) {
             Log.d(TAG, "Cannot wake glasses screen: init=$isInitialized, bt=$isBluetoothConnectedState")

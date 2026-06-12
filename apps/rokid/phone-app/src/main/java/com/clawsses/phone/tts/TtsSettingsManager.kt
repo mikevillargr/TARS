@@ -70,7 +70,8 @@ class TtsSettingsManager(context: Context) {
         private const val KEY_ENABLED = "tts_enabled"
         private const val KEY_SPEED = "tts_speed"
         const val DEFAULT_SPEED = 1.0f
-        const val MIN_SPEED = 0.7f
-        const val MAX_SPEED = 1.2f
+        // Match the TARS web app's speed range
+        const val MIN_SPEED = 0.5f
+        const val MAX_SPEED = 2.0f
     }
 }

@@ -66,6 +66,9 @@ class HudActivity : ComponentActivity() {
         /** Sentinel key for the "New Session" entry in the session picker. */
         const val NEW_SESSION_KEY = "__new_session__"
 
+        /** Placeholder entry shown in the session picker while loading. */
+        const val LOADING_SESSION_KEY = "__loading__"
+
         private fun isEmulator(): Boolean {
             return (Build.FINGERPRINT.contains("generic")
                     || Build.FINGERPRINT.contains("emulator")
@@ -441,6 +444,10 @@ class HudActivity : ComponentActivity() {
         Log.d(GlassesApp.TAG, "Gesture: $gesture, Area: ${current.focusedArea}")
 
         // If overlays are open, handle gestures for them
+        if (current.pendingPhoto != null) {
+            handlePhotoActionGesture(gesture)
+            return
+        }
         if (current.pendingCardJson != null) {
             handleCardGesture(gesture)
             return
@@ -687,9 +694,10 @@ class HudActivity : ComponentActivity() {
                 executeMenuItem(items[current.menuBarIndex])
             }
             Gesture.DOUBLE_TAP -> {
-                // Exit is intentionally disabled — the HUD is this device's purpose
-                // and exiting drops to the stock Rokid UI. Double-tap returns to
-                // CONTENT instead (recovery: phone app "Launch HUD" / auto-launch).
+                // Repurposed from the removed exit gesture: turn the display off.
+                // The phone keeps the BT link; any new stream/message wakes it.
+                Log.d(GlassesApp.TAG, "Display off requested (menu double-tap)")
+                phoneConnection.sendToPhone("""{"type":"display_off"}""")
                 hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
             }
             Gesture.LONG_PRESS -> startVoice()
@@ -701,6 +709,54 @@ class HudActivity : ComponentActivity() {
     private fun handleExitConfirmGesture(gesture: Gesture) {
         // Exit path removed — clear the overlay if it ever appears.
         hudState.value = hudState.value.copy(showExitConfirm = false)
+    }
+
+    // ============== Photo Action Gestures (post-capture overlay) ==============
+
+    /**
+     * After a capture, the preview overlay offers: Analyze (send to TARS now),
+     * Keep (stay staged for a later message), Discard. Swipe selects, tap runs.
+     */
+    private fun handlePhotoActionGesture(gesture: Gesture) {
+        val current = hudState.value
+        when (gesture) {
+            Gesture.SWIPE_FORWARD ->
+                hudState.value = current.copy(photoActionIndex = (current.photoActionIndex + 2) % 3)
+            Gesture.SWIPE_BACKWARD ->
+                hudState.value = current.copy(photoActionIndex = (current.photoActionIndex + 1) % 3)
+            Gesture.TAP -> {
+                when (current.photoActionIndex) {
+                    0 -> { // Analyze — send straight to TARS with the photo attached
+                        hudState.value = current.copy(
+                            pendingPhoto = null,
+                            photoActionIndex = 0,
+                            inputText = "Analyze this photo and tell me what you see, with any context that's useful."
+                        )
+                        submitInput()
+                    }
+                    1 -> { // Keep — photo stays staged for the next message
+                        hudState.value = current.copy(pendingPhoto = null, photoActionIndex = 0)
+                    }
+                    else -> { // Discard — drop the just-captured photo
+                        val idx = current.photoThumbnails.lastIndex
+                        if (idx >= 0) {
+                            hudState.value = current.copy(
+                                photoThumbnails = current.photoThumbnails.dropLast(1),
+                                pendingPhoto = null,
+                                photoActionIndex = 0
+                            )
+                            phoneConnection.sendToPhone("""{"type":"remove_photo","index":$idx}""")
+                        } else {
+                            hudState.value = current.copy(pendingPhoto = null, photoActionIndex = 0)
+                        }
+                    }
+                }
+            }
+            Gesture.DOUBLE_TAP -> { // quick dismiss = Keep
+                hudState.value = current.copy(pendingPhoto = null, photoActionIndex = 0)
+            }
+            Gesture.LONG_PRESS -> { /* no voice while previewing */ }
+        }
     }
 
     // ============== Interactive Card Gestures ==============
@@ -789,6 +845,16 @@ class HudActivity : ComponentActivity() {
                 Log.d(GlassesApp.TAG, "Requested video_record $action")
             }
             MenuBarItem.SESSION -> {
+                // Open the conversation picker immediately with a loading entry —
+                // the session_list response replaces it. (Previously the tap gave
+                // zero feedback until the round-trip finished.)
+                hudState.value = current.copy(
+                    showSessionPicker = true,
+                    availableSessions = listOf(
+                        SessionPickerInfo(key = LOADING_SESSION_KEY, name = "Loading conversations…")
+                    ),
+                    selectedSessionIndex = 0
+                )
                 requestSessionList()
             }
             MenuBarItem.SIZE -> {
@@ -874,6 +940,10 @@ class HudActivity : ComponentActivity() {
             Gesture.TAP -> {
                 if (totalOptions > 0) {
                     val selected = current.availableSessions[current.selectedSessionIndex]
+                    if (selected.key == LOADING_SESSION_KEY) {
+                        // Placeholder while the list loads — not selectable
+                        return
+                    }
                     if (selected.key == NEW_SESSION_KEY) {
                         createNewSession()
                         hudState.value = current.copy(
@@ -1551,10 +1621,14 @@ class HudActivity : ComponentActivity() {
                             } else {
                                 val bytes = Base64.decode(thumbnailBase64, Base64.DEFAULT)
                                 val thumbnail = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                // Stage the photo AND surface an in-glasses preview with
+                                // Analyze/Keep/Discard — no phone interaction needed.
                                 hudState.value = current.copy(
-                                    photoThumbnails = current.photoThumbnails + thumbnail
+                                    photoThumbnails = current.photoThumbnails + thumbnail,
+                                    pendingPhoto = thumbnail,
+                                    photoActionIndex = 0
                                 )
-                                Log.d(GlassesApp.TAG, "Photo captured, thumbnail added (total: ${current.photoThumbnails.size + 1})")
+                                Log.d(GlassesApp.TAG, "Photo captured — preview overlay shown (total: ${current.photoThumbnails.size + 1})")
                             }
                         }
                     } else {

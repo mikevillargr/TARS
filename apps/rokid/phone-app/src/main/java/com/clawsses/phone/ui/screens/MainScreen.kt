@@ -495,6 +495,10 @@ fun MainScreen() {
                             RokidSdkManager.setGlassBrightness(value)
                         }
                     }
+                    "display_off" -> {
+                        android.util.Log.i("MainScreen", "Glasses requested display off")
+                        RokidSdkManager.forceDisplayOff()
+                    }
                     "video_record" -> {
                         val action = json.optString("action", "")
                         android.util.Log.i("MainScreen", "Glasses requested video_record: $action")
