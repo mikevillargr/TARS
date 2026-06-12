@@ -17,6 +17,10 @@ class ClawssesApp : Application() {
         instance = this
         Log.d(TAG, "Clawsses app initialized")
 
+        // Restore display preferences before any wake/stream activity
+        val prefs = getSharedPreferences("clawsses", MODE_PRIVATE)
+        RokidSdkManager.screenTimeoutSeconds = prefs.getLong("glasses_screen_timeout", 10L)
+
         // Initialize Rokid SDK
         if (RokidSdkManager.initialize(this)) {
             Log.d(TAG, "Rokid SDK initialized successfully")

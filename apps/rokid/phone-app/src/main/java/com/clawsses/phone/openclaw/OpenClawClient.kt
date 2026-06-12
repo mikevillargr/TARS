@@ -86,6 +86,8 @@ class OpenClawClient(
     var onSessionList: ((SessionListUpdate) -> Unit)? = null
     var onConnectionUpdate: ((ConnectionUpdate) -> Unit)? = null
     var onMoreHistoryLoaded: ((Int, Boolean) -> Unit)? = null
+    /** Interactive card from TARS (email_draft / calendar_suggest / task_suggest) — raw JSON frame. */
+    var onCard: ((String) -> Unit)? = null
 
     private val _currentSessionKey = MutableStateFlow<String?>(null)
     val currentSessionKey: StateFlow<String?> = _currentSessionKey.asStateFlow()
@@ -258,6 +260,7 @@ class OpenClawClient(
                 "agent_thinking" -> onAgentThinking?.invoke(AgentThinking.fromJson(json))
                 "chat_stream" -> onChatStream?.invoke(ChatStream.fromJson(json))
                 "chat_stream_end" -> onChatStreamEnd?.invoke(ChatStreamEnd.fromJson(json))
+                "card" -> onCard?.invoke(json)
                 "ping" -> { /* keepalive */ }
                 else -> Log.d(TAG, "unhandled frame: $type")
             }

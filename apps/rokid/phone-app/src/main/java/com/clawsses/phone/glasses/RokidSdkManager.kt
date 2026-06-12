@@ -711,6 +711,96 @@ object RokidSdkManager {
         }
     }
 
+    // --- Video recording (SDK scene control — records to glasses storage) ---
+
+    @Volatile var isVideoRecording: Boolean = false
+        private set
+
+    fun startVideoRecord(width: Int = 1920, height: Int = 1080): Boolean {
+        if (!isBluetoothConnectedState) return false
+        return try {
+            // duration=30 (unit 0 = minutes) max clip, fps fixed at 30 per SDK
+            cxrApi?.setVideoParams(30, 30, width, height, 0)
+            val st = cxrApi?.controlScene(ValueUtil.CxrSceneType.VIDEO_RECORD, true, null)
+            Log.i(TAG, "startVideoRecord: $st")
+            isVideoRecording = (st == ValueUtil.CxrStatus.REQUEST_SUCCEED)
+            isVideoRecording
+        } catch (e: Exception) {
+            Log.e(TAG, "startVideoRecord failed", e)
+            false
+        }
+    }
+
+    fun stopVideoRecord(): Boolean {
+        return try {
+            val st = cxrApi?.controlScene(ValueUtil.CxrSceneType.VIDEO_RECORD, false, null)
+            Log.i(TAG, "stopVideoRecord: $st")
+            isVideoRecording = false
+            st == ValueUtil.CxrStatus.REQUEST_SUCCEED
+        } catch (e: Exception) {
+            Log.e(TAG, "stopVideoRecord failed", e)
+            false
+        }
+    }
+
+    // --- Media sync (pull glasses photos/videos to the phone over WiFi P2P) ---
+
+    /** Query unsynced media counts: callback(audio, pictures, videos), or (-1,-1,-1) on failure. */
+    fun getUnsyncCounts(callback: (Int, Int, Int) -> Unit) {
+        try {
+            cxrApi?.getUnsyncNum { status, audioNum, pictureNum, videoNum ->
+                if (status == ValueUtil.CxrStatus.REQUEST_SUCCEED) {
+                    callback(audioNum, pictureNum, videoNum)
+                } else {
+                    callback(-1, -1, -1)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "getUnsyncCounts failed", e)
+            callback(-1, -1, -1)
+        }
+    }
+
+    /**
+     * Pull unsynced photos+videos from the glasses into [savePath].
+     * Requires WiFi P2P connected. Fires per-file and terminal callbacks.
+     */
+    fun startMediaSync(
+        savePath: String,
+        onFile: (String) -> Unit,
+        onFinished: () -> Unit,
+        onFailed: () -> Unit,
+    ): Boolean {
+        if (!isWifiP2PConnected()) {
+            Log.e(TAG, "startMediaSync: WiFi P2P not connected")
+            return false
+        }
+        return try {
+            val types = arrayOf(ValueUtil.CxrMediaType.PICTURE, ValueUtil.CxrMediaType.VIDEO)
+            val ok = cxrApi?.startSync(savePath, types, object :
+                com.rokid.cxr.client.extend.callbacks.SyncStatusCallback {
+                override fun onSyncStart() { Log.i(TAG, "Media sync started") }
+                override fun onSingleFileSynced(fileName: String?) {
+                    Log.i(TAG, "Media synced: $fileName")
+                    fileName?.let(onFile)
+                }
+                override fun onSyncFailed() { Log.e(TAG, "Media sync failed"); onFailed() }
+                override fun onSyncFinished() { Log.i(TAG, "Media sync finished"); onFinished() }
+            }) ?: false
+            Log.i(TAG, "startMediaSync($savePath): $ok")
+            ok
+        } catch (e: Exception) {
+            Log.e(TAG, "startMediaSync failed", e)
+            false
+        }
+    }
+
+    const val GLASSES_HUD_PACKAGE = "com.clawsses.glasses"
+    const val GLASSES_HUD_ACTIVITY = "com.clawsses.glasses.HudActivity"
+
+    /** Bring the TARS HUD to the foreground on the glasses (idempotent). */
+    fun launchHud(): Boolean = openApp(GLASSES_HUD_PACKAGE, GLASSES_HUD_ACTIVITY)
+
     /**
      * Launch an installed app on the glasses over the Bluetooth control channel
      * (Sys_App_Open). No WiFi P2P needed. onApkOpenSucceed/Failed fire on result.
@@ -934,6 +1024,23 @@ object RokidSdkManager {
      * Safe to call repeatedly — setting brightness when already at that
      * level is effectively a no-op.
      */
+    /**
+     * User-configurable idle timeout (seconds) applied when waking the display
+     * and when a stream ends. Set from Settings via [screenTimeoutSeconds].
+     */
+    @Volatile var screenTimeoutSeconds: Long = 10L
+
+    /** Last brightness reported by the glasses (0–15) — seeds the Settings slider. */
+    fun currentBrightness(): Int = lastKnownBrightness
+
+    /** Set glasses display brightness (0–15) and remember it for future wakes. */
+    fun setGlassBrightness(value: Int): ValueUtil.CxrStatus? {
+        val level = value.coerceIn(0, 15)
+        lastKnownBrightness = level
+        Log.i(TAG, "setGlassBrightness: $level")
+        return cxrApi?.setGlassBrightness(level)
+    }
+
     fun wakeGlassesScreen(): Boolean {
         if (!isInitialized || !isBluetoothConnectedState) {
             Log.d(TAG, "Cannot wake glasses screen: init=$isInitialized, bt=$isBluetoothConnectedState")
@@ -941,8 +1048,11 @@ object RokidSdkManager {
         }
         return try {
             cxrApi?.setGlassBrightness(lastKnownBrightness)
-            cxrApi?.setScreenOffTimeout(30)
-            Log.i(TAG, "Wake glasses screen: brightness=$lastKnownBrightness, timeout reset to 30s")
+            // While awake/streaming, keepalives fire every 5s — the timeout here
+            // must outlast that cadence. The user's exact (possibly shorter)
+            // timeout is applied at stream end by WakeSignalManager.
+            cxrApi?.setScreenOffTimeout(maxOf(screenTimeoutSeconds, 10L))
+            Log.i(TAG, "Wake glasses screen: brightness=$lastKnownBrightness, timeout=${maxOf(screenTimeoutSeconds, 10L)}s")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to wake glasses screen", e)

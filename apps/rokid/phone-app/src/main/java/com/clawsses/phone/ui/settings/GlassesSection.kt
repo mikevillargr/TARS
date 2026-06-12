@@ -1,6 +1,7 @@
 package com.clawsses.phone.ui.settings
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -309,16 +311,19 @@ private fun ConnectedContent(
     // Recovery: bring the HUD back to the foreground if the glasses' system UI
     // took over (sleep, folding, app switch). Pure Bluetooth — instant.
     Button(
-        onClick = {
-            com.clawsses.phone.glasses.RokidSdkManager.openApp(
-                "com.clawsses.glasses",
-                "com.clawsses.glasses.HudActivity"
-            )
-        },
+        onClick = { com.clawsses.phone.glasses.RokidSdkManager.launchHud() },
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text("Launch HUD on Glasses")
     }
+
+    Spacer(Modifier.height(12.dp))
+
+    DisplayControls()
+
+    Spacer(Modifier.height(12.dp))
+
+    MediaSyncControls()
 
     Spacer(Modifier.height(12.dp))
 
@@ -555,4 +560,113 @@ private fun signalDescription(rssi: Int): String = when {
     rssi >= -50 -> "Strong"
     rssi >= -70 -> "Medium"
     else -> "Weak"
+}
+
+/**
+ * Display controls for the glasses: screen timeout after activity, and brightness.
+ * Persists to the shared "clawsses" prefs and applies live via RokidSdkManager.
+ */
+@Composable
+private fun DisplayControls() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = remember { context.getSharedPreferences("clawsses", android.content.Context.MODE_PRIVATE) }
+    val sdk = com.clawsses.phone.glasses.RokidSdkManager
+
+    var timeoutSec by remember { mutableStateOf(prefs.getLong("glasses_screen_timeout", 10L)) }
+    var brightness by remember { mutableIntStateOf(sdk.currentBrightness()) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text("Screen timeout after activity", style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(5L, 10L, 15L, 30L, 60L).forEach { sec ->
+                val selected = timeoutSec == sec
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.clickable {
+                        timeoutSec = sec
+                        sdk.screenTimeoutSeconds = sec
+                        prefs.edit().putLong("glasses_screen_timeout", sec).apply()
+                        // Apply immediately so the user sees the effect
+                        sdk.setScreenOffTimeout(sec)
+                    },
+                ) {
+                    Text(
+                        "${sec}s",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Text("Brightness  ($brightness/15)", style = MaterialTheme.typography.bodyMedium)
+        Slider(
+            value = brightness.toFloat(),
+            onValueChange = { brightness = it.toInt() },
+            onValueChangeFinished = { sdk.setGlassBrightness(brightness) },
+            valueRange = 0f..15f,
+            steps = 14,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/**
+ * Pull glasses-captured photos/videos into the phone gallery (WiFi P2P).
+ */
+@Composable
+internal fun MediaSyncControls() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var unsyncedLabel by remember { mutableStateOf<String?>(null) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var syncing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        com.clawsses.phone.glasses.RokidSdkManager.getUnsyncCounts { _, pictures, videos ->
+            unsyncedLabel = if (pictures >= 0) "$pictures photo(s), $videos video(s) on glasses" else null
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text("Glasses media", style = MaterialTheme.typography.bodyMedium)
+        unsyncedLabel?.let {
+            Spacer(Modifier.height(2.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+        Spacer(Modifier.height(6.dp))
+        OutlinedButton(
+            onClick = {
+                syncing = true
+                com.clawsses.phone.glasses.MediaSync.sync(
+                    context,
+                    onStatus = { status = it },
+                    onDone = { _, _ ->
+                        syncing = false
+                        com.clawsses.phone.glasses.RokidSdkManager.getUnsyncCounts { _, p, v ->
+                            unsyncedLabel = if (p >= 0) "$p photo(s), $v video(s) on glasses" else null
+                        }
+                    },
+                )
+            },
+            enabled = !syncing,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (syncing) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (syncing) (status ?: "Syncing…") else "Sync media to phone gallery")
+        }
+        status?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
 }

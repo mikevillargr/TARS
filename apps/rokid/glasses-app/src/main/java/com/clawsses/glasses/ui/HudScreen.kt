@@ -82,7 +82,8 @@ enum class ChatFocusArea {
  */
 enum class InputActionItem(val icon: String, val label: String) {
     SEND("\u21B5", "Send"),
-    CLEAR("\u2715", "Clear")
+    CLEAR("\u2715", "Clear"),
+    ANALYZE("\u2315", "Analyze")  // send photo(s) to TARS for analysis
 }
 
 /** Maximum number of photos that can be attached. */
@@ -102,6 +103,7 @@ enum class AgentState {
  */
 enum class MenuBarItem(val icon: String, val label: String) {
     PHOTO("\uD83D\uDCF7", "Photo"),
+    RECORD("\u23FA", "Rec"),  // glasses video recording (label flips to Stop while recording)
     SESSION("\u25CE", "Sess"),
     SIZE("\u2588", "Size"),  // Icon overridden dynamically based on next HudPosition
     MORE("\u2026", "More"),
@@ -117,6 +119,7 @@ enum class MoreMenuItem(val icon: String, val label: String, val displaySize: Hu
     FONT_LARGE("Aa", "Large", HudDisplaySize.LARGE),
     SLASH("/", "Slash Cmds"),
     VOICE("\uD83D\uDD0A", "Voice"),  // speaker icon - label is dynamic
+    BRIGHTNESS("\u2600", "Brightness"),  // cycles Low/Med/High via phone SDK
 }
 
 /**
@@ -229,7 +232,17 @@ data class ChatHudState(
     val showWakeNotification: Boolean = false,
     val wakeReason: String? = null,  // "stream_content", "new_message", "cron_message"
     // TTS state (voice responses)
-    val ttsEnabled: Boolean = false
+    val ttsEnabled: Boolean = false,
+    // Viewport-relative paging scroll: each swipe scrolls delta × viewport height
+    val pageScrollDelta: Float = 0f,
+    val pageScrollTrigger: Int = 0,
+    // Video recording indicator (red dot in top bar)
+    val isRecording: Boolean = false,
+    // Pending interactive card awaiting Confirm/Dismiss (email_draft etc.)
+    val pendingCardTitle: String? = null,
+    val pendingCardBody: String? = null,
+    val pendingCardJson: String? = null,   // original card payload, echoed back on confirm
+    val cardActionIndex: Int = 0           // 0 = Confirm, 1 = Dismiss
 ) {
     /** Total number of messages */
     val totalMessages: Int get() = messages.size
@@ -290,7 +303,8 @@ fun HudScreen(
     onTap: () -> Unit = {},
     onDoubleTap: () -> Unit = {},
     onLongPress: () -> Unit = {},
-    onScrolledToEndChanged: (Boolean) -> Unit = {}
+    onScrolledToEndChanged: (Boolean) -> Unit = {},
+    onScrollPastTop: () -> Unit = {}
 ) {
     val listState = rememberLazyListState()
     val textMeasurer = rememberTextMeasurer()
@@ -302,6 +316,21 @@ fun HudScreen(
     val canScrollForward = listState.canScrollForward
     LaunchedEffect(canScrollForward) {
         onScrolledToEndChanged(!canScrollForward)
+    }
+
+    // Viewport-relative paging: each swipe reveals ~delta × viewport of content,
+    // independent of message boundaries — long messages scroll incrementally.
+    LaunchedEffect(state.pageScrollTrigger) {
+        if (state.pageScrollTrigger > 0 && state.pageScrollDelta != 0f) {
+            val scrollingUp = state.pageScrollDelta < 0f
+            if (scrollingUp && !listState.canScrollBackward) {
+                // Already at the very top — ask for older history
+                onScrollPastTop()
+            } else {
+                val viewportHeight = listState.layoutInfo.viewportSize.height
+                listState.animateScrollBy(viewportHeight * state.pageScrollDelta)
+            }
+        }
     }
 
     // Auto-scroll when position or trigger changes
@@ -407,7 +436,8 @@ fun HudScreen(
                 // TOP BAR
                 TopBar(
                     isConnected = state.isConnected,
-                    scrollInfo = "${state.scrollPosition + 1}/${state.messages.size}",
+                    scrollInfo = "${listState.firstVisibleItemIndex + 1}/${state.messages.size}",
+                    isRecording = state.isRecording,
                     agentState = state.agentState,
                     focusedArea = state.focusedArea,
                     voiceState = state.voiceState,
@@ -464,7 +494,8 @@ fun HudScreen(
                     batteryCharging = state.batteryCharging,
                     currentTime = state.currentTime,
                     fontFamily = monoFontFamily,
-                    alpha = menuAlpha
+                    alpha = menuAlpha,
+                    isRecording = state.isRecording
                 )
             }
         }
@@ -517,6 +548,20 @@ fun HudScreen(
         ) {
             ExitConfirmOverlay(fontFamily = monoFontFamily)
         }
+
+        // Interactive card confirmation (email draft / calendar / task)
+        AnimatedVisibility(
+            visible = state.pendingCardTitle != null,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            CardConfirmOverlay(
+                title = state.pendingCardTitle ?: "",
+                body = state.pendingCardBody ?: "",
+                selectedIndex = state.cardActionIndex,
+                fontFamily = monoFontFamily
+            )
+        }
     }
 }
 
@@ -542,6 +587,7 @@ fun focusBrightness(isFocused: Boolean): Float {
 private fun TopBar(
     isConnected: Boolean,
     scrollInfo: String,
+    isRecording: Boolean = false,
     agentState: AgentState,
     focusedArea: ChatFocusArea,
     voiceState: VoiceInputState,
@@ -598,6 +644,20 @@ private fun TopBar(
                 color = if (isConnected) HudColors.green else HudColors.error,
                 fontSize = (statusFontSize.value + 2).sp
             )
+            if (isRecording) {
+                // Blinking REC indicator while glasses video recording is active
+                var recVisible by remember { mutableStateOf(true) }
+                LaunchedEffect(Unit) {
+                    while (true) { delay(600); recVisible = !recVisible }
+                }
+                Text(
+                    text = "\u25CF REC",
+                    color = if (recVisible) Color(0xFFFF4444) else Color(0x55FF4444),
+                    fontSize = statusFontSize,
+                    fontFamily = fontFamily,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             // Show voice state when active, wake notification, otherwise show agent state
             val stateLabel = when {
                 showWakeNotification -> {
@@ -1171,6 +1231,48 @@ private fun InputStagingArea(
                     }
                 }
             }
+
+            // Analyze button — shown whenever photos are staged; sends them to
+            // TARS with an analysis prompt (auto-generated if no text staged).
+            if (photoCount > 0) {
+                if (!hasContent) Spacer(modifier = Modifier.weight(1f))
+                else Spacer(modifier = Modifier.width(4.dp))
+
+                val analyzeIndex = photoCount + if (hasContent) 2 else 0
+                val analyzeSelected = selectedIndex == analyzeIndex && isFocused
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (analyzeSelected) HudColors.green.copy(alpha = 0.3f) else Color.Transparent,
+                            RoundedCornerShape(4.dp)
+                        )
+                        .border(
+                            width = if (analyzeSelected) 1.dp else 0.dp,
+                            color = if (analyzeSelected) HudColors.green else Color.Transparent,
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = InputActionItem.ANALYZE.icon,
+                            color = if (analyzeSelected) HudColors.green else HudColors.primaryText,
+                            fontSize = (commandFontSize.value + 2).sp,
+                            fontFamily = fontFamily
+                        )
+                        Text(
+                            text = InputActionItem.ANALYZE.label,
+                            color = if (analyzeSelected) HudColors.green else HudColors.dimText,
+                            fontSize = commandFontSize,
+                            fontFamily = fontFamily,
+                            fontWeight = if (analyzeSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1189,6 +1291,7 @@ private fun ChatMenuBar(
     currentTime: String,
     fontFamily: FontFamily,
     alpha: Float,
+    isRecording: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val commandFontSize = 8.sp  // Fixed size — FONT only affects content
@@ -1218,6 +1321,8 @@ private fun ChatMenuBar(
                         HudPosition.BOTTOM_HALF -> "\u2580" // ▀ next: top half
                         HudPosition.TOP_HALF -> "\u2588"    // █ next: full
                     }
+                } else if (item == MenuBarItem.RECORD && isRecording) {
+                    "\u25A0"  // stop icon while recording
                 } else {
                     item.icon
                 }
@@ -1616,6 +1721,90 @@ private fun SlashCommandOverlay(
 // ============================================================================
 // EXIT CONFIRMATION OVERLAY
 // ============================================================================
+
+/**
+ * Confirm/Dismiss overlay for interactive TARS cards (email drafts, calendar
+ * and task suggestions). Swipe toggles selection; tap executes.
+ */
+@Composable
+private fun CardConfirmOverlay(
+    title: String,
+    body: String,
+    selectedIndex: Int,  // 0 = Confirm, 1 = Dismiss
+    fontFamily: FontFamily,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.95f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Text(
+                text = title,
+                color = HudColors.green,
+                fontSize = 14.sp,
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = body,
+                color = HudColors.primaryText,
+                fontSize = 11.sp,
+                fontFamily = fontFamily,
+                textAlign = TextAlign.Center,
+                maxLines = 8
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                listOf("✓ Confirm", "✕ Dismiss").forEachIndexed { i, label ->
+                    val selected = selectedIndex == i
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (selected) HudColors.green.copy(alpha = 0.3f) else Color.Transparent,
+                                RoundedCornerShape(4.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = if (selected) HudColors.green else HudColors.dimText,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (selected) HudColors.green else HudColors.dimText,
+                            fontSize = 12.sp,
+                            fontFamily = fontFamily,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Swipe to choose · Tap to execute",
+                color = HudColors.dimText,
+                fontSize = 9.sp,
+                fontFamily = fontFamily,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
 
 @Composable
 private fun ExitConfirmOverlay(

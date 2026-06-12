@@ -36,9 +36,11 @@ class WakeSignalManager(
         // Minimum interval between wake signals to avoid spam
         private const val MIN_WAKE_INTERVAL_MS = 1000L
 
-        // Time after last confirmed activity before assuming glasses may be in standby.
-        // Slightly less than the 30s screen-off timeout to be conservative.
-        private const val STANDBY_DETECTION_MS = 25_000L
+        // Time after last confirmed activity before assuming glasses may be in
+        // standby. Tracks the user-configured screen timeout (slightly under it,
+        // erring toward sending a wake signal).
+        private val STANDBY_DETECTION_MS: Long
+            get() = (RokidSdkManager.screenTimeoutSeconds * 1000L - 2_000L).coerceAtLeast(3_000L)
 
         // Minimum interval between hardware wake keep-alive calls during streaming.
         // Each call resets the glasses' 30s screen-off timeout via CXR SDK.
@@ -208,9 +210,12 @@ class WakeSignalManager(
 
     /**
      * Notify that streaming has ended for a message.
+     * Applies the user's configured screen timeout so the display dims promptly
+     * after activity instead of lingering on the longer streaming-safe timeout.
      */
     fun notifyStreamEnd(messageId: String) {
         isStreaming = false
+        RokidSdkManager.setScreenOffTimeout(RokidSdkManager.screenTimeoutSeconds)
     }
 
     /**
@@ -226,6 +231,10 @@ class WakeSignalManager(
         if (ready) {
             _wakeState.value = WakeState.Awake
             resetStandbyTimer()
+
+            // Glasses just woke from standby — the system UI may have surfaced
+            // during sleep. Bring the HUD back to the foreground (idempotent).
+            RokidSdkManager.launchHud()
 
             // Deliver all buffered messages
             flushBuffer()

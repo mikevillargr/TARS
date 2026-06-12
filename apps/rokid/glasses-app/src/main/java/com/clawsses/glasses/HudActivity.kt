@@ -81,6 +81,9 @@ class HudActivity : ComponentActivity() {
     }
 
     private val hudState = MutableStateFlow(ChatHudState())
+
+    // Local brightness cycle position (Low 4 / Med 9 / High 14) — applied by phone SDK
+    private var brightnessLevel: Int = 9
     private lateinit var gestureHandler: GestureHandler
     private lateinit var phoneConnection: PhoneConnectionService
     private lateinit var voiceHandler: GlassesVoiceHandler
@@ -210,7 +213,8 @@ class HudActivity : ComponentActivity() {
                         if (current.isScrolledToEnd != atEnd) {
                             hudState.value = current.copy(isScrolledToEnd = atEnd)
                         }
-                    }
+                    },
+                    onScrollPastTop = { requestMoreHistory() }
                 )
             }
         }
@@ -283,9 +287,21 @@ class HudActivity : ComponentActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // Diagnostic: log every hardware keycode so we learn what the camera
+        // button (and any other physical keys) emit while the HUD is foreground.
+        Log.i(GlassesApp.TAG, "onKeyDown keyCode=$keyCode repeat=${event?.repeatCount}")
+
         // If capturing keyboard input for simulated voice, handle specially
         if (isCapturingKeyboardInput) {
             return handleKeyboardCapture(keyCode, event)
+        }
+
+        // Hardware camera button: short press = photo, long press = video toggle
+        if (keyCode == KeyEvent.KEYCODE_CAMERA || keyCode == KeyEvent.KEYCODE_FOCUS) {
+            if ((event?.repeatCount ?: 0) == 0) {
+                event?.startTracking()
+            }
+            return true
         }
 
         if (event?.repeatCount ?: 0 > 0) return true
@@ -322,6 +338,27 @@ class HudActivity : ComponentActivity() {
             }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_CAMERA || keyCode == KeyEvent.KEYCODE_FOCUS) {
+            // Short press (long press is handled in onKeyLongPress)
+            if (event?.isCanceled != true && (event?.flags ?: 0) and KeyEvent.FLAG_LONG_PRESS == 0) {
+                Log.i(GlassesApp.TAG, "Camera button short press → photo")
+                executeMenuItem(MenuBarItem.PHOTO)
+            }
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_CAMERA || keyCode == KeyEvent.KEYCODE_FOCUS) {
+            Log.i(GlassesApp.TAG, "Camera button long press → video toggle")
+            executeMenuItem(MenuBarItem.RECORD)
+            return true
+        }
+        return super.onKeyLongPress(keyCode, event)
     }
 
     private fun startKeyboardCapture(initialChar: Char? = null) {
@@ -404,6 +441,10 @@ class HudActivity : ComponentActivity() {
         Log.d(GlassesApp.TAG, "Gesture: $gesture, Area: ${current.focusedArea}")
 
         // If overlays are open, handle gestures for them
+        if (current.pendingCardJson != null) {
+            handleCardGesture(gesture)
+            return
+        }
         if (current.showExitConfirm) {
             handleExitConfirmGesture(gesture)
             return
@@ -505,8 +546,12 @@ class HudActivity : ComponentActivity() {
         val photoCount = current.photoThumbnails.size
         val hasText = current.stagingText.isNotEmpty()
         val clearIndex = photoCount       // CLEAR is right after photos
-        val sendIndex = photoCount + 1    // SEND is rightmost
-        val totalItems = if (hasText) photoCount + 2 else photoCount  // buttons only when text staged
+        val sendIndex = photoCount + 1    // SEND follows CLEAR
+        // ANALYZE appears whenever photos are staged (after SEND, or alone)
+        val analyzeIndex = photoCount + if (hasText) 2 else 0
+        val totalItems = photoCount +
+            (if (hasText) 2 else 0) +
+            (if (photoCount > 0) 1 else 0)
 
         when (gesture) {
             Gesture.SWIPE_FORWARD -> {
@@ -559,7 +604,21 @@ class HudActivity : ComponentActivity() {
                         )
                         phoneConnection.sendToPhone("""{"type":"remove_photo","index":$idx}""")
                     }
-                    idx == clearIndex -> {
+                    idx == analyzeIndex && photoCount > 0 -> {
+                        // Analyze: send staged photo(s) to TARS with the staged
+                        // text as context, or an auto prompt if none.
+                        val prompt = current.stagingText.trim().ifEmpty {
+                            "Analyze this photo and tell me what you see, with any context that's useful."
+                        }
+                        hudState.value = current.copy(inputText = prompt)
+                        submitInput()
+                        hudState.value = hudState.value.copy(
+                            showInputStaging = false,
+                            stagingText = "",
+                            inputActionIndex = 0
+                        )
+                    }
+                    idx == clearIndex && hasText -> {
                         // Clear staged text and dismiss
                         hudState.value = current.copy(
                             showInputStaging = false,
@@ -568,7 +627,7 @@ class HudActivity : ComponentActivity() {
                             focusedArea = ChatFocusArea.CONTENT
                         )
                     }
-                    idx == sendIndex -> {
+                    idx == sendIndex && hasText -> {
                         // Submit the staged text and dismiss
                         val text = current.stagingText.trim()
                         if (text.isNotEmpty()) {
@@ -628,26 +687,77 @@ class HudActivity : ComponentActivity() {
                 executeMenuItem(items[current.menuBarIndex])
             }
             Gesture.DOUBLE_TAP -> {
-                // Show exit confirmation dialog
-                hudState.value = current.copy(showExitConfirm = true)
+                // Exit is intentionally disabled — the HUD is this device's purpose
+                // and exiting drops to the stock Rokid UI. Double-tap returns to
+                // CONTENT instead (recovery: phone app "Launch HUD" / auto-launch).
+                hudState.value = current.copy(focusedArea = ChatFocusArea.CONTENT)
             }
             Gesture.LONG_PRESS -> startVoice()
         }
     }
 
-    // ============== Exit Confirmation Gestures ==============
+    // ============== Exit Confirmation Gestures (disabled) ==============
 
     private fun handleExitConfirmGesture(gesture: Gesture) {
+        // Exit path removed — clear the overlay if it ever appears.
+        hudState.value = hudState.value.copy(showExitConfirm = false)
+    }
+
+    // ============== Interactive Card Gestures ==============
+
+    /** One-line title + multi-line body for the card overlay. */
+    private fun summarizeCard(card: JSONObject): Pair<String, String> {
+        return when (card.optString("type")) {
+            "email_draft" -> Pair(
+                "EMAIL DRAFT",
+                "To: ${card.optString("to")}\n${card.optString("subject")}\n\n${card.optString("body").take(220)}"
+            )
+            "calendar_suggest" -> Pair(
+                "ADD TO CALENDAR",
+                "${card.optString("title")}\n${card.optString("datetime_iso")} · ${card.optInt("duration_min", 60)} min" +
+                    (card.optString("location").takeIf { it.isNotEmpty() }?.let { "\n@ $it" } ?: "")
+            )
+            "task_suggest" -> Pair(
+                "CREATE TASK",
+                "${card.optString("title")}" +
+                    (card.optString("description").takeIf { it.isNotEmpty() }?.let { "\n${it.take(160)}" } ?: "")
+            )
+            else -> Pair(card.optString("type").uppercase(), card.toString().take(200))
+        }
+    }
+
+    private fun handleCardGesture(gesture: Gesture) {
         val current = hudState.value
         when (gesture) {
+            Gesture.SWIPE_FORWARD, Gesture.SWIPE_BACKWARD -> {
+                hudState.value = current.copy(cardActionIndex = 1 - current.cardActionIndex)
+            }
+            Gesture.TAP -> {
+                if (current.cardActionIndex == 0 && current.pendingCardJson != null) {
+                    // Confirm — phone executes the REST call
+                    val json = JSONObject().apply {
+                        put("type", "card_action")
+                        put("action", "confirm")
+                        put("card", JSONObject(current.pendingCardJson))
+                    }
+                    phoneConnection.sendToPhone(json.toString())
+                    Log.d(GlassesApp.TAG, "Card confirmed")
+                } else {
+                    Log.d(GlassesApp.TAG, "Card dismissed")
+                }
+                hudState.value = current.copy(
+                    pendingCardTitle = null, pendingCardBody = null,
+                    pendingCardJson = null, cardActionIndex = 0
+                )
+            }
             Gesture.DOUBLE_TAP -> {
-                // Second double-tap confirms exit
-                finishAffinity()
+                // Quick dismiss
+                hudState.value = current.copy(
+                    pendingCardTitle = null, pendingCardBody = null,
+                    pendingCardJson = null, cardActionIndex = 0
+                )
             }
-            else -> {
-                // Any other input dismisses the dialog
-                hudState.value = current.copy(showExitConfirm = false)
-            }
+            Gesture.LONG_PRESS -> { /* voice disabled while a card is pending */ }
         }
     }
 
@@ -670,6 +780,13 @@ class HudActivity : ComponentActivity() {
                     phoneConnection.sendToPhone("""{"type":"take_photo"}""")
                     Log.d(GlassesApp.TAG, "Requested photo capture from phone")
                 }
+            }
+            MenuBarItem.RECORD -> {
+                // Toggle glasses POV video recording (runs on the glasses via the
+                // phone's SDK scene control; the red dot tracks video_state replies).
+                val action = if (current.isRecording) "stop" else "start"
+                phoneConnection.sendToPhone("""{"type":"video_record","action":"$action"}""")
+                Log.d(GlassesApp.TAG, "Requested video_record $action")
             }
             MenuBarItem.SESSION -> {
                 requestSessionList()
@@ -839,6 +956,16 @@ class HudActivity : ComponentActivity() {
                     selectedSlashIndex = 0
                 )
             }
+            MoreMenuItem.BRIGHTNESS -> {
+                // Cycle Low(4) → Med(9) → High(14); phone applies via CXR SDK
+                brightnessLevel = when {
+                    brightnessLevel < 6 -> 9
+                    brightnessLevel < 12 -> 14
+                    else -> 4
+                }
+                phoneConnection.sendToPhone("""{"type":"set_brightness","value":$brightnessLevel}""")
+                Log.d(GlassesApp.TAG, "Brightness cycle → $brightnessLevel")
+            }
             MoreMenuItem.VOICE -> {
                 // Toggle TTS and notify phone
                 val newEnabled = !current.ttsEnabled
@@ -910,14 +1037,13 @@ class HudActivity : ComponentActivity() {
     }
 
     private fun scrollUp() {
+        // Viewport-relative paging: reveal ~¾ of a screen of earlier content.
+        // HudScreen requests more history (onScrollPastTop) when already at top.
         val current = hudState.value
-        val newPosition = maxOf(0, current.scrollPosition - 5) // scroll by 5 messages
-        hudState.value = current.copy(scrollPosition = newPosition)
-
-        // If we've scrolled to the top and there might be more history, request it
-        if (newPosition == 0 && current.hasMoreHistory && !current.isLoadingMoreHistory && current.messages.isNotEmpty()) {
-            requestMoreHistory()
-        }
+        hudState.value = current.copy(
+            pageScrollDelta = -0.75f,
+            pageScrollTrigger = current.pageScrollTrigger + 1
+        )
     }
 
     private fun requestMoreHistory() {
@@ -936,9 +1062,10 @@ class HudActivity : ComponentActivity() {
 
     private fun scrollDown() {
         val current = hudState.value
-        val maxScroll = maxOf(0, current.messages.size - 1)
-        val newPosition = minOf(maxScroll, current.scrollPosition + 5)
-        hudState.value = current.copy(scrollPosition = newPosition)
+        hudState.value = current.copy(
+            pageScrollDelta = 0.75f,
+            pageScrollTrigger = current.pageScrollTrigger + 1
+        )
     }
 
     // ============== Voice Recognition ==============
@@ -1268,9 +1395,10 @@ class HudActivity : ComponentActivity() {
                         ))
                     }
 
-                    // Auto-scroll to bottom during streaming (unless user scrolled up)
+                    // Auto-scroll to bottom during streaming (unless user scrolled up).
+                    // isScrolledToEnd is pixel-accurate (from LazyListState).
                     val shouldAutoScroll = current.focusedArea != ChatFocusArea.CONTENT ||
-                        current.scrollPosition >= current.messages.size - 2
+                        current.isScrolledToEnd
 
                     hudState.value = current.copy(
                         messages = messages,
@@ -1486,6 +1614,29 @@ class HudActivity : ComponentActivity() {
                         current.copy(ttsEnabled = enabled)
                     }
                     Log.d(GlassesApp.TAG, "TTS state: enabled=$enabled, voice=$voiceName")
+                }
+
+                "video_state" -> {
+                    val recording = msg.optBoolean("recording", false)
+                    hudState.update { current -> current.copy(isRecording = recording) }
+                    Log.d(GlassesApp.TAG, "Video recording: $recording")
+                }
+
+                "card" -> {
+                    // Interactive TARS card needing Confirm/Dismiss
+                    val card = msg.optJSONObject("card")
+                    if (card != null) {
+                        val (title, body) = summarizeCard(card)
+                        hudState.update { current ->
+                            current.copy(
+                                pendingCardTitle = title,
+                                pendingCardBody = body,
+                                pendingCardJson = card.toString(),
+                                cardActionIndex = 0
+                            )
+                        }
+                        Log.d(GlassesApp.TAG, "Card pending: $title")
+                    }
                 }
 
                 else -> {

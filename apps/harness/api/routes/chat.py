@@ -144,6 +144,17 @@ def _pptx_to_text(data: bytes) -> str:
     return "\n".join(parts)
 
 
+def _sniff_image_media_type(data: bytes) -> str:
+    """Detect image MIME from magic bytes (Rokid glasses send WebP; Camera2 sends JPEG)."""
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:3] == b"GIF":
+        return "image/gif"
+    return "image/jpeg"
+
+
 async def _process_attachment(upload: UploadFile) -> dict:
     data = await upload.read()
     ct = (upload.content_type or "").lower()
@@ -481,6 +492,7 @@ async def send_message(
     conversation_id: str,
     content: str = Form(default=""),
     files: List[UploadFile] = File(default=[]),
+    image_base64: Optional[str] = Form(default=None),
     artifact_id: Optional[str] = Form(default=None),
     tier_override: Optional[str] = Form(default=None),
     location_lat: Optional[float] = Form(default=None),
@@ -505,6 +517,21 @@ async def send_message(
             )
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
+
+    # Base64 image attachment (Rokid glasses bridge sends photos this way)
+    if image_base64:
+        try:
+            raw = base64.b64decode(image_base64)
+            image_blocks.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": _sniff_image_media_type(raw),
+                    "data": base64.standard_b64encode(raw).decode(),
+                },
+            })
+        except Exception:
+            log.warning("send_message: invalid image_base64 attachment ignored")
 
     # If artifact_id provided, inject artifact content as invisible model context
     if artifact_id:

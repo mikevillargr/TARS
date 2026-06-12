@@ -305,6 +305,12 @@ fun MainScreen() {
         openClawClient.onSessionList = { msg ->
             glassesManager.sendRawMessage(msg.toJson())
         }
+        openClawClient.onCard = { json ->
+            // Interactive card → glasses HUD confirm overlay (treated as new
+            // content so the wake flow lights the display).
+            android.util.Log.i("MainScreen", "Forwarding card to glasses: ${json.take(120)}")
+            glassesManager.sendRawMessage(json, isNewMessage = true)
+        }
         openClawClient.onConnectionUpdate = { msg ->
             glassesManager.sendRawMessage(msg.toJson())
         }
@@ -481,6 +487,42 @@ fun MainScreen() {
                     "stop_tts" -> {
                         android.util.Log.d("MainScreen", "Glasses requested TTS stop")
                         ttsPlaybackManager.stop()
+                    }
+                    "set_brightness" -> {
+                        val value = json.optInt("value", -1)
+                        if (value in 0..15) {
+                            android.util.Log.d("MainScreen", "Glasses requested brightness $value")
+                            RokidSdkManager.setGlassBrightness(value)
+                        }
+                    }
+                    "video_record" -> {
+                        val action = json.optString("action", "")
+                        android.util.Log.i("MainScreen", "Glasses requested video_record: $action")
+                        val recording = when (action) {
+                            "start" -> RokidSdkManager.startVideoRecord()
+                            "stop" -> { RokidSdkManager.stopVideoRecord(); false }
+                            else -> RokidSdkManager.isVideoRecording
+                        }
+                        val stateMsg = org.json.JSONObject().apply {
+                            put("type", "video_state")
+                            put("recording", recording)
+                        }
+                        glassesManager.sendRawMessage(stateMsg.toString())
+                    }
+                    "card_action" -> {
+                        val action = json.optString("action", "")
+                        val card = json.optJSONObject("card")
+                        android.util.Log.i("MainScreen", "Glasses card_action: $action ${card?.optString("type")}")
+                        if (action == "confirm" && card != null) {
+                            com.clawsses.phone.openclaw.CardActions.confirm(card) { ok, summary ->
+                                val note = com.clawsses.shared.ChatMessage(
+                                    id = "card-${System.currentTimeMillis()}",
+                                    role = "assistant",
+                                    content = if (ok) "✓ $summary" else "✗ $summary",
+                                )
+                                glassesManager.sendRawMessage(note.toJson())
+                            }
+                        }
                     }
                     "tts_toggle" -> {
                         val enabled = json.optBoolean("enabled", false)

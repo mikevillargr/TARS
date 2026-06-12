@@ -304,6 +304,24 @@ async def _stream_to_glasses(
                                 "chunk": f"\n{label}\n",
                             })
 
+                    elif ev_type in _CONFIRMABLE_CARDS:
+                        # Interactive card needing user confirmation — forward the
+                        # full payload; the glasses HUD shows a Confirm/Dismiss
+                        # overlay and the phone executes the matching REST call.
+                        await send_fn({"type": "card", "card": event})
+
+                    elif ev_type in _DISPLAY_CARDS:
+                        # Display-only cards: inline one-line summary (never
+                        # forward heavy payloads like chart base64 to the HUD).
+                        summary = _card_summary(event)
+                        if summary:
+                            await send_fn({
+                                "type": "chat_stream",
+                                "id": msg_id,
+                                "role": "assistant",
+                                "chunk": f"\n{summary}\n",
+                            })
+
                     elif ev_type == "done":
                         await send_fn({"type": "chat_stream_end", "id": msg_id})
                         # Prefer streamed text; fall back to the full content on the done event.
@@ -375,3 +393,35 @@ _TOOL_LABELS = {
 
 def _tool_label(tool_name: str) -> str:
     return _TOOL_LABELS.get(tool_name, f"[{tool_name}…]")
+
+
+# Cards the HUD can confirm via gesture (phone executes the REST call).
+_CONFIRMABLE_CARDS = {"email_draft", "calendar_suggest", "task_suggest"}
+
+# Cards summarized inline on the HUD (no interaction; heavy payloads stripped).
+_DISPLAY_CARDS = {
+    "contact_card", "place_card", "artifact_created",
+    "chart_image", "search_images", "agent_job_created",
+}
+
+
+def _card_summary(event: dict) -> str:
+    t = event.get("type")
+    try:
+        if t == "contact_card":
+            names = [c.get("display_name", "?") for c in event.get("contacts", [])[:3]]
+            return f"[Contact: {', '.join(names)}]" if names else ""
+        if t == "place_card":
+            names = [p.get("name", "?") for p in event.get("places", [])[:3]]
+            return f"[Places: {', '.join(names)}]" if names else ""
+        if t == "artifact_created":
+            return f"[Created: {event.get('filename', 'document')}]"
+        if t == "chart_image":
+            return f"[Chart: {event.get('title') or 'generated'} — view in TARS app]"
+        if t == "search_images":
+            return f"[Images found for '{event.get('query', '')}' — view in TARS app]"
+        if t == "agent_job_created":
+            return f"[Agent job started: {(event.get('instruction') or '')[:60]}]"
+    except Exception:
+        pass
+    return ""
