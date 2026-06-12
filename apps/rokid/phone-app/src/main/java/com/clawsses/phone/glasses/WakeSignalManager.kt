@@ -76,6 +76,7 @@ class WakeSignalManager(
 
     // Track last hardware wake call to rate-limit keep-alives
     private var lastHardwareWakeTime = 0L
+    private var streamKeepaliveJob: Job? = null
 
     // Track last wake signal time to avoid spam
     private var lastWakeSignalTime = 0L
@@ -206,6 +207,21 @@ class WakeSignalManager(
                 lastHardwareWakeTime = now
             }
         }
+
+        // Active keepalive ticker: refresh the screen-off timer for the whole
+        // duration of the stream, including silent stretches (tool calls) where
+        // no chunks arrive — the display must never dim mid-response.
+        if (streamKeepaliveJob?.isActive != true) {
+            streamKeepaliveJob = scope.launch {
+                while (isStreaming) {
+                    delay(WAKE_KEEPALIVE_INTERVAL_MS)
+                    if (isStreaming && _enabled.value) {
+                        wakeHardwareDisplay()
+                        lastHardwareWakeTime = System.currentTimeMillis()
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -215,6 +231,9 @@ class WakeSignalManager(
      */
     fun notifyStreamEnd(messageId: String) {
         isStreaming = false
+        streamKeepaliveJob?.cancel()
+        streamKeepaliveJob = null
+        // Start the user's configured idle countdown now that the stream is done
         RokidSdkManager.setScreenOffTimeout(RokidSdkManager.screenTimeoutSeconds)
     }
 
