@@ -467,7 +467,12 @@ class HudActivity : ComponentActivity() {
                     scrollDown()
                 }
             }
-            Gesture.TAP -> scrollToBottom()
+            Gesture.TAP -> {
+                // Tap also halts any ongoing TTS on the phone — the natural
+                // "stop talking" gesture. No-op when nothing is playing.
+                phoneConnection.sendToPhone("""{"type":"stop_tts"}""")
+                scrollToBottom()
+            }
             Gesture.DOUBLE_TAP -> {
                 val current = hudState.value
                 if (current.showInputStaging || current.photoThumbnails.isNotEmpty()) {

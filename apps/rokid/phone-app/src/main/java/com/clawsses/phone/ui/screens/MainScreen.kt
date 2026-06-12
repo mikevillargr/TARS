@@ -364,6 +364,9 @@ fun MainScreen() {
                     }
                     "start_voice" -> {
                         android.util.Log.d("MainScreen", "Glasses requested voice recognition start")
+                        // Kill any ongoing TTS — both so the user can interrupt TARS by
+                        // speaking, and so playback doesn't bleed into the mic capture.
+                        ttsPlaybackManager.stop()
                         com.clawsses.phone.glasses.RokidSdkManager.setCommunicationDevice()
                         // Keep SDK AI scene alive (it times out without ASR content)
                         com.clawsses.phone.glasses.RokidSdkManager.sendAsrContent("...")
@@ -474,6 +477,10 @@ fun MainScreen() {
                             voiceName = ttsSettingsManager.selectedVoiceName.value
                         )
                         glassesManager.sendRawMessage(ttsStateMsg.toJson())
+                    }
+                    "stop_tts" -> {
+                        android.util.Log.d("MainScreen", "Glasses requested TTS stop")
+                        ttsPlaybackManager.stop()
                     }
                     "tts_toggle" -> {
                         val enabled = json.optBoolean("enabled", false)
