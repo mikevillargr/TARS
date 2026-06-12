@@ -4,15 +4,24 @@ import android.content.Context
 import android.media.MediaPlayer
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.coroutines.resume
 
 /**
- * Manages TTS audio playback using MediaPlayer.
- * New messages interrupt current playback.
+ * Streams TTS playback in sentence groups (like the TARS web app): the reply is
+ * split into ~250-char sentence-bounded chunks; chunk N plays while chunk N+1
+ * synthesizes on the server — first audio starts after one short synthesis
+ * instead of waiting for the whole reply, and Kokoro's per-call phoneme limit
+ * is never approached. New messages interrupt current playback.
  */
 class TtsPlaybackManager(
     private val context: Context,
@@ -20,11 +29,11 @@ class TtsPlaybackManager(
     private val settings: TtsSettingsManager
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var speakJob: Job? = null
     private var mediaPlayer: MediaPlayer? = null
-    private var currentTempFile: File? = null
 
     /**
-     * Speak the given text using ElevenLabs TTS.
+     * Speak the given text via Kokoro on the TARS server.
      * Stops any current playback first.
      */
     fun speak(text: String) {
@@ -32,107 +41,103 @@ class TtsPlaybackManager(
             Log.d(TAG, "TTS disabled, skipping")
             return
         }
-
-        // Kokoro runs on the TARS server — no API key needed. Voice may be null;
-        // the harness then uses the user's saved TARS voice preference.
-        val apiKey = ""
         val voiceId = settings.selectedVoiceId.value
+        val speed = settings.speed.value.toDouble()
 
-        // Stop any current playback
         stop()
 
-        scope.launch {
+        val chunks = splitForTts(text)
+        Log.d(TAG, "Speaking ${text.length} chars in ${chunks.size} chunk(s)")
+
+        speakJob = scope.launch {
+            var nextAudio: Deferred<File?> = async { synthesizeToFile(chunks[0], voiceId, speed, 0) }
             try {
-                Log.d(TAG, "Synthesizing TTS for text: ${text.take(50)}...")
-
-                val speed = settings.speed.value.toDouble()
-                val result = client.synthesize(apiKey, voiceId, text, speed)
-
-                result.onSuccess { inputStream ->
-                    // Write to temp file for MediaPlayer
-                    val tempFile = File.createTempFile("tts_", ".wav", context.cacheDir)
-                    currentTempFile = tempFile
-
-                    FileOutputStream(tempFile).use { output ->
-                        inputStream.copyTo(output)
+                for (i in chunks.indices) {
+                    val file = nextAudio.await()
+                    if (!isActive) { file?.delete(); break }
+                    // Prefetch the next chunk while this one plays
+                    if (i + 1 < chunks.size) {
+                        nextAudio = async { synthesizeToFile(chunks[i + 1], voiceId, speed, i + 1) }
                     }
-                    inputStream.close()
-
-                    Log.d(TAG, "Audio saved to temp file: ${tempFile.absolutePath}")
-
-                    // Play on main thread
-                    launch(Dispatchers.Main) {
-                        playAudioFile(tempFile)
-                    }
-                }.onFailure { error ->
-                    Log.e(TAG, "TTS synthesis failed", error)
+                    if (file == null) continue   // synthesis failed — skip chunk
+                    playAndAwait(file)
+                    file.delete()
+                    if (!isActive) break
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during TTS", e)
+            } finally {
+                releasePlayer()
             }
         }
     }
 
-    private fun playAudioFile(file: File) {
-        try {
-            mediaPlayer?.release()
+    private suspend fun synthesizeToFile(chunk: String, voiceId: String?, speed: Double, index: Int): File? {
+        return try {
+            val result = client.synthesize("", voiceId, chunk, speed)
+            result.fold(
+                onSuccess = { input ->
+                    val f = File.createTempFile("tts_${index}_", ".wav", context.cacheDir)
+                    FileOutputStream(f).use { out -> input.use { it.copyTo(out) } }
+                    f
+                },
+                onFailure = { e ->
+                    Log.e(TAG, "TTS synthesis failed for chunk $index", e)
+                    null
+                }
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during TTS chunk $index", e)
+            null
+        }
+    }
 
-            mediaPlayer = MediaPlayer().apply {
+    /** Play a WAV file and suspend until playback finishes (or fails). */
+    private suspend fun playAndAwait(file: File) = suspendCancellableCoroutine { cont ->
+        try {
+            releasePlayer()
+            val player = MediaPlayer().apply {
                 setDataSource(file.absolutePath)
                 setOnCompletionListener {
-                    Log.d(TAG, "Playback completed")
-                    cleanup()
+                    if (cont.isActive) cont.resume(Unit)
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
-                    cleanup()
+                    if (cont.isActive) cont.resume(Unit)
                     true
                 }
                 prepare()
                 start()
-                Log.d(TAG, "Playback started")
             }
+            mediaPlayer = player
+            cont.invokeOnCancellation {
+                try { player.stop() } catch (_: Exception) {}
+                try { player.release() } catch (_: Exception) {}
+            }
+            Log.d(TAG, "Playback started (${file.length() / 1024} KB)")
         } catch (e: Exception) {
             Log.e(TAG, "Error playing audio file", e)
-            cleanup()
+            if (cont.isActive) cont.resume(Unit)
         }
     }
 
     /**
-     * Stop current playback and cleanup.
+     * Stop current playback (and any queued chunks).
      */
     fun stop() {
+        speakJob?.cancel()
+        speakJob = null
+        releasePlayer()
+    }
+
+    private fun releasePlayer() {
         try {
             mediaPlayer?.let {
-                if (it.isPlaying) {
-                    it.stop()
-                }
+                if (it.isPlaying) it.stop()
                 it.release()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping MediaPlayer", e)
+            Log.e(TAG, "Error releasing MediaPlayer", e)
         }
         mediaPlayer = null
-        deleteTempFile()
-    }
-
-    private fun cleanup() {
-        mediaPlayer?.release()
-        mediaPlayer = null
-        deleteTempFile()
-    }
-
-    private fun deleteTempFile() {
-        currentTempFile?.let { file ->
-            try {
-                if (file.exists()) {
-                    file.delete()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error deleting temp file", e)
-            }
-        }
-        currentTempFile = null
     }
 
     /**
@@ -147,5 +152,36 @@ class TtsPlaybackManager(
 
     companion object {
         private const val TAG = "TtsPlaybackManager"
+        private const val MAX_CHUNK_CHARS = 250
+
+        /** Sentence-bounded chunks ≤ MAX_CHUNK_CHARS (hard-split as fallback). */
+        fun splitForTts(text: String): List<String> {
+            val sentences = text.trim().split(Regex("(?<=[.!?…])\\s+"))
+            val chunks = mutableListOf<String>()
+            val current = StringBuilder()
+            for (raw in sentences) {
+                var s = raw.trim()
+                if (s.isEmpty()) continue
+                while (s.length > MAX_CHUNK_CHARS) {
+                    var cut = s.lastIndexOf(',', MAX_CHUNK_CHARS)
+                    if (cut < MAX_CHUNK_CHARS / 2) cut = s.lastIndexOf(' ', MAX_CHUNK_CHARS)
+                    if (cut <= 0) cut = MAX_CHUNK_CHARS
+                    if (current.isNotEmpty()) { chunks.add(current.toString()); current.clear() }
+                    chunks.add(s.substring(0, cut).trim())
+                    s = s.substring(cut).trimStart(',', ' ')
+                }
+                if (s.isEmpty()) continue
+                if (current.length + s.length + 1 <= MAX_CHUNK_CHARS) {
+                    if (current.isNotEmpty()) current.append(' ')
+                    current.append(s)
+                } else {
+                    if (current.isNotEmpty()) chunks.add(current.toString())
+                    current.clear()
+                    current.append(s)
+                }
+            }
+            if (current.isNotEmpty()) chunks.add(current.toString())
+            return chunks.ifEmpty { listOf(text.take(MAX_CHUNK_CHARS)) }
+        }
     }
 }

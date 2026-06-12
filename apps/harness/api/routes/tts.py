@@ -339,6 +339,46 @@ def _prepare_text(text: str) -> str:
     return text.strip()
 
 
+def _split_for_tts(text: str, max_chars: int = 350) -> list[str]:
+    """Split text into sentence-bounded chunks under Kokoro's ~510-phoneme cap.
+
+    350 chars of English is comfortably below the limit. Sentences longer than
+    max_chars are hard-split on commas/spaces as a fallback.
+    """
+    import re as _re
+    sentences = _re.split(r"(?<=[.!?…])\s+", text)
+    chunks: list[str] = []
+    current = ""
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        # Hard-split pathological sentences
+        while len(s) > max_chars:
+            cut = s.rfind(",", 0, max_chars)
+            if cut < max_chars // 2:
+                cut = s.rfind(" ", 0, max_chars)
+            if cut <= 0:
+                cut = max_chars
+            piece, s = s[:cut].strip(), s[cut:].lstrip(", ")
+            if current:
+                chunks.append(current)
+                current = ""
+            if piece:
+                chunks.append(piece)
+        if not s:
+            continue
+        if len(current) + len(s) + 1 <= max_chars:
+            current = f"{current} {s}".strip()
+        else:
+            if current:
+                chunks.append(current)
+            current = s
+    if current:
+        chunks.append(current)
+    return chunks or [text[:max_chars]]
+
+
 # ── Voice → espeak language code mapping ──────────────────────────────────────
 
 _VOICE_LANG: dict[str, str] = {
@@ -398,13 +438,22 @@ async def synthesize(
 
     try:
         def _synth() -> bytes:
+            import numpy as np
             import soundfile as sf
             kokoro  = _get_kokoro()
-            samples, sample_rate = kokoro.create(
-                text, voice=voice, speed=speed, lang=lang
-            )
+            # Kokoro's ONNX model caps at 510 phonemes per call — long text raises
+            # "index 510 is out of bounds". Synthesize sentence-bounded chunks and
+            # concatenate the audio.
+            parts = []
+            sample_rate = 24000
+            for chunk in _split_for_tts(text):
+                samples, sample_rate = kokoro.create(
+                    chunk, voice=voice, speed=speed, lang=lang
+                )
+                parts.append(samples)
+            full = np.concatenate(parts) if len(parts) > 1 else parts[0]
             buf = io.BytesIO()
-            sf.write(buf, samples, sample_rate, format="WAV")
+            sf.write(buf, full, sample_rate, format="WAV")
             return buf.getvalue()
 
         loop       = asyncio.get_event_loop()
