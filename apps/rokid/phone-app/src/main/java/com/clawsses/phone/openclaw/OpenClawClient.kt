@@ -163,6 +163,11 @@ class OpenClawClient(
         this.token = token
         this.useTls = inferTls(port)
         this.shouldReconnect = true
+        // Share connection details with REST-calling components (Kokoro TTS).
+        TarsServerConfig.host = host
+        TarsServerConfig.port = port
+        TarsServerConfig.token = token
+        TarsServerConfig.useTls = this.useTls
         openSocket()
     }
 

@@ -1,8 +1,11 @@
 package com.clawsses.phone.tts
 
+import com.clawsses.phone.openclaw.TarsServerConfig
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -12,92 +15,105 @@ import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 /**
- * ElevenLabs API client for text-to-speech synthesis.
+ * TTS client for the TARS harness's Kokoro engine (clawsses' ElevenLabs client
+ * retrofitted — class/method names kept so the rest of the app is unchanged).
+ *
+ *   POST {base}/api/tts          {"text","voice"?,"speed"?} -> audio/wav
+ *   GET  {base}/api/tts/voices   -> {"voices": ["af_bella", ...]}
+ *
+ * Auth is the TARS JWT from [TarsServerConfig] (set on connect); the legacy
+ * `apiKey` parameters are ignored. Voice may be null/blank — the harness then
+ * uses the user's saved TARS voice preference.
  */
 class ElevenLabsClient {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS) // Kokoro synthesis of long replies
         .build()
 
     private val gson = Gson()
 
-    /**
-     * Fetch available voices from ElevenLabs API.
-     */
+    /** Wait briefly for the TARS connection to come up (e.g. settings opened early). */
+    private suspend fun awaitConfig(): Boolean {
+        var waited = 0
+        while (!TarsServerConfig.isReady && waited < 5_000) {
+            delay(250); waited += 250
+        }
+        return TarsServerConfig.isReady
+    }
+
+    /** Fetch available Kokoro voices from the TARS harness. */
     suspend fun getVoices(apiKey: String): Result<List<Voice>> = withContext(Dispatchers.IO) {
         try {
+            if (!awaitConfig()) {
+                return@withContext Result.failure(Exception("Not connected to TARS yet"))
+            }
             val request = Request.Builder()
-                .url("$BASE_URL/voices")
-                .header("xi-api-key", apiKey)
+                .url("${TarsServerConfig.baseUrl()}/api/tts/voices")
+                .header("Authorization", "Bearer ${TarsServerConfig.token}")
                 .get()
                 .build()
 
-            val response = client.newCall(request).execute()
-
-            if (!response.isSuccessful) {
-                return@withContext Result.failure(
-                    Exception("Failed to fetch voices: ${response.code} ${response.message}")
-                )
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(
+                        Exception("Failed to fetch voices: ${response.code} ${response.message}")
+                    )
+                }
+                val body = response.body?.string()
+                    ?: return@withContext Result.failure(Exception("Empty response body"))
+                val voicesResponse = gson.fromJson(body, KokoroVoicesResponse::class.java)
+                val names = voicesResponse?.voices ?: emptyList()
+                Result.success(names.map { Voice(voiceId = it, name = it) })
             }
-
-            val body = response.body?.string()
-                ?: return@withContext Result.failure(Exception("Empty response body"))
-
-            val voicesResponse = gson.fromJson(body, VoicesResponse::class.java)
-            Result.success(voicesResponse.voices)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
     /**
-     * Synthesize text to speech and return audio stream.
-     * Returns MP3 audio data as InputStream.
+     * Synthesize text via Kokoro on the TARS server.
+     * Returns WAV audio data as InputStream.
      */
     suspend fun synthesize(
         apiKey: String,
-        voiceId: String,
+        voiceId: String?,
         text: String,
         speed: Double = 1.0
     ): Result<InputStream> = withContext(Dispatchers.IO) {
         try {
-            val voiceSettings = if (speed != 1.0) VoiceSettings(speed = speed) else null
-            val requestBody = SynthesisRequest(
-                text = text,
-                modelId = MODEL_ID,
-                voiceSettings = voiceSettings
-            )
-
+            if (!awaitConfig()) {
+                return@withContext Result.failure(Exception("Not connected to TARS yet"))
+            }
+            val payload = JsonObject().apply {
+                addProperty("text", text)
+                if (!voiceId.isNullOrBlank()) addProperty("voice", voiceId)
+                addProperty("speed", speed)
+            }
             val request = Request.Builder()
-                .url("$BASE_URL/text-to-speech/$voiceId/stream")
-                .header("xi-api-key", apiKey)
-                .header("Content-Type", "application/json")
-                .post(gson.toJson(requestBody).toRequestBody("application/json".toMediaType()))
+                .url("${TarsServerConfig.baseUrl()}/api/tts")
+                .header("Authorization", "Bearer ${TarsServerConfig.token}")
+                .post(gson.toJson(payload).toRequestBody("application/json".toMediaType()))
                 .build()
 
             val response = client.newCall(request).execute()
-
             if (!response.isSuccessful) {
                 val errorBody = response.body?.string() ?: "Unknown error"
+                response.close()
                 return@withContext Result.failure(
                     Exception("TTS synthesis failed: ${response.code} - $errorBody")
                 )
             }
-
             val inputStream = response.body?.byteStream()
-                ?: return@withContext Result.failure(Exception("Empty response body"))
-
+                ?: run {
+                    response.close()
+                    return@withContext Result.failure(Exception("Empty response body"))
+                }
             Result.success(inputStream)
         } catch (e: Exception) {
             Result.failure(e)
         }
-    }
-
-    companion object {
-        private const val BASE_URL = "https://api.elevenlabs.io/v1"
-        private const val MODEL_ID = "eleven_turbo_v2_5"
     }
 }
 
@@ -110,16 +126,6 @@ data class Voice(
     @SerializedName("category") val category: String? = null
 )
 
-data class VoicesResponse(
-    @SerializedName("voices") val voices: List<Voice>
-)
-
-data class VoiceSettings(
-    @SerializedName("speed") val speed: Double
-)
-
-data class SynthesisRequest(
-    @SerializedName("text") val text: String,
-    @SerializedName("model_id") val modelId: String,
-    @SerializedName("voice_settings") val voiceSettings: VoiceSettings? = null
+data class KokoroVoicesResponse(
+    @SerializedName("voices") val voices: List<String>? = null
 )

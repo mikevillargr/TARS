@@ -12,7 +12,9 @@ class TtsSettingsManager(context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    private val _apiKey = MutableStateFlow(prefs.getString(KEY_API_KEY, "") ?: "")
+    // Kokoro runs on the TARS server — no external API key. Defaults to a
+    // non-blank sentinel so legacy "has key?" UI gates pass and voices auto-load.
+    private val _apiKey = MutableStateFlow(prefs.getString(KEY_API_KEY, "tars") ?: "tars")
     val apiKey: StateFlow<String> = _apiKey.asStateFlow()
 
     private val _selectedVoiceId = MutableStateFlow(prefs.getString(KEY_VOICE_ID, null))
@@ -52,10 +54,11 @@ class TtsSettingsManager(context: Context) {
     }
 
     /**
-     * Check if TTS is properly configured (has API key and voice selected).
+     * Check if TTS is usable. Kokoro needs no API key, and a null voice means
+     * the server uses the saved TARS voice preference — so enabled is enough.
      */
     fun isConfigured(): Boolean {
-        return _apiKey.value.isNotBlank() && _selectedVoiceId.value != null
+        return _isEnabled.value
     }
 
     companion object {

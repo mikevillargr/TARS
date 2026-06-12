@@ -31,6 +31,15 @@ class ApkInstaller(private val context: Context) {
         private const val GLASSES_APP_ASSET = "glasses-app-release.apk"
         private const val DEFAULT_ADB_PORT = 5555
         private const val OPERATION_TIMEOUT_MS = 60_000L
+        // SDK path budget: up to 3 WiFi P2P cycles (~55s each, the Rokid SDK retries
+        // internally ~10x per cycle) + 120s upload/install window.
+        private const val SDK_OPERATION_TIMEOUT_MS = 320_000L
+        private const val P2P_CYCLE_WAIT_MS = 55_000
+        private const val P2P_MAX_CYCLES = 3
+        // The HUD we launch after install (and the stale package we clean up).
+        private const val GLASSES_PACKAGE = "com.clawsses.glasses"
+        private const val GLASSES_ACTIVITY = "com.clawsses.glasses.HudActivity"
+        private const val OLD_GLASSES_PACKAGE = "com.tars.glasses"
     }
 
     /**
@@ -206,11 +215,14 @@ class ApkInstaller(private val context: Context) {
 
         installJob = scope.launch {
             try {
-                withTimeout(OPERATION_TIMEOUT_MS) {
+                // P2P negotiation alone can take up to 3 × ~55s cycles when the
+                // phone's LTE radio is squatting on the 2.4GHz band, plus the
+                // upload/install itself — so the overall budget is generous.
+                withTimeout(SDK_OPERATION_TIMEOUT_MS) {
                     doSdkInstall()
                 }
             } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "SDK installation timed out after ${OPERATION_TIMEOUT_MS}ms")
+                Log.e(TAG, "SDK installation timed out after ${SDK_OPERATION_TIMEOUT_MS}ms")
                 _installState.value = InstallState.Error("Installation timed out. Check glasses connection.")
             } catch (e: CancellationException) {
                 Log.d(TAG, "SDK installation cancelled")
@@ -269,30 +281,49 @@ class ApkInstaller(private val context: Context) {
             }
         }
 
-        // Step 4: Initialize WiFi P2P if not connected
+        // Step 4: Initialize WiFi P2P if not connected.
+        // The Rokid SDK uses legacy 2.4GHz WiFi Direct with no band selection and
+        // retries internally ~10x over ~50s. On phones where the LTE radio blocks
+        // 2.4GHz channels (shifting AVOID-FREQ windows), one cycle can lose the
+        // race — so we run up to P2P_MAX_CYCLES full cycles, waiting out each
+        // internal retry run before tearing down and starting fresh.
         if (!RokidSdkManager.isWifiP2PConnected()) {
             Log.i(TAG, "Initializing WiFi P2P for APK transfer...")
             _installState.value = InstallState.InitializingWifiP2P
 
-            if (!RokidSdkManager.initWifiP2P()) {
-                throw Exception("Failed to initialize WiFi P2P. Ensure Bluetooth is connected.")
-            }
-
-            // Wait for WiFi P2P connection (up to 30 seconds)
-            var waitTime = 0
-            while (!RokidSdkManager.isWifiP2PConnected() && waitTime < 30000) {
-                delay(500)
-                waitTime += 500
-                if (waitTime % 5000 == 0) {
-                    Log.i(TAG, "Still waiting for WiFi P2P... (${waitTime / 1000}s)")
+            var p2pReady = false
+            for (cycle in 1..P2P_MAX_CYCLES) {
+                Log.i(TAG, "WiFi P2P cycle $cycle/$P2P_MAX_CYCLES")
+                if (cycle > 1) {
+                    withContext(Dispatchers.Main) { RokidSdkManager.deinitWifiP2P() }
+                    delay(2000)
                 }
+                val initOk = withContext(Dispatchers.Main) { RokidSdkManager.initWifiP2P() }
+                if (!initOk) {
+                    Log.w(TAG, "initWifiP2P returned false on cycle $cycle")
+                    continue
+                }
+                var waitTime = 0
+                while (!RokidSdkManager.isWifiP2PConnected() && waitTime < P2P_CYCLE_WAIT_MS) {
+                    delay(500)
+                    waitTime += 500
+                    if (waitTime % 5000 == 0) {
+                        Log.i(TAG, "Still waiting for WiFi P2P... cycle $cycle (${waitTime / 1000}s)")
+                    }
+                }
+                if (RokidSdkManager.isWifiP2PConnected()) {
+                    p2pReady = true
+                    break
+                }
+                Log.w(TAG, "WiFi P2P cycle $cycle timed out")
             }
 
-            if (!RokidSdkManager.isWifiP2PConnected()) {
+            if (!p2pReady) {
                 throw Exception(
-                    "WiFi P2P connection timed out.\n\n" +
-                    "Ensure WiFi is enabled on both phone and glasses. " +
-                    "You may need to grant 'Nearby devices' permission in Android Settings."
+                    "WiFi P2P didn't come up after $P2P_MAX_CYCLES attempts.\n\n" +
+                    "The phone's cellular radio can block the 2.4GHz band the glasses use. " +
+                    "Keep WiFi on, move away from congested areas, and tap Install again — " +
+                    "it usually succeeds within a retry or two."
                 )
             }
         }
@@ -326,13 +357,36 @@ class ApkInstaller(private val context: Context) {
         }
 
         Log.i(TAG, "SDK APK installation successful!")
-        _installState.value = InstallState.Success("Glasses app installed successfully via SDK!")
 
         // Disconnect WiFi P2P to save battery — Bluetooth remains for communication.
         // Must switch to Main thread since SDK methods require it.
         withContext(Dispatchers.Main) {
             disconnectWifiP2PAfterInstall()
         }
+
+        // Installed APKs don't auto-start. Launch the HUD over the Bluetooth
+        // control channel (no WiFi needed), after letting the package manager
+        // on the glasses settle. Also clean up the legacy TARS HUD if present.
+        _installState.value = InstallState.Installing("Launching HUD on glasses…")
+        delay(1500)
+        var opened = false
+        RokidSdkManager.onApkOpenSucceed = { opened = true }
+        withContext(Dispatchers.Main) {
+            RokidSdkManager.openApp(GLASSES_PACKAGE, GLASSES_ACTIVITY)
+        }
+        var openWait = 0
+        while (!opened && openWait < 10_000) {
+            delay(500); openWait += 500
+        }
+        // Clean up the legacy TARS HUD afterwards (best-effort, non-blocking).
+        withContext(Dispatchers.Main) {
+            RokidSdkManager.uninstallApp(OLD_GLASSES_PACKAGE)
+        }
+
+        _installState.value = InstallState.Success(
+            if (opened) "Installed and launched on glasses!"
+            else "Installed! If the HUD didn't open, restart the glasses."
+        )
     }
 
     /**

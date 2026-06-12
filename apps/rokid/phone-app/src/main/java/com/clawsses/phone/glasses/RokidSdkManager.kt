@@ -80,6 +80,8 @@ object RokidSdkManager {
     var onApkUploadFailed: (() -> Unit)? = null
     var onApkInstallSucceed: (() -> Unit)? = null
     var onApkInstallFailed: (() -> Unit)? = null
+    var onApkOpenSucceed: (() -> Unit)? = null
+    var onApkOpenFailed: (() -> Unit)? = null
 
     // AI scene callbacks (voice input via glasses long-press)
     var onAiKeyDown: (() -> Unit)? = null
@@ -236,10 +238,12 @@ object RokidSdkManager {
 
         override fun onOpenAppSucceed() {
             Log.d(TAG, "App opened successfully")
+            onApkOpenSucceed?.invoke()
         }
 
         override fun onOpenAppFailed() {
             Log.e(TAG, "Failed to open app")
+            onApkOpenFailed?.invoke()
         }
     }
 
@@ -704,6 +708,44 @@ object RokidSdkManager {
             Log.d(TAG, "APK upload stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping APK upload", e)
+        }
+    }
+
+    /**
+     * Launch an installed app on the glasses over the Bluetooth control channel
+     * (Sys_App_Open). No WiFi P2P needed. onApkOpenSucceed/Failed fire on result.
+     */
+    fun openApp(packageName: String, activityName: String): Boolean {
+        if (!isBluetoothConnectedState) {
+            Log.e(TAG, "openApp: Bluetooth not connected")
+            return false
+        }
+        return try {
+            cxrApi?.openApp(
+                com.rokid.cxr.client.extend.infos.RKAppInfo(packageName, activityName),
+                apkCallback
+            )
+            Log.i(TAG, "openApp requested: $packageName/$activityName")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "openApp failed", e)
+            false
+        }
+    }
+
+    /**
+     * Uninstall an app from the glasses over the Bluetooth control channel
+     * (Sys_App_*). Best-effort — used to clean up stale HUD builds.
+     */
+    fun uninstallApp(packageName: String): Boolean {
+        if (!isBluetoothConnectedState) return false
+        return try {
+            cxrApi?.uninstallApk(packageName, apkCallback)
+            Log.i(TAG, "uninstallApp requested: $packageName")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "uninstallApp failed", e)
+            false
         }
     }
 

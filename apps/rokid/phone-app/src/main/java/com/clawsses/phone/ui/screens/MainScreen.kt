@@ -267,6 +267,11 @@ fun MainScreen() {
                 it is WakeSignalManager.WakeState.Awake || it is WakeSignalManager.WakeState.WakingUp
             }
             glassesManager.sendRawMessage(msg.toJson(), isNewMessage = isNewMessage)
+            // TARS sends the final assistant chat_message AFTER chat_stream_end,
+            // so this (not stream-end) is the reliable trigger for Kokoro TTS.
+            if (msg.role == "assistant" && msg.content.isNotBlank()) {
+                ttsPlaybackManager.onMessageComplete(msg.content)
+            }
         }
         openClawClient.onChatHistory = { messages ->
             // Full history reload (initial load or session switch) — reset glasses limit
@@ -288,11 +293,8 @@ fun MainScreen() {
             // Streaming complete — notify wake manager
             glassesManager.notifyStreamEnd(msg.id)
             glassesManager.sendRawMessage(msg.toJson())
-            // Trigger TTS if enabled
-            val fullText = openClawClient.chatMessages.value.lastOrNull { it.id == msg.id }?.content
-            if (fullText != null) {
-                ttsPlaybackManager.onMessageComplete(fullText)
-            }
+            // TTS fires from onChatMessage — TARS delivers the final assistant
+            // chat_message after stream_end, so the lookup here would miss it.
         }
         openClawClient.onSessionList = { msg ->
             glassesManager.sendRawMessage(msg.toJson())

@@ -33,18 +33,10 @@ class TtsPlaybackManager(
             return
         }
 
-        val apiKey = settings.apiKey.value
+        // Kokoro runs on the TARS server — no API key needed. Voice may be null;
+        // the harness then uses the user's saved TARS voice preference.
+        val apiKey = ""
         val voiceId = settings.selectedVoiceId.value
-
-        if (apiKey.isBlank()) {
-            Log.w(TAG, "No API key configured")
-            return
-        }
-
-        if (voiceId == null) {
-            Log.w(TAG, "No voice selected")
-            return
-        }
 
         // Stop any current playback
         stop()
@@ -58,7 +50,7 @@ class TtsPlaybackManager(
 
                 result.onSuccess { inputStream ->
                     // Write to temp file for MediaPlayer
-                    val tempFile = File.createTempFile("tts_", ".mp3", context.cacheDir)
+                    val tempFile = File.createTempFile("tts_", ".wav", context.cacheDir)
                     currentTempFile = tempFile
 
                     FileOutputStream(tempFile).use { output ->
