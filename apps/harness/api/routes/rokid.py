@@ -164,6 +164,8 @@ async def rokid_ws(
             except asyncio.TimeoutError:
                 await send({"type": "ping"})
                 continue
+            except (RuntimeError, WebSocketDisconnect):
+                break
 
             try:
                 msg = json.loads(raw)
