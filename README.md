@@ -1,67 +1,75 @@
 # TARS
 
-An AI operating system that runs your life. Chat, tasks, meetings, knowledge, scheduled prompts, agent jobs — all in one place, all connected, all talking to each other.
+Personal AI operating system. Chat, tasks, meetings, calendar, knowledge, cron jobs, agent jobs — all connected, all talking to each other.
 
-Built on Next.js 16 + FastAPI with a three-tier model routing architecture. Installable as a PWA. Every module is live and connected.
+Built on Next.js 15 + FastAPI with a three-tier model routing architecture. Installable as a PWA. Streams to Rokid AR glasses. Every module is live and connected.
 
-**Current version: v2.3.0**
+**Current version: v2.6.0**
 
 ---
 
 ## What it does
 
 ### Chat
-Streaming AI assistant with full tool use. Renders markdown, code with syntax highlighting, SVG diagrams, Mermaid flowcharts, and matplotlib charts directly inline in the message body — the code block is replaced by the rendered image when streaming finishes, with click-to-expand and a download button. Contextual reply chips appear when TARS presents a numbered list of options. Inline text selection toolbar — highlight anything in any message to Copy, Create Task, Save to Second Brain, Add to Calendar, Open URL, or Compose email. Tool calls surface as chips mid-message. Conversation list with auto-generated titles, focus mode, and file/image attachment support.
+Streaming AI assistant with full tool use. Renders markdown, code with syntax highlighting, SVG diagrams, Mermaid flowcharts, and matplotlib charts directly inline in the message body. Tool calls surface as chips mid-message. Inline text selection toolbar — highlight anything to Copy, Create Task, Save to Second Brain, Add to Calendar, Open URL, or Compose email. Contextual reply chips appear when TARS presents a numbered list. Conversation list with auto-generated titles and focus mode.
+
+Voice: tap the mic to record; VAD silence detection auto-sends. TTS: every response is read aloud sentence-by-sentence via Kokoro. An amber "TARS is speaking" pill with a stop button floats above the composer while audio plays. Voice and TTS can be toggled per session.
 
 ### Tasks
-Kanban board across five columns: Inbox → Todo → In Progress → Done → Snoozed. Cards show source badge, priority colour bar, due date, description preview, and connector sync indicator. Right-panel detail includes checklist support, full description, activity log, and inline editing. Custom column management. Bulk actions, quick-add, filter/sort bar. Tasks are auto-extracted from meetings and can be created from chat, artifacts, and Second Brain items.
+Kanban: Inbox → Todo → In Progress → Done → Snoozed. Cards show source badge, priority colour bar, due date, and connector sync indicator. Right-panel detail with checklist support, full description, and activity log. Auto-extracted from meetings; createable from chat, artifacts, and Second Brain.
 
 ### Meetings
-Fireflies.ai integration. Lists all meetings with status badges (Processing / Ready / Action Required). Detail view has Summary, Transcript (speaker labels + timestamps), and Actions tabs. Action items show suggested owners and due dates with one-click task creation. Auto-syncs every 4 hours via cron.
+Fireflies.ai integration. Lists all meetings with status badges (Processing / Ready / Action Required). Detail view: Summary, Transcript (speaker labels + timestamps), Actions tabs. Action items show suggested owners and due dates with one-click task creation.
 
 ### Calendar
-Google Calendar sync. Month/Week/Day views (week default). Events colour-coded by type — meetings, tasks with due dates, cron jobs, agent jobs. Mini month picker sidebar, Today button. Click any event to open the detail panel.
-
-### Strava & Garmin
-Fitness data connectors with full OAuth. Strava activities are searchable with date-range filtering, pagination, and multi-page server-side fetching. TARS can reference your recent rides, runs, and stats in chat via tool calls — pace, distance, elevation, heart rate zones, gear. Garmin Connect is integrated with token-based auth and a fallback flow for rate-limited IPs.
+Google Calendar sync. Month/Week/Day views (week default). Events colour-coded by type. Mini month picker, Today button. Click any event to open the detail panel.
 
 ### Second Brain
-Semantic knowledge store backed by pgvector. Two-stage RAG retrieval: item-level cosine similarity → chunk-level reranking within matched documents. Tag filter sidebar is searchable and paginated — handles large tag vocabularies cleanly. Ingests:
+Semantic knowledge store backed by pgvector. Two-stage RAG: item-level cosine similarity → chunk-level reranking. Ingests:
 
 - **URLs** — trafilatura extraction + AI summary
 - **Notes** — plain text with tags and domain
 - **Documents** — Tiptap WYSIWYG editor (headings, lists, code, links, images, inline AI rewrite)
 - **Files** — PDF, DOCX, PPTX, XLSX, images
 
-Quick Capture from any page with inline domain creation. AI BubbleMenu on selected text: Improve / Shorten / Expand / Rephrase / Continue, streamed via SSE. Items convertible to tasks in one click. Filter by tag and domain directly from the capture flow.
+Quick Capture from any page. AI BubbleMenu on selected text: Improve / Shorten / Expand / Rephrase / Continue. Tag filter sidebar with search and pagination.
 
 ### Agent Jobs
-Claude Code subprocess executor. Accepts a natural language instruction and optional repo path. Streams live output to the UI. Supervised mode pauses for Approve / Modify / Reject before destructive steps. Job list shows status pills, live streaming output, and creation time.
+Claude Code subprocess executor. Accepts a natural language instruction and optional repo path. Streams live output to the UI. Supervised mode pauses for Approve / Modify / Reject before destructive steps.
 
 ### Artifacts
-Generated output library. Every file TARS produces — documents, code, reports, spreadsheets, transcripts — is automatically saved and versioned when created via `generate_document`, `generate_presentation`, or `generate_pdf` tools. Grid and list views. Full preview in modal (markdown rendered, code syntax-highlighted). Version history, download, re-open in chat, save to Second Brain.
+Generated output library. Every file TARS produces — documents, code, reports, spreadsheets, transcripts — is automatically saved and versioned. Grid and list views. Full preview modal. Version history, download, re-open in chat, save to Second Brain.
 
 ### Cron Manager
-Two-type scheduled job system:
+Two-type scheduled jobs:
 
-**Connector Jobs** — system sync tasks (Fireflies transcript pull, Google Contacts sync) with configurable intervals and a Test button for immediate execution.
-
-**Prompt Jobs** — user-defined prompts that run on a wall-clock schedule. Create any number with an arbitrary name. Set frequency (daily / weekdays / weekly / biweekly / monthly), time, and day. When fired, the prompt runs through Claude Sonnet (Tier 3 with full tool access), and the response is saved as a new chat conversation with a notification. Last output is previewed on the card with a direct "Open in chat →" link. Time picker uses Asia/Manila timezone with a segmented HH:MM AM/PM control.
+- **Connector Jobs** — system sync tasks (Fireflies, Google Contacts) on configurable intervals.
+- **Prompt Jobs** — user-defined prompts on a wall-clock schedule. Create any number with an arbitrary name, frequency (daily / weekdays / weekly / biweekly / monthly), and time (Asia/Manila). Runs through Claude Sonnet with full tool access; result saved as a new chat conversation with a push notification.
 
 ### Connectors
-Google Calendar, Gmail, Fireflies, Strava, and Garmin Connect with a standard base interface. Each connector card shows live status, last synced time, capabilities, and a webhook event log. OAuth connectors have a full in-app flow with credential management from the Settings panel. All connectors support manual Sync Now and disconnect.
 
-### Mnemon
-Episodic memory layer. Stores facts, decisions, and context extracted from every conversation. Browse, filter by domain/source/importance, semantic search, edit, delete, or manually add memories. Injected into every chat turn alongside Second Brain context. Domains are shared with Second Brain — manage your domain taxonomy in one place across both systems.
+| Connector | Capabilities |
+|---|---|
+| Gmail | read, webhook |
+| Google Calendar | read, write |
+| Google Contacts | read, write, weekly sync |
+| Fireflies | read, webhook (meeting.ended) |
+| Strava | read (activities, stats, zones) |
+| Tesla (Tessie) | read, write (full vehicle control) |
+| OpenStreetMap | read, no API key required |
 
-### Domains
-User-managed taxonomy applied to both Second Brain items and Mnemon memories. Create, rename, and delete domains from the capture flow or directly in settings. Domains replace free-text categories with a consistent, searchable vocabulary across the knowledge layer.
+### Mnemon (Memory Browser)
+Episodic memory layer. Stores facts, decisions, and context from every conversation. Browse, filter, semantic search, edit, delete, or manually add memories. Injected into every chat turn alongside Second Brain context.
 
-### Notifications
-Real-time WebSocket notification system. A green dot appears on the Chat nav item and mobile tab bar whenever TARS sends a message while you're on another page. A toast notification pops up with a message preview and "View →" link. Both clear automatically when you open the conversation. Mute toggle and optional audio alert.
+### Rokid Glasses
+Streams TARS responses token-by-token to Rokid AR Lite glasses (480×640 green micro-LED HUD). Full duplex: voice input from glasses, TTS output to glasses speaker. Temple touchpad gestures for brightness, TTS stop, and display sleep.
+
+```
+TARS Harness ── ws /api/rokid/ws ── Android Phone ── Bluetooth (CXR-M) ── Rokid AR Lite
+```
 
 ### Settings
-Profile, model routing config with live switching between Anthropic and Z.ai (GLM) per tier, notification preferences, API key management, PWA install prompt.
+Profile, model routing config with live switching between Anthropic and Z.ai (GLM) per tier, notification preferences, Kokoro TTS voice selector and speed slider, API key management, PWA install prompt.
 
 ---
 
@@ -69,32 +77,27 @@ Profile, model routing config with live switching between Anthropic and Z.ai (GL
 
 | Tool | What it does |
 |---|---|
-| `create_task` | Create a task with title, priority, and due date |
-| `propose_task` | Suggest a task for user approval before creating |
-| `create_calendar_event` | Create a Google Calendar event |
-| `update_calendar_event` | Reschedule, rename, or edit an existing event |
-| `delete_calendar_event` | Remove an event from Google Calendar |
-| `propose_calendar_event` | Suggest an event for user approval |
+| `create_task` / `propose_task` | Create or suggest a task |
+| `create_calendar_event` / `propose_calendar_event` | Book or suggest an event |
+| `update_calendar_event` / `delete_calendar_event` | Edit or remove an event |
 | `save_memory` | Persist a fact to episodic memory |
-| `read_email` | Fetch recent emails from Gmail |
-| `send_email` | Send or reply to an email via Gmail |
+| `save_to_second_brain` | Ingest a URL or text as a knowledge item |
+| `read_email` | Fetch an email by thread ID or search query |
 | `read_meeting` | Fetch a meeting transcript and summary |
 | `sync_meetings` | Trigger a Fireflies sync |
-| `web_search` | Search the web with snippet results |
-| `save_to_second_brain` | Ingest a URL or text as a knowledge item |
+| `web_search` | Search the web for current information |
 | `generate_document` | Produce a DOCX artifact |
 | `generate_presentation` | Produce a PPTX artifact |
 | `generate_pdf` | Produce a PDF artifact |
-| `lookup_contact` / `search_contacts` | Search and fetch contacts |
-| `search_places` / `save_place` | Find and save places |
-| `create_agent_job` | Spin up a Claude Code agent job from chat |
-| `generate_chart` | Render a matplotlib chart inline in the message body |
-| `get_strava_activities` | List recent Strava activities with filtering |
-| `get_strava_activity` | Fetch a single activity with full streams |
-| `get_strava_stats` | Fetch cumulative training stats |
-| `get_strava_zones` | Fetch heart rate and power zones |
-
-Tools are available to Tier 2 and Tier 3 models. Tier 1 (Haiku) handles fast/simple queries without tools.
+| `lookup_contact` / `search_contacts` | Find a contact by name or browse all |
+| `create_contact` / `update_contact` | Add or update a Google Contact |
+| `search_places` / `save_place` / `get_saved_places` | Find and bookmark places (OSM) |
+| `get_strava_activities` / `get_strava_activity` | List or detail Strava activities |
+| `get_strava_stats` / `get_strava_zones` | Training totals and HR/power zones |
+| `get_tesla_status` | Full real-time vehicle state |
+| `tesla_command` | Execute any vehicle command (locks, climate, charging, etc.) |
+| `get_tesla_sessions` | Drive and charging history |
+| `create_agent_job` | Spawn a Claude Code agent job from chat |
 
 ---
 
@@ -106,27 +109,31 @@ Every request
     ├─ Classifier: Claude Haiku (~200ms)
     │
     ├─ Tier 1 (simple/fast)     → Claude Haiku          ~500ms
-    ├─ Tier 2 (most tasks)      → RunPod Serverless GPU  ~2-4s warm
-    └─ Tier 3 (tools/frontier)  → Claude Sonnet          ~3-8s
+    ├─ Tier 2 (most tasks)      → RunPod Serverless GPU  ~2–4s warm
+    └─ Tier 3 (tools/frontier)  → Claude Sonnet          ~3–8s
 ```
 
-Prompt cron jobs always route to Tier 3. Cold-start fallback: messages ≤500 chars → Haiku, longer → Sonnet.
+Cold-start fallback: messages ≤500 chars → Haiku, longer → Sonnet.
+Prompt cron jobs always route to Tier 3.
 
 **Stack**
 
 | Layer | Choice |
 |---|---|
-| Frontend | Next.js 16 PWA + Tailwind + shadcn/ui |
+| Frontend | Next.js 15 PWA + Tailwind + shadcn/ui |
 | Backend | FastAPI (Python) + SQLAlchemy async |
 | Database | PostgreSQL + pgvector |
 | Cache | Redis |
-| Episodic memory | Mnemon (custom RAG layer) |
-| Semantic memory | Second Brain — pgvector, two-stage RAG |
+| Episodic memory | Mnemon (episodic RAG) |
+| Semantic memory | Second Brain (pgvector, two-stage RAG) |
 | Tier 1 + classifier | Claude Haiku via Anthropic API |
 | Tier 2 | RunPod Serverless GPU — model via `WORKHORSE_MODEL` |
 | Tier 3 | Claude Sonnet via Anthropic API |
-| Document editor | Tiptap v2 (ProseMirror) |
+| Agentic executor | Claude Code subprocess |
+| TTS | Kokoro (sentence-by-sentence streaming) |
+| Document editor | Tiptap v2 |
 | Real-time | WebSocket notification stream |
+| Glasses | Rokid AR Lite via CXR-M/CXR-S BT SDK |
 | Process manager | PM2 |
 | Reverse proxy | Nginx + Let's Encrypt SSL |
 | CI/CD | GitHub Actions → SSH deploy |
@@ -180,12 +187,17 @@ Optional (enables additional features):
 RUNPOD_API_KEY=            # Tier 2 GPU inference
 RUNPOD_ENDPOINT_32B=
 WORKHORSE_MODEL=           # e.g. Qwen/Qwen3-32B-AWQ
-TAVILY_API_KEY=            # web search tool
+TAVILY_API_KEY=            # web search
 GMAIL_CLIENT_ID=           # Gmail + Google Calendar OAuth
 GMAIL_CLIENT_SECRET=
 GCAL_CLIENT_ID=
 GCAL_CLIENT_SECRET=
 FIREFLIES_API_KEY=         # meeting transcripts
+STRAVA_CLIENT_ID=          # Strava OAuth
+STRAVA_CLIENT_SECRET=
+TESSIE_API_KEY=            # Tesla via Tessie
+VAPID_PUBLIC_KEY=          # push notifications
+VAPID_PRIVATE_KEY=
 ```
 
 ---
@@ -195,14 +207,13 @@ FIREFLIES_API_KEY=         # meeting transcripts
 Runs on a Hostinger KVM4 (4 vCPU / 16GB RAM) managed by PM2 behind Nginx.
 
 ```bash
-# Pull and deploy
-ssh root@<your-server> "cd /opt/tars && git pull origin main"
-ssh root@<your-server> "cd /opt/tars/apps/harness && source .venv/bin/activate && python -m alembic upgrade head"
-ssh root@<your-server> "pm2 restart tars-harness"
-ssh root@<your-server> "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && pm2 restart tars-web"
+ssh tars "cd /opt/tars && git pull origin main"
+ssh tars "cd /opt/tars/apps/harness && source .venv/bin/activate && python -m alembic upgrade head"
+ssh tars "pm2 restart tars-harness"
+ssh tars "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && mkdir -p .next/standalone/apps/web/public && cp -r public/* .next/standalone/apps/web/public/ && pm2 restart tars-web"
 ```
 
-> ⚠️ The server has fail2ban. Do not run retry loops against SSH — repeated failed connection attempts will trigger an IP block.
+> The server has fail2ban. Do not run retry loops against SSH — repeated failed connection attempts will trigger an IP block.
 
 ---
 
@@ -210,30 +221,54 @@ ssh root@<your-server> "cd /opt/tars/apps/web && npm run build && cp -r .next/st
 
 [Semantic versioning](https://semver.org). All releases tagged on GitHub.
 
-- **MAJOR** — breaking changes or major new capability
-- **MINOR** — new features, backward compatible
-- **PATCH** — bug fixes only
+`SYSTEM_STATE.md` at the repo root tracks every version, infrastructure change, and the full architecture inventory — and is injected into TARS's context at runtime so it can answer questions about itself.
+
+---
 
 ## Changelog
 
+### v2.6.0
+Rokid glasses HUD: full TTS, photo flow, brightness control, session polish.
+
+- Swipe brightness control on temple touchpad; double-tap to stop TTS or sleep display
+- Hands-free photo flow, display-off gesture, Kokoro voice settings in glasses UI
+- TTS stop controls: tap to stop, voice trigger interrupts playback
+- Auto-send voice input; TTS enabled by default in glasses mode
+- Z.ai GLM models surfaced with free-tier defaults
+- Resilient WiFi P2P APK install + auto-launch HUD
+- Removed 500-char message truncation that corrupted large JSON
+- TTS streaming: chunked past Kokoro's 510-phoneme limit (both ends)
+- Active stream keepalive prevents display dimming mid-response
+- Null-safe Gson frame parsing; forced phone mic over glasses BT SCO
+
+### v2.5.0
+Kokoro TTS voice settings, chat composer redesign, amber speaking indicator.
+
+- Kokoro voice selector (alloy, echo, fable, onyx, nova, shimmer) + speed slider in Settings
+- Chat composer: mic on right when empty, send when text present, stop square when streaming
+- Amber floating "TARS is speaking" pill with AudioLines icon and stop button
+- TTS AbortController Set fix (stopped any active audio on new message)
+
+### v2.4.x
+Rokid AR Lite integration — FastAPI WebSocket bridge (`/api/rokid/ws`), Android phone-app (TarsClient, TarsBridgeService), glasses HUD (Jetpack Compose, 480×640 green micro-LED).
+
 ### v2.3.0
-- **GLM-5 support** — GLM-5.1 (Tier 3) and GLM-4.7 (Tier 2) wired through Z.ai's OpenAI-compatible endpoint; thinking token budget handled correctly for GLM-5.x
-- **Vision routing** — explicit vision model tier independent of the main tier config; prefers Anthropic for image analysis (Z.ai/GLM does not support vision); Vision row added to the model routing UI in Settings
-- **Calendar update/delete** — agents can now reschedule, rename, and delete calendar events via `update_calendar_event` and `delete_calendar_event` tools; event IDs are injected into context so the model can reference them directly
-- **Calendar context window** — expanded from 7 to 30 days (up to 30 events) so agents can see and act on events further out
-- **Email send fix** — 8-char truncated thread IDs from context are now expanded to full Gmail IDs before sending, resolving the 404 notFound error on replies
+- GLM-5.1 and GLM-4.7 support via Z.ai's OpenAI-compatible endpoint
+- Vision model routing with independent tier config
+- `update_calendar_event` and `delete_calendar_event` tools
+- Calendar context window expanded to 30 days
+- Email send thread ID fix (8-char truncated IDs expanded to full Gmail IDs)
 
 ### v2.2.0
-- **Strava connector** — full OAuth, activity list with date-range filtering, pagination, and multi-page fetching; four chat tools (activities, single activity, stats, zones)
-- **Garmin Connect** — token-based auth with fallback for rate-limited IPs
-- **Inline matplotlib charts** — code block is replaced by the rendered PNG when streaming completes; click to expand, download button; works for both Claude (tool) and Z.ai (code-block fallback) paths
-- **Email send approval gate** — send_email tool always surfaces a draft card for explicit approval before sending
-- **Contextual reply chips** — when TARS presents a numbered option list, clickable chips appear so you can reply without typing
-- **Second Brain tag filter** — sidebar tag list is now searchable and paginated
-- **Connector improvements** — Sync Now button on all connectors, Fireflies disconnect, better status display
+- Strava connector (OAuth, activities, stats, zones, chat tools)
+- Garmin Connect integration
+- Inline matplotlib chart rendering (code block replaced by PNG on stream complete)
+- Email send approval gate (draft card before sending)
+- Contextual reply chips for numbered lists
+- Second Brain tag filter pagination
 
-### v2.1.0 – v2.1.1
-Places, contacts, inline map cards, email draft cards, Google Contacts sync, pending contacts queue, Tiptap document editor in Second Brain.
+### v2.1.x
+Places (OSM), contacts (Google Contacts sync), inline map cards, email draft approval, Tiptap document editor in Second Brain.
 
 ### v2.0.0
-Domains taxonomy, Mnemon memory browser, notification WebSocket, PWA manifest, Settings panel, full production deploy on Hostinger KVM4.
+Domains taxonomy, Mnemon memory browser, WebSocket notifications, PWA manifest, Settings, full production deploy on Hostinger KVM4.
