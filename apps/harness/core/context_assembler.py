@@ -62,6 +62,9 @@ MEMORY SYSTEM (two stores — both are semantically searched and injected into e
   Trigger words: "save this", "add to second brain", "note this for later", "save this research".
   Also use when you produce analysis, comparisons, or findings the user might want to retrieve later.
 
+TIME:
+• get_current_time — get the precise current date and time in the user's timezone. Call this before any time-relative computation (task due dates, event scheduling, "in X hours", "next Monday"). The [CURRENT TIME] section in this prompt is stamped at request start — use the tool for precision mid-chain.
+
 WEB SEARCH:
 • web_search — search the web for current information. Use proactively when the query involves recent events, news, live data, prices, or anything that requires information beyond your training cutoff. Also use for research tasks. search_depth: "basic" for quick lookups, "advanced" for deeper research.
 
@@ -255,7 +258,7 @@ and Entire Travel Group. He is a randonneur and cyclist. He manages his health a
 {second_brain_context}
 {gmail_section}{gcal_section}{tasks_section}{meetings_section}{contacts_section}{strava_section}
 [ACTIVE CONTEXT]
-Timezone: {user_timezone}
+{current_time_section}Timezone: {user_timezone}
 {location_section}{active_tasks_count} open tasks
 Last interaction: {last_seen}
 
@@ -527,6 +530,16 @@ async def assemble(
         except Exception:
             pass
 
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    _now = datetime.now(ZoneInfo(user_tz))
+    current_time_section = (
+        f"[CURRENT TIME]\n"
+        f"{_now.strftime('%A, %B %-d, %Y  %-I:%M %p')} ({user_tz})\n"
+        f"ISO: {_now.isoformat()}\n"
+    )
+
+    if db is not None:
         async def _fetch_memory() -> tuple:
             _mnemon = "No relevant memories."
             _second_brain = "No relevant knowledge."
@@ -643,6 +656,7 @@ async def assemble(
         contacts_section=contacts_section,
         strava_section=strava_section,
         location_section=location_section,
+        current_time_section=current_time_section,
         user_timezone=user_tz,
         active_tasks_count=active_tasks_count,
         last_seen=last_seen,

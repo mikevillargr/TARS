@@ -205,6 +205,17 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     })
   }, [voice, router])
 
+  // Auto-detect browser timezone on mount and silently sync to server
+  useEffect(() => {
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (!detected) return
+    fetch("/api/proxy/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timezone: detected }),
+    }).catch(() => {})
+  }, [])
+
   // Global Cmd+K / Ctrl+K listener
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

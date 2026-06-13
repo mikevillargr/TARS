@@ -29,7 +29,7 @@ from core.model_client import (
     GET_STRAVA_ACTIVITIES_TOOL, GET_STRAVA_ACTIVITY_TOOL,
     GET_STRAVA_STATS_TOOL, GET_STRAVA_ZONES_TOOL,
     GET_TESLA_STATUS_TOOL, TESLA_COMMAND_TOOL, GET_TESLA_SESSIONS_TOOL,
-    GENERATE_CHART_TOOL,
+    GENERATE_CHART_TOOL, GET_CURRENT_TIME_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -758,6 +758,7 @@ async def send_message(
         GET_TESLA_STATUS_TOOL,
         TESLA_COMMAND_TOOL,
         GET_TESLA_SESSIONS_TOOL,
+        GET_CURRENT_TIME_TOOL,
         # generate_chart only sent to Anthropic — Z.ai/GLM refuses the tool and
         # outputs "environment not configured". With Z.ai, the code-block fallback
         # runs post-stream instead (no tool needed, GLM naturally writes Python code).
@@ -2285,6 +2286,27 @@ plt.close('all')
                         finally:
                             if _os.path.exists(_output_path):
                                 _os.unlink(_output_path)
+
+                    if name == "get_current_time":
+                        from datetime import datetime, timezone as _tz
+                        from zoneinfo import ZoneInfo
+                        from sqlalchemy import select as _sel
+                        from db.models import User as _User
+                        _tz_name = "UTC"
+                        try:
+                            _r = await bg_db.execute(_sel(_User.timezone).where(_User.id == user_id))
+                            _tz_val = _r.scalar_one_or_none()
+                            if _tz_val:
+                                _tz_name = _tz_val
+                        except Exception:
+                            pass
+                        _now_utc = datetime.now(_tz.utc)
+                        _now_local = _now_utc.astimezone(ZoneInfo(_tz_name))
+                        return (
+                            f"Local: {_now_local.strftime('%A, %B %-d, %Y  %-I:%M %p')} ({_tz_name})\n"
+                            f"ISO local: {_now_local.isoformat()}\n"
+                            f"UTC ISO: {_now_utc.isoformat()}"
+                        )
 
                     return "Action completed."
 

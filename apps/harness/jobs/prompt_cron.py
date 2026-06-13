@@ -462,8 +462,14 @@ async def execute(job_id: str) -> str | None:
 
                 return f"Tool '{name}' is not available in scheduled task context."
 
+            import pytz as _pytz
+            _tz_obj = _pytz.timezone(tz_name)
+            _fire_time = datetime.now(_tz_obj)
+            _fire_prefix = (
+                f"[Scheduled run: {_fire_time.strftime('%A, %B %-d, %Y  %-I:%M %p')} {tz_name}]\n\n"
+            )
             async for chunk in client.stream(
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": _fire_prefix + prompt}],
                 tier=ModelTier.TIER3,
                 system=system_prompt,
                 tools=tools,

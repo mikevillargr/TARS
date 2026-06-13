@@ -1068,6 +1068,21 @@ GET_TESLA_SESSIONS_TOOL = {
     },
 }
 
+GET_CURRENT_TIME_TOOL = {
+    "name": "get_current_time",
+    "description": (
+        "Returns the current date and time in the user's local timezone and as UTC ISO 8601. "
+        "Call this before computing any time-relative value — due dates ('in 2 hours', 'next Monday'), "
+        "event scheduling, countdowns, or whenever the user asks what time or date it is. "
+        "Never rely on training data for the current time."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
+
 GENERATE_CHART_TOOL = {
     "name": "generate_chart",
     "description": (
