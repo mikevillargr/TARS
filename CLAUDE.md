@@ -96,7 +96,7 @@ Humor setting: 75%.
 | Database | Postgres + pgvector | Structured data + semantic search |
 | Queue | Redis + BullMQ | Cron jobs + async task queue |
 | Memory | Mnemon + pgvector | Episodic memory layer |
-| Tier 2 inference | RunPod Serverless | GPU on demand, model set via WORKHORSE_MODEL |
+| Tier 2 inference | Z.ai (GLM models) | OpenAI-compatible endpoint, model set via Settings UI |
 | Tier 1 + Tier 3 | Anthropic API direct | Haiku (fast) + Sonnet (frontier/tools) |
 | Agentic executor | Claude Code via subprocess | Non-interactive mode, stdout capture |
 | Monorepo | Turborepo | Cached builds, parallel deploys |
@@ -110,17 +110,10 @@ Humor setting: 75%.
 
 | Component | Provider | Spec | Est. Cost |
 |---|---|---|---|
-| App server | Hostinger KVM4 (NEW, dedicated) | 4 vCPU, 16GB RAM, 200GB NVMe | ~$10-15/mo |
-| Existing server | Hostinger KVM4 (keep) | Current workloads untouched | Current price |
-| GPU inference | RunPod Serverless | RTX 4090, network volume 50GB+ | ~$20-40/mo |
-| Frontier API | Anthropic API | Pay per token | ~$10-20/mo |
-| Domain | IP-based for now | Subdomain/domain decision deferred | - |
-
-### RunPod Setup
-- Use **Secure Cloud** not Community Cloud for production
-- Attach **persistent network volume** (50GB+) to store model weights
-- Models downloaded once to volume, no re-download on cold start
-- Cold start ~10-30s on first request, harness falls back to Claude during warmup
+| App server | Hostinger KVM4 | 4 vCPU, 16GB RAM, 200GB NVMe | ~$10-15/mo |
+| Tier 2 inference | Z.ai API | GLM models via OpenAI-compatible endpoint | Pay per token |
+| Tier 1 + 3 API | Anthropic API | Haiku + Sonnet | Pay per token |
+| Domain | tarsmv.duckdns.org | DuckDNS pointing to 72.60.234.180 | Free |
 
 ---
 
@@ -137,8 +130,8 @@ Claude Haiku classifier (~200ms, Anthropic API)
     |   "What's on my calendar"     ~500ms
     |   "Mark that task done"
     |
-    +-- Tier 2 (most tasks) -------> RunPod Serverless GPU
-    |   Email summarization          ~2-4s (warm); cold falls back to Haiku/Sonnet
+    +-- Tier 2 (most tasks) -------> Z.ai GLM (e.g. GLM-4.7)
+    |   Email summarization          ~1-3s
     |   Meeting extraction
     |   Coding questions
     |   Day-to-day assistant work
@@ -155,16 +148,9 @@ Claude Haiku classifier (~200ms, Anthropic API)
 | Role | Model | Notes |
 |---|---|---|
 | Classifier + Tier 1 | Claude Haiku | Fast, cheap, always available via Anthropic API |
-| Tier 2 workhorse | RunPod GPU | Model configured via `WORKHORSE_MODEL` env var |
+| Tier 2 workhorse | Z.ai GLM-4.7 (default) | Configurable via Settings UI per-tier |
 | Tier 3 frontier | Claude Sonnet | Tool use, long context, client-facing work |
 | Embeddings | nomic-embed-text | pgvector semantic search |
-
-### Cold-start fallback
-```
-RunPod Tier 2 unavailable →
-  message ≤ 500 chars → Haiku (instant)
-  message > 500 chars → Sonnet (full quality)
-```
 
 ---
 
@@ -577,12 +563,8 @@ SERVER_SSH=root@72.60.234.180
 # GitHub
 GITHUB_REPO=https://github.com/mikevillargr/TARS
 
-# RunPod
-RUNPOD_API_KEY=rpa_your_runpod_api_key_here
-RUNPOD_ENDPOINT_32B=https://api.runpod.ai/v2/your_32b_endpoint/runsync
-RUNPOD_ENDPOINT_8B=https://api.runpod.ai/v2/your_8b_endpoint/runsync
-ROUTER_MODEL=Qwen/Qwen3-8B
-WORKHORSE_MODEL=Qwen/Qwen3-32B-AWQ
+# Z.ai (Tier 2 — GLM models)
+ZAI_API_KEY=your_zai_api_key_here
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here

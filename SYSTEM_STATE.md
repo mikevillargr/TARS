@@ -24,7 +24,7 @@
 | IP | 72.60.234.180 |
 | Domain | tarsmv.duckdns.org |
 | SSH alias | `ssh tars` (configured in ~/.ssh/config on dev machine) |
-| GPU inference | RunPod Serverless — RTX 4090, 50GB network volume |
+| Tier 2 inference | Z.ai API — GLM models via OpenAI-compatible endpoint |
 | CI/CD | GitHub Actions — triggers on version tags |
 
 ### Running Services (PM2)
@@ -50,7 +50,7 @@
 | Memory | Mnemon (episodic RAG) + pgvector |
 | Knowledge | Second Brain (semantic RAG) + pgvector |
 | Tier 1 + 3 inference | Anthropic API (Haiku + Sonnet) |
-| Tier 2 inference | RunPod Serverless GPU (WORKHORSE_MODEL env var) |
+| Tier 2 inference | Z.ai API — GLM models (configurable via Settings UI) |
 | Agentic executor | Claude Code via subprocess |
 | Monorepo | Turborepo |
 | Containerization | Docker Compose |
@@ -62,10 +62,10 @@
 | Tier | Model | Use Case | Latency |
 |---|---|---|---|
 | Tier 1 | Claude Haiku | Simple/fast queries, classifier | ~500ms |
-| Tier 2 | RunPod GPU (Qwen3-32B-AWQ) | Most tasks — email, summaries, day-to-day | 2–4s warm |
+| Tier 2 | Z.ai GLM-4.7 (default) | Most tasks — email, summaries, day-to-day | 1–3s |
 | Tier 3 | Claude Sonnet | All tool calls, client work, long context, complex reasoning | 3–8s |
 
-Cold-start fallback: RunPod unavailable → ≤500 chars to Haiku, >500 chars to Sonnet.
+Provider and model are configurable per-tier via the Settings UI (Anthropic or Z.ai).
 
 ---
 

@@ -109,11 +109,11 @@ Every request
     ├─ Classifier: Claude Haiku (~200ms)
     │
     ├─ Tier 1 (simple/fast)     → Claude Haiku          ~500ms
-    ├─ Tier 2 (most tasks)      → RunPod Serverless GPU  ~2–4s warm
+    ├─ Tier 2 (most tasks)      → Z.ai GLM               ~1–3s
     └─ Tier 3 (tools/frontier)  → Claude Sonnet          ~3–8s
 ```
 
-Cold-start fallback: messages ≤500 chars → Haiku, longer → Sonnet.
+Provider and model are configurable per-tier in Settings (Anthropic or Z.ai).
 Prompt cron jobs always route to Tier 3.
 
 **Stack**
@@ -127,7 +127,7 @@ Prompt cron jobs always route to Tier 3.
 | Episodic memory | Mnemon (episodic RAG) |
 | Semantic memory | Second Brain (pgvector, two-stage RAG) |
 | Tier 1 + classifier | Claude Haiku via Anthropic API |
-| Tier 2 | RunPod Serverless GPU — model via `WORKHORSE_MODEL` |
+| Tier 2 | Z.ai GLM (configurable via Settings UI) |
 | Tier 3 | Claude Sonnet via Anthropic API |
 | Agentic executor | Claude Code subprocess |
 | TTS | Kokoro (sentence-by-sentence streaming) |
@@ -184,9 +184,7 @@ python3 -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()
 
 Optional (enables additional features):
 ```env
-RUNPOD_API_KEY=            # Tier 2 GPU inference
-RUNPOD_ENDPOINT_32B=
-WORKHORSE_MODEL=           # e.g. Qwen/Qwen3-32B-AWQ
+ZAI_API_KEY=               # Tier 2 — Z.ai GLM models
 TAVILY_API_KEY=            # web search
 GMAIL_CLIENT_ID=           # Gmail + Google Calendar OAuth
 GMAIL_CLIENT_SECRET=
