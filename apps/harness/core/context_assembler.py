@@ -6,10 +6,26 @@ when the query warrants it.
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
+
+# SYSTEM_STATE.md — injected into Tier 3 prompts so TARS can answer questions about itself.
+# Loaded once at import time; refreshed on each process restart (i.e. after every deploy).
+_SYSTEM_STATE_PATH = Path(__file__).resolve().parents[3] / "SYSTEM_STATE.md"
+_system_state_cache: Optional[str] = None
+
+def _load_system_state() -> str:
+    global _system_state_cache
+    if _system_state_cache is None:
+        try:
+            _system_state_cache = _SYSTEM_STATE_PATH.read_text(encoding="utf-8")
+        except Exception as exc:
+            log.warning("Could not load SYSTEM_STATE.md: %s", exc)
+            _system_state_cache = ""
+    return _system_state_cache
 
 def _format_event_time(start: str, all_day: bool, tz_name: str = "UTC") -> str:
     if not start:
@@ -219,6 +235,7 @@ WHEN TO STORE MEMORY VS SECOND BRAIN:
 """
 
 SYSTEM_TEMPLATE = """You are TARS, Mike Villar's personal AI operating system.
+{system_state_section}
 
 You are direct, precise, and efficient - like your namesake from Interstellar. \
 You don't over-explain. You get things done.
@@ -607,7 +624,15 @@ async def assemble(
             f"• Never ask 'where are you?' — coordinates are already provided above.\n"
         )
 
+    # Inject system state for Tier 3 only — Tier 1/2 don't need self-knowledge context
+    system_state_section = ""
+    if tier == ModelTier.TIER3:
+        raw = _load_system_state()
+        if raw:
+            system_state_section = f"\n[TARS SYSTEM STATE]\n{raw}\n"
+
     return SYSTEM_TEMPLATE.format(
+        system_state_section=system_state_section,
         capabilities_section=capabilities_section,
         mnemon_context=mnemon_context,
         second_brain_context=second_brain_context,

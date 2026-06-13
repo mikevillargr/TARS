@@ -1,0 +1,278 @@
+# TARS System State
+> Single source of truth for TARS's own architecture, infrastructure, and version history.
+> Updated by Claude Code on every version tag and infrastructure change.
+> Injected into TARS's context assembler so it can answer questions about itself.
+
+---
+
+## Current Version
+
+| Field | Value |
+|---|---|
+| Version | v2.6.0 |
+| Released | 2026-06-13 |
+| Branch | main |
+| Repo | https://github.com/mikevillargr/TARS |
+
+---
+
+## Live Infrastructure
+
+| Component | Details |
+|---|---|
+| App server | Hostinger KVM4 — 4 vCPU, 16GB RAM, 200GB NVMe |
+| IP | 72.60.234.180 |
+| Domain | tarsmv.duckdns.org |
+| SSH alias | `ssh tars` (configured in ~/.ssh/config on dev machine) |
+| GPU inference | RunPod Serverless — RTX 4090, 50GB network volume |
+| CI/CD | GitHub Actions — triggers on version tags |
+
+### Running Services (PM2)
+
+| Service | Process | Port |
+|---|---|---|
+| Next.js frontend | tars-web | 3000 |
+| FastAPI harness | tars-harness | 8000 |
+| Postgres + pgvector | Docker | 5432 |
+| Redis | Docker | 6379 |
+| Nginx (reverse proxy + SSL) | system | 80/443 |
+
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 15 PWA, shadcn/ui |
+| Backend | FastAPI (Python) |
+| Database | Postgres + pgvector |
+| Queue | Redis + BullMQ |
+| Memory | Mnemon (episodic RAG) + pgvector |
+| Knowledge | Second Brain (semantic RAG) + pgvector |
+| Tier 1 + 3 inference | Anthropic API (Haiku + Sonnet) |
+| Tier 2 inference | RunPod Serverless GPU (WORKHORSE_MODEL env var) |
+| Agentic executor | Claude Code via subprocess |
+| Monorepo | Turborepo |
+| Containerization | Docker Compose |
+
+---
+
+## Model Routing
+
+| Tier | Model | Use Case | Latency |
+|---|---|---|---|
+| Tier 1 | Claude Haiku | Simple/fast queries, classifier | ~500ms |
+| Tier 2 | RunPod GPU (Qwen3-32B-AWQ) | Most tasks — email, summaries, day-to-day | 2–4s warm |
+| Tier 3 | Claude Sonnet | All tool calls, client work, long context, complex reasoning | 3–8s |
+
+Cold-start fallback: RunPod unavailable → ≤500 chars to Haiku, >500 chars to Sonnet.
+
+---
+
+## Active Components (11)
+
+| # | Component | Route | Status |
+|---|---|---|---|
+| 1 | Chat | /chat | Live |
+| 2 | Tasks | /tasks | Live |
+| 3 | Meetings | /meetings | Live |
+| 4 | Calendar | /calendar | Live |
+| 5 | Second Brain | /second-brain | Live |
+| 6 | Agent Jobs | /agent-jobs | Live |
+| 7 | Artifacts | /artifacts | Live |
+| 8 | Cron Manager | /cron | Live |
+| 9 | Connectors | /connectors | Live |
+| 10 | Mnemon | /memory | Live |
+| 11 | Settings | /settings | Live |
+
+---
+
+## Active Connectors
+
+| Connector | Capabilities | Status |
+|---|---|---|
+| Gmail | read, webhook | Live |
+| Google Calendar | read, write | Live |
+| Fireflies | read, webhook (meeting.ended) | Live |
+| Strava | read | Live |
+| Tesla (Tessie) | read, write (full vehicle control) | Live |
+| Google Contacts | read, write, weekly sync | Live |
+| OpenStreetMap (Places) | read (no API key) | Live |
+
+---
+
+## Rokid Glasses Integration
+
+Streams TARS responses token-by-token to Rokid AR Lite glasses (480×640 green micro-LED).
+
+```
+TARS Harness ── ws /api/rokid/ws?token=<jwt> ── Android Phone ── BT (CXR-M) ── Rokid AR Lite
+```
+
+| Component | Status |
+|---|---|
+| Harness WebSocket endpoint (`/api/rokid/ws`) | Live |
+| Android phone-app (TarsClient, bridge service) | Live |
+| Android glasses HUD (Jetpack Compose) | Live |
+| Rokid developer account + app creation | Pending |
+| Physical hardware testing | Pending |
+
+Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `chat_stream`, `chat_stream_end`, `wake_signal` (phone→glasses); `user_input`, `list_sessions`, `switch_session`, `create_session`, `start_voice` (glasses→phone).
+
+---
+
+## Key File Locations (on server)
+
+| Path | Contents |
+|---|---|
+| `/opt/tars/` | Repo root |
+| `/opt/tars/apps/web/` | Next.js app |
+| `/opt/tars/apps/harness/` | FastAPI harness |
+| `/opt/tars/apps/harness/.venv/` | Python virtualenv |
+| `/opt/tars/infrastructure/` | Docker Compose, Nginx config |
+
+---
+
+## Version History
+
+### v2.6.0 — 2026-06-13
+**Rokid Glasses HUD: full TTS, photo flow, brightness, session polish**
+
+Features:
+- Swipe brightness control on glasses touchpad
+- Double-tap main view to stop TTS / sleep display
+- Hands-free photo flow + display-off gesture
+- Kokoro voice settings surfaced in glasses UI
+- Session picker feedback + media sync hardening
+- Auto-send voice input + TTS enabled by default
+- TTS stop controls: tap to stop, voice trigger interrupts playback
+- 7 HUD/assistant improvements: display, scroll, media, photos, cards
+- Z.ai GLM models surfaced with free-tier defaults
+- Resilient WiFi P2P install + auto-launch HUD + Kokoro TTS via TARS
+- BLE scanning for glasses discovery (replaced bonded-device lookup)
+- ApkInstaller: push glasses APK via Rokid SDK WiFi P2P
+
+Fixes:
+- Session continuity, TTS-stop-any-gesture, continuous conversation, photo overlay, tool routing
+- Removed 500-char message truncation that corrupted large JSON payloads
+- Real display-off, correct brightness direction, wake-on-interaction, gallery DCIM, build tag
+- TTS streaming: chunk past Kokoro's 510-phoneme limit (both harness and glasses ends)
+- Active stream keepalive prevents display dimming mid-response
+- Keep HUD in foreground: auto-launch on connect + manual button
+- Null-safe Gson frame parsing (Gson nulls were killing the WebSocket)
+- Force phone built-in mic for voice (glasses BT SCO was capturing microphone)
+- Auto-connect TARS on launch + retryable error state
+
+---
+
+### v2.5.0 — 2026-06 (approx)
+**Kokoro TTS voice settings, chat composer redesign, TTS speaking indicator**
+
+- Kokoro TTS voice selector (alloy, echo, fable, onyx, nova, shimmer) + speed slider in Settings
+- Chat composer redesign: mic on right when empty (mic=send pattern), send when text present, stop square when streaming
+- Amber "TARS is speaking" pill above composer with pulsing AudioLines icon
+- TTS AbortController Set fix (stopped any active TTS on new message)
+- Enlarged header mic button
+
+---
+
+### v2.4.6 — pre-June 2026
+**Rokid glasses initial integration**
+
+- FastAPI WebSocket bridge `/api/rokid/ws`
+- Android phone-app: TarsClient (JWT WS), TarsAuthManager, TarsBridgeService
+- Android glasses HUD: Jetpack Compose on 480×640 green micro-LED
+- Gesture handler: temple touchpad support
+- Phone↔glasses protocol (clawsses-compatible wire format)
+
+---
+
+### v1.0.0 — Session 9 completion
+**Full production deploy: PWA, push notifications, Settings, Kokoro TTS**
+
+- PWA manifest + share target
+- Push notifications (VAPID)
+- Settings view: profile, model routing, notification prefs, voice section
+- Kokoro TTS embedded: sentence-by-sentence streaming via `/api/proxy/tts`
+- Voice input: `useVoiceInput` hook, VAD silence detection, transcription
+
+---
+
+### v0.8.0 — Session 8
+**Google Calendar sync + Calendar view**
+
+- Google Calendar connector (read + write)
+- Calendar view: month/week/day toggle, event color coding
+- create_calendar_event, update_calendar_event, delete_calendar_event tools
+
+---
+
+### v0.7.0 — Session 7
+**Document ingest + Second Brain full UI**
+
+- PDF (pymupdf), PPTX (python-pptx), DOCX (python-docx), URL (trafilatura) parsers
+- Chunking pipeline: 500-token chunks, 50-token overlap, pgvector embeddings
+- Second Brain UI: collections sidebar, masonry grid, semantic search, annotations
+
+---
+
+### v0.6.0 — Session 6
+**Agent Jobs + Artifacts**
+
+- Claude Code subprocess executor
+- Supervised approval flow (Approve / Modify / Reject)
+- Agent Jobs UI: live output stream, approval flow
+- Artifacts view: auto-save hook, version tracking, file grid/list
+
+---
+
+### v0.5.0 — Session 5
+**Tasks + Meetings**
+
+- Task CRUD: kanban (Inbox/Todo/In Progress/Done/Snoozed)
+- Fireflies webhook: meeting.ended → transcript ingest
+- Meeting processor: AI summary + action item extraction
+- Action items → Tasks flow
+
+---
+
+### v0.4.0 — Session 4
+**Connectors + Cron**
+
+- Gmail connector (read, webhook)
+- Google Calendar connector (read, write)
+- Fireflies sync
+- Prompt cron system: wall-clock scheduled Tier 3 jobs (Asia/Manila tz)
+- Connector cron: interval-based sync loops
+
+---
+
+### v0.3.0 — Session 3
+**Memory layer**
+
+- Mnemon: episodic read/write with pgvector
+- Second Brain: URL + text ingest, embeddings
+- Context injection: both memory stores queried before every turn
+
+---
+
+### v0.2.0 — Session 2
+**Harness core + Chat end-to-end**
+
+- Model client: Anthropic API + RunPod unified
+- Tier classifier (Haiku-based)
+- Context assembler
+- Chat endpoint with streaming
+- Chat UI end-to-end
+
+---
+
+### v0.1.0 — Session 1
+**Foundation**
+
+- Turborepo monorepo
+- Docker Compose: Postgres + pgvector + Redis
+- FastAPI skeleton
+- Next.js shell
+- GitHub Actions CI
+- Server bootstrap on Hostinger KVM4

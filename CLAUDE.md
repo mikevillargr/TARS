@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.5.0 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.6.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -12,10 +12,22 @@ Every agent reads it on start. If it drifts from reality, agents make wrong deci
 
 ### After every session that changes architecture, processes, or components:
 1. Update the relevant sections in this file
-2. Commit with message `docs: update CLAUDE.md — <what changed>`
-3. Push to main
+2. Update `SYSTEM_STATE.md` (see below)
+3. Commit with message `docs: update CLAUDE.md — <what changed>`
+4. Push to main
 
-### What to update:
+### SYSTEM_STATE.md — mandatory on every version tag
+`SYSTEM_STATE.md` at the repo root is the live architecture file injected into TARS's own
+context so it can answer questions about itself ("what version are you?", "what connectors
+do you have?", "how does your model routing work?"). Update it on every `git tag`.
+
+Fields to update on every tag:
+- **Current Version** table — version number + release date
+- **Version History** — prepend a new entry (latest first) with features + fixes
+- **Infrastructure / Running Services** — if any server config changed
+- **Active Components / Connectors** — if any added, removed, or changed status
+
+### What to update in CLAUDE.md:
 - **Section 6** — data model if schema changed
 - **Section 8** — component specs if UI changed
 - **Section 9** — monorepo structure if files added/removed
