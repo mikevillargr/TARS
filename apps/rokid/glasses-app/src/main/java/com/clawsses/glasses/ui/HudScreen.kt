@@ -238,6 +238,8 @@ data class ChatHudState(
     val pageScrollTrigger: Int = 0,
     // Video recording indicator (red dot in top bar)
     val isRecording: Boolean = false,
+    // Hardware/menu camera button pressed — photo request in flight to phone
+    val isCapturingPhoto: Boolean = false,
     // Freshly captured photo awaiting Analyze/Keep/Discard (in-glasses preview)
     val showPhotoActions: Boolean = false,
     val pendingPhoto: Bitmap? = null,   // preview thumbnail (may be null if decode failed)
@@ -454,6 +456,7 @@ fun HudScreen(
                     isLoadingMoreHistory = state.isLoadingMoreHistory,
                     showWakeNotification = state.showWakeNotification,
                     wakeReason = state.wakeReason,
+                    isCapturingPhoto = state.isCapturingPhoto,
                     fontFamily = monoFontFamily,
                     fontSize = fontSize
                 )
@@ -775,6 +778,7 @@ private fun TopBar(
     isLoadingMoreHistory: Boolean = false,
     showWakeNotification: Boolean = false,
     wakeReason: String? = null,
+    isCapturingPhoto: Boolean = false,
     fontFamily: FontFamily,
     fontSize: androidx.compose.ui.unit.TextUnit
 ) {
@@ -852,9 +856,11 @@ private fun TopBar(
                         "stream_content" -> "\u26A1 streaming..."
                         "new_message" -> "\u26A1 new message"
                         "cron_message" -> "\u26A1 notification"
+                        "camera_error" -> "camera unavailable"
                         else -> "\u26A1 waking..."
                     }
                 }
+                isCapturingPhoto -> "capturing..."
                 voiceState is VoiceInputState.Listening -> {
                     val modeSuffix = if (voiceMode == RecognitionMode.OPENAI) " [AI]" else ""
                     "listening$modeSuffix..."

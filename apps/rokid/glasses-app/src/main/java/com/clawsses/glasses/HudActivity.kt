@@ -104,6 +104,9 @@ class HudActivity : ComponentActivity() {
     // Wake signal handling
     private var clearWakeNotificationJob: Job? = null
 
+    // Auto-reset if phone never replies to take_photo (camera lock / dropped message)
+    private var captureTimeoutJob: Job? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -882,8 +885,16 @@ class HudActivity : ComponentActivity() {
                         ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_REQUEST)
                     }
                 } else {
+                    hudState.update { it.copy(isCapturingPhoto = true) }
                     phoneConnection.sendToPhone("""{"type":"take_photo"}""")
                     Log.d(GlassesApp.TAG, "Requested photo capture from phone")
+                    // Auto-reset if phone never replies (e.g. camera lock or dropped message)
+                    captureTimeoutJob?.cancel()
+                    captureTimeoutJob = lifecycleScope.launch {
+                        delay(10_000)
+                        Log.w(GlassesApp.TAG, "Photo capture timed out — resetting state")
+                        hudState.update { it.copy(isCapturingPhoto = false) }
+                    }
                 }
             }
             MenuBarItem.RECORD -> {
@@ -1665,6 +1676,8 @@ class HudActivity : ComponentActivity() {
                 }
 
                 "photo_result" -> {
+                    captureTimeoutJob?.cancel()
+                    captureTimeoutJob = null
                     val status = msg.optString("status", "")
                     Log.i(GlassesApp.TAG, "photo_result: status=$status")
                     if (status == "captured") {
@@ -1682,6 +1695,7 @@ class HudActivity : ComponentActivity() {
                         val newThumbs = if (thumbnail != null && !atMax)
                             current.photoThumbnails + thumbnail else current.photoThumbnails
                         hudState.value = current.copy(
+                            isCapturingPhoto = false,
                             photoThumbnails = newThumbs,
                             showPhotoActions = true,
                             pendingPhoto = thumbnail,
@@ -1690,6 +1704,12 @@ class HudActivity : ComponentActivity() {
                         Log.i(GlassesApp.TAG, "Photo overlay shown (thumb=${thumbnail != null}, atMax=$atMax)")
                     } else {
                         Log.e(GlassesApp.TAG, "Photo capture failed: ${msg.optString("message", "")}")
+                        clearWakeNotificationJob?.cancel()
+                        hudState.update { it.copy(isCapturingPhoto = false, showWakeNotification = true, wakeReason = "camera_error") }
+                        clearWakeNotificationJob = lifecycleScope.launch {
+                            delay(3000)
+                            hudState.update { it.copy(showWakeNotification = false, wakeReason = null) }
+                        }
                     }
                 }
 
