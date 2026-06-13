@@ -108,7 +108,7 @@ object MediaSync {
                     when {
                         failed -> "Sync failed after $count file(s)"
                         count == 0 -> "Nothing new to sync"
-                        else -> "Done — $count file(s) in your gallery"
+                        else -> "Done — $count file(s) saved to DCIM/TARS. Note: the Rokid SDK does not support deleting files from the glasses — manage glasses storage manually in the glasses gallery app."
                     }
                 )
                 onDone(count, !failed)

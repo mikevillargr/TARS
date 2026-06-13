@@ -143,7 +143,6 @@ fun SettingsScreen(
             item {
                 VoiceSection(
                     voiceLanguageManager = voiceLanguageManager,
-                    voiceRecognitionManager = voiceRecognitionManager,
                 )
             }
 

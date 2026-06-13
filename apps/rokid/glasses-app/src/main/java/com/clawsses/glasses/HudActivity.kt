@@ -184,7 +184,10 @@ class HudActivity : ComponentActivity() {
                         val current = hudState.value
                         if (current.photoThumbnails.size < MAX_PHOTOS) {
                             hudState.value = current.copy(
-                                photoThumbnails = current.photoThumbnails + photoState.thumbnail
+                                photoThumbnails = current.photoThumbnails + photoState.thumbnail,
+                                showPhotoActions = true,
+                                pendingPhoto = photoState.thumbnail,
+                                photoActionIndex = 0
                             )
                         } else {
                             Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring capture")
@@ -913,6 +916,7 @@ class HudActivity : ComponentActivity() {
                     hudPosition = nextPosition,
                     scrollTrigger = current.scrollTrigger + 1
                 )
+                saveHudPreferences()
             }
             MenuBarItem.MORE -> {
                 hudState.value = current.copy(
@@ -1061,6 +1065,7 @@ class HudActivity : ComponentActivity() {
                 displaySize = item.displaySize,
                 scrollTrigger = current.scrollTrigger + 1
             )
+            saveHudPreferences()
             return
         }
 

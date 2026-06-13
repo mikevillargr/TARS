@@ -174,16 +174,17 @@ class WakeSignalManager(
                     // Very recent confirmed activity — glasses is likely still awake
                     sendToGlasses(json)
                     true
-                } else {
-                    // May be in standby — wake hardware and initiate wake protocol
-                    val reason = when {
-                        isStreamContent -> WakeSignal.REASON_STREAM_CONTENT
-                        isNewMessage -> WakeSignal.REASON_CRON_MESSAGE
-                        else -> WakeSignal.REASON_NEW_MESSAGE
-                    }
+                } else if (isStreamContent || isNewMessage) {
+                    // Actual content that warrants waking the display
+                    val reason = if (isStreamContent) WakeSignal.REASON_STREAM_CONTENT else WakeSignal.REASON_CRON_MESSAGE
                     bufferMessage(json, reason)
                     initiateWake(reason)
                     false
+                } else {
+                    // Routine protocol message (session_list, connection_update, tts_state, etc.)
+                    // — send directly; no reason to light up the display for housekeeping frames
+                    sendToGlasses(json)
+                    true
                 }
             }
         }
