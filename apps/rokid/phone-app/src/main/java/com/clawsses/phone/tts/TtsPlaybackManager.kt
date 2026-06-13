@@ -35,6 +35,10 @@ class TtsPlaybackManager(
     /** True while a reply is being synthesized/spoken (queue active). */
     val isSpeaking: Boolean get() = speakJob?.isActive == true
 
+    /** Fired when a reply finishes speaking naturally (NOT on stop()). Used to
+     *  re-arm the mic in continuous-conversation mode. */
+    var onSpeechFinished: (() -> Unit)? = null
+
     /**
      * Speak the given text via Kokoro on the TARS server.
      * Stops any current playback first.
@@ -54,6 +58,7 @@ class TtsPlaybackManager(
 
         speakJob = scope.launch {
             var nextAudio: Deferred<File?> = async { synthesizeToFile(chunks[0], voiceId, speed, 0) }
+            var completedNaturally = false
             try {
                 for (i in chunks.indices) {
                     val file = nextAudio.await()
@@ -67,9 +72,12 @@ class TtsPlaybackManager(
                     file.delete()
                     if (!isActive) break
                 }
+                completedNaturally = isActive
             } finally {
                 releasePlayer()
             }
+            // Fire only on natural completion (cancellation/stop() must NOT re-arm the mic)
+            if (completedNaturally) onSpeechFinished?.invoke()
         }
     }
 

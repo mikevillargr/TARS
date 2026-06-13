@@ -35,7 +35,7 @@ from starlette.websockets import WebSocketState
 
 from core.auth import verify_ws_token
 from db.session import AsyncSessionLocal
-from db.models import Conversation
+from db.models import Conversation, Message
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -100,6 +100,32 @@ async def rokid_ws(
             await db.commit()
             current_conv_id = conv.id
             return conv.id
+
+    async def _send_history(conv_id: str) -> None:
+        """Load a conversation's recent messages and replace the HUD view with them."""
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Message)
+                .where(Message.conversation_id == conv_id)
+                .order_by(Message.created_at)
+                .limit(40)
+            )
+            rows = result.scalars().all()
+        await send({
+            "type": "chat_history",
+            "messages": [
+                {
+                    "id": m.id,
+                    "role": m.role,
+                    "content": (m.content or ""),
+                    "timestamp": int(m.created_at.timestamp() * 1000) if m.created_at else 0,
+                }
+                for m in rows
+                if m.role in ("user", "assistant") and (m.content or "").strip()
+            ],
+            "isLoadMore": False,
+            "hasMore": False,
+        })
 
     async def _conv_name(conv_id: str) -> str:
         async with AsyncSessionLocal() as db:
@@ -193,6 +219,9 @@ async def rokid_ws(
                 session_key = msg.get("sessionKey")
                 if session_key:
                     current_conv_id = session_key
+                    # Cancel any in-flight stream from the previous session
+                    if active_stream_task and not active_stream_task.done():
+                        active_stream_task.cancel()
                     name = await _conv_name(session_key)
                     await send({
                         "type": "connection_update",
@@ -200,8 +229,12 @@ async def rokid_ws(
                         "sessionId": session_key,
                         "sessionName": name,
                     })
+                    # Replace the HUD view with the switched conversation's history
+                    await _send_history(session_key)
 
             elif mtype == "create_session":
+                if active_stream_task and not active_stream_task.done():
+                    active_stream_task.cancel()
                 new_id = await _new_conv()
                 await send({
                     "type": "connection_update",
@@ -209,8 +242,8 @@ async def rokid_ws(
                     "sessionId": new_id,
                     "sessionName": "New conversation",
                 })
-                convs = await _list_convs()
-                await send(_session_list_payload(convs, new_id))
+                # Fresh conversation — clear the HUD view
+                await send({"type": "chat_history", "messages": [], "isLoadMore": False, "hasMore": False})
 
     except WebSocketDisconnect:
         pass

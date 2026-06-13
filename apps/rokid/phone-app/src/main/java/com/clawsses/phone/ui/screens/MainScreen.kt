@@ -91,6 +91,10 @@ fun MainScreen() {
     val elevenLabsClient = remember { ElevenLabsClient() }
     val ttsPlaybackManager = remember { TtsPlaybackManager(context, elevenLabsClient, ttsSettingsManager) }
 
+    // Continuous-conversation mode: after TARS finishes replying, the mic
+    // re-opens for a follow-up until the user falls silent or taps to stop.
+    val conversationActive = remember { mutableStateOf(false) }
+
     // State
     val glassesState by glassesManager.connectionState.collectAsState()
     val openClawState by openClawClient.connectionState.collectAsState()
@@ -137,6 +141,35 @@ fun MainScreen() {
     var showSessionPicker by remember { mutableStateOf(false) }
     var pendingPhotos by remember { mutableStateOf<List<String>>(emptyList()) }
     val listState = rememberLazyListState()
+
+    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+
+    // Re-open the mic for the next turn if we're in continuous-conversation mode.
+    fun restartVoiceIfConversing() {
+        if (!conversationActive.value) return
+        mainHandler.post {
+            if (!conversationActive.value) return@post
+            android.util.Log.i("MainScreen", "Continuous conversation: re-opening mic")
+            RokidSdkManager.setCommunicationDevice()
+            startVoiceRecognitionWithManager(
+                voiceRecognitionManager = voiceRecognitionManager,
+                voiceHandler = voiceHandler,
+                openClawClient = openClawClient,
+                glassesManager = glassesManager,
+                mainHandler = mainHandler,
+                isRetry = false,
+                languageTag = voiceLanguageManager.getActiveLanguageTag(),
+                pendingPhotos = { pendingPhotos },
+                onPhotosConsumed = { pendingPhotos = emptyList() },
+                onSilence = { conversationActive.value = false }
+            )
+        }
+    }
+
+    // When a spoken reply finishes, re-arm the mic for a follow-up.
+    LaunchedEffect(Unit) {
+        ttsPlaybackManager.onSpeechFinished = { restartVoiceIfConversing() }
+    }
 
     // How many messages we send to glasses (starts at 20, grows on demand)
     var glassesMessageLimit by remember { mutableIntStateOf(20) }
@@ -276,7 +309,13 @@ fun MainScreen() {
             // so this (not stream-end) is the reliable trigger for Kokoro TTS.
             if (msg.role == "assistant" && msg.content.isNotBlank()) {
                 android.util.Log.i("MainScreen", "TTS trigger: assistant message (${msg.content.length} chars), enabled=${ttsSettingsManager.isEnabled.value}")
-                ttsPlaybackManager.onMessageComplete(msg.content)
+                if (ttsSettingsManager.isEnabled.value) {
+                    ttsPlaybackManager.onMessageComplete(msg.content)
+                    // onSpeechFinished re-opens the mic when TTS completes.
+                } else if (conversationActive.value) {
+                    // No TTS — re-open the mic shortly after the reply lands.
+                    mainHandler.postDelayed({ restartVoiceIfConversing() }, 800)
+                }
             }
         }
         openClawClient.onChatHistory = { messages ->
@@ -328,7 +367,6 @@ fun MainScreen() {
     }
 
     // Handle AI scene events (glasses long-press triggers voice input)
-    val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     LaunchedEffect(Unit) {
         glassesManager.onAiKeyDown = {
             android.util.Log.i("MainScreen", ">>> AI key down from glasses - starting voice recognition")
@@ -373,6 +411,8 @@ fun MainScreen() {
                         // Kill any ongoing TTS — both so the user can interrupt TARS by
                         // speaking, and so playback doesn't bleed into the mic capture.
                         ttsPlaybackManager.stop()
+                        // Long-press starts/continues a hands-free conversation.
+                        conversationActive.value = true
                         com.clawsses.phone.glasses.RokidSdkManager.setCommunicationDevice()
                         // Keep SDK AI scene alive (it times out without ASR content)
                         com.clawsses.phone.glasses.RokidSdkManager.sendAsrContent("...")
@@ -392,6 +432,10 @@ fun MainScreen() {
                             when (result) {
                                 is VoiceCommandHandler.VoiceResult.Text -> {
                                     android.util.Log.d("MainScreen", "Voice result text: ${result.text.take(100)}")
+                                    if (result.text.isBlank()) {
+                                        // User fell silent — end the continuous conversation
+                                        conversationActive.value = false
+                                    }
                                     val resultMsg = org.json.JSONObject().apply {
                                         put("type", "voice_result")
                                         put("result_type", "text")
@@ -412,6 +456,7 @@ fun MainScreen() {
                                 }
                                 is VoiceCommandHandler.VoiceResult.Error -> {
                                     android.util.Log.e("MainScreen", "Voice result error: ${result.message}")
+                                    conversationActive.value = false  // end conversation on failure
                                     val resultMsg = org.json.JSONObject().apply {
                                         put("type", "voice_result")
                                         put("result_type", "error")
@@ -485,7 +530,10 @@ fun MainScreen() {
                         glassesManager.sendRawMessage(ttsStateMsg.toJson())
                     }
                     "stop_tts" -> {
-                        android.util.Log.d("MainScreen", "Glasses requested TTS stop")
+                        // Stopping TTS prevents onSpeechFinished from firing, so the
+                        // continuous-conversation loop pauses naturally — no need to
+                        // touch conversationActive here (a scroll swipe shouldn't end it,
+                        // and a deliberate stop already halts the auto-restart).
                         ttsPlaybackManager.stop()
                     }
                     "set_brightness" -> {
@@ -1262,7 +1310,8 @@ private fun startVoiceRecognitionWithManager(
     isRetry: Boolean,
     languageTag: String? = null,
     pendingPhotos: () -> List<String> = { emptyList() },
-    onPhotosConsumed: () -> Unit = {}
+    onPhotosConsumed: () -> Unit = {},
+    onSilence: () -> Unit = {}
 ) {
     // Send initial voice state with mode indicator
     val modeIndicator = if (voiceRecognitionManager.isOpenAIAvailable()) "openai" else "device"
@@ -1312,6 +1361,7 @@ private fun startVoiceRecognitionWithManager(
                 } else {
                     android.util.Log.i("MainScreen", "Voice: no speech detected, dismissing")
                     RokidSdkManager.notifyAsrNone()
+                    onSilence()  // user fell silent — end continuous conversation
                     // Send voice_state idle to glasses so the voice overlay closes
                     val idleMsg = org.json.JSONObject().apply {
                         put("type", "voice_state")
@@ -1347,6 +1397,7 @@ private fun startVoiceRecognitionWithManager(
                     android.util.Log.e("MainScreen", "Voice error (after retry): ${result.message}")
                     RokidSdkManager.clearCommunicationDevice()
                     RokidSdkManager.notifyAsrError()
+                    onSilence()  // recognition failed — end continuous conversation
                     val resultMsg = org.json.JSONObject().apply {
                         put("type", "voice_result")
                         put("result_type", "error")

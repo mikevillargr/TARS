@@ -135,6 +135,17 @@ _TIER3_RE = re.compile(
     r"|(make|create|generate|draw|show|build|produce|render) (a |an |me |the )?(chart|graph|plot|visualization|figure|heatmap|histogram)"
     r"|visuali[sz]e"
     r"|bar chart|line chart|line graph|pie chart|scatter plot|heatmap|histogram"
+    # Local search / places — needs the search_places tool (Tier 3 only)
+    r"|(coffee shop|coffee place|cafe|café|restaurant|diner|bistro|brewery|pub|eatery|bakery|pharmacy|drugstore|gas station|petrol station)s?\b"
+    r"|near ?(me|by|here)"
+    r"|nearby"
+    r"|where (can i|to) (get|buy|find|eat|grab|stay)"
+    r"|directions? (to|from)"
+    r"|how (do i|to) get to"
+    r"|find (me )?(a |an |the )?(place|spot|coffee|cafe|café|restaurant|bar|hotel|gym|bakery|pharmacy)"
+    r"|recommend (a |an |me |some )?(place|spot|coffee|cafe|café|restaurant|bar|hotel|gym|bakery)"
+    # Weather — needs a tool / live data (Tier 3 only)
+    r"|weather|forecast|(temperature|how (hot|cold|warm)) (today|tomorrow|outside|now|this)|is it (going to |gonna )?rain"
     r")\b",
     re.IGNORECASE,
 )

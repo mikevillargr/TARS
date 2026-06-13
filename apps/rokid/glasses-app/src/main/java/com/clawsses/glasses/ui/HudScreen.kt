@@ -239,7 +239,8 @@ data class ChatHudState(
     // Video recording indicator (red dot in top bar)
     val isRecording: Boolean = false,
     // Freshly captured photo awaiting Analyze/Keep/Discard (in-glasses preview)
-    val pendingPhoto: Bitmap? = null,
+    val showPhotoActions: Boolean = false,
+    val pendingPhoto: Bitmap? = null,   // preview thumbnail (may be null if decode failed)
     val photoActionIndex: Int = 0,   // 0 = Analyze, 1 = Keep, 2 = Discard
     // Brightness adjust mode (swipe to change, tap to dismiss)
     val showBrightnessAdjust: Boolean = false,
@@ -573,17 +574,15 @@ fun HudScreen(
 
         // Post-capture photo preview with Analyze/Keep/Discard
         AnimatedVisibility(
-            visible = state.pendingPhoto != null,
+            visible = state.showPhotoActions,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            state.pendingPhoto?.let { bmp ->
-                PhotoActionOverlay(
-                    photo = bmp,
-                    selectedIndex = state.photoActionIndex,
-                    fontFamily = monoFontFamily
-                )
-            }
+            PhotoActionOverlay(
+                photo = state.pendingPhoto,
+                selectedIndex = state.photoActionIndex,
+                fontFamily = monoFontFamily
+            )
         }
 
         // Brightness adjust (swipe up/down, tap to dismiss)
@@ -669,7 +668,7 @@ private fun BrightnessAdjustOverlay(
  */
 @Composable
 private fun PhotoActionOverlay(
-    photo: Bitmap,
+    photo: Bitmap?,
     selectedIndex: Int,  // 0 = Analyze, 1 = Keep, 2 = Discard
     fontFamily: FontFamily,
     modifier: Modifier = Modifier
@@ -694,13 +693,15 @@ private fun PhotoActionOverlay(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Image(
-                bitmap = photo.asImageBitmap(),
-                contentDescription = "Captured photo",
-                modifier = Modifier
-                    .fillMaxWidth(0.7f)
-                    .border(1.dp, HudColors.green, RoundedCornerShape(4.dp))
-            )
+            if (photo != null) {
+                Image(
+                    bitmap = photo.asImageBitmap(),
+                    contentDescription = "Captured photo",
+                    modifier = Modifier
+                        .fillMaxWidth(0.7f)
+                        .border(1.dp, HudColors.green, RoundedCornerShape(4.dp))
+                )
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 

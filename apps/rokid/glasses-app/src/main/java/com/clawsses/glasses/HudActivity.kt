@@ -443,6 +443,10 @@ class HudActivity : ComponentActivity() {
 
         Log.d(GlassesApp.TAG, "Gesture: $gesture, Area: ${current.focusedArea}")
 
+        // ANY hardware interaction stops TTS dead. Cheap no-op when nothing is
+        // playing; sent before routing so it fires for every tap/swipe/double-tap.
+        phoneConnection.sendToPhone("""{"type":"stop_tts"}""")
+
         // Display is off — any interaction wakes it (and is otherwise consumed)
         if (current.displayOff) {
             Log.d(GlassesApp.TAG, "Interaction while display off → wake")
@@ -456,7 +460,7 @@ class HudActivity : ComponentActivity() {
             handleBrightnessGesture(gesture)
             return
         }
-        if (current.pendingPhoto != null) {
+        if (current.showPhotoActions) {
             handlePhotoActionGesture(gesture)
             return
         }
@@ -768,6 +772,7 @@ class HudActivity : ComponentActivity() {
                 when (current.photoActionIndex) {
                     0 -> { // Analyze — send straight to TARS with the photo attached
                         hudState.value = current.copy(
+                            showPhotoActions = false,
                             pendingPhoto = null,
                             photoActionIndex = 0,
                             inputText = "Analyze this photo and tell me what you see, with any context that's useful."
@@ -775,25 +780,26 @@ class HudActivity : ComponentActivity() {
                         submitInput()
                     }
                     1 -> { // Keep — photo stays staged for the next message
-                        hudState.value = current.copy(pendingPhoto = null, photoActionIndex = 0)
+                        hudState.value = current.copy(showPhotoActions = false, pendingPhoto = null, photoActionIndex = 0)
                     }
                     else -> { // Discard — drop the just-captured photo
                         val idx = current.photoThumbnails.lastIndex
                         if (idx >= 0) {
                             hudState.value = current.copy(
                                 photoThumbnails = current.photoThumbnails.dropLast(1),
+                                showPhotoActions = false,
                                 pendingPhoto = null,
                                 photoActionIndex = 0
                             )
                             phoneConnection.sendToPhone("""{"type":"remove_photo","index":$idx}""")
                         } else {
-                            hudState.value = current.copy(pendingPhoto = null, photoActionIndex = 0)
+                            hudState.value = current.copy(showPhotoActions = false, pendingPhoto = null, photoActionIndex = 0)
                         }
                     }
                 }
             }
             Gesture.DOUBLE_TAP -> { // quick dismiss = Keep
-                hudState.value = current.copy(pendingPhoto = null, photoActionIndex = 0)
+                hudState.value = current.copy(showPhotoActions = false, pendingPhoto = null, photoActionIndex = 0)
             }
             Gesture.LONG_PRESS -> { /* no voice while previewing */ }
         }
@@ -1610,15 +1616,20 @@ class HudActivity : ComponentActivity() {
                     // Extract the current session's name from the list
                     val resolvedSessionName = sessions.firstOrNull { it.key == currentSessionKey }?.name
                         ?: current.currentSessionName
+                    // Only OPEN the picker if the user actually requested it (the Sess tap
+                    // shows a "Loading…" placeholder first). Unsolicited session_list frames
+                    // — e.g. the connect handshake — update the list silently so the picker
+                    // doesn't pop up at random.
+                    val pickerWasOpen = current.showSessionPicker
                     hudState.value = current.copy(
-                        showSessionPicker = true,
-                        availableSessions = sessionsWithNew,
+                        showSessionPicker = pickerWasOpen,
+                        availableSessions = if (pickerWasOpen) sessionsWithNew else current.availableSessions,
                         currentSessionKey = currentSessionKey.ifEmpty { current.currentSessionKey },
                         currentSessionName = resolvedSessionName,
-                        selectedSessionIndex = currentIndex
+                        selectedSessionIndex = if (pickerWasOpen) currentIndex else current.selectedSessionIndex
                     )
 
-                    Log.d(GlassesApp.TAG, "Sessions: ${sessions.size}, current: $currentSessionKey")
+                    Log.d(GlassesApp.TAG, "Sessions: ${sessions.size}, current: $currentSessionKey, pickerOpen=$pickerWasOpen")
                 }
 
                 "voice_state" -> {
@@ -1650,25 +1661,28 @@ class HudActivity : ComponentActivity() {
 
                 "photo_result" -> {
                     val status = msg.optString("status", "")
+                    Log.i(GlassesApp.TAG, "photo_result: status=$status")
                     if (status == "captured") {
+                        val current = hudState.value
                         val thumbnailBase64 = msg.optString("thumbnail", "")
-                        if (thumbnailBase64.isNotEmpty()) {
-                            val current = hudState.value
-                            if (current.photoThumbnails.size >= MAX_PHOTOS) {
-                                Log.w(GlassesApp.TAG, "Max $MAX_PHOTOS photos reached, ignoring photo_result")
-                            } else {
+                        val thumbnail = if (thumbnailBase64.isNotEmpty()) {
+                            try {
                                 val bytes = Base64.decode(thumbnailBase64, Base64.DEFAULT)
-                                val thumbnail = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                // Stage the photo AND surface an in-glasses preview with
-                                // Analyze/Keep/Discard — no phone interaction needed.
-                                hudState.value = current.copy(
-                                    photoThumbnails = current.photoThumbnails + thumbnail,
-                                    pendingPhoto = thumbnail,
-                                    photoActionIndex = 0
-                                )
-                                Log.d(GlassesApp.TAG, "Photo captured — preview overlay shown (total: ${current.photoThumbnails.size + 1})")
-                            }
-                        }
+                                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            } catch (e: Exception) { null }
+                        } else null
+                        // ALWAYS surface the Analyze/Keep/Discard overlay on capture —
+                        // even if the thumbnail is missing/undecodable, so Analyze works.
+                        val atMax = current.photoThumbnails.size >= MAX_PHOTOS
+                        val newThumbs = if (thumbnail != null && !atMax)
+                            current.photoThumbnails + thumbnail else current.photoThumbnails
+                        hudState.value = current.copy(
+                            photoThumbnails = newThumbs,
+                            showPhotoActions = true,
+                            pendingPhoto = thumbnail,
+                            photoActionIndex = 0
+                        )
+                        Log.i(GlassesApp.TAG, "Photo overlay shown (thumb=${thumbnail != null}, atMax=$atMax)")
                     } else {
                         Log.e(GlassesApp.TAG, "Photo capture failed: ${msg.optString("message", "")}")
                     }

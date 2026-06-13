@@ -260,6 +260,23 @@ class OpenClawClient(
                 "agent_thinking" -> onAgentThinking?.invoke(AgentThinking.fromJson(json))
                 "chat_stream" -> onChatStream?.invoke(ChatStream.fromJson(json))
                 "chat_stream_end" -> onChatStreamEnd?.invoke(ChatStreamEnd.fromJson(json))
+                "chat_history" -> {
+                    // Session switch / new session — replace the conversation view.
+                    val obj = JsonParser.parseString(json).asJsonObject
+                    val arr = obj.getAsJsonArray("messages")
+                    val msgs = arr?.mapNotNull { el ->
+                        try {
+                            val o = el.asJsonObject
+                            ChatMessage(
+                                id = o.get("id")?.asString ?: return@mapNotNull null,
+                                role = o.get("role")?.asString ?: "assistant",
+                                content = o.get("content")?.asString ?: "",
+                            )
+                        } catch (e: Exception) { null }
+                    } ?: emptyList()
+                    _chatMessages.value = msgs
+                    onChatHistory?.invoke(msgs)
+                }
                 "card" -> onCard?.invoke(json)
                 "ping" -> { /* keepalive */ }
                 else -> Log.d(TAG, "unhandled frame: $type")
