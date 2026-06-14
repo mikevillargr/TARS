@@ -398,15 +398,14 @@ fun MainScreen() {
             glassesManager.sendRawMessage("""{"type":"video_state","recording":false}""")
         }
     }
-    // The hardware AI/camera button's long-press surfaces here as onAiKeyDown — BUT the
-    // touchpad long-press (the voice gesture) ALSO fires this same firmware "AI scene"
-    // event. Voice is fully handled by the glasses' start_voice message, so this handler
-    // must NOT trigger photo/video (doing so collided with the touchpad voice gesture).
-    // We only dismiss the native AI scene so it doesn't pop over our HUD.
+    // The touchpad long-press (voice gesture) enters the firmware AI scene, which
+    // surfaces here as onAiKeyDown. That AI scene is REQUIRED for voice recognition —
+    // the start_voice handler keeps it alive via sendAsrContent and exits it itself once
+    // ASR finishes. So onAiKeyDown must be a NO-OP: calling sendExitEvent() here killed
+    // the scene the instant it opened, self-terminating voice before the user could speak.
     LaunchedEffect(Unit) {
         glassesManager.onAiKeyDown = {
-            android.util.Log.i("MainScreen", ">>> onAiKeyDown (touchpad long-press / AI scene) → dismiss; voice via start_voice")
-            mainHandler.post { RokidSdkManager.sendExitEvent() }
+            android.util.Log.i("MainScreen", ">>> onAiKeyDown (touchpad long-press) — voice handled via start_voice; no-op")
         }
         glassesManager.onAiKeyUp = { /* SDK: no effect — ignored */ }
         glassesManager.onAiExit = {
