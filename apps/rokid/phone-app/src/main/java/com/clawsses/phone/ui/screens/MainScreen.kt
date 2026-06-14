@@ -149,6 +149,8 @@ fun MainScreen() {
     // Probe for the live camera stream — verifies onCameraFrame delivery (step 1 of
     // HUD-overlay recording). Grows into the decode→composite→encode→mux pipeline.
     val cameraStreamProbe = remember { com.clawsses.phone.glasses.CameraStreamProbe() }
+    // Overlay-recording toggle state (driven by the top-bar record button).
+    var isOverlayRecording by remember { mutableStateOf(false) }
 
     // Re-open the mic for the next turn if we're in continuous-conversation mode.
     fun restartVoiceIfConversing() {
@@ -372,26 +374,18 @@ fun MainScreen() {
         }
     }
 
-    // Hardware AI/camera button. The Rokid SDK gives us exactly ONE usable event for
-    // this button: onAiKeyDown, which fires on a LONG press. A short press is taken by
-    // the firmware as a native photo to glasses storage and never reaches us, and
-    // onAiKeyUp "has no effect" per the SDK. So we disambiguate by press count:
-    //   • single long-press (idle)      → photo with analyze/keep/discard flow
-    //   • double long-press (idle)       → start video recording
-    //   • any long-press while recording → stop video recording
-    // Voice recognition is a separate gesture (touchpad long-press on the glasses).
+    // Overlay video recording — triggered from the PHONE APP (record toggle below),
+    // NOT a glasses gesture. Opens the live camera stream to the phone so the HUD can
+    // be composited onto each frame. Step 1 verifies frames arrive (CameraStreamProbe).
     fun startVideoRecording() {
         mainHandler.post {
             RokidSdkManager.wakeGlassesScreen()
             // Keep the micro-LED display awake for the whole clip so the flashing
             // REC indicator stays visible; restored to the user's timeout on stop.
             RokidSdkManager.setScreenOffTimeout(3600L)
-            // Open the live camera STREAM to the phone (not glasses-storage record) —
-            // this is the foundation of HUD-overlay recording. Step 1: verify frames
-            // arrive (CameraStreamProbe logs count + codec); compositor comes next.
             RokidSdkManager.setMediaStreamListener(cameraStreamProbe)
             val ok = RokidSdkManager.openCameraVideo(1280, 720, 0, 1)
-            android.util.Log.i("MainScreen", "AI button → start camera stream, ok=$ok")
+            android.util.Log.i("MainScreen", "Phone record → start camera stream, ok=$ok")
             glassesManager.sendRawMessage("""{"type":"video_state","recording":$ok}""")
         }
     }
@@ -400,41 +394,19 @@ fun MainScreen() {
             RokidSdkManager.closeCameraVideo()
             RokidSdkManager.setMediaStreamListener(null)
             RokidSdkManager.setScreenOffTimeout(RokidSdkManager.screenTimeoutSeconds)
-            android.util.Log.i("MainScreen", "AI button → stop camera stream")
+            android.util.Log.i("MainScreen", "Phone record → stop camera stream")
             glassesManager.sendRawMessage("""{"type":"video_state","recording":false}""")
         }
     }
+    // The hardware AI/camera button's long-press surfaces here as onAiKeyDown — BUT the
+    // touchpad long-press (the voice gesture) ALSO fires this same firmware "AI scene"
+    // event. Voice is fully handled by the glasses' start_voice message, so this handler
+    // must NOT trigger photo/video (doing so collided with the touchpad voice gesture).
+    // We only dismiss the native AI scene so it doesn't pop over our HUD.
     LaunchedEffect(Unit) {
         glassesManager.onAiKeyDown = {
-            android.util.Log.i("MainScreen", ">>> AI long-press (onAiKeyDown), recording=${RokidSdkManager.isCameraStreaming}")
-            // Dismiss the native Rokid AI scene so our HUD stays in front.
+            android.util.Log.i("MainScreen", ">>> onAiKeyDown (touchpad long-press / AI scene) → dismiss; voice via start_voice")
             mainHandler.post { RokidSdkManager.sendExitEvent() }
-            when {
-                RokidSdkManager.isCameraStreaming -> {
-                    // Recording in progress → this long-press stops it.
-                    aiKeyDownJobRef.getAndSet(null)?.cancel()
-                    stopVideoRecording()
-                }
-                else -> {
-                    val pending = aiKeyDownJobRef.getAndSet(null)
-                    if (pending?.isActive == true) {
-                        // Second long-press within the window → double → start video.
-                        pending.cancel()
-                        startVideoRecording()
-                    } else {
-                        // First long-press → take a photo unless a 2nd press arrives soon.
-                        val job = scope.launch {
-                            delay(450)
-                            aiKeyDownJobRef.set(null)
-                            mainHandler.post {
-                                android.util.Log.i("MainScreen", "AI single long-press → photo (hw_photo_key)")
-                                glassesManager.sendRawMessage("""{"type":"hw_photo_key"}""")
-                            }
-                        }
-                        aiKeyDownJobRef.set(job)
-                    }
-                }
-            }
         }
         glassesManager.onAiKeyUp = { /* SDK: no effect — ignored */ }
         glassesManager.onAiExit = {
@@ -734,6 +706,24 @@ fun MainScreen() {
             TopAppBar(
                 title = { Text("Clawsses") },
                 actions = {
+                    // Overlay video recording — triggered here in the phone app.
+                    val recTint = if (isOverlayRecording) Color(0xFFFF4444) else MaterialTheme.colorScheme.onSurface
+                    IconButton(
+                        enabled = glassesState is GlassesConnectionManager.ConnectionState.Connected,
+                        onClick = {
+                            if (isOverlayRecording) {
+                                stopVideoRecording(); isOverlayRecording = false
+                            } else {
+                                startVideoRecording(); isOverlayRecording = true
+                            }
+                        }
+                    ) {
+                        Icon(
+                            if (isOverlayRecording) Icons.Default.Stop else Icons.Default.Videocam,
+                            contentDescription = if (isOverlayRecording) "Stop recording" else "Record (HUD overlay)",
+                            tint = recTint
+                        )
+                    }
                     IconButton(onClick = { showSettings = true }) {
                         Icon(Icons.Default.Settings, "Settings")
                     }
