@@ -349,7 +349,7 @@ async def list_items(
     result = await db.execute(
         select(KnowledgeItem)
         .where(KnowledgeItem.user_id == user_id)
-        .order_by(desc(KnowledgeItem.saved_at))
+        .order_by(desc(KnowledgeItem.starred), desc(KnowledgeItem.saved_at))
         .limit(limit)
     )
     return result.scalars().all()

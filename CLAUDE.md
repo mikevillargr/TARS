@@ -363,8 +363,9 @@ Chat, Tasks, Meetings, Calendar, Second Brain, Agent Jobs, Artifacts, Cron Manag
 **5. Second Brain**
 - Collections sidebar panel (named groups of items)
 - Masonry/card grid + list toggle
-- Semantic search bar, domain/tag/collection filters
-- Item cards: favicon/thumbnail, title, summary excerpt, personal note, tags
+- Semantic search bar, domain/tag/collection filters; **Starred** sidebar filter (amber star) for pinned items
+- Item cards: favicon/thumbnail, title, summary excerpt, personal note, tags; star toggle in card corner (shows on hover, persists `starred`) — starred items sort first
+- Detail modal: star toggle in header (optimistic, persisted via PATCH)
 - Right panel: full content, annotation textarea, related items, access history
 - PWA share target (native share sheet on mobile)
 - Quick Capture: URL, Note, Document upload, Voice memo

@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm"
 import {
   ChevronLeft, X, Pencil, Check, Copy, ExternalLink, Trash2,
   MessageSquare, Loader2, Tag, Layers, ChevronDown, ChevronUp,
-  Link as LinkIcon, FileText, Mic, File, BookOpen, ListTodo,
+  Link as LinkIcon, FileText, Mic, File, BookOpen, ListTodo, Star,
 } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { apiGet, apiPatch, apiDelete } from "@/lib/api-client"
@@ -29,6 +29,7 @@ interface KnowledgeItem {
   tags: string[]
   domain: string | null
   access_count: number
+  starred: boolean
   saved_at: string
 }
 
@@ -130,6 +131,20 @@ export function ItemDetailModal({
       console.error(err)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function toggleStar() {
+    if (!item) return
+    const next = !item.starred
+    setItem({ ...item, starred: next })          // optimistic
+    try {
+      const updated = await apiPatch<KnowledgeItemDetail>(`/second-brain/items/${item.id}`, { starred: next })
+      setItem(updated)
+      onUpdated(updated)
+    } catch (err) {
+      console.error(err)
+      setItem(prev => prev ? { ...prev, starred: !next } : prev)   // rollback
     }
   }
 
@@ -240,6 +255,18 @@ export function ItemDetailModal({
         </h2>
       )}
     </div>
+  )
+
+  const starToggle = item && (
+    <button
+      onClick={toggleStar}
+      className="p-1.5 rounded-md transition-colors"
+      style={{ color: "var(--c-amber)" }}
+      title={item.starred ? "Unstar" : "Star"}
+      aria-pressed={item.starred}
+    >
+      <Star size={15} fill={item.starred ? "var(--c-amber)" : "none"} />
+    </button>
   )
 
   const editToggle = !isDocument && (
@@ -518,6 +545,7 @@ export function ItemDetailModal({
 
           {/* Right controls */}
           {saveStatusBadge}
+          {starToggle}
           {editToggle}
         </div>
 
@@ -560,6 +588,7 @@ export function ItemDetailModal({
           </div>
           <div className="flex items-center gap-1.5 shrink-0 ml-3">
             {saveStatusBadge}
+            {starToggle}
             {editToggle}
             <button onClick={onClose} className="p-1.5 rounded-md" style={{ color: "var(--c-ink-faint)" }}>
               <X size={15} />

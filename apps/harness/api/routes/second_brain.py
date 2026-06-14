@@ -26,6 +26,7 @@ class KnowledgeItemOut(BaseModel):
     tags: list
     domain: Optional[str]
     access_count: int
+    starred: bool = False
     saved_at: datetime
 
     class Config:
@@ -58,6 +59,7 @@ class UpdateItemRequest(BaseModel):
     personal_note: Optional[str] = None
     tags: Optional[List[str]] = None
     domain: Optional[str] = None
+    starred: Optional[bool] = None
     clean_content: Optional[str] = None   # document content edit — triggers re-embed + re-chunk
 
 
@@ -135,6 +137,7 @@ async def get_item(
         tags=item.tags or [],
         domain=item.domain,
         access_count=item.access_count,
+        starred=item.starred,
         saved_at=item.saved_at,
         clean_content=item.clean_content,
         chunk_count=chunk_count,
@@ -160,6 +163,8 @@ async def update_item(
         item.tags = body.tags
     if body.domain is not None:
         item.domain = body.domain
+    if body.starred is not None:
+        item.starred = body.starred
     if body.clean_content is not None:
         from sqlalchemy import delete as _delete
         from memory.embeddings import embed_one, embed
@@ -207,6 +212,7 @@ async def update_item(
         tags=item.tags or [],
         domain=item.domain,
         access_count=item.access_count,
+        starred=item.starred,
         saved_at=item.saved_at,
         clean_content=item.clean_content,
         chunk_count=chunk_count,

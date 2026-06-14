@@ -5,9 +5,9 @@ import { useSearchParams } from "next/navigation"
 import {
   Search, LayoutGrid, List as ListIcon,
   Link as LinkIcon, FileText, File, Mic, Plus, Menu, X, Loader2,
-  BookOpen, Tag,
+  BookOpen, Tag, Star,
 } from "lucide-react"
-import { apiGet, apiPost } from "@/lib/api-client"
+import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
 import { ItemDetailModal } from "@/components/second-brain/ItemDetailModal"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
 import { useDomains } from "@/hooks/useDomains"
@@ -25,6 +25,7 @@ interface KnowledgeItem {
   tags: string[]
   domain: string | null
   access_count: number
+  starred: boolean
   saved_at: string
 }
 
@@ -99,6 +100,17 @@ export default function SecondBrainPage() {
 
   useEffect(() => { loadItems() }, [loadItems])
 
+  // Optimistic star toggle — persists via PATCH, rolls back on failure
+  const toggleStar = useCallback(async (id: string, current: boolean) => {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, starred: !current } : i))
+    try {
+      await apiPatch(`/second-brain/items/${id}`, { starred: !current })
+    } catch (e) {
+      console.error(e)
+      setItems(prev => prev.map(i => i.id === id ? { ...i, starred: current } : i))
+    }
+  }, [])
+
   // Debounced semantic search
   useEffect(() => {
     if (!query.trim()) { setSearchResults(null); return }
@@ -118,7 +130,8 @@ export default function SecondBrainPage() {
   const displayItems = searchResults
     ? items.filter((item) => searchResults.some((r) => r.item_id === item.id))
     : items.filter((item) => {
-        if (selectedDomain !== "All" && item.domain !== selectedDomain) return false
+        if (selectedDomain === "Starred" && !item.starred) return false
+        if (selectedDomain !== "All" && selectedDomain !== "Starred" && item.domain !== selectedDomain) return false
         if (selectedTag && !(item.tags ?? []).includes(selectedTag)) return false
         return true
       })
@@ -156,6 +169,28 @@ export default function SecondBrainPage() {
             </button>
           )
         })}
+        {/* Starred */}
+        {(() => {
+          const count = items.filter((i) => i.starred).length
+          const isActive = selectedDomain === "Starred"
+          return (
+            <button
+              key="Starred"
+              onClick={() => { setSelectedDomain("Starred"); setSelectedTag(""); setMobileSidebar(false) }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors"
+              style={{
+                backgroundColor: isActive ? "var(--c-amber-soft)" : "transparent",
+                color: isActive ? "var(--c-amber)" : "var(--c-ink)",
+                fontWeight: isActive ? 500 : 400,
+                borderLeft: isActive ? "2px solid var(--c-amber)" : "2px solid transparent",
+              }}
+            >
+              <Star size={13} className="shrink-0" fill={isActive ? "var(--c-amber)" : "none"} style={{ color: "var(--c-amber)" }} />
+              <span className="flex-1 text-left">Starred</span>
+              <span style={{ color: isActive ? "var(--c-amber)" : "var(--c-ink-faint)" }}>{count || ""}</span>
+            </button>
+          )
+        })()}
         {domainList.map((d) => {
           const count = items.filter((i) => i.domain === d.name).length
           const isActive = selectedDomain === d.name
@@ -367,7 +402,9 @@ export default function SecondBrainPage() {
               </div>
             ) : displayItems.length === 0 ? (
               <div className="col-span-full py-16 text-center text-sm" style={{ color: "var(--c-ink-faint)" }}>
-                {query ? "No items matched that search." : "Nothing here yet — hit Capture to add your first item."}
+                {query ? "No items matched that search."
+                  : selectedDomain === "Starred" ? "No starred items yet — tap the star on any card to pin it here."
+                  : "Nothing here yet — hit Capture to add your first item."}
               </div>
             ) : displayItems.map((item) => {
               const isSelected = selectedId === item.id
@@ -394,9 +431,21 @@ export default function SecondBrainPage() {
                       })()}
                       <span className="text-[10px] uppercase tracking-wider font-medium">{item.domain ?? typeLabel(item.type)}</span>
                     </div>
-                    <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>
-                      {new Date(item.saved_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>
+                        {new Date(item.saved_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); toggleStar(item.id, item.starred) }}
+                        className={`p-0.5 -m-0.5 rounded transition-opacity ${item.starred ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"}`}
+                        style={{ color: "var(--c-amber)" }}
+                        title={item.starred ? "Unstar" : "Star"}
+                        aria-pressed={item.starred}
+                      >
+                        <Star size={13} fill={item.starred ? "var(--c-amber)" : "none"} />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Title + summary */}

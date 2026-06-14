@@ -216,6 +216,7 @@ class KnowledgeItem(Base):
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     source_author: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    starred: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     last_accessed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     access_count: Mapped[int] = mapped_column(Integer, default=0)
