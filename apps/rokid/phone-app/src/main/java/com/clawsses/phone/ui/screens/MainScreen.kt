@@ -146,10 +146,7 @@ fun MainScreen() {
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     // Tracks in-flight AI key timing job for single (photo) vs double (video) long-press
     val aiKeyDownJobRef = remember { java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null) }
-    // Records the live camera stream to an MP4 in Movies/Clawsses on the phone.
-    // (HUD-overlay compositing is the next step layered on this same stream.)
     val appContext = LocalContext.current.applicationContext
-    val cameraStreamRecorder = remember { com.clawsses.phone.glasses.CameraStreamRecorder(appContext) }
     // Overlay-recording toggle state (driven by the top-bar record button).
     var isOverlayRecording by remember { mutableStateOf(false) }
 
@@ -375,29 +372,32 @@ fun MainScreen() {
         }
     }
 
-    // Overlay video recording — triggered from the PHONE APP (record toggle below),
-    // NOT a glasses gesture. Opens the live camera stream to the phone so the HUD can
-    // be composited onto each frame. Step 1 verifies frames arrive (CameraStreamProbe).
+    // Video recording — triggered from the PHONE APP record toggle. Records NATIVELY
+    // in-glass at full 30fps (firmware → glasses storage), NOT the ~5fps Bluetooth
+    // stream. On stop, the clip is auto-fetched to the phone gallery over WiFi P2P.
+    // (HUD-overlay burn-in is a post-process step applied to the fetched clip — added
+    // next — which avoids the Bluetooth framerate ceiling entirely.)
     fun startVideoRecording() {
         mainHandler.post {
-            RokidSdkManager.wakeGlassesScreen()
-            // Keep the micro-LED display awake for the whole clip so the flashing
-            // REC indicator stays visible; restored to the user's timeout on stop.
-            RokidSdkManager.setScreenOffTimeout(3600L)
-            RokidSdkManager.setMediaStreamListener(cameraStreamRecorder)
-            val ok = RokidSdkManager.openCameraVideo(1280, 720, 0, 1)
-            android.util.Log.i("MainScreen", "Phone record → start camera stream, ok=$ok")
+            val ok = RokidSdkManager.startVideoRecord()   // native 30fps → glasses storage
+            android.util.Log.i("MainScreen", "Phone record → native in-glass record, ok=$ok")
             glassesManager.sendRawMessage("""{"type":"video_state","recording":$ok}""")
         }
     }
     fun stopVideoRecording() {
         mainHandler.post {
-            RokidSdkManager.closeCameraVideo()
-            cameraStreamRecorder.stop()   // finalize the MP4 (don't rely solely on onCameraClosed)
-            RokidSdkManager.setMediaStreamListener(null)
-            RokidSdkManager.setScreenOffTimeout(RokidSdkManager.screenTimeoutSeconds)
-            android.util.Log.i("MainScreen", "Phone record → stop camera stream")
+            RokidSdkManager.stopVideoRecord()
             glassesManager.sendRawMessage("""{"type":"video_state","recording":false}""")
+            android.util.Log.i("MainScreen", "Phone record → stopped; fetching clip to phone")
+            // Give the firmware a moment to finalize the file, then pull it to the
+            // phone gallery via WiFi P2P (same path as Settings → Sync media).
+            mainHandler.postDelayed({
+                com.clawsses.phone.glasses.MediaSync.sync(
+                    appContext,
+                    onStatus = { android.util.Log.i("MainScreen", "video sync: $it") },
+                    onDone = { n, ok -> android.util.Log.i("MainScreen", "video sync done: $n file(s), ok=$ok") },
+                )
+            }, 2000)
         }
     }
     // Touchpad long-press enters the firmware AI scene → surfaces here as onAiKeyDown.
@@ -741,7 +741,7 @@ fun MainScreen() {
                     ) {
                         Icon(
                             if (isOverlayRecording) Icons.Default.Stop else Icons.Default.Videocam,
-                            contentDescription = if (isOverlayRecording) "Stop recording" else "Record (HUD overlay)",
+                            contentDescription = if (isOverlayRecording) "Stop recording" else "Record video (to phone)",
                             tint = recTint
                         )
                     }
