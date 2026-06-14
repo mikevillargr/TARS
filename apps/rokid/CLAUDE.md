@@ -2,6 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Versioning — MANDATORY
+
+**Every meaningful change to this project must be committed and pushed before reporting it as done.**
+
+### Glasses build tag (`BUILD_TAG`)
+- Defined in `BuildConfig.BUILD_TAG`, generated at build time by `glasses-app/build.gradle.kts`
+- Derived from `git rev-list --count HEAD` — automatically increments with every commit
+- **Never edit `BUILD_TAG` manually.** Just commit your changes and rebuild.
+- Shown in the HUD top-right corner so Mike can confirm which build is on the glasses.
+
+### After any glasses-side change:
+1. Commit all changes (`git add` + `git commit`)
+2. Push to main (`git push origin main`)
+3. Run `./gradlew :phone-app:assembleDebug` to produce the updated phone APK (which bundles the new glasses APK)
+4. The new `BUILD_TAG` (= `b<commit-count>`) confirms the correct build is running once pushed to the glasses via the phone app's APK installer.
+
+### App versioning (`versionName`)
+- `versionName` in `glasses-app/build.gradle.kts` follows `1.0.<buildNumber>`
+- For breaking changes, bump the major segment manually in `build.gradle.kts` (e.g. `2.0.$buildNumber`)
+
+### Phone app versioning
+- `phone-app/build.gradle.kts` has a separate `versionCode`/`versionName` — bump manually when releasing to production devices.
+
 ## Build Commands
 
 ```bash

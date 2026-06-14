@@ -4,6 +4,16 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Build number = total git commit count. Automatically increments with
+// every commit — no manual bumping required. Shown in the HUD top bar as
+// BuildConfig.BUILD_TAG ("b<N>") and used as Android versionCode.
+val buildNumber: Int = try {
+    val proc = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+        .redirectErrorStream(true)
+        .start()
+    proc.inputStream.bufferedReader().readLine()?.trim()?.toIntOrNull() ?: 0
+} catch (_: Exception) { 0 }
+
 android {
     namespace = "com.clawsses.glasses"
     compileSdk = 34
@@ -12,8 +22,9 @@ android {
         applicationId = "com.clawsses.glasses"
         minSdk = 28  // Required for CXR-S SDK
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = buildNumber
+        versionName = "1.0.$buildNumber"
+        buildConfigField("String", "BUILD_TAG", "\"b$buildNumber\"")
     }
 
     buildTypes {

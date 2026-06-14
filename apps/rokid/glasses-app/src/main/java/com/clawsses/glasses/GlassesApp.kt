@@ -7,8 +7,9 @@ class GlassesApp : Application() {
 
     companion object {
         const val TAG = "GlassesHUD"
-        // Bump on every glasses build so the HUD top bar confirms what's running.
-        const val BUILD_TAG = "b17"
+        // BUILD_TAG is generated at compile time from git commit count (build.gradle.kts).
+        // It increments automatically with every commit — never edit it manually.
+        val BUILD_TAG: String get() = BuildConfig.BUILD_TAG
         lateinit var instance: GlassesApp
             private set
     }
@@ -16,6 +17,6 @@ class GlassesApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        Log.d(TAG, "Clawsses HUD initialized")
+        Log.d(TAG, "Clawsses HUD initialized — $BUILD_TAG")
     }
 }
