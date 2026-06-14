@@ -222,7 +222,7 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document", 
         {tab === "url" ? (
           <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
+              <label className="block text-[10px] font-mono uppercase tracking-wider font-medium mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
                 URL
               </label>
               <input
@@ -486,7 +486,7 @@ function MetadataFields({
       {show && (
         <div className="space-y-3">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
+            <label className="block text-[10px] font-mono uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
               Personal note
             </label>
             <textarea
@@ -499,7 +499,7 @@ function MetadataFields({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
+              <label className="block text-[10px] font-mono uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
                 Tags
               </label>
               <input
@@ -510,7 +510,7 @@ function MetadataFields({
               />
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
+              <label className="block text-[10px] font-mono uppercase tracking-wider font-medium mb-1" style={{ color: "var(--c-ink-faint)" }}>
                 Domain
               </label>
 

@@ -73,12 +73,15 @@ export function AppSidebar() {
       <SidebarHeader className="px-4 py-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           <TarsLogo />
-          <span
-            className="font-semibold text-lg tracking-[0.25em] text-sidebar-foreground"
-            style={{ fontFamily: "var(--font-heading), serif" }}
-          >
-            TARS
-          </span>
+          <div className="flex flex-col gap-1">
+            <span
+              className="font-semibold text-lg leading-none tracking-[0.25em] text-sidebar-foreground"
+              style={{ fontFamily: "var(--font-mono), monospace" }}
+            >
+              TARS
+            </span>
+            <span className="tars-label tars-label--moss">Personal AI OS</span>
+          </div>
         </div>
       </SidebarHeader>
 
@@ -126,7 +129,7 @@ export function AppSidebar() {
           className="flex items-center justify-between px-3 py-2 rounded-lg"
           style={{ color: "var(--c-ink-muted)" }}
         >
-          <span className="text-sm font-medium">
+          <span className="tars-label tars-label--muted">
             {mode === "light" ? "Light" : mode === "dark" ? "Dark" : "System"}
           </span>
           <button
@@ -152,7 +155,7 @@ export function AppSidebar() {
           </Avatar>
           <div className="flex flex-col min-w-0 flex-1">
             <span className="text-sm font-medium text-sidebar-foreground truncate">Mike Villar</span>
-            <span className="text-xs text-sidebar-foreground/50 truncate">CEO, Growth Rocket</span>
+            <span className="tars-label tars-label--muted truncate">CEO · Growth Rocket</span>
           </div>
           <button
             onClick={handleLogout}

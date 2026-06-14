@@ -60,12 +60,12 @@ export default function LoginPage() {
             </svg>
           </div>
           <h1
-            className="text-4xl font-semibold tracking-[0.25em] text-foreground"
-            style={{ fontFamily: "var(--font-heading), serif" }}
+            className="text-4xl font-semibold tracking-[0.25em] text-foreground pl-[0.25em]"
+            style={{ fontFamily: "var(--font-mono), monospace" }}
           >
             TARS
           </h1>
-          <p className="text-sm text-muted-foreground">Personal AI Operating System</p>
+          <p className="tars-label tars-label--muted">Personal AI Operating System</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -89,6 +89,7 @@ export default function LoginPage() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Authenticating..." : "Login"}
           </Button>
+          <p className="tars-label tars-label--muted text-center pt-2">Access restricted — single operator</p>
         </form>
       </div>
     </div>

@@ -230,7 +230,7 @@ export default function SecondBrainPage() {
           <div className="mt-4 pt-4 flex flex-col gap-2" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
             {/* Header row */}
             <div className="flex items-center justify-between px-1">
-              <span className="text-[0.6rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Tags</span>
+              <span className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Tags</span>
               {selectedTag && (
                 <button
                   onClick={() => setSelectedTag("")}
@@ -429,7 +429,7 @@ export default function SecondBrainPage() {
                         const dc = domainList.find(d => d.name === item.domain)
                         return dc ? <span className="rounded-full shrink-0" style={{ width: 6, height: 6, backgroundColor: dc.color }} /> : null
                       })()}
-                      <span className="text-[10px] uppercase tracking-wider font-medium">{item.domain ?? typeLabel(item.type)}</span>
+                      <span className="text-[10px] font-mono uppercase tracking-wider font-medium">{item.domain ?? typeLabel(item.type)}</span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>

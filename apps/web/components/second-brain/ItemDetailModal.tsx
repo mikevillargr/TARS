@@ -373,12 +373,12 @@ export function ItemDetailModal({
       )}
       {searchChunk && (
         <div className="rounded-lg p-3" style={{ backgroundColor: "var(--c-amber-soft)", border: "1px solid color-mix(in srgb, var(--c-amber) 30%, transparent)" }}>
-          <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--c-amber)" }}>Matched passage</p>
+          <p className="text-[10px] font-semibold font-mono uppercase tracking-wider mb-1" style={{ color: "var(--c-amber)" }}>Matched passage</p>
           <p className="text-xs leading-relaxed" style={{ color: "var(--c-ink)" }}>{searchChunk}</p>
         </div>
       )}
       <div className="space-y-1">
-        <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Your Note</p>
+        <p className="text-[10px] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Your Note</p>
         {editing ? (
           <textarea
             value={editNote}
@@ -396,7 +396,7 @@ export function ItemDetailModal({
       </div>
       {displayContent && (
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>Content</p>
+          <p className="text-[10px] font-semibold font-mono uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>Content</p>
           <div
             className="text-sm leading-relaxed rounded-lg p-4 overflow-hidden"
             style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)", color: "var(--c-ink)" }}
@@ -537,7 +537,7 @@ export function ItemDetailModal({
           {/* Type chip */}
           <div className="flex items-center gap-1 shrink-0" style={{ color: "var(--c-ink-faint)" }}>
             <TypeIcon type={item?.type ?? ""} size={12} />
-            <span className="text-[10px] uppercase tracking-wider font-medium">{typeLabel(item?.type ?? "")}</span>
+            <span className="text-[10px] font-mono uppercase tracking-wider font-medium">{typeLabel(item?.type ?? "")}</span>
           </div>
 
           {/* Title */}
@@ -574,7 +574,7 @@ export function ItemDetailModal({
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="flex items-center gap-1.5 shrink-0" style={{ color: "var(--c-ink-faint)" }}>
               <TypeIcon type={item?.type ?? ""} size={13} />
-              <span className="text-[10px] uppercase tracking-wider font-medium">{typeLabel(item?.type ?? "")}</span>
+              <span className="text-[10px] font-mono uppercase tracking-wider font-medium">{typeLabel(item?.type ?? "")}</span>
               {(item?.chunk_count ?? 0) > 0 && (
                 <span
                   className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px]"

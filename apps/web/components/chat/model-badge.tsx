@@ -1,19 +1,30 @@
-import { Badge } from "@/components/ui/badge"
+// Bracketed-mono instrument chips. One accent (moss) signals the frontier tier;
+// everything else stays neutral so the badge reads like a system readout, not decoration.
+const MODEL_LABELS: Record<string, { label: string; tier: "fast" | "work" | "frontier" }> = {
+  "tier1":              { label: "Haiku",  tier: "fast" },
+  "tier2":              { label: "GLM",    tier: "work" },
+  "tier3":              { label: "Sonnet", tier: "frontier" },
+  "claude-haiku":       { label: "Haiku",  tier: "fast" },
+  "glm-4.7":            { label: "GLM",    tier: "work" },
+  "claude-sonnet-4-6":  { label: "Sonnet", tier: "frontier" },
+}
 
-const MODEL_LABELS: Record<string, { label: string; className: string }> = {
-  "tier1":          { label: "Qwen 8B",       className: "bg-blue-950 text-blue-300 border-blue-800" },
-  "tier2":          { label: "Qwen 32B",      className: "bg-violet-950 text-violet-300 border-violet-800" },
-  "tier3":          { label: "Claude",        className: "bg-amber-950 text-amber-300 border-amber-800" },
-  "qwen3-8b":       { label: "Qwen 8B",       className: "bg-blue-950 text-blue-300 border-blue-800" },
-  "qwen3-32b":      { label: "Qwen 32B",      className: "bg-violet-950 text-violet-300 border-violet-800" },
-  "claude-sonnet-4-6": { label: "Claude Sonnet", className: "bg-amber-950 text-amber-300 border-amber-800" },
+const TIER_COLOR: Record<"fast" | "work" | "frontier", string> = {
+  fast: "var(--c-ink-faint)",
+  work: "var(--c-ink-muted)",
+  frontier: "var(--c-moss)",
 }
 
 export function ModelBadge({ model }: { model: string }) {
-  const meta = MODEL_LABELS[model] ?? { label: model, className: "bg-zinc-800 text-zinc-400 border-zinc-700" }
+  const meta = MODEL_LABELS[model] ?? { label: model, tier: "work" as const }
   return (
-    <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 font-mono ${meta.className}`}>
+    <span
+      className="inline-flex items-center gap-1 font-mono text-[0.625rem] uppercase tracking-[0.1em] leading-none whitespace-nowrap"
+      style={{ color: TIER_COLOR[meta.tier] }}
+    >
+      <span style={{ opacity: 0.5 }}>[</span>
       {meta.label}
-    </Badge>
+      <span style={{ opacity: 0.5 }}>]</span>
+    </span>
   )
 }

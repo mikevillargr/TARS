@@ -611,14 +611,14 @@ function ArtifactModal({
 
               {detail.project_ref && (
                 <div>
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>Project</p>
+                  <p className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>Project</p>
                   <p className="text-sm" style={{ color: "var(--c-ink)" }}>{detail.project_ref}</p>
                 </div>
               )}
 
               {detail.tags.length > 0 && (
                 <div>
-                  <p className="text-[0.65rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Tags</p>
+                  <p className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Tags</p>
                   <div className="flex flex-wrap gap-1.5">
                     {detail.tags.map(t => (
                       <span key={t} className="badge badge-neutral" style={{ fontSize: "0.7rem" }}>#{t}</span>
@@ -868,7 +868,7 @@ export default function ArtifactsPage() {
             </div>
           ) : (
             <div className="rounded-xl overflow-hidden" style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border)" }}>
-              <div className="grid text-[0.65rem] font-semibold uppercase tracking-wider px-4 py-2.5"
+              <div className="grid text-[0.65rem] font-semibold font-mono uppercase tracking-wider px-4 py-2.5"
                 style={{ gridTemplateColumns: "3fr 1fr 1fr 80px 100px", backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-faint)", borderBottom: "1px solid var(--c-border)" }}>
                 {["Name", "Type", "Source", "Size", "Date"].map(h => <span key={h}>{h}</span>)}
               </div>

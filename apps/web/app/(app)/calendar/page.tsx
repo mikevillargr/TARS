@@ -197,7 +197,7 @@ function WeekView({ anchor, events, onEventClick }: { anchor: Date; events: Cale
           const isToday = isSameDay(d, TODAY)
           return (
             <div key={d.toISOString()} className={`text-center py-2 border-l border-border-faint ${isToday ? "bg-moss-soft/50" : ""}`}>
-              <div className="text-[10px] uppercase tracking-wider text-ink-muted font-medium">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium">
                 {d.toLocaleDateString(undefined, { weekday: "short" })}
               </div>
               <div className={`font-serif text-lg ${isToday ? "text-moss font-medium" : "text-ink"}`}>{d.getDate()}</div>
@@ -266,7 +266,7 @@ function MonthView({ anchor, events, onEventClick, onDayClick }: { anchor: Date;
     <div className="p-2 sm:p-4">
       <div className="grid grid-cols-7 gap-px bg-border-faint rounded-lg overflow-hidden border border-border-faint">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-          <div key={d} className="bg-surface text-[10px] uppercase tracking-wider text-ink-muted font-medium text-center py-2">{d}</div>
+          <div key={d} className="bg-surface text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium text-center py-2">{d}</div>
         ))}
         {days.map((d) => {
           const inMonth = d.getMonth() === anchor.getMonth()
@@ -341,7 +341,7 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
         </div>
         <div className="p-4 space-y-4">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-ink-muted font-medium mb-1">Title</label>
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-1">Title</label>
             <input
               autoFocus
               value={title}
@@ -353,17 +353,17 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-ink-muted font-medium mb-1">Date</label>
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-1">Date</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)} className="input-field w-full" />
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-ink-muted font-medium mb-1">Time</label>
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-1">Time</label>
               <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="input-field w-full" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-ink-muted font-medium mb-1">Duration</label>
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-1">Duration</label>
               <select value={durationMin} onChange={e => setDurationMin(Number(e.target.value))} className="input-field w-full">
                 <option value={15}>15 min</option>
                 <option value={30}>30 min</option>
@@ -373,7 +373,7 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
               </select>
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-ink-muted font-medium mb-1">Location</label>
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-1">Location</label>
               <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Optional" className="input-field w-full" />
             </div>
           </div>
@@ -444,7 +444,7 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
 
         {event.source.attendees?.length > 0 && (
           <div>
-            <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>Attendees</div>
+            <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>Attendees</div>
             <div className="space-y-1">
               {event.source.attendees.map((a, i) => (
                 <p key={i} className="text-xs" style={{ color: "var(--c-ink)" }}>{a}</p>
@@ -455,7 +455,7 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
 
         {event.source.description && (
           <div>
-            <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>
+            <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1" style={{ color: "var(--c-ink-faint)" }}>
               {event.type === "meeting" ? "Summary" : "Description"}
             </div>
             <p className="text-xs leading-relaxed" style={{ color: "var(--c-ink)" }}>{event.source.description.slice(0, 300)}</p>
@@ -565,7 +565,7 @@ export default function CalendarPage() {
       <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-border bg-surface p-4 gap-6 overflow-y-auto">
         <MiniMonth anchor={anchor} selected={anchor} onSelect={(d) => setAnchor(d)} />
         <div>
-          <h3 className="text-[10px] uppercase tracking-wider text-ink-muted font-medium mb-2">Legend</h3>
+          <h3 className="text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-2">Legend</h3>
           <div className="space-y-1.5">
             {(["gcal", "meeting", "task"] as EventType[]).map((t) => {
               const s = TYPE_STYLES[t]

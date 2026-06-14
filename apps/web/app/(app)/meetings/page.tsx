@@ -350,7 +350,7 @@ export default function MeetingsPage() {
                 <div className="max-w-3xl mx-auto px-8 py-8 space-y-8">
                   {selected.summary ? (
                     <section>
-                      <h3 className="text-xs font-medium uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: "var(--c-ink-muted)" }}>
+                      <h3 className="text-xs font-medium font-mono uppercase tracking-wider mb-3 flex items-center gap-2" style={{ color: "var(--c-ink-muted)" }}>
                         <Sparkles size={14} style={{ color: "var(--c-moss)" }} />Summary
                       </h3>
                       <p className="text-lg leading-relaxed" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>{selected.summary}</p>
@@ -361,7 +361,7 @@ export default function MeetingsPage() {
                   {(selected.action_items?.length ?? 0) > 0 && (
                     <section>
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-xs font-medium uppercase tracking-wider flex items-center gap-2" style={{ color: "var(--c-ink-muted)" }}>
+                        <h3 className="text-xs font-medium font-mono uppercase tracking-wider flex items-center gap-2" style={{ color: "var(--c-ink-muted)" }}>
                           <CheckSquare size={14} style={{ color: "var(--c-moss)" }} />Action items
                         </h3>
                         <button onClick={() => setTab("actions")} className="text-xs font-medium hover:underline" style={{ color: "var(--c-moss)" }}>View all →</button>

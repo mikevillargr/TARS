@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.6.1 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.7.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -789,6 +789,10 @@ v2.5.0  Session 9 continued — Kokoro TTS voice settings, chat composer redesig
 v2.6.0  Rokid glasses HUD — full TTS, photo flow, brightness, session polish
 v2.6.1  Second Brain star/favorite — card + modal star toggles, Starred sidebar filter,
         starred-first sort, STAR_BOOST relevance boost in retrieval (migration j7k8l9m0n1o2)
+v2.7.0  Instrument design language — JetBrains Mono promoted to the system label voice
+        (.tars-label across all 11 views), heading discipline (medium weight + tight
+        tracking), dropped Lora, accent-as-signal (moss), bracketed-mono model chips,
+        mono wordmark + boot-style login/empty states. Web-only, no schema change.
 ```
 
 ---
@@ -837,6 +841,26 @@ v2.6.1  Second Brain star/favorite — card + modal star toggles, Starred sideba
 ## 15. Design
 
 Magic Patterns prototype: https://www.magicpatterns.com/c/77rtra481stk1dtgfpjkp7
+
+### Design language — v2 "Instrument" (since v2.7.0)
+TARS reads like a precise machine's readout. Warm moss/amber/parchment palette retained;
+the *character* lives in typography and presentation. Refero references: Warp, Linear
+Changelog, Operate.
+
+Rules (enforced in `apps/web/app/globals.css`):
+- **Two faces, clear jobs.** Inter = human-readable prose (chat, titles, descriptions).
+  JetBrains Mono = the *instrument layer* — every label, eyebrow, column header, status,
+  count, timestamp, badge, model tag, kbd hint. **Lora removed.** `--font-heading` now
+  resolves to the sans stack.
+- **Instrument label primitive:** `.tars-label` (mono, 11px, uppercase, 0.14em tracking,
+  `--c-ink-faint`); `--moss`/`--muted` colour variants. Use it for all microtype labels.
+  Title helpers: `.tars-title` / `.tars-display`.
+- **Heading discipline:** h1–h6 are weight 600 (not bold) with `letter-spacing -0.02em`.
+- **Accent = signal.** Moss is the only accent (active nav, eyebrow prompt, focus ring,
+  primary action, live indicator). Amber/rose are status-only. Badges are mono + uppercase.
+- **Depth by surface, not shadow** — hairline borders + the canvas→surface→surface-2 stack.
+- Signature touches: mono "TARS" wordmark + sublabel, topbar Agent-Active pill, chat
+  "STANDBY" boot empty state, bracketed-mono model chips, login as the authorization moment.
 
 Design decisions (let Magic Patterns + Refero research decide):
 - Color palette, typography, spacing driven by Refero research

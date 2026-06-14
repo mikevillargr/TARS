@@ -241,7 +241,7 @@ export default function MemoryPage() {
                         {(() => { const dc = domainList.find(d => d.name === mem.domain); return dc ? <span className="rounded-full inline-block shrink-0" style={{ width: 6, height: 6, backgroundColor: dc.color }} /> : null })()}
                         {mem.domain}
                       </span>
-                      <span className="text-[10px] text-ink-faint uppercase tracking-wider font-medium pt-0.5">
+                      <span className="text-[10px] text-ink-faint font-mono uppercase tracking-wider font-medium pt-0.5">
                         {mem.source}
                       </span>
                     </div>

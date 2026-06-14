@@ -202,9 +202,9 @@ export function MessageThread({
   if (all.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-center space-y-2">
-          <p className="text-2xl font-bold text-foreground">TARS</p>
-          <p className="text-sm text-muted-foreground">What do you need?</p>
+        <div className="text-center space-y-3">
+          <p className="font-mono text-2xl tracking-[0.35em] text-foreground pl-[0.35em]">TARS</p>
+          <p className="tars-label tars-label--muted">Standby — what do you need?</p>
         </div>
       </div>
     )

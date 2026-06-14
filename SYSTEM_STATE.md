@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.6.1 |
+| Version | v2.7.0 |
 | Released | 2026-06-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -134,6 +134,24 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.7.0 — 2026-06-14
+**Instrument design language (web app visual identity)**
+
+A typography/presentation pass giving TARS a distinctive "mission-control instrument"
+character while keeping the warm moss/amber/parchment palette. No backend or schema changes.
+
+Features:
+- **JetBrains Mono promoted to the system "chrome" voice** — every label, eyebrow, column header, status, count, timestamp, and metadata row now renders in monospace (was confined to code blocks). New `.tars-label` utility (mono, 11px, uppercase, 0.14em tracking) applied across all 11 views (53 label sites unified in one pass). Unifies the web app with the Rokid HUD's JetBrains Mono.
+- **Heading discipline** — headings are now medium weight (600) with tight negative tracking (-0.02em) instead of default bold; `--font-heading` repointed to the sans stack.
+- **Dropped Lora (serif)** — typeface lineup is now Inter (human prose) + JetBrains Mono (instrument layer) only.
+- **Accent as signal** — moss is the single accent (active state, eyebrow prompt, focus, primary, live indicator); amber/rose demoted to status only. Badges restyled to bracketed/mono uppercase.
+- **Signature readouts** — sidebar wordmark in mono with "PERSONAL AI OS" sublabel; topbar "Agent Active" instrument pill; chat empty state as "TARS — STANDBY" boot readout; bracketed-mono model chips (`[ SONNET ]`, corrected from stale Qwen labels to Haiku/GLM/Sonnet); login styled as the boot/authorization moment.
+- **Depth by surface, not shadow** — `.card` soft shadow removed in favor of hairline borders.
+
+Refero references: Warp (terminal-native, accent-as-eyebrow), Linear Changelog (medium-weight headlines, mono timestamps), Operate (ledger microtype labels).
+
+---
 
 ### v2.6.1 — 2026-06-14
 **Second Brain: star / favorite items**

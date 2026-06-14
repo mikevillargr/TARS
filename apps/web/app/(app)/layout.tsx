@@ -278,14 +278,14 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
             {agentActive && (
               <div
-                className="flex items-center gap-2 px-2.5 py-1 rounded-full border text-xs font-medium hidden sm:flex"
+                className="tars-label flex items-center gap-2 px-2.5 py-1.5 rounded-full border hidden sm:flex"
                 style={{
                   backgroundColor: "var(--c-moss-soft)",
                   borderColor: "color-mix(in srgb, var(--c-moss) 25%, transparent)",
                   color: "var(--c-moss)",
                 }}
               >
-                <span className="w-2 h-2 rounded-full bg-moss animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-moss animate-pulse" />
                 Agent Active
               </div>
             )}

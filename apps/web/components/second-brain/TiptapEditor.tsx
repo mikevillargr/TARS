@@ -456,7 +456,7 @@ export function TiptapEditor({
               style={{ background: "var(--c-surface)", borderColor: "var(--c-border)", minWidth: "200px" }}
             >
               <div className="px-3 py-1.5 border-b" style={{ borderColor: "var(--c-border-faint)" }}>
-                <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--c-ink-faint)" }}>
+                <span className="text-[10px] font-mono uppercase tracking-wider font-medium" style={{ color: "var(--c-ink-faint)" }}>
                   Insert block
                 </span>
               </div>

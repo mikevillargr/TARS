@@ -477,7 +477,7 @@ export default function SettingsPage() {
 
         {/* ── Profile ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+          <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             Profile
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -513,7 +513,7 @@ export default function SettingsPage() {
         {/* ── Timezone ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+            <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Timezone
             </h2>
             {tzSaved && (
@@ -560,7 +560,7 @@ export default function SettingsPage() {
         {/* ── Model Routing ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+            <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Model Routing
             </h2>
             <button
@@ -639,7 +639,7 @@ export default function SettingsPage() {
         {/* ── Voice ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+            <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Voice
             </h2>
             {ttsSaved && (
@@ -717,7 +717,7 @@ export default function SettingsPage() {
 
         {/* ── Security ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+          <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             Security
           </h2>
           <div className="grid grid-cols-1 gap-3">
@@ -792,7 +792,7 @@ export default function SettingsPage() {
         {/* ── Domains ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
           <div className="flex items-center justify-between">
-            <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+            <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Domains
             </h2>
             <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
@@ -856,7 +856,7 @@ export default function SettingsPage() {
                     <span className="rounded-full shrink-0" style={{ width: 10, height: 10, backgroundColor: d.color, display: "inline-block" }} />
                     <span className="flex-1 text-sm font-medium capitalize" style={{ color: "var(--c-ink)" }}>{d.name}</span>
                     {d.is_system && (
-                      <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
+                      <span className="text-[10px] font-semibold font-mono uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0"
                         style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-faint)" }}>
                         system
                       </span>
@@ -943,7 +943,7 @@ export default function SettingsPage() {
 
         {/* ── API Keys ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+          <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             API Keys
           </h2>
           <div className="flex flex-col gap-3">
@@ -1021,7 +1021,7 @@ export default function SettingsPage() {
 
         {/* ── App Installation ── */}
         <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
-          <h2 className="text-[0.65rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+          <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             App Installation
           </h2>
 

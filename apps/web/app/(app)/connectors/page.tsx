@@ -139,7 +139,7 @@ function SettingsPanel({
 }) {
   return (
     <div>
-      <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: "var(--c-ink-faint)" }}>
+      <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-2 flex items-center gap-1.5" style={{ color: "var(--c-ink-faint)" }}>
         <Settings2 size={10} /> Settings
       </div>
       <div className="flex flex-col gap-2">
@@ -600,7 +600,7 @@ export default function ConnectorsPage() {
             {selected.status === "connected" ? (
               <>
                 <div>
-                  <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
+                  <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>
                     Sync Status
                   </div>
                   <div className="rounded-lg p-3 text-xs" style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}>
@@ -609,7 +609,7 @@ export default function ConnectorsPage() {
                 </div>
 
                 <div>
-                  <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>
+                  <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>
                     Capabilities
                   </div>
                   <div className="flex flex-col gap-1.5">
@@ -624,7 +624,7 @@ export default function ConnectorsPage() {
 
                 {selected.id === "google_people" && (
                   <div>
-                    <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>
+                    <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>
                       Pending review
                     </div>
                     <button

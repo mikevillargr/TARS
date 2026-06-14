@@ -403,7 +403,7 @@ function TaskModal({
           {/* Meta fields */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[0.6rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Status</label>
+              <label className="block text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Status</label>
               <select
                 value={status}
                 onChange={e => setStatus(e.target.value)}
@@ -415,7 +415,7 @@ function TaskModal({
             </div>
 
             <div>
-              <label className="block text-[0.6rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Priority</label>
+              <label className="block text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Priority</label>
               <select
                 value={priority}
                 onChange={e => setPriority(e.target.value)}
@@ -429,7 +429,7 @@ function TaskModal({
             </div>
 
             <div className="col-span-2 sm:col-span-1">
-              <label className="block text-[0.6rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Due Date</label>
+              <label className="block text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Due Date</label>
               <input
                 type="date"
                 value={dueAt}
@@ -441,7 +441,7 @@ function TaskModal({
 
             {task.source && (
               <div>
-                <label className="block text-[0.6rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Source</label>
+                <label className="block text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Source</label>
                 <span className="text-xs capitalize" style={{ color: "var(--c-ink)" }}>{task.source}</span>
               </div>
             )}
@@ -449,7 +449,7 @@ function TaskModal({
 
           {/* Description */}
           <div>
-            <label className="block text-[0.6rem] font-semibold uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Description</label>
+            <label className="block text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Description</label>
             <textarea
               value={description}
               onChange={e => { setDesc(e.target.value); setEditing(true) }}
@@ -464,7 +464,7 @@ function TaskModal({
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-[0.6rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Checklist</span>
+                <span className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Checklist</span>
                 {checklist.length > 0 && (
                   <span className="text-[0.6rem]" style={{ color: "var(--c-ink-faint)" }}>
                     {doneCount}/{checklist.length}
@@ -551,7 +551,7 @@ function TaskModal({
 
           {/* Move to */}
           <div>
-            <div className="text-[0.6rem] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>Move to</div>
+            <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-2" style={{ color: "var(--c-ink-faint)" }}>Move to</div>
             <div className="flex flex-wrap gap-1.5">
               {columns.filter(c => c.id !== status).map(col => (
                 <button
@@ -571,7 +571,7 @@ function TaskModal({
           {/* Linked Artifacts */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="text-[0.6rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Linked Artifacts</div>
+              <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Linked Artifacts</div>
               <button
                 onClick={loadAllArtifacts}
                 className="text-[10px] flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors"
@@ -624,7 +624,7 @@ function TaskModal({
           {/* Linked Second Brain */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="text-[0.6rem] font-semibold uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Linked Second Brain</div>
+              <div className="text-[0.6rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Linked Second Brain</div>
               <button
                 onClick={loadAllKb}
                 className="text-[10px] flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors"
@@ -809,12 +809,12 @@ function KanbanColumn({
               if (e.key === "Escape") { setRenamingMode(false); setRenameValue(col.name) }
             }}
             onBlur={commitRename}
-            className="input-field flex-1 min-w-0 text-[0.7rem] font-semibold uppercase tracking-wider py-0 px-1"
+            className="input-field flex-1 min-w-0 text-[0.7rem] font-semibold font-mono uppercase tracking-wider py-0 px-1"
             style={{ height: "1.4rem" }}
           />
         ) : (
           <span
-            className="text-[0.7rem] font-semibold uppercase tracking-wider flex-1 min-w-0 truncate cursor-text"
+            className="text-[0.7rem] font-semibold font-mono uppercase tracking-wider flex-1 min-w-0 truncate cursor-text"
             style={{ color: col.color }}
             onDoubleClick={() => { setRenamingMode(true); setRenameValue(col.name) }}
             title="Double-click to rename"
@@ -969,7 +969,7 @@ function AddColumnCard({ onAdd }: { onAdd: (name: string, color: string) => void
         className="input-field text-xs px-2 py-1.5 w-full"
       />
       <div className="flex gap-2 items-center">
-        <span className="text-[0.6rem] uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Color</span>
+        <span className="text-[0.6rem] font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>Color</span>
         {COLOR_PRESETS.map(cp => (
           <button
             key={cp.value}
