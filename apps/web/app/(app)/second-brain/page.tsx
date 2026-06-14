@@ -510,7 +510,7 @@ export default function SecondBrainPage() {
       <CaptureModal
         open={showCapture}
         onClose={() => setShowCapture(false)}
-        onSaved={(item) => setItems(prev => [item, ...prev])}
+        onSaved={(item) => setItems(prev => [{ ...item, starred: false }, ...prev])}
         initialTitle={captureInitialTitle}
       />
     </div>
