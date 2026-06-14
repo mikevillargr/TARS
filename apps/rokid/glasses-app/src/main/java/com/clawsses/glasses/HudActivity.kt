@@ -362,11 +362,6 @@ class HudActivity : ComponentActivity() {
     }
 
     override fun onKeyLongPress(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_CAMERA || keyCode == KeyEvent.KEYCODE_FOCUS) {
-            Log.i(GlassesApp.TAG, "Camera button long press → video toggle")
-            executeMenuItem(MenuBarItem.RECORD)
-            return true
-        }
         return super.onKeyLongPress(keyCode, event)
     }
 
@@ -897,13 +892,6 @@ class HudActivity : ComponentActivity() {
                     }
                 }
             }
-            MenuBarItem.RECORD -> {
-                // Toggle glasses POV video recording (runs on the glasses via the
-                // phone's SDK scene control; the red dot tracks video_state replies).
-                val action = if (current.isRecording) "stop" else "start"
-                phoneConnection.sendToPhone("""{"type":"video_record","action":"$action"}""")
-                Log.d(GlassesApp.TAG, "Requested video_record $action")
-            }
             MenuBarItem.SESSION -> {
                 // Open the conversation picker immediately with a loading entry —
                 // the session_list response replaces it. (Previously the tap gave
@@ -1106,20 +1094,6 @@ class HudActivity : ComponentActivity() {
                 }
                 phoneConnection.sendToPhone(json.toString())
                 Log.d(GlassesApp.TAG, "TTS toggle: $newEnabled")
-            }
-            MoreMenuItem.DELETE_PHOTOS -> {
-                // Clear all staged photos from the HUD session
-                if (current.photoThumbnails.isNotEmpty() || current.showPhotoActions) {
-                    hudState.value = current.copy(
-                        photoThumbnails = emptyList(),
-                        showPhotoActions = false,
-                        pendingPhoto = null,
-                        photoActionIndex = 0,
-                        focusedArea = ChatFocusArea.CONTENT
-                    )
-                    phoneConnection.sendToPhone("""{"type":"remove_photo","all":true}""")
-                    Log.d(GlassesApp.TAG, "All staged photos deleted via More menu")
-                }
             }
             else -> {}
         }
@@ -1789,12 +1763,6 @@ class HudActivity : ComponentActivity() {
                         current.copy(ttsEnabled = enabled)
                     }
                     Log.d(GlassesApp.TAG, "TTS state: enabled=$enabled, voice=$voiceName")
-                }
-
-                "video_state" -> {
-                    val recording = msg.optBoolean("recording", false)
-                    hudState.update { current -> current.copy(isRecording = recording) }
-                    Log.d(GlassesApp.TAG, "Video recording: $recording")
                 }
 
                 "display_state" -> {

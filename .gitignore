@@ -51,3 +51,7 @@ __pycache__/
 ---
 .claude/
 *.tmp
+
+# Reference APKs (not source)
+Hi+Rokid+*.xapk
+*.xapk

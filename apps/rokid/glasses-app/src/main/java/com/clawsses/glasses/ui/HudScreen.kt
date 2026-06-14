@@ -103,7 +103,6 @@ enum class AgentState {
  */
 enum class MenuBarItem(val icon: String, val label: String) {
     PHOTO("\uD83D\uDCF7", "Photo"),
-    RECORD("\u23FA", "Rec"),  // glasses video recording (label flips to Stop while recording)
     SESSION("\u25CE", "Sess"),
     SIZE("\u2588", "Size"),  // Icon overridden dynamically based on next HudPosition
     MORE("\u2026", "More"),
@@ -120,7 +119,6 @@ enum class MoreMenuItem(val icon: String, val label: String, val displaySize: Hu
     SLASH("/", "Slash Cmds"),
     VOICE("\uD83D\uDD0A", "Voice"),  // speaker icon - label is dynamic
     BRIGHTNESS("\u2600", "Brightness"),  // cycles Low/Med/High via phone SDK
-    DELETE_PHOTOS("\u232B", "Del Photos"),  // \u232B erase symbol \u2014 clear all staged photos
 }
 
 /**
@@ -237,8 +235,6 @@ data class ChatHudState(
     // Viewport-relative paging scroll: each swipe scrolls delta × viewport height
     val pageScrollDelta: Float = 0f,
     val pageScrollTrigger: Int = 0,
-    // Video recording indicator (red dot in top bar)
-    val isRecording: Boolean = false,
     // Hardware/menu camera button pressed — photo request in flight to phone
     val isCapturingPhoto: Boolean = false,
     // Freshly captured photo awaiting Analyze/Keep/Discard (in-glasses preview)
@@ -449,7 +445,6 @@ fun HudScreen(
                 TopBar(
                     isConnected = state.isConnected,
                     scrollInfo = "${listState.firstVisibleItemIndex + 1}/${state.messages.size}",
-                    isRecording = state.isRecording,
                     agentState = state.agentState,
                     focusedArea = state.focusedArea,
                     voiceState = state.voiceState,
@@ -507,8 +502,7 @@ fun HudScreen(
                     batteryCharging = state.batteryCharging,
                     currentTime = state.currentTime,
                     fontFamily = monoFontFamily,
-                    alpha = menuAlpha,
-                    isRecording = state.isRecording
+                    alpha = menuAlpha
                 )
             }
         }
@@ -771,7 +765,6 @@ fun focusBrightness(isFocused: Boolean): Float {
 private fun TopBar(
     isConnected: Boolean,
     scrollInfo: String,
-    isRecording: Boolean = false,
     agentState: AgentState,
     focusedArea: ChatFocusArea,
     voiceState: VoiceInputState,
@@ -836,20 +829,6 @@ private fun TopBar(
                 fontSize = (statusFontSize.value - 1).coerceAtLeast(7f).sp,
                 fontFamily = fontFamily
             )
-            if (isRecording) {
-                // Blinking REC indicator while glasses video recording is active
-                var recVisible by remember { mutableStateOf(true) }
-                LaunchedEffect(Unit) {
-                    while (true) { delay(600); recVisible = !recVisible }
-                }
-                Text(
-                    text = "\u25CF REC",
-                    color = if (recVisible) Color(0xFFFF4444) else Color(0x55FF4444),
-                    fontSize = statusFontSize,
-                    fontFamily = fontFamily,
-                    fontWeight = FontWeight.Bold
-                )
-            }
             // Show voice state when active, wake notification, otherwise show agent state
             val stateLabel = when {
                 showWakeNotification -> {
@@ -1485,7 +1464,6 @@ private fun ChatMenuBar(
     currentTime: String,
     fontFamily: FontFamily,
     alpha: Float,
-    isRecording: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val commandFontSize = 8.sp  // Fixed size — FONT only affects content
@@ -1515,8 +1493,6 @@ private fun ChatMenuBar(
                         HudPosition.BOTTOM_HALF -> "\u2580" // ▀ next: top half
                         HudPosition.TOP_HALF -> "\u2588"    // █ next: full
                     }
-                } else if (item == MenuBarItem.RECORD && isRecording) {
-                    "\u25A0"  // stop icon while recording
                 } else {
                     item.icon
                 }
