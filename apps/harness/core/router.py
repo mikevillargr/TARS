@@ -102,6 +102,28 @@ _ACTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Tesla / vehicle queries — always need get_tesla_status or tesla_command (Tier 3 tools only)
+_TESLA_RE = re.compile(
+    r"\b("
+    r"tesla|model [s3xy]\b|my car|the car"
+    r"|charging|charge (level|limit|rate|status|port|my car)"
+    r"|battery (level|percent|range|status|charge)"
+    r"|range (left|remaining)"
+    r"|is it (charging|locked|parked|plugged)"
+    r"|lock|unlock (the )?(car|tesla|vehicle|doors?)"
+    r"|climate|heat|cool (down|off|the car)|ac|air con|defrost"
+    r"|sentry (mode)?"
+    r"|frunk|trunk|boot"
+    r"|vent windows|close windows"
+    r"|honk|flash (lights|the lights)"
+    r"|remote start"
+    r"|where('?s| is) (the |my )?(car|tesla|vehicle)"
+    r"|odometer|software (version|update)"
+    r"|supercharg|charge (at home|session)"
+    r")\b",
+    re.IGNORECASE,
+)
+
 _TIER3_RE = re.compile(
     r"\b("
     # Writing with adjectives (existing)
@@ -174,6 +196,8 @@ def _heuristic(prompt: str) -> ModelTier:
     n = len(s)
     if _ACTION_RE.search(s):
         return ModelTier.TIER3
+    if _TESLA_RE.search(s):
+        return ModelTier.TIER3
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
     if _PERSONAL_RE.search(s):
@@ -198,6 +222,8 @@ async def classify(prompt: str) -> ModelTier:
 
     # Fast-path for unambiguous cases — no API call needed
     if _ACTION_RE.search(s):
+        return ModelTier.TIER3
+    if _TESLA_RE.search(s):
         return ModelTier.TIER3
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
