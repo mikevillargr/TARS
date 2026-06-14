@@ -398,18 +398,38 @@ fun MainScreen() {
             glassesManager.sendRawMessage("""{"type":"video_state","recording":false}""")
         }
     }
-    // The touchpad long-press (voice gesture) enters the firmware AI scene, which
-    // surfaces here as onAiKeyDown. That AI scene is REQUIRED for voice recognition —
-    // the start_voice handler keeps it alive via sendAsrContent and exits it itself once
-    // ASR finishes. So onAiKeyDown must be a NO-OP: calling sendExitEvent() here killed
-    // the scene the instant it opened, self-terminating voice before the user could speak.
+    // Touchpad long-press enters the firmware AI scene → surfaces here as onAiKeyDown.
+    // This IS the voice gesture: start phone-side recognition routed to the glasses mic
+    // (setCommunicationDevice), keeping the AI scene alive — startVoiceRecognitionWithManager
+    // sends the ASR keepalive and exits the scene itself when ASR finishes. This is the
+    // original working path; briefly making it a no-op left the listening dialog up with
+    // no audio capture. Must NOT do photo/video here (that collided with this same event).
     LaunchedEffect(Unit) {
         glassesManager.onAiKeyDown = {
-            android.util.Log.i("MainScreen", ">>> onAiKeyDown (touchpad long-press) — voice handled via start_voice; no-op")
+            android.util.Log.i("MainScreen", ">>> onAiKeyDown (touchpad long-press) → start voice")
+            aiKeyDownJobRef.getAndSet(null)?.cancel()
+            val job = scope.launch {
+                delay(200)
+                mainHandler.post {
+                    RokidSdkManager.setCommunicationDevice()
+                    startVoiceRecognitionWithManager(
+                        voiceRecognitionManager = voiceRecognitionManager,
+                        voiceHandler = voiceHandler,
+                        openClawClient = openClawClient,
+                        glassesManager = glassesManager,
+                        mainHandler = mainHandler,
+                        isRetry = false,
+                        languageTag = voiceLanguageManager.getActiveLanguageTag(),
+                        pendingPhotos = { pendingPhotos },
+                        onPhotosConsumed = { pendingPhotos = emptyList() }
+                    )
+                }
+            }
+            aiKeyDownJobRef.set(job)
         }
         glassesManager.onAiKeyUp = { /* SDK: no effect — ignored */ }
         glassesManager.onAiExit = {
-            android.util.Log.d("MainScreen", "AI scene exited on glasses")
+            android.util.Log.d("MainScreen", "AI scene exited on glasses (recognizer continues)")
         }
     }
 
