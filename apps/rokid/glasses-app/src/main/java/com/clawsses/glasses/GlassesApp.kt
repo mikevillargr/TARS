@@ -8,7 +8,7 @@ class GlassesApp : Application() {
     companion object {
         const val TAG = "GlassesHUD"
         // Bump on every glasses build so the HUD top bar confirms what's running.
-        const val BUILD_TAG = "b16"
+        const val BUILD_TAG = "b17"
         lateinit var instance: GlassesApp
             private set
     }
