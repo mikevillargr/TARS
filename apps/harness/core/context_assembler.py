@@ -637,9 +637,11 @@ async def assemble(
             f"• Never ask 'where are you?' — coordinates are already provided above.\n"
         )
 
-    # Inject system state for Tier 3 only — Tier 1/2 don't need self-knowledge context
+    # Inject system state for Tier 2 and Tier 3 — TARS should know its own architecture
+    # regardless of which tier handles the request. Tier 1 (fast lookups) is the only
+    # exception since it's purely for quick reads where self-knowledge is irrelevant.
     system_state_section = ""
-    if tier == ModelTier.TIER3:
+    if tier in (ModelTier.TIER2, ModelTier.TIER3):
         raw = _load_system_state()
         if raw:
             system_state_section = f"\n[TARS SYSTEM STATE]\n{raw}\n"
