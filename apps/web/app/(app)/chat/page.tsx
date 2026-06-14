@@ -969,6 +969,12 @@ function InlineMessageCards({
 
 // ─── Single message bubble ────────────────────────────────────────
 // memo: skips re-render when msg reference is stable (i.e. on inputValue keystrokes)
+function fmtMsgTime(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+}
+
 const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message | StreamingMsg; onAsk?: (q: string) => void }) {
   const isUser = msg.role === "user"
   const toolCalls = !isUser && "tool_calls" in msg ? msg.tool_calls : undefined
@@ -996,12 +1002,17 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
 
       {/* Column: no items-start/end so children stretch to column width (needed for code scroll) */}
       <div className={`flex flex-col min-w-0 max-w-[93%] md:max-w-[80%] ${isUser ? "items-end" : ""}`}>
-        {/* Always show "TARS" as the sender name for assistant messages */}
-        {!isUser && (
-          <span className="text-xs font-semibold mb-1 ml-1" style={{ color: "var(--c-moss)" }}>
-            TARS
+        {/* Speaker + time eyebrow — instrument log marker (prose stays Inter) */}
+        <div className={`flex items-center gap-2 mb-1 ${isUser ? "mr-1 flex-row-reverse" : "ml-1"}`}>
+          <span className={`tars-label ${isUser ? "tars-label--muted" : "tars-label--moss"}`}>
+            {isUser ? "Mike" : "TARS"}
           </span>
-        )}
+          {!isStreaming && "created_at" in msg && msg.created_at && (
+            <span className="tars-label tars-label--muted" style={{ opacity: 0.6 }}>
+              {fmtMsgTime(msg.created_at)}
+            </span>
+          )}
+        </div>
 
         {toolCalls && toolCalls.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -1018,11 +1029,13 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
         )}
 
         <div
-          className={`p-3 md:p-4 rounded-2xl min-w-0 ${isUser ? "" : "w-full"}`}
-          style={isUser
-            ? { backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border)", color: "var(--c-ink)", overflowWrap: "break-word" }
-            : { color: "var(--c-ink)", overflowWrap: "break-word" }
-          }
+          className={`p-3 md:p-4 rounded-lg min-w-0 ${isUser ? "" : "w-full"}`}
+          style={{
+            backgroundColor: isUser ? "var(--c-surface-2)" : "var(--c-surface)",
+            border: "1px solid var(--c-border-faint)",
+            color: "var(--c-ink)",
+            overflowWrap: "break-word",
+          }}
         >
           {attachments && attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-2">
@@ -1082,8 +1095,8 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
 
         {/* Subtle model badge below the bubble — only when known */}
         {modelLabel && (
-          <span className="text-[10px] ml-1 mt-1" style={{ color: "var(--c-ink-faint)" }}>
-            · {modelLabel}
+          <span className="tars-label tars-label--muted mt-1.5 ml-1" style={{ opacity: 0.8 }}>
+            {modelLabel}
           </span>
         )}
 
@@ -1264,7 +1277,7 @@ const MessageArea = memo(function MessageArea({
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-24 md:p-6 md:pb-28 space-y-6">
       {allMessages.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
-          <p className="text-2xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>TARS</p>
+          <p className="text-2xl tracking-[0.3em] pl-[0.3em]" style={{ fontFamily: "var(--font-mono), monospace", color: "var(--c-ink)" }}>TARS</p>
           <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
             &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
           </p>
