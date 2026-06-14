@@ -144,8 +144,11 @@ fun MainScreen() {
     val listState = rememberLazyListState()
 
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
-    // Tracks in-flight AI key timing job for short-press (photo) vs long-press (voice) detection
+    // Tracks in-flight AI key timing job for single (photo) vs double (video) long-press
     val aiKeyDownJobRef = remember { java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null) }
+    // Probe for the live camera stream — verifies onCameraFrame delivery (step 1 of
+    // HUD-overlay recording). Grows into the decode→composite→encode→mux pipeline.
+    val cameraStreamProbe = remember { com.clawsses.phone.glasses.CameraStreamProbe() }
 
     // Re-open the mic for the next turn if we're in continuous-conversation mode.
     fun restartVoiceIfConversing() {
@@ -383,26 +386,31 @@ fun MainScreen() {
             // Keep the micro-LED display awake for the whole clip so the flashing
             // REC indicator stays visible; restored to the user's timeout on stop.
             RokidSdkManager.setScreenOffTimeout(3600L)
-            val ok = RokidSdkManager.startVideoRecord()
-            android.util.Log.i("MainScreen", "AI button → start video, ok=$ok")
+            // Open the live camera STREAM to the phone (not glasses-storage record) —
+            // this is the foundation of HUD-overlay recording. Step 1: verify frames
+            // arrive (CameraStreamProbe logs count + codec); compositor comes next.
+            RokidSdkManager.setMediaStreamListener(cameraStreamProbe)
+            val ok = RokidSdkManager.openCameraVideo(1280, 720, 0, 1)
+            android.util.Log.i("MainScreen", "AI button → start camera stream, ok=$ok")
             glassesManager.sendRawMessage("""{"type":"video_state","recording":$ok}""")
         }
     }
     fun stopVideoRecording() {
         mainHandler.post {
-            RokidSdkManager.stopVideoRecord()
+            RokidSdkManager.closeCameraVideo()
+            RokidSdkManager.setMediaStreamListener(null)
             RokidSdkManager.setScreenOffTimeout(RokidSdkManager.screenTimeoutSeconds)
-            android.util.Log.i("MainScreen", "AI button → stop video")
+            android.util.Log.i("MainScreen", "AI button → stop camera stream")
             glassesManager.sendRawMessage("""{"type":"video_state","recording":false}""")
         }
     }
     LaunchedEffect(Unit) {
         glassesManager.onAiKeyDown = {
-            android.util.Log.i("MainScreen", ">>> AI long-press (onAiKeyDown), recording=${RokidSdkManager.isVideoRecording}")
+            android.util.Log.i("MainScreen", ">>> AI long-press (onAiKeyDown), recording=${RokidSdkManager.isCameraStreaming}")
             // Dismiss the native Rokid AI scene so our HUD stays in front.
             mainHandler.post { RokidSdkManager.sendExitEvent() }
             when {
-                RokidSdkManager.isVideoRecording -> {
+                RokidSdkManager.isCameraStreaming -> {
                     // Recording in progress → this long-press stops it.
                     aiKeyDownJobRef.getAndSet(null)?.cancel()
                     stopVideoRecording()

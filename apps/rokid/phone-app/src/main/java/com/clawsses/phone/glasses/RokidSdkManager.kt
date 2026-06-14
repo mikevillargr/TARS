@@ -746,6 +746,47 @@ object RokidSdkManager {
         }
     }
 
+    // --- Live camera video STREAM to the phone (CXR-M openCameraVideo) ---
+    // Unlike VIDEO_RECORD (which records to glasses storage with no overlay), this
+    // streams encoded camera frames to the phone via MediaStreamListener.onCameraFrame.
+    // The phone can then composite the HUD overlay onto each frame and encode an MP4
+    // locally — the only public-SDK path to "record with HUD overlay". Frames are
+    // capped at 1280px / ~10fps by the Bluetooth link.
+
+    @Volatile var isCameraStreaming: Boolean = false
+        private set
+
+    fun setMediaStreamListener(listener: com.rokid.cxr.client.extend.listeners.MediaStreamListener?) {
+        Log.i(TAG, "setMediaStreamListener: $listener")
+        cxrApi?.setMediaStreamListener(listener)
+    }
+
+    /** Open the live camera stream to the phone. encoderMode: 1 = H.264 (default). */
+    fun openCameraVideo(width: Int = 1280, height: Int = 720, rotate: Int = 0, encoderMode: Int = 1): Boolean {
+        if (!isBluetoothConnectedState) return false
+        return try {
+            val st = cxrApi?.openCameraVideo(width, height, rotate, encoderMode)
+            Log.i(TAG, "openCameraVideo ${width}x$height rotate=$rotate enc=$encoderMode → $st")
+            isCameraStreaming = (st == ValueUtil.CxrStatus.REQUEST_SUCCEED)
+            isCameraStreaming
+        } catch (e: Exception) {
+            Log.e(TAG, "openCameraVideo failed", e)
+            false
+        }
+    }
+
+    fun closeCameraVideo(): Boolean {
+        return try {
+            val st = cxrApi?.closeCameraVideo()
+            Log.i(TAG, "closeCameraVideo → $st")
+            isCameraStreaming = false
+            st == ValueUtil.CxrStatus.REQUEST_SUCCEED
+        } catch (e: Exception) {
+            Log.e(TAG, "closeCameraVideo failed", e)
+            false
+        }
+    }
+
     // --- Media sync (pull glasses photos/videos to the phone over WiFi P2P) ---
 
     /** Query unsynced media counts: callback(audio, pictures, videos), or (-1,-1,-1) on failure. */
