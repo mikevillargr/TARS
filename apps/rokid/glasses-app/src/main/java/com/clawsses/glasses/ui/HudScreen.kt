@@ -235,6 +235,9 @@ data class ChatHudState(
     // Viewport-relative paging scroll: each swipe scrolls delta × viewport height
     val pageScrollDelta: Float = 0f,
     val pageScrollTrigger: Int = 0,
+    // Video recording indicator (red REC dot in top bar) — driven by phone video_state.
+    // Recording is toggled by a long-press of the hardware AI/camera button (phone side).
+    val isRecording: Boolean = false,
     // Hardware/menu camera button pressed — photo request in flight to phone
     val isCapturingPhoto: Boolean = false,
     // Freshly captured photo awaiting Analyze/Keep/Discard (in-glasses preview)
@@ -445,6 +448,7 @@ fun HudScreen(
                 TopBar(
                     isConnected = state.isConnected,
                     scrollInfo = "${listState.firstVisibleItemIndex + 1}/${state.messages.size}",
+                    isRecording = state.isRecording,
                     agentState = state.agentState,
                     focusedArea = state.focusedArea,
                     voiceState = state.voiceState,
@@ -765,6 +769,7 @@ fun focusBrightness(isFocused: Boolean): Float {
 private fun TopBar(
     isConnected: Boolean,
     scrollInfo: String,
+    isRecording: Boolean = false,
     agentState: AgentState,
     focusedArea: ChatFocusArea,
     voiceState: VoiceInputState,
@@ -829,6 +834,20 @@ private fun TopBar(
                 fontSize = (statusFontSize.value - 1).coerceAtLeast(7f).sp,
                 fontFamily = fontFamily
             )
+            if (isRecording) {
+                // Blinking REC indicator while glasses video recording is active
+                var recVisible by remember { mutableStateOf(true) }
+                LaunchedEffect(Unit) {
+                    while (true) { delay(600); recVisible = !recVisible }
+                }
+                Text(
+                    text = "● REC",
+                    color = if (recVisible) Color(0xFFFF4444) else Color(0x55FF4444),
+                    fontSize = statusFontSize,
+                    fontFamily = fontFamily,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             // Show voice state when active, wake notification, otherwise show agent state
             val stateLabel = when {
                 showWakeNotification -> {

@@ -369,28 +369,29 @@ fun MainScreen() {
         }
     }
 
-    // AI key timing: short press (<200ms down→up) = hardware photo trigger, long press = voice
+    // Hardware AI/camera button timing (voice rec is a SEPARATE gesture — touchpad
+    // long-press, handled on the glasses). On the hardware button:
+    //   short press (<200ms down→up) = photo (keep/analyze/discard flow)
+    //   long press (200ms+ hold)      = toggle glasses video recording
     LaunchedEffect(Unit) {
         glassesManager.onAiKeyDown = {
             android.util.Log.i("MainScreen", ">>> AI key down from glasses")
             aiKeyDownJobRef.getAndSet(null)?.cancel()
             val job = scope.launch {
                 delay(200)
-                // Key held 200ms+ → long press, start voice recognition
+                // Key held 200ms+ → long press → toggle video recording
                 mainHandler.post {
-                    android.util.Log.i("MainScreen", "AI key long press → voice recognition")
-                    RokidSdkManager.setCommunicationDevice()
-                    startVoiceRecognitionWithManager(
-                        voiceRecognitionManager = voiceRecognitionManager,
-                        voiceHandler = voiceHandler,
-                        openClawClient = openClawClient,
-                        glassesManager = glassesManager,
-                        mainHandler = mainHandler,
-                        isRetry = false,
-                        languageTag = voiceLanguageManager.getActiveLanguageTag(),
-                        pendingPhotos = { pendingPhotos },
-                        onPhotosConsumed = { pendingPhotos = emptyList() }
-                    )
+                    val recording = if (RokidSdkManager.isVideoRecording) {
+                        RokidSdkManager.stopVideoRecord(); false
+                    } else {
+                        RokidSdkManager.startVideoRecord()
+                    }
+                    android.util.Log.i("MainScreen", "AI key long press → video toggle, recording=$recording")
+                    val stateMsg = org.json.JSONObject().apply {
+                        put("type", "video_state")
+                        put("recording", recording)
+                    }
+                    glassesManager.sendRawMessage(stateMsg.toString())
                 }
             }
             aiKeyDownJobRef.set(job)

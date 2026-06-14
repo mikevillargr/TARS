@@ -1765,6 +1765,12 @@ class HudActivity : ComponentActivity() {
                     Log.d(GlassesApp.TAG, "TTS state: enabled=$enabled, voice=$voiceName")
                 }
 
+                "video_state" -> {
+                    val recording = msg.optBoolean("recording", false)
+                    hudState.update { current -> current.copy(isRecording = recording) }
+                    Log.d(GlassesApp.TAG, "Video recording: $recording")
+                }
+
                 "display_state" -> {
                     val on = msg.optBoolean("on", true)
                     hudState.update { current -> current.copy(displayOff = !on) }
