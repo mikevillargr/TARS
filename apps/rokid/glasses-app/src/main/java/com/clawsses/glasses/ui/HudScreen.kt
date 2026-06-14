@@ -412,6 +412,14 @@ fun HudScreen(
                 )
             }
     ) {
+        // While recording, show a clean minimal view — just a flashing REC in the
+        // corner — so the AR field of view isn't cluttered by the full chat HUD.
+        // The phone keeps the micro-LED display awake for the whole clip.
+        if (state.isRecording) {
+            RecordingOverlay(monoFontFamily)
+            return@BoxWithConstraints
+        }
+
         // Calculate font size to fit content width — varies with displaySize
         val targetColumns = when (state.displaySize) {
             HudDisplaySize.COMPACT -> 70
@@ -448,7 +456,6 @@ fun HudScreen(
                 TopBar(
                     isConnected = state.isConnected,
                     scrollInfo = "${listState.firstVisibleItemIndex + 1}/${state.messages.size}",
-                    isRecording = state.isRecording,
                     agentState = state.agentState,
                     focusedArea = state.focusedArea,
                     voiceState = state.voiceState,
@@ -765,11 +772,37 @@ fun focusBrightness(isFocused: Boolean): Float {
 // TOP BAR
 // ============================================================================
 
+/**
+ * Minimal full-screen view shown while video recording is active: a clean AR field
+ * of view (black = transparent on the waveguide) with only a flashing "● REC" in the
+ * top-right corner. Replaces the full chat HUD so it isn't distracting while filming.
+ */
+@Composable
+private fun RecordingOverlay(fontFamily: FontFamily) {
+    var visible by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        while (true) { delay(600); visible = !visible }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.TopEnd
+    ) {
+        Text(
+            text = "● REC",
+            color = if (visible) Color(0xFFFF4444) else Color(0x33FF4444),
+            fontSize = 16.sp,
+            fontFamily = fontFamily,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
 @Composable
 private fun TopBar(
     isConnected: Boolean,
     scrollInfo: String,
-    isRecording: Boolean = false,
     agentState: AgentState,
     focusedArea: ChatFocusArea,
     voiceState: VoiceInputState,
@@ -834,20 +867,6 @@ private fun TopBar(
                 fontSize = (statusFontSize.value - 1).coerceAtLeast(7f).sp,
                 fontFamily = fontFamily
             )
-            if (isRecording) {
-                // Blinking REC indicator while glasses video recording is active
-                var recVisible by remember { mutableStateOf(true) }
-                LaunchedEffect(Unit) {
-                    while (true) { delay(600); recVisible = !recVisible }
-                }
-                Text(
-                    text = "● REC",
-                    color = if (recVisible) Color(0xFFFF4444) else Color(0x55FF4444),
-                    fontSize = statusFontSize,
-                    fontFamily = fontFamily,
-                    fontWeight = FontWeight.Bold
-                )
-            }
             // Show voice state when active, wake notification, otherwise show agent state
             val stateLabel = when {
                 showWakeNotification -> {

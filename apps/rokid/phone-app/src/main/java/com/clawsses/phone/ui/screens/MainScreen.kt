@@ -369,44 +369,68 @@ fun MainScreen() {
         }
     }
 
-    // Hardware AI/camera button timing (voice rec is a SEPARATE gesture — touchpad
-    // long-press, handled on the glasses). On the hardware button:
-    //   short press (<200ms down→up) = photo (keep/analyze/discard flow)
-    //   long press (200ms+ hold)      = toggle glasses video recording
+    // Hardware AI/camera button. The Rokid SDK gives us exactly ONE usable event for
+    // this button: onAiKeyDown, which fires on a LONG press. A short press is taken by
+    // the firmware as a native photo to glasses storage and never reaches us, and
+    // onAiKeyUp "has no effect" per the SDK. So we disambiguate by press count:
+    //   • single long-press (idle)      → photo with analyze/keep/discard flow
+    //   • double long-press (idle)       → start video recording
+    //   • any long-press while recording → stop video recording
+    // Voice recognition is a separate gesture (touchpad long-press on the glasses).
+    fun startVideoRecording() {
+        mainHandler.post {
+            RokidSdkManager.wakeGlassesScreen()
+            // Keep the micro-LED display awake for the whole clip so the flashing
+            // REC indicator stays visible; restored to the user's timeout on stop.
+            RokidSdkManager.setScreenOffTimeout(3600L)
+            val ok = RokidSdkManager.startVideoRecord()
+            android.util.Log.i("MainScreen", "AI button → start video, ok=$ok")
+            glassesManager.sendRawMessage("""{"type":"video_state","recording":$ok}""")
+        }
+    }
+    fun stopVideoRecording() {
+        mainHandler.post {
+            RokidSdkManager.stopVideoRecord()
+            RokidSdkManager.setScreenOffTimeout(RokidSdkManager.screenTimeoutSeconds)
+            android.util.Log.i("MainScreen", "AI button → stop video")
+            glassesManager.sendRawMessage("""{"type":"video_state","recording":false}""")
+        }
+    }
     LaunchedEffect(Unit) {
         glassesManager.onAiKeyDown = {
-            android.util.Log.i("MainScreen", ">>> AI key down from glasses")
-            aiKeyDownJobRef.getAndSet(null)?.cancel()
-            val job = scope.launch {
-                delay(200)
-                // Key held 200ms+ → long press → toggle video recording
-                mainHandler.post {
-                    val recording = if (RokidSdkManager.isVideoRecording) {
-                        RokidSdkManager.stopVideoRecord(); false
+            android.util.Log.i("MainScreen", ">>> AI long-press (onAiKeyDown), recording=${RokidSdkManager.isVideoRecording}")
+            // Dismiss the native Rokid AI scene so our HUD stays in front.
+            mainHandler.post { RokidSdkManager.sendExitEvent() }
+            when {
+                RokidSdkManager.isVideoRecording -> {
+                    // Recording in progress → this long-press stops it.
+                    aiKeyDownJobRef.getAndSet(null)?.cancel()
+                    stopVideoRecording()
+                }
+                else -> {
+                    val pending = aiKeyDownJobRef.getAndSet(null)
+                    if (pending?.isActive == true) {
+                        // Second long-press within the window → double → start video.
+                        pending.cancel()
+                        startVideoRecording()
                     } else {
-                        RokidSdkManager.startVideoRecord()
+                        // First long-press → take a photo unless a 2nd press arrives soon.
+                        val job = scope.launch {
+                            delay(450)
+                            aiKeyDownJobRef.set(null)
+                            mainHandler.post {
+                                android.util.Log.i("MainScreen", "AI single long-press → photo (hw_photo_key)")
+                                glassesManager.sendRawMessage("""{"type":"hw_photo_key"}""")
+                            }
+                        }
+                        aiKeyDownJobRef.set(job)
                     }
-                    android.util.Log.i("MainScreen", "AI key long press → video toggle, recording=$recording")
-                    val stateMsg = org.json.JSONObject().apply {
-                        put("type", "video_state")
-                        put("recording", recording)
-                    }
-                    glassesManager.sendRawMessage(stateMsg.toString())
                 }
             }
-            aiKeyDownJobRef.set(job)
         }
-        glassesManager.onAiKeyUp = {
-            val job = aiKeyDownJobRef.getAndSet(null)
-            if (job?.isActive == true) {
-                // Released before 200ms → short press → trigger photo on glasses
-                job.cancel()
-                android.util.Log.i("MainScreen", "AI key short press → hw_photo_key")
-                glassesManager.sendRawMessage("""{"type":"hw_photo_key"}""")
-            }
-        }
+        glassesManager.onAiKeyUp = { /* SDK: no effect — ignored */ }
         glassesManager.onAiExit = {
-            android.util.Log.d("MainScreen", "AI scene exited on glasses (recognizer continues)")
+            android.util.Log.d("MainScreen", "AI scene exited on glasses")
         }
     }
 
