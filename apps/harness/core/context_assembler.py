@@ -47,9 +47,7 @@ def _format_event_time(start: str, all_day: bool, tz_name: str = "UTC") -> str:
         return start
 
 
-# Capabilities block — only injected for Tier 3 (Claude, which has native tool support).
-# Tier 1 (Haiku) and Tier 2 (RunPod) do NOT receive this — they have no tool support
-# and would otherwise output raw XML tool-call markup in the response text.
+# Capabilities block — injected for all tiers. All tiers have tool support.
 _CAPABILITIES_BLOCK = """[CAPABILITIES]
 You have the following tools available. Use them proactively — don't wait to be asked when the intent is clear.
 
@@ -228,6 +226,13 @@ TARS has a self-evolving coding agent system. Spawn agents that work on the TARS
   All agents work on the dev branch only.
   The TARS app URL is https://tarsmv.duckdns.org — always use this domain for any links.
   After creating a job, share: https://tarsmv.duckdns.org/agent-jobs?id={job_id} so Mike can watch it live. Replace {job_id} with the actual job ID returned by create_agent_job.
+
+ESCALATION:
+• request_escalation(reason) — call this BEFORE generating any response text if you determine
+  the task needs a more capable tier (complex reasoning, multi-document analysis, client
+  deliverables, anything you're not confident handling at your current tier). The harness will
+  re-run the full request at the next tier up automatically. Never use this for simple tool
+  calls — just call the tool.
 
 WHEN TO STORE MEMORY VS SECOND BRAIN:
 - Personal facts, preferences, one-time events → save_memory
@@ -504,9 +509,7 @@ async def assemble(
     from core.model_client import ModelTier
 
     is_lightweight = (tier == ModelTier.TIER1)
-    # Capabilities block only for Claude (Tier 3) — Ollama/RunPod models have no tool support
-    # and would output raw XML tool-call markup if they see the capabilities section.
-    capabilities_section = _CAPABILITIES_BLOCK if tier == ModelTier.TIER3 else ""
+    capabilities_section = _CAPABILITIES_BLOCK  # all tiers — tool support is available everywhere
 
     mnemon_context = "No relevant memories."
     second_brain_context = "No relevant knowledge."

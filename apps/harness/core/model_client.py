@@ -1,13 +1,14 @@
 """
 Unified model client.
 
-Tier 1: Claude Haiku  — always available, ~200-500ms, cheap (~$0.001/req)
-Tier 2: RunPod        — GPU inference via RunPod Serverless; model set by WORKHORSE_MODEL env var
-         cold fallback: Haiku  if message ≤ 500 chars (standard tasks)
-                        Sonnet if message > 500 chars or contains complexity signals
-Tier 3: Claude Sonnet — frontier, tools, streaming, always Claude
+Tier 1: fast model    — always available, ~200-500ms, cheap; handles simple queries + single tool calls
+Tier 2: workhorse     — standard tasks; writing, coding, analysis, multi-step tool chains
+Tier 3: frontier      — complex reasoning, long context, client deliverables
 
-NOTE: Ollama is fully retired. The classifier is a Haiku API call (router.py).
+Provider and model per tier are configurable via the Settings UI (Anthropic or Z.ai).
+All tiers have full tool access. Any tier can emit escalation_requested to re-run at Tier 3.
+
+NOTE: Ollama and RunPod are retired. The classifier uses the Tier 1 model API (router.py).
 """
 
 from __future__ import annotations  # makes all annotations lazy — avoids 'anthropic' property shadowing the module
@@ -16,17 +17,14 @@ import asyncio
 import json
 import logging
 import re
-import time
 from enum import Enum
 from typing import AsyncGenerator, List, Dict, Any, Optional
 
-import httpx
 import anthropic
 
 # ── XML tool-call strip ────────────────────────────────────────────────────────
-# Non-Claude models (RunPod Tier 2) sometimes emit XML tool-call markup
-# (e.g. <function_calls>…</function_calls>) in response text.
-# Capabilities are gated to Tier 3 only, but this filter is a safety net.
+# Safety net: some third-party models occasionally emit XML tool-call markup
+# in response text instead of structured tool calls.
 _TOOL_XML_RE = re.compile(
     r"<function_calls>.*?</function_calls>|"
     r"<invoke\b[^>]*>.*?</invoke>|"
@@ -1116,57 +1114,29 @@ GENERATE_CHART_TOOL = {
     },
 }
 
-
-# ─── Tier routing tables ─────────────────────────────────────────────────────
-
-# Tier 2 display label derived from the model name (strip org prefix for brevity)
-_tier2_label = settings.workhorse_model.split("/")[-1].lower() if settings.workhorse_model else "runpod"
-
-TIER_MODELS = {
-    ModelTier.TIER1: "haiku",
-    ModelTier.TIER2: _tier2_label,
-    ModelTier.TIER3: "claude-sonnet-4-6",
+REQUEST_ESCALATION_TOOL = {
+    "name": "request_escalation",
+    "description": (
+        "Signal that this task requires a more capable tier. "
+        "Call this BEFORE generating any response text. "
+        "The harness will re-run the full request at Tier 3 automatically. "
+        "Use only when the task genuinely exceeds your current tier — "
+        "never for simple lookups or single tool calls."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "reason": {
+                "type": "string",
+                "description": "Why this task needs a higher tier.",
+            }
+        },
+        "required": ["reason"],
+    },
 }
 
-# Only Tier 2 uses RunPod; Tier 1 = Haiku, Tier 3 = Sonnet (both Anthropic API)
-TIER_ENDPOINTS = {
-    ModelTier.TIER2: settings.runpod_endpoint_32b,
-}
 
-TIER_MODEL_NAMES = {
-    ModelTier.TIER2: settings.workhorse_model,
-}
-
-_TIER_COOLDOWN = {
-    ModelTier.TIER2: 120.0,
-}
-
-# RunPod Tier 2 timeout: 32B warm = 2-10s; 40s covers heavy generation
-_RUNPOD_TIMEOUT = {
-    ModelTier.TIER2: 40.0,
-}
-
-# Tier 2 cold fallback: complexity signals → Sonnet; otherwise → Haiku
-_COMPLEX_T2_RE = re.compile(
-    r"\b(comprehensive|in.?depth|detailed analysis|full analysis|thorough|"
-    r"strategy|proposal|formal report|deep dive)\b",
-    re.IGNORECASE,
-)
-
-
-def _tier2_cold_model(messages: list) -> Optional[str]:
-    """
-    Decide which model to use when RunPod 32B is cold.
-    Returns settings.tier1_model (Haiku) for short/standard requests,
-    None (→ Sonnet default) for long/complex ones.
-    """
-    last = next((m["content"] for m in reversed(messages) if m.get("role") == "user"), "")
-    if not isinstance(last, str):
-        return None  # image/rich content → Sonnet
-    if len(last) > 500 or _COMPLEX_T2_RE.search(last):
-        return None  # complex → Sonnet
-    return settings.tier1_model  # standard → Haiku
-
+# ─── Provider / model config ──────────────────────────────────────────────────
 
 _ZAI_MODELS = {
     # Free text models (Anthropic-compatible endpoint)
@@ -1196,7 +1166,7 @@ _ZAI_MODELS = {
 _PROVIDER_DEFAULTS = {
     # (provider, tier) → default model name
     ("anthropic", "tier1"): "claude-haiku-4-5-20251001",
-    ("anthropic", "tier2"): None,              # None → use existing RunPod/fallback logic
+    ("anthropic", "tier2"): None,              # None → no override; uses model_override if set
     ("anthropic", "tier3"): "claude-sonnet-4-6",
     ("anthropic", "vision"): "claude-sonnet-4-6",
     ("zai",       "tier1"): "glm-4.5-flash",   # free
@@ -1216,9 +1186,6 @@ class ModelClient:
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
         self._zai: Optional[anthropic.AsyncAnthropic] = None
         self._zai_openai = None   # openai.AsyncOpenAI, lazy-init
-        self._failed_at: dict[ModelTier, Optional[float]] = {
-            ModelTier.TIER2: None,
-        }
 
     @property
     def anthropic(self) -> anthropic.AsyncAnthropic:
@@ -1274,21 +1241,6 @@ class ModelClient:
                     if isinstance(block, dict) and block.get("type") == "image":
                         return True
         return False
-
-    def _is_warm(self, tier: ModelTier) -> bool:
-        failed_at = self._failed_at.get(tier)
-        if failed_at is None:
-            return True
-        return (time.monotonic() - failed_at) >= _TIER_COOLDOWN.get(tier, 120.0)
-
-    def _mark_failed(self, tier: ModelTier) -> None:
-        self._failed_at[tier] = time.monotonic()
-        logger.warning("RunPod %s marked cold — falling back for %.0fs", tier, _TIER_COOLDOWN.get(tier, 120.0))
-
-    def _mark_warm(self, tier: ModelTier) -> None:
-        if self._failed_at.get(tier) is not None:
-            logger.info("RunPod %s recovered — resuming tier routing", tier)
-        self._failed_at[tier] = None
 
     async def stream(
         self,
@@ -1354,43 +1306,28 @@ class ModelClient:
             async for event in self._stream_anthropic(
                 messages, system, min(max_tokens, 1024),
                 model=model1, client=self._client_for(provider1),
+                tools=tools, tool_executor=tool_executor,
             ):
                 yield event
             return
 
-        # ── Tier 2: workhorse — RunPod if provider=anthropic, else Z.ai ───────
+        # ── Tier 2: workhorse ─────────────────────────────────────────────────
         provider2 = settings.tier2_provider
-        if provider2 == "zai":
-            model2 = self._resolve_model("tier2", "zai") or "glm-4.7"
-            if _is_openai_path(model2):
-                logger.info("Tier2 routed to Z.ai OpenAI endpoint (%s)", model2)
-                async for event in self._stream_openai(
-                    messages, system, max_tokens,
-                    model=model2, tools=tools, tool_executor=tool_executor,
-                ):
-                    yield event
-            else:
-                logger.info("Tier2 routed to Z.ai Anthropic endpoint (%s)", model2)
-                async for event in self._stream_anthropic(
-                    messages, system, max_tokens,
-                    model=model2, client=self.zai, tools=tools, tool_executor=tool_executor,
-                ):
-                    yield event
-            return
-
-        endpoint_2 = TIER_ENDPOINTS.get(ModelTier.TIER2)
-        if endpoint_2 and self._is_warm(ModelTier.TIER2):
-            # Pass tools so RunPod-level fallback can hand them to Sonnet if RunPod fails
-            async for event in self._stream_runpod(messages, system, max_tokens, tier=ModelTier.TIER2, tools=tools, tool_executor=tool_executor):
+        model2 = self._resolve_model("tier2", provider2) or "glm-4.7"
+        if provider2 == "zai" and _is_openai_path(model2):
+            logger.info("Tier2 routed to Z.ai OpenAI endpoint (%s)", model2)
+            async for event in self._stream_openai(
+                messages, system, max_tokens,
+                model=model2, tools=tools, tool_executor=tool_executor,
+            ):
                 yield event
         else:
-            # If tools were requested, always use Sonnet so they remain available
-            cold_model = None if tools else _tier2_cold_model(messages)
-            logger.info(
-                "Tier2 RunPod cold — falling back to %s",
-                "sonnet (tools)" if tools else ("haiku" if cold_model else "sonnet"),
-            )
-            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
+            client2 = self._client_for(provider2)
+            logger.info("Tier2 routed to %s (%s)", provider2, model2)
+            async for event in self._stream_anthropic(
+                messages, system, max_tokens,
+                model=model2, client=client2, tools=tools, tool_executor=tool_executor,
+            ):
                 yield event
 
     async def _stream_anthropic(
@@ -1466,6 +1403,12 @@ class ModelClient:
                                 "type": "tool_use", "id": b.id,
                                 "name": b.name, "input": b.input,
                             })
+
+                    # Escalation: if any tool call is request_escalation, signal and stop
+                    for b in tool_uses:
+                        if b.name == "request_escalation":
+                            yield {"type": "escalation_requested", "reason": b.input.get("reason", "")}
+                            return
 
                     tool_results = []
                     for b in tool_uses:
@@ -1690,6 +1633,12 @@ class ModelClient:
                     elif tu["name"] == "propose_task":
                         yield {"type": "task_suggest", "tool_use_id": tu["id"], **tu["input"]}
 
+                # Escalation: if any tool call is request_escalation, signal and stop
+                for tu in tool_uses:
+                    if tu["name"] == "request_escalation":
+                        yield {"type": "escalation_requested", "reason": tu["input"].get("reason", "")}
+                        return
+
                 # Build assistant turn + tool results, then loop
                 asst: Dict = {
                     "role": "assistant",
@@ -1731,88 +1680,6 @@ class ModelClient:
         except Exception as e:
             logger.error("OpenAI path error (model=%s): %s", model, e)
             yield {"type": "error", "error": str(e)}
-
-    async def _stream_runpod(
-        self,
-        messages: List[Dict[str, str]],
-        system: str,
-        max_tokens: int,
-        *,
-        tier: ModelTier,
-        tools: Optional[List[Dict]] = None,
-        tool_executor=None,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Call a RunPod serverless Ollama endpoint (Tier 2 only)."""
-        endpoint = TIER_ENDPOINTS[tier]
-        model_name = TIER_MODEL_NAMES[tier]
-        model_label = TIER_MODELS[tier]
-
-        all_messages = []
-        if system:
-            all_messages.append({"role": "system", "content": system})
-        all_messages.extend(messages)
-
-        payload = {
-            "input": {
-                "openai_route": "/v1/chat/completions",
-                "openai_input": {
-                    "model": model_name,
-                    "messages": all_messages,
-                    "max_tokens": max_tokens,
-                    "stream": False,
-                },
-            }
-        }
-
-        timeout = _RUNPOD_TIMEOUT.get(tier, 40.0)
-        logger.info("RunPod %s request: model=%s timeout=%.0fs", tier, model_name, timeout)
-        try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.post(
-                    endpoint,
-                    json=payload,
-                    headers={
-                        "Authorization": f"Bearer {settings.runpod_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                )
-            resp.raise_for_status()
-            data = resp.json()
-
-            output = data.get("output", {})
-            if isinstance(output, list) and output:
-                output = output[0]
-            choices = output.get("choices", []) if isinstance(output, dict) else []
-
-            if not choices:
-                self._mark_failed(tier)
-                logger.warning("RunPod %s returned empty choices — falling back to Claude", tier)
-                # If tools were requested, always use Sonnet so they remain available
-                cold_model = None if tools else _tier2_cold_model(messages)
-                async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
-                    yield event
-                return
-
-            self._mark_warm(tier)
-            full_text: str = choices[0].get("message", {}).get("content", "")
-            full_text = _strip_tool_xml(full_text)   # remove any stray XML tool-call markup
-            usage = output.get("usage", {})
-            total_tokens = usage.get("total_tokens", 0)
-
-            chunk_size = 40
-            for i in range(0, len(full_text), chunk_size):
-                yield {"type": "chunk", "text": full_text[i: i + chunk_size]}
-                await asyncio.sleep(0.02)
-
-            yield {"type": "done", "model": model_label, "tokens": total_tokens}
-
-        except Exception as e:
-            logger.warning("RunPod %s failed (%s: %s) — falling back", tier, type(e).__name__, e)
-            self._mark_failed(tier)
-            # If tools were requested, always use Sonnet so they remain available
-            cold_model = None if tools else _tier2_cold_model(messages)
-            async for event in self._stream_anthropic(messages, system, max_tokens, model=cold_model, tools=tools, tool_executor=tool_executor):
-                yield event
 
 
 # App-level singleton

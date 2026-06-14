@@ -1,13 +1,16 @@
 """
-Tier classifier — routes each request to the right model tier.
+Tier classifier — routes each request to the right model tier based on complexity.
 
-Primary path: regex fast-paths (instant) → Haiku API for ambiguous cases (~200ms).
-Fallback: heuristics (instant, used when Anthropic API is unreachable).
+Primary path: regex fast-paths (instant) → tier1 model API for ambiguous cases (~200ms).
+Fallback: heuristics (instant, used when API is unreachable).
 
 Tiers:
-  tier1 — simple, fast   → Claude Haiku   (quick Q&A, lookups, short replies)
-  tier2 — standard       → RunPod 32B     (writing, coding, analysis, most tasks)
-  tier3 — frontier       → Claude Sonnet  (strategy, long docs, client work, ALL tools)
+  tier1 — simple/fast    quick Q&A, single tool calls (status lookups, task reads)
+  tier2 — standard       writing, coding, analysis, multi-step reasoning, most chat
+  tier3 — frontier       strategy, long docs, client deliverables, complex tool chains
+
+All tiers have tool access. Routing is purely complexity-based.
+Any tier can call request_escalation to hand off to the next tier up.
 """
 
 import re
@@ -33,14 +36,14 @@ def _ollama_mark_recovered() -> None: pass
 
 _CLASSIFY_SYSTEM = (
     "You are a routing classifier. Reply with ONLY one word — no explanation.\n\n"
-    "tier1 — read-only lookups answered directly from context: "
-    "'what's on my calendar', 'show my tasks', 'how many meetings today', "
-    "'what time is X', 'list my open tasks'\n"
-    "tier2 — standard work needing reasoning but no actions: "
-    "writing, coding, analysis, summarization, research, explaining, most chat\n"
+    "tier1 — simple, fast requests: status lookups, single tool calls, short Q&A. "
+    "Examples: 'what's my battery?', 'what's on my calendar', 'show my tasks', "
+    "'lock the car', 'what's my Strava this week'\n"
+    "tier2 — standard work: writing, coding, analysis, summarization, research, "
+    "multi-step reasoning, most chat\n"
     "tier3 — ANY of the following: "
     "(a) actions that change state: create/add/book/schedule/remind/mark/cancel/update/track/follow-up/note/log/capture; "
-    "(b) requests that need tools or web search (current events, live prices, recent news, real-time data); "
+    "(b) requests needing web search (current events, live prices, recent news); "
     "(c) document/file generation: create a document/report/PDF/PPTX/DOCX/presentation/slide deck; "
     "(d) data visualization: plot/chart/graph/visualize/draw a chart/show a graph/make a chart; "
     "(e) frontier tasks: strategy, proposals, client deliverables, deep analysis. "
@@ -51,7 +54,7 @@ _CLASSIFY_SYSTEM = (
 
 # ── Regex fast-paths ──────────────────────────────────────────────────────────
 
-# Pure read-only lookup patterns — no tools needed
+# Pure read-only lookup patterns — quick Tier 1 Q&A
 _TIER1_RE = re.compile(
     r"\b("
     r"what('s| is) (on |my )?(my |the )?(calendar|schedule|tasks?|todo)"
@@ -63,7 +66,7 @@ _TIER1_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Action patterns — always TIER3 (require tool execution via Claude)
+# Action patterns — always Tier 3 (state-changing tool calls)
 _ACTION_RE = re.compile(
     r"\b("
     # Explicit create/add
@@ -102,28 +105,6 @@ _ACTION_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Tesla / vehicle queries — always need get_tesla_status or tesla_command (Tier 3 tools only)
-_TESLA_RE = re.compile(
-    r"\b("
-    r"tesla|model [s3xy]\b|my car|the car"
-    r"|charging|charge (level|limit|rate|status|port|my car)"
-    r"|battery (level|percent|range|status|charge)"
-    r"|range (left|remaining)"
-    r"|is it (charging|locked|parked|plugged)"
-    r"|lock|unlock (the )?(car|tesla|vehicle|doors?)"
-    r"|climate|heat|cool (down|off|the car)|ac|air con|defrost"
-    r"|sentry (mode)?"
-    r"|frunk|trunk|boot"
-    r"|vent windows|close windows"
-    r"|honk|flash (lights|the lights)"
-    r"|remote start"
-    r"|where('?s| is) (the |my )?(car|tesla|vehicle)"
-    r"|odometer|software (version|update)"
-    r"|supercharg|charge (at home|session)"
-    r")\b",
-    re.IGNORECASE,
-)
-
 _TIER3_RE = re.compile(
     r"\b("
     # Writing with adjectives (existing)
@@ -157,7 +138,7 @@ _TIER3_RE = re.compile(
     r"|(make|create|generate|draw|show|build|produce|render) (a |an |me |the )?(chart|graph|plot|visualization|figure|heatmap|histogram)"
     r"|visuali[sz]e"
     r"|bar chart|line chart|line graph|pie chart|scatter plot|heatmap|histogram"
-    # Local search / places — needs the search_places tool (Tier 3 only)
+    # Local search / places — needs the search_places tool
     r"|(coffee shop|coffee place|cafe|café|restaurant|diner|bistro|brewery|pub|eatery|bakery|pharmacy|drugstore|gas station|petrol station)s?\b"
     r"|near ?(me|by|here)"
     r"|nearby"
@@ -166,13 +147,13 @@ _TIER3_RE = re.compile(
     r"|how (do i|to) get to"
     r"|find (me )?(a |an |the )?(place|spot|coffee|cafe|café|restaurant|bar|hotel|gym|bakery|pharmacy)"
     r"|recommend (a |an |me |some )?(place|spot|coffee|cafe|café|restaurant|bar|hotel|gym|bakery)"
-    # Weather — needs a tool / live data (Tier 3 only)
+    # Weather — needs a tool / live data
     r"|weather|forecast|(temperature|how (hot|cold|warm)) (today|tomorrow|outside|now|this)|is it (going to |gonna )?rain"
     r")\b",
     re.IGNORECASE,
 )
 
-# Personal/self-referential queries — small models struggle with injected context
+# Personal/self-referential queries — route to Tier 3 for reliable context handling
 _PERSONAL_RE = re.compile(
     r"\b("
     r"what do you know about me"
@@ -196,8 +177,6 @@ def _heuristic(prompt: str) -> ModelTier:
     n = len(s)
     if _ACTION_RE.search(s):
         return ModelTier.TIER3
-    if _TESLA_RE.search(s):
-        return ModelTier.TIER3
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
     if _PERSONAL_RE.search(s):
@@ -211,19 +190,17 @@ def _heuristic(prompt: str) -> ModelTier:
 
 async def classify(prompt: str) -> ModelTier:
     """
-    Classify a prompt into a ModelTier.
+    Classify a prompt into a ModelTier based on complexity.
 
     Fast-path: obvious Tier 1 / Tier 3 signals are caught by regex (instant).
-    Ambiguous messages go to Claude Haiku (~200ms, near-zero cost).
-    Falls back to heuristics if Anthropic API is unreachable.
+    Ambiguous messages go to the Tier 1 model API (~200ms, near-zero cost).
+    Falls back to heuristics if the API is unreachable.
     """
     s = prompt.strip()
     n = len(s)
 
     # Fast-path for unambiguous cases — no API call needed
     if _ACTION_RE.search(s):
-        return ModelTier.TIER3
-    if _TESLA_RE.search(s):
         return ModelTier.TIER3
     if n < _SHORT and _TIER1_RE.search(s):
         return ModelTier.TIER1
@@ -239,7 +216,6 @@ async def classify(prompt: str) -> ModelTier:
         return _heuristic(prompt)
 
     # Ambiguous — ask the tier1 model (~200ms, max_tokens=5)
-    # Uses whichever provider is configured for tier1 (Anthropic or Z.ai)
     model = settings.tier1_model_override or (
         "glm-4.5-air" if provider == "zai" else settings.tier1_model
     )
@@ -260,5 +236,5 @@ async def classify(prompt: str) -> ModelTier:
             return ModelTier.TIER3
         return ModelTier.TIER2
     except Exception as e:
-        logger.warning("Haiku classifier failed (%s) — using heuristic", e)
+        logger.warning("Tier1 classifier failed (%s) — using heuristic", e)
         return _heuristic(prompt)

@@ -30,6 +30,7 @@ from core.model_client import (
     GET_STRAVA_STATS_TOOL, GET_STRAVA_ZONES_TOOL,
     GET_TESLA_STATUS_TOOL, TESLA_COMMAND_TOOL, GET_TESLA_SESSIONS_TOOL,
     GENERATE_CHART_TOOL, GET_CURRENT_TIME_TOOL,
+    REQUEST_ESCALATION_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -684,12 +685,7 @@ async def send_message(
             messages[-1]["content"] = full_text
 
     client = get_model_client()
-    # When RunPod (Tier2) is cold and falls back to Claude, upgrade to Tier3 so the
-    # request gets full tools + capabilities block instead of a tool-deaf response.
     effective_tier = tier
-    if tier == ModelTier.TIER2 and not client._is_warm(ModelTier.TIER2):
-        effective_tier = ModelTier.TIER3
-        log.info("RunPod Tier2 cold — upgrading to Tier3 for full tool support")
 
     system_prompt = await assemble(
         user_id, content or "attachment", db=db, tier=effective_tier,
@@ -721,11 +717,9 @@ async def send_message(
     from core.config import settings as _cfg
     _using_zai = _cfg.tier3_provider == "zai"
 
-    # Tools available for TIER2 and TIER3.
-    # TIER2 (RunPod) ignores them in the payload but the Sonnet fallback path
-    # uses them — so we must build them here regardless, otherwise a RunPod
-    # timeout with a "warm" start would fall back to Sonnet with no tools.
-    # TIER1 (Haiku) handles simple queries and never needs tool execution.
+    # All tiers get tools. Tier 1 and Tier 2 also get REQUEST_ESCALATION_TOOL so
+    # they can hand off to Tier 3 when they recognise the task is beyond their depth.
+    # generate_chart is Anthropic-only — Z.ai/GLM writes Python code naturally instead.
     tools = [
         CREATE_TASK_TOOL,
         CREATE_CALENDAR_EVENT_TOOL,
@@ -759,11 +753,9 @@ async def send_message(
         TESLA_COMMAND_TOOL,
         GET_TESLA_SESSIONS_TOOL,
         GET_CURRENT_TIME_TOOL,
-        # generate_chart only sent to Anthropic — Z.ai/GLM refuses the tool and
-        # outputs "environment not configured". With Z.ai, the code-block fallback
-        # runs post-stream instead (no tool needed, GLM naturally writes Python code).
         *([GENERATE_CHART_TOOL] if not _using_zai else []),
-    ] if effective_tier != ModelTier.TIER1 else None
+        *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
+    ]
     queue: asyncio.Queue = asyncio.Queue()
 
     async def background_generate() -> None:
@@ -2310,10 +2302,15 @@ plt.close('all')
 
                     return "Action completed."
 
+                escalation_reason: Optional[str] = None
+
                 async for event in client.stream(messages, effective_tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
+                    elif event["type"] == "escalation_requested":
+                        escalation_reason = event.get("reason", "")
+                        log.info("Tier %s requested escalation to Tier 3: %s", effective_tier.value, escalation_reason)
                     elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
                         tool_results.append(event)
                         await queue.put(sse_event(event))
@@ -2322,6 +2319,40 @@ plt.close('all')
                         tokens_used = event.get("tokens", 0)
                     elif event["type"] == "error":
                         await queue.put(sse_event(event))
+
+                # Escalation: re-run at Tier 3 with full tools (no escalation tool)
+                if escalation_reason is not None:
+                    t3_system = await assemble(
+                        user_id, content or "attachment", db=bg_db, tier=ModelTier.TIER3,
+                        user_lat=location_lat, user_lng=location_lng,
+                    )
+                    try:
+                        from memory import mnemon as _mn, second_brain as _sb
+                        _mr = await _mn.search(bg_db, user_id, content or "attachment", limit=20)
+                        _sr = await _sb.search(bg_db, user_id, content or "attachment", limit=20)
+                        _mp = [m.content for m in _mr if m.content]
+                        for r in _sr:
+                            c = r.get("chunk"); i = r.get("item")
+                            t = c.content if c else (i.summary or "" if i else "")
+                            if t: _mp.append(t)
+                        if _mp:
+                            t3_system = f"Memory context (from Mnemon & Second Brain):\n{chr(10).join(_mp)}\n\n{t3_system}"
+                    except Exception:
+                        pass
+                    t3_tools = [t for t in tools if t["name"] != "request_escalation"]
+                    full_response.clear()
+                    async for event in client.stream(messages, ModelTier.TIER3, system=t3_system, tools=t3_tools, tool_executor=_tool_executor):
+                        if event["type"] == "chunk":
+                            full_response.append(event.get("text", ""))
+                            await queue.put(sse_event(event))
+                        elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
+                            tool_results.append(event)
+                            await queue.put(sse_event(event))
+                        elif event["type"] == "done":
+                            model_used = event.get("model", "") + f" (escalated from {effective_tier.value})"
+                            tokens_used = event.get("tokens", 0)
+                        elif event["type"] == "error":
+                            await queue.put(sse_event(event))
 
             assistant_content = "".join(full_response)
 
@@ -2490,8 +2521,7 @@ plt.close('all')
             try:
                 item = await asyncio.wait_for(queue.get(), timeout=15.0)
             except asyncio.TimeoutError:
-                # Keepalive comment — keeps SSE connection alive through proxies
-                # while the model is warming up or thinking (e.g. RunPod cold start).
+                # Keepalive — keeps SSE connection alive through proxies while streaming.
                 yield ": keepalive\n\n"
                 continue
             if item is None:
