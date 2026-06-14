@@ -146,9 +146,10 @@ fun MainScreen() {
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
     // Tracks in-flight AI key timing job for single (photo) vs double (video) long-press
     val aiKeyDownJobRef = remember { java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null) }
-    // Probe for the live camera stream — verifies onCameraFrame delivery (step 1 of
-    // HUD-overlay recording). Grows into the decode→composite→encode→mux pipeline.
-    val cameraStreamProbe = remember { com.clawsses.phone.glasses.CameraStreamProbe() }
+    // Records the live camera stream to an MP4 in Movies/Clawsses on the phone.
+    // (HUD-overlay compositing is the next step layered on this same stream.)
+    val appContext = LocalContext.current.applicationContext
+    val cameraStreamRecorder = remember { com.clawsses.phone.glasses.CameraStreamRecorder(appContext) }
     // Overlay-recording toggle state (driven by the top-bar record button).
     var isOverlayRecording by remember { mutableStateOf(false) }
 
@@ -383,7 +384,7 @@ fun MainScreen() {
             // Keep the micro-LED display awake for the whole clip so the flashing
             // REC indicator stays visible; restored to the user's timeout on stop.
             RokidSdkManager.setScreenOffTimeout(3600L)
-            RokidSdkManager.setMediaStreamListener(cameraStreamProbe)
+            RokidSdkManager.setMediaStreamListener(cameraStreamRecorder)
             val ok = RokidSdkManager.openCameraVideo(1280, 720, 0, 1)
             android.util.Log.i("MainScreen", "Phone record → start camera stream, ok=$ok")
             glassesManager.sendRawMessage("""{"type":"video_state","recording":$ok}""")
@@ -392,6 +393,7 @@ fun MainScreen() {
     fun stopVideoRecording() {
         mainHandler.post {
             RokidSdkManager.closeCameraVideo()
+            cameraStreamRecorder.stop()   // finalize the MP4 (don't rely solely on onCameraClosed)
             RokidSdkManager.setMediaStreamListener(null)
             RokidSdkManager.setScreenOffTimeout(RokidSdkManager.screenTimeoutSeconds)
             android.util.Log.i("MainScreen", "Phone record → stop camera stream")
