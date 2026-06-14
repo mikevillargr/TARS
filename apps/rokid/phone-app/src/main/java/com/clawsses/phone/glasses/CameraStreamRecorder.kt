@@ -38,6 +38,8 @@ class CameraStreamRecorder(
     private var started = false
     private var firstTsMs = -1L
     private var frameCount = 0
+    private var actualW = width
+    private var actualH = height
 
     override fun onCameraOpened() {
         Log.i(TAG, ">>> onCameraOpened — stream is live")
@@ -64,6 +66,10 @@ class CameraStreamRecorder(
                     Log.w(TAG, "frame $frameCount: waiting for SPS/PPS keyframe")
                     return
                 }
+                // Real dimensions come from the SPS — hardcoding caused the stretch.
+                val dims = parseSpsDimensions(spsPps.first)
+                if (dims != null) { actualW = dims.first; actualH = dims.second }
+                Log.i(TAG, "stream resolution from SPS: ${actualW}x$actualH (requested ${width}x$height)")
                 startMuxer(spsPps.first, spsPps.second)
             }
             if (firstTsMs < 0) firstTsMs = timestamp
@@ -100,7 +106,7 @@ class CameraStreamRecorder(
             ?: throw IllegalStateException("openFileDescriptor failed")
         pfd = p
         val mx = MediaMuxer(p.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-        val fmt = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+        val fmt = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, actualW, actualH).apply {
             setByteBuffer("csd-0", ByteBuffer.wrap(sps))
             setByteBuffer("csd-1", ByteBuffer.wrap(pps))
         }
@@ -165,6 +171,78 @@ class CameraStreamRecorder(
             ranges.add(s to e)
         }
         return ranges
+    }
+
+    /** Minimal MSB-first bit reader for Exp-Golomb SPS parsing. */
+    private class BitReader(private val d: ByteArray) {
+        private var bytePos = 0; private var bitPos = 0
+        fun bit(): Int {
+            if (bytePos >= d.size) return 0
+            val b = (d[bytePos].toInt() ushr (7 - bitPos)) and 1
+            if (++bitPos == 8) { bitPos = 0; bytePos++ }
+            return b
+        }
+        fun bits(n: Int): Int { var v = 0; repeat(n) { v = (v shl 1) or bit() }; return v }
+        fun ue(): Int {
+            var z = 0; while (bit() == 0 && bytePos < d.size) z++
+            if (z == 0) return 0
+            var v = 1; repeat(z) { v = (v shl 1) or bit() }; return v - 1
+        }
+    }
+
+    /** Decode width/height from an SPS NAL (Annex-B, with start code). Baseline-profile
+     *  stream (no scaling-matrix branch). Returns null on failure. */
+    private fun parseSpsDimensions(sps: ByteArray): Pair<Int, Int>? {
+        return try {
+            var off = 0
+            off += when {
+                sps.size > 4 && sps[0].toInt()==0 && sps[1].toInt()==0 && sps[2].toInt()==0 && sps[3].toInt()==1 -> 4
+                sps.size > 3 && sps[0].toInt()==0 && sps[1].toInt()==0 && sps[2].toInt()==1 -> 3
+                else -> 0
+            }
+            off += 1 // NAL header byte (0x67)
+            // strip emulation-prevention bytes (00 00 03)
+            val rbsp = ArrayList<Byte>(sps.size)
+            var zeros = 0
+            var i = off
+            while (i < sps.size) {
+                val b = sps[i]
+                if (zeros >= 2 && b.toInt() == 3) { zeros = 0; i++; continue }
+                zeros = if (b.toInt() == 0) zeros + 1 else 0
+                rbsp.add(b); i++
+            }
+            val r = BitReader(rbsp.toByteArray())
+            val profileIdc = r.bits(8)
+            r.bits(8); r.bits(8) // constraint flags + level
+            r.ue() // sps id
+            if (profileIdc in intArrayOf(100,110,122,244,44,83,86,118,128,138,139,134,135)) {
+                val chroma = r.ue()
+                if (chroma == 3) r.bit()
+                r.ue(); r.ue(); r.bit()
+                if (r.bit() == 1) return null // scaling matrix present — bail (not baseline)
+            }
+            r.ue() // log2_max_frame_num_minus4
+            val pocType = r.ue()
+            when (pocType) {
+                0 -> r.ue()
+                1 -> { r.bit(); r.ue(); r.ue(); val n = r.ue(); repeat(n) { r.ue() } }
+            }
+            r.ue() // max_num_ref_frames
+            r.bit() // gaps_in_frame_num_allowed
+            val widthMbs = r.ue() + 1
+            val heightMapUnits = r.ue() + 1
+            val frameMbsOnly = r.bit()
+            if (frameMbsOnly == 0) r.bit() // mb_adaptive_frame_field
+            r.bit() // direct_8x8_inference
+            var w = widthMbs * 16
+            var h = (2 - frameMbsOnly) * heightMapUnits * 16
+            if (r.bit() == 1) { // frame_cropping (assume 4:2:0)
+                val l = r.ue(); val rt = r.ue(); val t = r.ue(); val b = r.ue()
+                w -= (l + rt) * 2
+                h -= (t + b) * 2 * (2 - frameMbsOnly)
+            }
+            if (w in 1..4096 && h in 1..4096) w to h else null
+        } catch (e: Exception) { Log.w(TAG, "SPS parse failed: $e"); null }
     }
 
     /** NAL type (low 5 bits) of the byte following the start code at [start]. */
