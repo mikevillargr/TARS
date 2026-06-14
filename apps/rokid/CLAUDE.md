@@ -46,40 +46,33 @@ The phone app's `preBuild` depends on a `bundleGlassesApk` task that copies `gla
 ## Architecture
 
 ```
-OpenClaw Gateway  ←WebSocket→  Phone App (Android)  ←Bluetooth/CXR→  Glasses App (Android)
-     │                              │                                       │
-  AI agent                     CXR-M SDK                               CXR-S SDK
-  Chat streaming               OpenClawClient                          Chat HUD
-  Sessions                     Voice input                             Gesture input
-                               Bridge logic
+TARS Harness  ←WebSocket /api/rokid/ws→  Phone App (Android)  ←Bluetooth/CXR→  Glasses App (Android)
+      │                                        │                                        │
+ JWT WebSocket                           CXR-M SDK                                CXR-S SDK
+ SSE → glasses protocol                  Voice + TTS                              Chat HUD
+ proxied by rokid.py                     Bridge logic                             Gesture input
 ```
 
 Three Gradle modules:
 - **shared/** — Protocol data classes (Gson-serialized). Used by both apps.
-- **phone-app/** — Companion app. Connects to OpenClaw Gateway via WebSocket and to glasses via Rokid CXR-M SDK (Bluetooth) or debug WebSocket.
+- **phone-app/** — Companion app. Connects to TARS harness via JWT WebSocket and to glasses via Rokid CXR-M SDK (Bluetooth) or debug WebSocket.
 - **glasses-app/** — HUD app running on Rokid glasses. Receives messages from phone via CXR-S SDK bridge. Renders chat UI with Jetpack Compose.
 
-## OpenClaw Protocol
+## TARS Connection
 
-[OpenClaw](https://openclaw.ai/) is an open-source personal AI assistant you run on your own devices, created by Peter Steinberger and the community ([source](https://github.com/openclaw/openclaw)). It supports multiple AI backends (Claude, GPT, local models). A local reference clone lives at `.openclaw-ref/` for protocol details.
+The phone app authenticates to TARS with username/password (`POST /api/auth/login` → JWT), then opens a persistent WebSocket at `ws://<host>/api/rokid/ws?token=<jwt>`.
 
-The Gateway is OpenClaw's local control plane — it manages sessions, channels, tools, and events. Phone connects to the Gateway via `ws://host:port` (default 18789).
+On the harness side, `apps/harness/api/routes/rokid.py` proxies TARS SSE (streaming chat responses) into the glasses wire format and forwards phone→glasses JSON messages back through the WebSocket.
 
-**Frame types:** Three discriminated JSON frames: `req` (`type`, `id`, `method`, `params?`), `res` (`type`, `id`, `ok`, `payload?`, `error?`), `event` (`type`, `event`, `payload?`, `seq?`, `stateVersion?`). `id` must be a string.
-
-**Auth flow:** Gateway supports token or password auth modes (env: `OPENCLAW_GATEWAY_TOKEN` / `OPENCLAW_GATEWAY_PASSWORD`). Our client uses token auth plus Ed25519 device identity: connect → receive `connect.challenge` event with nonce → send `connect` request with token + signed device payload → receive `hello-ok`. Device identity uses Android Keystore Ed25519 keypair (`DeviceIdentity.kt`).
-
-**Chat streaming:** Client sends `chat.send` with `sessionKey`, `idempotencyKey`, `message`. Server responds with ack (`status: "started"`, `runId`), then pushes `chat` events with `state: "delta"|"final"|"error"`. Each delta contains **full accumulated text** (not incremental chunks) — client diffs against previous content to extract new text.
-
-**Key connect params:** `client.id = "openclaw-control-ui"`, `client.mode = "ui"`, `scopes = ["operator.admin"]`. Origin header must be set on the WebSocket request.
+**Auth flow:** Login with TARS credentials → JWT stored in SharedPreferences → JWT attached as query param on WebSocket connect → harness validates JWT on every connection.
 
 ## Phone ↔ Glasses Protocol
 
 Defined in `shared/.../Protocol.kt`. JSON messages over CXR SDK (production) or WebSocket (debug).
 
-**Phone → Glasses:** `chat_message`, `agent_thinking`, `chat_stream` (incremental chunk), `chat_stream_end`, `connection_update`, `session_list`, `voice_state`, `voice_result`
+**Phone → Glasses:** `chat_message`, `agent_thinking`, `chat_stream` (incremental chunk), `chat_stream_end`, `connection_update`, `session_list`, `voice_state`, `voice_result`, `wake_signal`, `hw_photo_key`, `tts_state`
 
-**Glasses → Phone:** `user_input` (text + optional imageBase64), `list_sessions`, `switch_session`, `slash_command`, `start_voice`, `cancel_voice`
+**Glasses → Phone:** `user_input` (text + optional imageBase64), `list_sessions`, `switch_session`, `slash_command`, `start_voice`, `cancel_voice`, `request_more_history`, `wake_ack`, `tts_toggle`, `remove_photo`
 
 ## Glasses HUD
 
@@ -133,14 +126,14 @@ For emulator testing without physical glasses. Auto-enabled when `BuildConfig.DE
 
 ```bash
 # Logcat filtering
-adb -s emulator-5554 logcat | grep -E "(MainScreen|OpenClawClient|GlassesConnection|RokidSdkManager)"
+adb -s emulator-5554 logcat | grep -E "(MainScreen|TarsClient|GlassesConnection|RokidSdkManager)"
 adb -s emulator-5556 logcat | grep -E "(GlassesApp|HudActivity|PhoneConnection)"
 ```
 
 ## Key State Patterns
 
 - `MutableStateFlow` for all reactive state (glasses HudState, phone connection states)
-- OpenClawClient uses `ConcurrentHashMap<String, CompletableDeferred<OpenClawResponse>>` for request/response correlation
+- TarsClient uses coroutine-based streaming for TARS SSE message handling
 - Callbacks (nullable lambdas) for inter-component message routing
 - Sealed classes for connection state machines (`ConnectionState`, `VoiceInputState`)
 - Auto-reconnect with 3-second delay on disconnect/error
@@ -152,9 +145,9 @@ shared/src/main/java/com/clawsses/shared/
 └── Protocol.kt                    # All message types + JSON parsing
 
 phone-app/src/main/java/com/clawsses/phone/
-├── openclaw/
-│   ├── OpenClawClient.kt          # WebSocket client, auth, streaming
-│   └── DeviceIdentity.kt          # Ed25519 keypair (Android Keystore)
+├── tars/
+│   ├── TarsClient.kt              # JWT WebSocket client → TARS harness /api/rokid/ws
+│   └── TarsAuthManager.kt         # Login → JWT, persisted in SharedPreferences
 ├── glasses/
 │   ├── GlassesConnectionManager.kt # BLE scan/connect or debug WebSocket
 │   ├── RokidSdkManager.kt         # CXR-M SDK, SN verification, persistence
