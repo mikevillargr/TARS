@@ -37,6 +37,12 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
 }
 
+function formatTime(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+}
+
 function fileTypeIcon(name: string, type: string) {
   const ext = name.split(".").pop()?.toLowerCase() ?? ""
   const ct = type.toLowerCase()
@@ -249,23 +255,35 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
     : ("tool_results" in msg ? (msg.tool_results ?? []) : [])
 
   return (
-    <div className={cn("flex min-w-0", isUser ? "justify-end" : "justify-start")}>
-      <div
-        className={cn(
-          "min-w-0 max-w-[93%] md:max-w-[80%] rounded-2xl px-3 py-2.5 md:px-4 md:py-3 overflow-hidden",
-          isUser
-            ? "bg-primary text-primary-foreground rounded-br-sm"
-            : "bg-muted text-foreground rounded-bl-sm"
+    <div className={cn("flex flex-col min-w-0 gap-1", isUser ? "items-end" : "items-start")}>
+      {/* Speaker + time eyebrow — instrument log marker (prose stays Inter) */}
+      <div className={cn("flex items-center gap-2 px-1", isUser ? "flex-row-reverse" : "flex-row")}>
+        <span className={cn("tars-label", isUser ? "tars-label--muted" : "tars-label--moss")}>
+          {isUser ? "Mike" : "TARS"}
+        </span>
+        {!isStreaming && "created_at" in msg && msg.created_at && (
+          <span className="tars-label tars-label--muted" style={{ opacity: 0.65 }}>
+            {formatTime(msg.created_at)}
+          </span>
         )}
+      </div>
+
+      <div
+        className="min-w-0 max-w-[93%] md:max-w-[80%] rounded-lg border px-3 py-2.5 md:px-4 md:py-3 overflow-hidden"
+        style={{
+          backgroundColor: isUser ? "var(--c-surface-2)" : "var(--c-surface)",
+          borderColor: "var(--c-border-faint)",
+          color: "var(--c-ink)",
+        }}
       >
         {"_attachments" in msg && msg._attachments && msg._attachments.length > 0 && (
-          <AttachmentList attachments={msg._attachments} isUser={isUser} />
+          <AttachmentList attachments={msg._attachments} isUser={false} />
         )}
 
         {!isUser && cards.length > 0 && <ToolResultCards cards={cards} />}
 
         {msg.content && (
-          <div className={cn("prose md:prose-sm max-w-none", isUser ? "prose-invert" : "dark:prose-invert")}>
+          <div className={cn("prose md:prose-sm max-w-none dark:prose-invert")}>
             <ReactMarkdown
               urlTransform={(url: string) => url}
               components={{
