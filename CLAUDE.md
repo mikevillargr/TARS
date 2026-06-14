@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.6.0 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.6.1 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -10,22 +10,28 @@
 **This document is the single source of truth for every Claude Code agent session.**
 Every agent reads it on start. If it drifts from reality, agents make wrong decisions.
 
-### After every session that changes architecture, processes, or components:
-1. Update the relevant sections in this file
-2. Update `SYSTEM_STATE.md` (see below)
-3. Commit with message `docs: update CLAUDE.md — <what changed>`
-4. Push to main
+### After EVERY change that ships to production, BOTH docs must be updated in the same commit:
+This is not tied to formal `git tag` releases. The working model is "always push to live" —
+so any deploy that adds, removes, or changes a feature, component, schema, connector, or
+process **must** update both docs before/with the deploy. Bump the patch version even for
+small user-facing features so TARS's self-knowledge stays accurate.
 
-### SYSTEM_STATE.md — mandatory on every version tag
+1. Update the relevant sections in **CLAUDE.md** (see list below)
+2. Update **SYSTEM_STATE.md** (see below)
+3. Commit (may be part of the feature commit, or a `docs:` commit)
+4. Push to main + deploy
+
+### SYSTEM_STATE.md — mandatory on every production change
 `SYSTEM_STATE.md` at the repo root is the live architecture file injected into TARS's own
 context so it can answer questions about itself ("what version are you?", "what connectors
-do you have?", "how does your model routing work?"). Update it on every `git tag`.
+do you have?", "how does your model routing work?", "can I star a Second Brain item?").
+**If TARS doesn't know about a feature, it's because this file wasn't updated — update it.**
 
-Fields to update on every tag:
-- **Current Version** table — version number + release date
+Fields to update on every production change:
+- **Current Version** table — version number (bump patch even for small features) + release date
 - **Version History** — prepend a new entry (latest first) with features + fixes
 - **Infrastructure / Running Services** — if any server config changed
-- **Active Components / Connectors** — if any added, removed, or changed status
+- **Active Components / Connectors** — if any added, removed, or changed status/capability
 
 ### What to update in CLAUDE.md:
 - **Section 6** — data model if schema changed
@@ -366,6 +372,7 @@ Chat, Tasks, Meetings, Calendar, Second Brain, Agent Jobs, Artifacts, Cron Manag
 - Semantic search bar, domain/tag/collection filters; **Starred** sidebar filter (amber star) for pinned items
 - Item cards: favicon/thumbnail, title, summary excerpt, personal note, tags; star toggle in card corner (shows on hover, persists `starred`) — starred items sort first
 - Detail modal: star toggle in header (optimistic, persisted via PATCH)
+- Retrieval boost: starred items get a `STAR_BOOST` (0.06) reduction in effective cosine distance in `second_brain.search`, so user-pinned knowledge is favored when injected into TARS's context (semantic + keyword-fallback paths)
 - Right panel: full content, annotation textarea, related items, access history
 - PWA share target (native share sheet on mobile)
 - Quick Capture: URL, Note, Document upload, Voice memo
@@ -779,6 +786,9 @@ v1.0.0  Session 9 complete - polish, PWA, full production deploy
 v2.4.6  (latest before this session) — Rokid glasses HUD + TTS improvements
 v2.5.0  Session 9 continued — Kokoro TTS voice settings, chat composer redesign (mic-on-right),
         TTS stop bug fix (AbortController Set), amber speaking pill, header mic enlarged
+v2.6.0  Rokid glasses HUD — full TTS, photo flow, brightness, session polish
+v2.6.1  Second Brain star/favorite — card + modal star toggles, Starred sidebar filter,
+        starred-first sort, STAR_BOOST relevance boost in retrieval (migration j7k8l9m0n1o2)
 ```
 
 ---

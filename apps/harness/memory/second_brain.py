@@ -5,7 +5,7 @@ Two-stage retrieval: item-level summary first, then chunk-level within matched i
 """
 
 from typing import List, Optional
-from sqlalchemy import select, desc, delete
+from sqlalchemy import select, desc, delete, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import select
@@ -251,6 +251,13 @@ async def _ingest_content(
 
 # ── Search ────────────────────────────────────────────────────────────────────
 
+# Starred items get a relevance boost in retrieval: their effective cosine
+# distance is reduced by this amount, so they clear the threshold more easily
+# and rank ahead of comparable un-starred items. Distances here run ~0.2–0.45,
+# so this is a meaningful nudge without drowning out genuine relevance.
+STAR_BOOST = 0.06
+
+
 async def search(
     db: AsyncSession,
     user_id: str,
@@ -264,17 +271,22 @@ async def search(
     2. Find top matching chunks within those items (filtered by threshold)
     Returns list of {item, chunk} dicts with the most relevant context.
     Only results with cosine_distance < threshold are returned (similarity > 0.45).
+    Starred items receive a STAR_BOOST nudge so user-pinned knowledge is favored.
     Falls back to keyword search when no semantic matches are found.
     """
     query_embedding = embed_one(query)
 
-    # Stage 1: top items within similarity threshold
+    # Effective distance = raw cosine distance, minus a boost for starred items.
+    _raw_dist = KnowledgeItem.embedding.cosine_distance(query_embedding)
+    _boosted_dist = _raw_dist - case((KnowledgeItem.starred.is_(True), STAR_BOOST), else_=0.0)
+
+    # Stage 1: top items within similarity threshold (starred items boosted)
     item_result = await db.execute(
         select(KnowledgeItem)
         .where(KnowledgeItem.user_id == user_id)
         .where(KnowledgeItem.embedding.is_not(None))
-        .where(KnowledgeItem.embedding.cosine_distance(query_embedding) < threshold)
-        .order_by(KnowledgeItem.embedding.cosine_distance(query_embedding))
+        .where(_boosted_dist < threshold)
+        .order_by(_boosted_dist)
         .limit(limit * 2)
     )
     top_items = item_result.scalars().all()
@@ -336,7 +348,9 @@ async def _keyword_fallback_search(
         ])).lower()
         hits = sum(1 for kw in keywords if kw in text)
         if hits > 0:
-            scored.append((hits, item))
+            # Starred items get a half-hit bonus so user-pinned knowledge ranks higher
+            score = hits + (0.5 if item.starred else 0.0)
+            scored.append((score, item))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [{"item": item, "chunk": None} for _, item in scored[:top_n]]
 

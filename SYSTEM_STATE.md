@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.6.0 |
-| Released | 2026-06-13 |
+| Version | v2.6.1 |
+| Released | 2026-06-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -77,7 +77,7 @@ Provider and model are configurable per-tier via the Settings UI (Anthropic or Z
 | 2 | Tasks | /tasks | Live |
 | 3 | Meetings | /meetings | Live |
 | 4 | Calendar | /calendar | Live |
-| 5 | Second Brain | /second-brain | Live |
+| 5 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval |
 | 6 | Agent Jobs | /agent-jobs | Live |
 | 7 | Artifacts | /artifacts | Live |
 | 8 | Cron Manager | /cron | Live |
@@ -134,6 +134,20 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.6.1 — 2026-06-14
+**Second Brain: star / favorite items**
+
+Features:
+- Star (favorite) any Second Brain item: hover-reveal amber star toggle on each card, plus a star toggle in the detail modal header (both optimistic, persisted via `PATCH /second-brain/items/{id}`)
+- New **Starred** filter in the Second Brain sidebar (amber accent + live count)
+- Starred items sort first in the item list (`ORDER BY starred DESC, saved_at DESC`)
+- Retrieval boost: starred items get a `STAR_BOOST` (0.06) reduction in effective cosine distance during context assembly, so user-pinned knowledge clears the relevance threshold more easily and ranks ahead of comparable items (semantic + keyword-fallback paths)
+
+Schema:
+- `knowledge_items.starred` boolean (default false) — migration `j7k8l9m0n1o2`
+
+---
 
 ### v2.6.0 — 2026-06-13
 **Rokid Glasses HUD: full TTS, photo flow, brightness, session polish**
