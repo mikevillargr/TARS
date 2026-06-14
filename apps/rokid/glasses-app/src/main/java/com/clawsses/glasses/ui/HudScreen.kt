@@ -120,6 +120,7 @@ enum class MoreMenuItem(val icon: String, val label: String, val displaySize: Hu
     SLASH("/", "Slash Cmds"),
     VOICE("\uD83D\uDD0A", "Voice"),  // speaker icon - label is dynamic
     BRIGHTNESS("\u2600", "Brightness"),  // cycles Low/Med/High via phone SDK
+    DELETE_PHOTOS("\u232B", "Del Photos"),  // \u232B erase symbol \u2014 clear all staged photos
 }
 
 /**

@@ -97,8 +97,9 @@ class GlassesConnectionManager(private val context: Context) {
     // Callback for messages from glasses (both BLE and debug modes)
     var onMessageFromGlasses: ((String) -> Unit)? = null
 
-    // AI scene callbacks (glasses long-press voice activation)
+    // AI scene callbacks (short press = photo trigger, long press = voice)
     var onAiKeyDown: (() -> Unit)? = null
+    var onAiKeyUp: (() -> Unit)? = null
     var onAiExit: (() -> Unit)? = null
 
     // Wake signal manager for handling standby wake-up and message buffering
@@ -213,10 +214,14 @@ class GlassesConnectionManager(private val context: Context) {
             onMessageFromGlasses?.invoke(cmd)
         }
 
-        // AI scene events (glasses long-press triggers voice input)
+        // AI scene events — down/up forwarded for short-press (photo) vs long-press (voice) timing
         RokidSdkManager.onAiKeyDown = {
-            Log.d(TAG, "SDK: AI key down (voice activation)")
+            Log.d(TAG, "SDK: AI key down")
             onAiKeyDown?.invoke()
+        }
+        RokidSdkManager.onAiKeyUp = {
+            Log.d(TAG, "SDK: AI key up")
+            onAiKeyUp?.invoke()
         }
         RokidSdkManager.onAiExit = {
             Log.d(TAG, "SDK: AI scene exited")

@@ -1107,6 +1107,20 @@ class HudActivity : ComponentActivity() {
                 phoneConnection.sendToPhone(json.toString())
                 Log.d(GlassesApp.TAG, "TTS toggle: $newEnabled")
             }
+            MoreMenuItem.DELETE_PHOTOS -> {
+                // Clear all staged photos from the HUD session
+                if (current.photoThumbnails.isNotEmpty() || current.showPhotoActions) {
+                    hudState.value = current.copy(
+                        photoThumbnails = emptyList(),
+                        showPhotoActions = false,
+                        pendingPhoto = null,
+                        photoActionIndex = 0,
+                        focusedArea = ChatFocusArea.CONTENT
+                    )
+                    phoneConnection.sendToPhone("""{"type":"remove_photo","all":true}""")
+                    Log.d(GlassesApp.TAG, "All staged photos deleted via More menu")
+                }
+            }
             else -> {}
         }
     }
@@ -1673,6 +1687,13 @@ class HudActivity : ComponentActivity() {
                     }
                     // Clear callback and ensure voice handler knows we're done
                     voiceHandler.handleVoiceResult(resultType, text)
+                }
+
+                "hw_photo_key" -> {
+                    // Phone detected a short press of the physical AI/camera button —
+                    // trigger the same capture flow as the in-HUD PHOTO menu item.
+                    Log.i(GlassesApp.TAG, "Hardware photo key from phone → capture")
+                    executeMenuItem(MenuBarItem.PHOTO)
                 }
 
                 "photo_result" -> {

@@ -3,6 +3,7 @@ package com.clawsses.phone.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -143,6 +144,8 @@ fun MainScreen() {
     val listState = rememberLazyListState()
 
     val mainHandler = remember { android.os.Handler(android.os.Looper.getMainLooper()) }
+    // Tracks in-flight AI key timing job for short-press (photo) vs long-press (voice) detection
+    val aiKeyDownJobRef = remember { java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null) }
 
     // Re-open the mic for the next turn if we're in continuous-conversation mode.
     fun restartVoiceIfConversing() {
@@ -366,23 +369,39 @@ fun MainScreen() {
         }
     }
 
-    // Handle AI scene events (glasses long-press triggers voice input)
+    // AI key timing: short press (<200ms down→up) = hardware photo trigger, long press = voice
     LaunchedEffect(Unit) {
         glassesManager.onAiKeyDown = {
-            android.util.Log.i("MainScreen", ">>> AI key down from glasses - starting voice recognition")
-            mainHandler.post {
-                RokidSdkManager.setCommunicationDevice()
-                startVoiceRecognitionWithManager(
-                    voiceRecognitionManager = voiceRecognitionManager,
-                    voiceHandler = voiceHandler,
-                    openClawClient = openClawClient,
-                    glassesManager = glassesManager,
-                    mainHandler = mainHandler,
-                    isRetry = false,
-                    languageTag = voiceLanguageManager.getActiveLanguageTag(),
-                    pendingPhotos = { pendingPhotos },
-                    onPhotosConsumed = { pendingPhotos = emptyList() }
-                )
+            android.util.Log.i("MainScreen", ">>> AI key down from glasses")
+            aiKeyDownJobRef.getAndSet(null)?.cancel()
+            val job = scope.launch {
+                delay(200)
+                // Key held 200ms+ → long press, start voice recognition
+                mainHandler.post {
+                    android.util.Log.i("MainScreen", "AI key long press → voice recognition")
+                    RokidSdkManager.setCommunicationDevice()
+                    startVoiceRecognitionWithManager(
+                        voiceRecognitionManager = voiceRecognitionManager,
+                        voiceHandler = voiceHandler,
+                        openClawClient = openClawClient,
+                        glassesManager = glassesManager,
+                        mainHandler = mainHandler,
+                        isRetry = false,
+                        languageTag = voiceLanguageManager.getActiveLanguageTag(),
+                        pendingPhotos = { pendingPhotos },
+                        onPhotosConsumed = { pendingPhotos = emptyList() }
+                    )
+                }
+            }
+            aiKeyDownJobRef.set(job)
+        }
+        glassesManager.onAiKeyUp = {
+            val job = aiKeyDownJobRef.getAndSet(null)
+            if (job?.isActive == true) {
+                // Released before 200ms → short press → trigger photo on glasses
+                job.cancel()
+                android.util.Log.i("MainScreen", "AI key short press → hw_photo_key")
+                glassesManager.sendRawMessage("""{"type":"hw_photo_key"}""")
             }
         }
         glassesManager.onAiExit = {
