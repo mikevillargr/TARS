@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.7.1 |
+| Version | v2.7.2 |
 | Released | 2026-06-15 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -134,6 +134,27 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.7.2 — 2026-06-15
+**Fix: charts now actually render on GLM (Z.ai) tiers**
+
+Follow-up to v2.7.1. After the docx bug was fixed, GLM stopped making a Word doc but still
+produced no chart — it narrated "Here's a line chart…" and emitted nothing (or fabricated a
+broken `/api/render-chart` image URL). Root cause: the `generate_chart` tool was withheld
+from GLM on the false assumption that "GLM writes Python code blocks naturally." It doesn't —
+GLM narrates instead of emitting a ```python block, but it *does* call tools reliably.
+
+- `generate_chart` is now given to **all** tiers/providers (removed the Anthropic-only gate).
+  The tool runs matplotlib server-side in an isolated subprocess and emits a `chart_image`
+  card, so it works for any model that can make a tool call. (`apps/harness/api/routes/chat.py`)
+- CHARTS prompt rewritten to instruct ALWAYS calling generate_chart with the code in the
+  `code` field; explicitly bans narrating a chart, pasting a bare code block and claiming it
+  rendered, or fabricating `![Chart](...)` / `/api/render-chart` links.
+  (`apps/harness/core/context_assembler.py`)
+
+The matplotlib code-block fallback remains as a secondary safety net. Harness-only, no schema change.
+
+---
 
 ### v2.7.1 — 2026-06-15
 **Fix: chart requests no longer produce a Word doc**

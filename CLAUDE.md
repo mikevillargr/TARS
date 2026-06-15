@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.7.1 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.7.2 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -797,6 +797,10 @@ v2.7.1  Fix: chart requests no longer produce a Word doc — document-generation
         rule now excludes charts/graphs/plots (chart-as-Python-code path always wins,
         no fabricated image links); generate_chart tool gating keyed on the effective
         tier's provider instead of tier3_provider. Harness-only, no schema change.
+v2.7.2  Fix: charts now actually render on GLM tiers — generate_chart given to ALL
+        providers (GLM narrates instead of emitting code blocks but calls tools
+        reliably; tool runs matplotlib server-side → chart_image card). CHARTS prompt
+        rewritten to always call the tool. Harness-only, no schema change.
 ```
 
 ---

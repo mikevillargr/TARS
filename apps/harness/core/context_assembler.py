@@ -169,9 +169,9 @@ Results render as map cards with OSM tile thumbnails and navigation deep links (
   Supports optional query/category filter.
 
 CHARTS & DATA VISUALIZATIONS:
-When asked to plot, chart, graph, or visualize any data — including phrasings like "generate/make/create/build a chart/graph/plot" — write complete, self-contained Python code using matplotlib/seaborn/numpy/pandas in a ```python code block. The server executes it in an isolated subprocess and renders the chart inline. This always wins over the document tools — a chart is never a .docx/.pptx/.pdf.
+When asked to plot, chart, graph, or visualize any data — including phrasings like "generate/make/create/build a chart/graph/plot" — ALWAYS call the generate_chart tool. Pass complete, self-contained Python code (matplotlib/seaborn/numpy/pandas) in the `code` field; the server executes it in an isolated subprocess and renders the chart inline. Do NOT just describe a chart in text, do NOT paste a ```python block and claim it rendered, and NEVER fabricate an image link like ![Chart](...) or invent a URL such as /api/render-chart — those do not render anything. The only thing that produces a visible chart is a generate_chart tool call. This always wins over the document tools — a chart is never a .docx/.pptx/.pdf.
 
-CRITICAL CHART RULE: Every chart code block must define ALL its data as Python literals inside the block itself. Never reference external variables like `activities`, `df`, `df_all`, or any name from earlier in the conversation — those do not exist in the subprocess. After fetching data via a tool, embed the actual values directly:
+CRITICAL CHART RULE: The code you pass to generate_chart must define ALL its data as Python literals inside the code itself. Never reference external variables like `activities`, `df`, `df_all`, or any name from earlier in the conversation — those do not exist in the subprocess. After fetching data via a tool, embed the actual values directly:
   dates = ['2025-01-01', '2025-01-08', ...]
   values = [142.3, 138.1, ...]
   ax.plot(dates, values)

@@ -714,21 +714,13 @@ async def send_message(
     except Exception:
         pass  # Non-blocking
 
-    from core.config import settings as _cfg
-    # generate_chart uses the Anthropic tool format and is only reliable on
-    # Anthropic-served models. Gate it on the provider serving THIS request's
-    # effective tier — not tier3_provider — so a Tier 2 GLM request never gets
-    # a chart tool it can't use, and a Tier 3 Anthropic request always does.
-    _tier_provider = {
-        ModelTier.TIER1: _cfg.tier1_provider,
-        ModelTier.TIER2: _cfg.tier2_provider,
-        ModelTier.TIER3: _cfg.tier3_provider,
-    }.get(effective_tier, _cfg.tier3_provider)
-    _serving_is_anthropic = _tier_provider == "anthropic"
 
-    # All tiers get tools. Tier 1 and Tier 2 also get REQUEST_ESCALATION_TOOL so
-    # they can hand off to Tier 3 when they recognise the task is beyond their depth.
-    # generate_chart is Anthropic-only — Z.ai/GLM writes Python code naturally instead.
+    # All tiers/providers get the full tool set, including generate_chart.
+    # generate_chart runs the matplotlib code server-side (see _tool_executor)
+    # and emits a chart_image card, so it works for any model that can make a
+    # tool call — including GLM/Z.ai, which calls tools reliably but does NOT
+    # reliably emit raw ```python blocks on its own. Tier 1/2 also get
+    # REQUEST_ESCALATION_TOOL to hand off to Tier 3 when a task exceeds them.
     tools = [
         CREATE_TASK_TOOL,
         CREATE_CALENDAR_EVENT_TOOL,
@@ -762,7 +754,7 @@ async def send_message(
         TESLA_COMMAND_TOOL,
         GET_TESLA_SESSIONS_TOOL,
         GET_CURRENT_TIME_TOOL,
-        *([GENERATE_CHART_TOOL] if _serving_is_anthropic else []),
+        GENERATE_CHART_TOOL,
         *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
     ]
     queue: asyncio.Queue = asyncio.Queue()
