@@ -420,50 +420,70 @@ function ActionItemRow({
   }
 
   return (
-    <div className="card flex items-start gap-3 group">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium leading-snug" style={{ color: "var(--c-ink)" }}>{item.raw_text}</p>
-        {item.owner && (
-          <div className="flex items-center gap-1 text-xs mt-1" style={{ color: "var(--c-ink-muted)" }}>
-            <Users size={11} />{item.owner}
-          </div>
-        )}
+    <div className="card group">
+      {/* Text + desktop hover actions */}
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium leading-snug" style={{ color: "var(--c-ink)" }}>{item.raw_text}</p>
+          {item.owner && (
+            <div className="flex items-center gap-1 text-xs mt-1" style={{ color: "var(--c-ink-muted)" }}>
+              <Users size={11} />{item.owner}
+            </div>
+          )}
+        </div>
+        {/* Desktop only — hover-reveal; hidden on mobile to prevent layout crush */}
+        <div className="hidden md:flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          {item.task_id ? (
+            <span className="text-[10px] font-medium badge badge-moss">Task created</span>
+          ) : (
+            <>
+              <button
+                onClick={openInChat}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
+                style={{ color: "var(--c-ink-muted)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
+              >
+                <MessageSquare size={11} />Chat
+              </button>
+              <button
+                onClick={openInSecondBrain}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium"
+                style={{ color: "var(--c-ink-muted)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
+              >
+                <Brain size={11} />Second Brain
+              </button>
+              <button
+                onClick={() => onCreateTask(item)}
+                disabled={creating}
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium disabled:opacity-50"
+                style={{ color: "var(--c-moss)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--c-moss-dark, var(--c-moss))")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--c-moss)")}
+              >
+                {creating ? <Loader2 size={11} className="animate-spin" /> : <CheckSquare size={11} />}
+                {creating ? "Creating…" : "Create Task"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-1 shrink-0">
+      {/* Mobile only — always-visible compact actions below the text */}
+      <div className="flex md:hidden items-center gap-2 mt-2 pt-2 border-t" style={{ borderColor: "var(--c-border-faint)" }}>
         {item.task_id ? (
-          <span className="text-[10px] font-medium badge badge-moss">Task created</span>
+          <span className="badge badge-moss">Task created</span>
         ) : (
-          <>
-            <button
-              onClick={openInChat}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ color: "var(--c-ink-muted)" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
-            >
-              <MessageSquare size={11} />Chat
-            </button>
-            <button
-              onClick={openInSecondBrain}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
-              style={{ color: "var(--c-ink-muted)" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-muted)")}
-            >
-              <Brain size={11} />Second Brain
-            </button>
-            <button
-              onClick={() => onCreateTask(item)}
-              disabled={creating}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
-              style={{ color: "var(--c-moss)" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "var(--c-moss-dark, var(--c-moss))")}
-              onMouseLeave={e => (e.currentTarget.style.color = "var(--c-moss)")}
-            >
-              {creating ? <Loader2 size={11} className="animate-spin" /> : <CheckSquare size={11} />}
-              {creating ? "Creating…" : "Create Task"}
-            </button>
-          </>
+          <button
+            onClick={() => onCreateTask(item)}
+            disabled={creating}
+            className="flex items-center gap-1.5 text-xs font-medium disabled:opacity-50"
+            style={{ color: "var(--c-moss)" }}
+          >
+            {creating ? <Loader2 size={11} className="animate-spin" /> : <CheckSquare size={11} />}
+            {creating ? "Creating…" : "Create Task"}
+          </button>
         )}
       </div>
     </div>
