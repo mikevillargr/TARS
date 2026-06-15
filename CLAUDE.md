@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.7.0 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.7.1 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -793,6 +793,10 @@ v2.7.0  Instrument design language — JetBrains Mono promoted to the system lab
         (.tars-label across all 11 views), heading discipline (medium weight + tight
         tracking), dropped Lora, accent-as-signal (moss), bracketed-mono model chips,
         mono wordmark + boot-style login/empty states. Web-only, no schema change.
+v2.7.1  Fix: chart requests no longer produce a Word doc — document-generation prompt
+        rule now excludes charts/graphs/plots (chart-as-Python-code path always wins,
+        no fabricated image links); generate_chart tool gating keyed on the effective
+        tier's provider instead of tier3_provider. Harness-only, no schema change.
 ```
 
 ---

@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.7.0 |
-| Released | 2026-06-14 |
+| Version | v2.7.1 |
+| Released | 2026-06-15 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -134,6 +134,27 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.7.1 — 2026-06-15
+**Fix: chart requests no longer produce a Word doc**
+
+Asking TARS to "generate a graph/chart" on a GLM (Z.ai) tier produced a `.docx` with a
+broken inline image instead of an actual rendered chart. Two root causes, both fixed:
+
+- **Prompt collision** — the word "generate" triggered the assertive "ALWAYS call
+  generate_document" rule, which overrode the chart-as-Python-code path on weaker models.
+  The document rule now explicitly excludes charts/graphs/plots, and the CHARTS rule states
+  it always wins over the document tools and bans fabricated `![Chart](...)` image links.
+  (`apps/harness/core/context_assembler.py`)
+- **Gating bug** — `generate_chart` (Anthropic tool format) was gated on `tier3_provider`
+  rather than the provider actually serving the request. A Tier 2 GLM request could be
+  handed a chart tool it can't use, while a Tier 3 Anthropic request could lose it. Gate is
+  now keyed on the effective tier's provider (`_serving_is_anthropic`).
+  (`apps/harness/api/routes/chat.py`)
+
+Harness-only, no schema change.
+
+---
 
 ### v2.7.0 — 2026-06-14
 **Instrument design language (web app visual identity)**
