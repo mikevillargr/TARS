@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.7.2 |
+| Version | v2.7.3 |
 | Released | 2026-06-15 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -134,6 +134,28 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.7.3 — 2026-06-15
+**Fix: blank charts — strip the model's own savefig/close calls**
+
+Follow-up to v2.7.2. Charts started rendering but came out BLANK. Root cause: both chart
+render paths (the `generate_chart` tool wrapper and the matplotlib code-block fallback)
+append their own `plt.savefig(output_path)` after the model's code. But the model's code
+typically ends with `plt.savefig(...)` (often to a bogus path like `/mnt/data/...`) followed
+by `plt.close('all')`. So the harness's appended savefig fired *after* the figure was already
+closed → it wrote a blank canvas over the real chart (and the bogus path also errored the
+fallback outright).
+
+- New `_strip_chart_io()` helper removes any `plt.show()` / `*.savefig(...)` / `plt.close(...)`
+  lines from the model's code before wrapping. The harness's single savefig now runs while the
+  figure is still open. Applied to both the tool wrapper and the code-block fallback.
+  (`apps/harness/api/routes/chat.py`)
+- `generate_chart` tool description + CHARTS prompt updated to instruct BUILD-only code (no
+  savefig/show/close — the server saves and renders). (`apps/harness/core/model_client.py`)
+
+Harness-only, no schema change.
+
+---
 
 ### v2.7.2 — 2026-06-15
 **Fix: charts now actually render on GLM (Z.ai) tiers**

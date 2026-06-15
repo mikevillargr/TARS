@@ -1087,12 +1087,13 @@ GENERATE_CHART_TOOL = {
         "Generate any chart, graph, or data visualization and display it inline in the chat. "
         "ALWAYS use this tool when asked to plot, chart, graph, or visualize anything — never refuse. "
         "The server has matplotlib, seaborn, numpy, and pandas fully installed and ready. "
-        "Write Python code using those libraries. The variable `output_path` is pre-defined — "
-        "save the figure with plt.savefig(output_path) or fig.savefig(output_path). "
+        "Write Python code using those libraries to BUILD the figure only. "
+        "Do NOT call plt.savefig(), plt.show(), or plt.close() — the server saves and renders the "
+        "figure automatically. Call plt.tight_layout() at the end. "
         "CRITICAL: The code runs in an isolated subprocess. ALL data must be defined as Python "
         "literals inside the code — never reference external variables like `activities`, `df`, "
         "or any name from the conversation context. Embed the actual values directly in the code. "
-        "The chart will render immediately in the chat. Always call plt.tight_layout() before saving."
+        "The chart will render immediately in the chat."
     ),
     "input_schema": {
         "type": "object",
@@ -1104,9 +1105,9 @@ GENERATE_CHART_TOOL = {
             "code": {
                 "type": "string",
                 "description": (
-                    "Complete Python code to generate the chart using matplotlib/seaborn/numpy/pandas. "
-                    "The variable `output_path` is already defined — do not reassign it. "
-                    "End with: plt.tight_layout(); plt.savefig(output_path); plt.close('all')"
+                    "Complete Python code to BUILD the chart using matplotlib/seaborn/numpy/pandas. "
+                    "Do NOT call plt.savefig(), plt.show(), or plt.close() — the server handles "
+                    "saving and rendering. End with plt.tight_layout()."
                 ),
             },
         },

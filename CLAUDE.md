@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.7.2 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.7.3 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -801,6 +801,11 @@ v2.7.2  Fix: charts now actually render on GLM tiers — generate_chart given to
         providers (GLM narrates instead of emitting code blocks but calls tools
         reliably; tool runs matplotlib server-side → chart_image card). CHARTS prompt
         rewritten to always call the tool. Harness-only, no schema change.
+v2.7.3  Fix: blank charts — both render paths appended their own savefig() AFTER the
+        model's code, which ended with savefig(bogus path)+close('all'); the appended
+        savefig fired post-close and wrote a blank canvas. New _strip_chart_io() removes
+        the model's show/savefig/close so the harness saves while the figure is open.
+        Tool desc + CHARTS prompt now say build-only. Harness-only, no schema change.
 ```
 
 ---

@@ -339,6 +339,29 @@ async def _extract_and_save_facts(
 
 
 
+import re as _chart_io_re
+
+# Matches any whole line whose statement is a .show()/.savefig()/.close() call
+# (plt.show(), plt.savefig(...), fig.savefig(...), plt.close('all'), etc.).
+_CHART_IO_LINE = _chart_io_re.compile(
+    r"^[ \t]*[A-Za-z_][\w.]*\.(?:show|savefig|close)\s*\([^\n]*\)[ \t]*$",
+    _chart_io_re.MULTILINE,
+)
+
+
+def _strip_chart_io(code: str) -> str:
+    """Remove the model's own show/savefig/close calls from chart code.
+
+    Both the generate_chart tool wrapper and the code-block fallback append a
+    single savefig() to the harness-controlled output_path. If the model's code
+    also saves (often to a non-existent path like /mnt/data/...) and then calls
+    plt.close('all'), the appended savefig fires after the figure is closed and
+    writes a BLANK image over the real one. Stripping these lines guarantees the
+    figure is still open when the harness saves it.
+    """
+    return _CHART_IO_LINE.sub("", code)
+
+
 def _strip_tool_artifacts(text: str) -> str:
     """Remove raw tool-call tags and internal tool syntax from message text."""
     import re
@@ -2218,6 +2241,12 @@ async def send_message(
                         import re as _re
                         title = tool_input.get("title", "Chart")
                         code = tool_input.get("code", "")
+                        # Strip the model's own show()/savefig()/close() calls.
+                        # The wrapper appends a single savefig() to output_path; if
+                        # the model already saved (often to a bogus path like
+                        # /mnt/data/...) and then closed all figures, the wrapper's
+                        # savefig would overwrite the chart with a blank canvas.
+                        code = _strip_chart_io(code)
 
                         # Wrap code in a safe execution environment
                         with _tempfile.NamedTemporaryFile(suffix=".png", delete=False) as _f:
@@ -2393,7 +2422,7 @@ plt.close('all')
                     wrapper = (
                         _PREAMBLE
                         + f"output_path = {repr(out_path)}\n"
-                        + _chart_re.sub(r'plt\.show\(\)', '', code_str)
+                        + _strip_chart_io(code_str)
                         + _SAVEFIG
                     )
                     r = _sp.run([_sys.executable, "-c", wrapper], capture_output=True, text=True, timeout=30)
