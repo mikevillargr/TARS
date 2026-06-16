@@ -413,15 +413,19 @@ export default function SettingsPage() {
     }
   }
 
-  function ValueRow({ label, desc, value, placeholder, onClick }: { label: string; desc?: string; value: string; placeholder: string; onClick: () => void }) {
+  function ValueRow({ label, desc, value, placeholder, onClick, sub }: { label: string; desc?: string; value: string; placeholder: string; onClick: () => void; sub?: boolean }) {
     return (
       <button
         onClick={onClick}
-        className="flex items-center justify-between w-full px-4 py-3 text-left gap-3 transition-colors"
-        style={{ backgroundColor: "var(--c-surface)" }}
+        className="flex items-center justify-between w-full text-left gap-3 transition-colors"
+        style={{ backgroundColor: "var(--c-surface)", padding: sub ? "0.625rem 1rem 0.625rem 2rem" : "0.75rem 1rem" }}
       >
         <div className="min-w-0">
-          <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{label}</div>
+          {sub ? (
+            <span className="text-[10px] font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>{label}</span>
+          ) : (
+            <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{label}</div>
+          )}
           {desc && <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{desc}</div>}
         </div>
         <span className="flex items-center gap-1 text-xs shrink-0 max-w-[55%]" style={{ color: value ? "var(--c-ink)" : "var(--c-ink-faint)" }}>
@@ -760,12 +764,13 @@ export default function SettingsPage() {
               const isVision = tier.key === "vision"
               return (
                 <div key={tier.key} style={{ borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none" }}>
-                  <div className="px-4 pt-3 pb-1 flex items-baseline justify-between">
-                    <span className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{tier.label}</span>
+                  <div className="px-4 py-2.5 flex items-baseline justify-between" style={{ backgroundColor: "var(--c-surface-2)" }}>
+                    <span className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>{tier.label}</span>
                     <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{tier.desc}</span>
                   </div>
                   <div style={{ borderTop: "1px solid var(--c-border-faint)" }}>
                     <ValueRow
+                      sub
                       label="Primary"
                       value={`${cfg.provider === "zai" ? "Z.ai" : "Anthropic"} · ${modelLabel(cfg.provider, cfg.model, isVision)}`}
                       placeholder="Choose model"
@@ -774,6 +779,7 @@ export default function SettingsPage() {
                   </div>
                   <div style={{ borderTop: "1px solid var(--c-border-faint)" }}>
                     <ValueRow
+                      sub
                       label="Backup"
                       value={cfg.backupProvider ? `${cfg.backupProvider === "zai" ? "Z.ai" : "Anthropic"} · ${modelLabel(cfg.backupProvider, cfg.backupModel, isVision)}` : ""}
                       placeholder="No fallback"
@@ -781,7 +787,7 @@ export default function SettingsPage() {
                     />
                   </div>
                   {isVision && cfg.provider === "zai" && (
-                    <div className="px-4 pb-2 text-[10px]" style={{ color: "var(--c-ink-faint)" }}>
+                    <div className="text-[10px]" style={{ color: "var(--c-ink-faint)", padding: "0 1rem 0.5rem 2rem" }}>
                       Routes via Z.ai OpenAI-compatible endpoint
                     </div>
                   )}
