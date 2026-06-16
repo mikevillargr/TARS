@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.7.3 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.8.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -157,6 +157,35 @@ Claude Haiku classifier (~200ms, Anthropic API)
 | Tier 2 workhorse | Z.ai GLM-4.7 (default) | Configurable via Settings UI per-tier |
 | Tier 3 frontier | Claude Sonnet | Tool use, long context, client-facing work |
 | Embeddings | nomic-embed-text | pgvector semantic search |
+
+### Backup models (per-tier fallback) — since v2.8.0
+Each tier (tier1/2/3/vision) can have an optional **backup** provider+model (Settings → Model
+Routing). If the primary errors/times out **before any content has streamed**, the harness emits
+a `model_fallback` event and re-runs the turn on the backup. A per-tier in-memory circuit breaker
+(`ModelClient._degraded`) then keeps the backup in use and re-probes the primary with a cheap
+1-token ping at the start of each turn, reverting the moment it recovers. Fallback never fires
+mid-stream (after tools may have side-effected). `.env`: `{tier}_backup_provider` /
+`{tier}_backup_model_override`. Logic lives in `ModelClient._stream_with_fallback` /
+`_stream_pair` / `_probe` (`core/model_client.py`).
+
+### Task-category forced routing — since v2.8.0
+Routing stays complexity-based, but every request is **also** classified into one of six task
+categories so a specific model can be forced per category, independent of tier:
+
+| Category | Covers |
+|---|---|
+| `quick_lookup` | status checks, single-tool reads, short Q&A |
+| `writing` | drafting docs/reports/proposals/emails/memos/summaries, decks |
+| `coding` | code generation, debugging, technical Q&A |
+| `data_viz` | charts, plots, graphs, visualizing data |
+| `analysis` | strategy, deep analysis, research synthesis, client deliverables |
+| `general` | conversational / anything else |
+
+Detection is regex fast-path + the existing tier-1 classifier (now two-token: `tier category`)
+in `router.classify_full`. Settings → Task-Category Routing maps a category to a forced
+provider+model that **overrides the tier's model** while the classified tier still governs tool
+access and context budget. Stored as `category_routing_json` in `.env`; image/vision requests are
+excluded (vision routing owns model choice).
 
 ---
 
@@ -432,7 +461,11 @@ Prompt Jobs tab:
 
 **11. Settings**
 - Profile and preferences
-- Model routing config: tier assignments
+- Model routing config: tier assignments (provider + model per tier) **plus an optional backup
+  model per tier** — used as automatic fallback when the primary errors/times out (see §4)
+- Task-Category Routing: force a specific provider+model per task category
+  (quick_lookup / writing / coding / data_viz / analysis / general); "Default" = normal tier
+  routing. Backed by `GET/PATCH /api/settings/model-routing/categories`
 - Notification preferences per component
 - PWA install prompt
 - API key management
@@ -806,6 +839,14 @@ v2.7.3  Fix: blank charts — both render paths appended their own savefig() AFT
         savefig fired post-close and wrote a blank canvas. New _strip_chart_io() removes
         the model's show/savefig/close so the harness saves while the figure is open.
         Tool desc + CHARTS prompt now say build-only. Harness-only, no schema change.
+v2.8.0  Feature: per-tier backup models + task-category forced routing. (1) Each tier gets
+        an optional backup provider+model; on a pre-content primary failure the harness emits
+        model_fallback and re-runs on the backup, with an in-memory per-tier circuit breaker
+        that probes the primary each turn and reverts on recovery. (2) Requests are classified
+        into 6 task categories (quick_lookup/writing/coding/data_viz/analysis/general) via
+        router.classify_full (two-token classifier); Settings can force a model per category,
+        overriding the tier's model. New backup .env fields + category_routing_json; new
+        GET/PATCH /api/settings/model-routing/categories. No DB migration (config in .env).
 ```
 
 ---

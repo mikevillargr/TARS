@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.7.3 |
-| Released | 2026-06-15 |
+| Version | v2.8.0 |
+| Released | 2026-06-16 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -66,6 +66,23 @@
 | Tier 3 | Claude Sonnet | All tool calls, client work, long context, complex reasoning | 3–8s |
 
 Provider and model are configurable per-tier via the Settings UI (Anthropic or Z.ai).
+
+### Backup models (per-tier fallback)
+Each tier can have an optional **backup model** (Settings → Model Routing). If the primary
+errors or times out **before any content streams**, TARS falls back to the backup, emits a
+`model_fallback` event, and marks that tier degraded. While degraded it routes to the backup
+and re-probes the primary (cheap 1-token ping) at the start of each turn — reverting the moment
+the primary responds. Fallback never fires mid-stream (after tools may have side-effected).
+Circuit-breaker state is in-memory on the harness singleton.
+
+### Task-category forced routing
+Six task categories — `quick_lookup`, `writing`, `coding`, `data_viz`, `analysis`, `general` —
+detected per request (regex fast-paths + the existing tier-1 classifier, which now emits a
+category token alongside the tier). Any category can be pinned to a specific provider+model in
+Settings → Task-Category Routing, **overriding the tier's model** while the classified tier still
+governs tool access and context budget. Unset categories use normal tier routing. Stored as
+`category_routing_json` in `.env` (live-reloaded via `ModelClient.reset()`). Image/vision
+requests are excluded — vision routing owns model choice.
 
 ---
 
@@ -134,6 +151,24 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.8.0 — 2026-06-16
+**Feature: per-tier backup models + task-category forced routing**
+- **Backup models.** Every tier (tier1/2/3/vision) gets an optional backup provider+model in
+  Settings → Model Routing. On a pre-content primary failure (timeout/error), TARS streams a
+  `model_fallback` event and re-runs the turn on the backup. A per-tier circuit breaker keeps
+  the backup in use and probes the primary (1-token ping) each turn, reverting the moment it
+  recovers. New `.env` fields `{tier}_backup_provider` / `{tier}_backup_model_override`.
+- **Task-category forced routing.** Requests are classified into one of six categories
+  (`quick_lookup`, `writing`, `coding`, `data_viz`, `analysis`, `general`) via regex + the
+  tier-1 classifier (now two-token: tier + category). Settings → Task-Category Routing maps any
+  category to a forced provider+model that overrides the tier's model (tier still governs tools).
+  Stored as `category_routing_json` in `.env`.
+- Harness: `router.classify_full`, `ModelClient._stream_with_fallback` / `_stream_pair` /
+  `_probe` / circuit-breaker state, `stream(forced_provider, forced_model)`; new
+  `GET/PATCH /api/settings/model-routing/categories` and backup fields on `/model-routing`.
+- Web: backup-model row per tier + new Task-Category Routing section in Settings.
+- No DB migration — all config lives in `.env`.
 
 ### v2.7.3 — 2026-06-15
 **Fix: blank charts — strip the model's own savefig/close calls**

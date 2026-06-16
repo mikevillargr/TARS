@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 log = logging.getLogger(__name__)
 
 from core.auth import require_auth
-from core.router import classify
+from core.router import classify, classify_full
 from core.model_client import (
     get_model_client, ModelClient, ModelTier,
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
@@ -622,8 +622,9 @@ async def send_message(
                     f"Analyze this file and provide a clear summary of the key insights."
                 )
 
-    # Classify the request to pick the right model tier.
+    # Classify the request to pick the right model tier (and task category).
     # Images always need vision (Claude). Override wins if provided.
+    task_category: Optional[str] = None
     if image_blocks:
         tier = ModelTier.TIER3
     elif artifact_id:
@@ -631,11 +632,24 @@ async def send_message(
     elif tier_override:
         tier = ModelTier(tier_override)
     elif content:
-        tier = await classify(content)
+        tier, task_category = await classify_full(content)
     elif doc_snippets:
         tier = ModelTier.TIER2
     else:
         tier = ModelTier.TIER2
+
+    # Task-category forced model override (Settings → Task-Category Routing).
+    # Swaps the model only; the tier still governs tools / context / max_tokens.
+    # Vision (image) requests are excluded — vision routing owns model choice.
+    forced_provider: Optional[str] = None
+    forced_model: Optional[str] = None
+    if task_category and not image_blocks:
+        from core.config import settings as _cfg
+        _override = _cfg.category_routing().get(task_category)
+        if isinstance(_override, dict) and _override.get("provider") and _override.get("model"):
+            forced_provider = _override["provider"]
+            forced_model = _override["model"]
+            log.info("Category '%s' → forced model %s (%s)", task_category, forced_model, forced_provider)
 
     # Build the text that goes to the model (doc text prepended)
     full_text = ("\n\n".join(doc_snippets) + "\n\n" + content).strip() if doc_snippets else content
@@ -2334,13 +2348,20 @@ plt.close('all')
 
                 escalation_reason: Optional[str] = None
 
-                async for event in client.stream(messages, effective_tier, system=system_prompt, tools=tools, tool_executor=_tool_executor):
+                async for event in client.stream(
+                    messages, effective_tier, system=system_prompt, tools=tools,
+                    tool_executor=_tool_executor,
+                    forced_provider=forced_provider, forced_model=forced_model,
+                ):
                     if event["type"] == "chunk":
                         full_response.append(event.get("text", ""))
                         await queue.put(sse_event(event))
                     elif event["type"] == "escalation_requested":
                         escalation_reason = event.get("reason", "")
                         log.info("Tier %s requested escalation to Tier 3: %s", effective_tier.value, escalation_reason)
+                    elif event["type"] == "model_fallback":
+                        log.warning("Tier %s fell back: %s → %s", event.get("tier"), event.get("from"), event.get("to"))
+                        await queue.put(sse_event(event))
                     elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
                         tool_results.append(event)
                         await queue.put(sse_event(event))
@@ -2371,9 +2392,16 @@ plt.close('all')
                         pass
                     t3_tools = [t for t in tools if t["name"] != "request_escalation"]
                     full_response.clear()
-                    async for event in client.stream(messages, ModelTier.TIER3, system=t3_system, tools=t3_tools, tool_executor=_tool_executor):
+                    async for event in client.stream(
+                        messages, ModelTier.TIER3, system=t3_system, tools=t3_tools,
+                        tool_executor=_tool_executor,
+                        forced_provider=forced_provider, forced_model=forced_model,
+                    ):
                         if event["type"] == "chunk":
                             full_response.append(event.get("text", ""))
+                            await queue.put(sse_event(event))
+                        elif event["type"] == "model_fallback":
+                            log.warning("Tier %s fell back: %s → %s", event.get("tier"), event.get("from"), event.get("to"))
                             await queue.put(sse_event(event))
                         elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
                             tool_results.append(event)

@@ -136,6 +136,8 @@ async def change_password(
 class TierConfig(BaseModel):
     provider: str   # "anthropic" | "zai"
     model: str      # resolved effective model name
+    backup_provider: str = ""   # "" = no backup configured
+    backup_model: str = ""      # resolved effective backup model name
 
 
 class ModelRoutingOut(BaseModel):
@@ -147,7 +149,9 @@ class ModelRoutingOut(BaseModel):
 
 class TierUpdate(BaseModel):
     provider: Optional[str] = None
-    model_override: Optional[str] = None   # "" clears override → use provider default
+    model_override: Optional[str] = None          # "" clears override → use provider default
+    backup_provider: Optional[str] = None         # "" clears the backup entirely
+    backup_model_override: Optional[str] = None   # "" → use provider default for the backup
 
 
 class ModelRoutingUpdate(BaseModel):
@@ -186,13 +190,32 @@ def _resolved_model(tier_key: str) -> str:
     return _PROVIDER_DEFAULTS.get((provider, tier_key), "claude-sonnet-4-6")
 
 
+def _resolved_backup(tier_key: str) -> tuple[str, str]:
+    """(provider, model) for the tier's backup, or ('', '') when unconfigured."""
+    bp = getattr(settings, f"{tier_key}_backup_provider", "")
+    if not bp:
+        return "", ""
+    bm = getattr(settings, f"{tier_key}_backup_model_override", "")
+    if not bm:
+        bm = _PROVIDER_DEFAULTS.get((bp, tier_key), "claude-sonnet-4-6")
+    return bp, bm
+
+
+def _tier_config(tier_key: str, provider: str) -> TierConfig:
+    bp, bm = _resolved_backup(tier_key)
+    return TierConfig(
+        provider=provider, model=_resolved_model(tier_key),
+        backup_provider=bp, backup_model=bm,
+    )
+
+
 @router.get("/model-routing", response_model=ModelRoutingOut)
 async def get_model_routing(_user_id: str = Depends(require_auth)):
     return ModelRoutingOut(
-        tier1=TierConfig(provider=settings.tier1_provider,  model=_resolved_model("tier1")),
-        tier2=TierConfig(provider=settings.tier2_provider,  model=_resolved_model("tier2")),
-        tier3=TierConfig(provider=settings.tier3_provider,  model=_resolved_model("tier3")),
-        vision=TierConfig(provider=_resolved_provider("vision"), model=_resolved_model("vision")),
+        tier1=_tier_config("tier1", settings.tier1_provider),
+        tier2=_tier_config("tier2", settings.tier2_provider),
+        tier3=_tier_config("tier3", settings.tier3_provider),
+        vision=_tier_config("vision", _resolved_provider("vision")),
     )
 
 
@@ -211,12 +234,69 @@ async def update_model_routing(
             _set_env(f"{tier_key}_provider", update.provider)
         if update.model_override is not None:
             _set_env(f"{tier_key}_model_override", update.model_override)
+        if update.backup_provider is not None:
+            if update.backup_provider not in ("", "anthropic", "zai"):
+                raise HTTPException(status_code=400, detail="backup_provider must be '', 'anthropic' or 'zai'")
+            _set_env(f"{tier_key}_backup_provider", update.backup_provider)
+        if update.backup_model_override is not None:
+            _set_env(f"{tier_key}_backup_model_override", update.backup_model_override)
 
     # Reset cached clients so new config is picked up immediately
     from core.model_client import get_model_client
     get_model_client().reset()
 
     return await get_model_routing(_user_id=_user_id)
+
+
+# ─── Task-category forced routing ──────────────────────────────────────────────
+
+class CategoryConfig(BaseModel):
+    provider: str = ""   # "" = no override (use normal tier routing)
+    model: str = ""
+
+
+@router.get("/model-routing/categories")
+async def get_category_routing(_user_id: str = Depends(require_auth)):
+    """Return { category: {provider, model} } for every known category."""
+    from core.router import CATEGORIES
+    current = settings.category_routing()
+    out: dict = {}
+    for cat in CATEGORIES:
+        entry = current.get(cat) or {}
+        out[cat] = CategoryConfig(
+            provider=entry.get("provider", "") if isinstance(entry, dict) else "",
+            model=entry.get("model", "") if isinstance(entry, dict) else "",
+        )
+    return out
+
+
+@router.patch("/model-routing/categories")
+async def update_category_routing(
+    body: dict,   # { category: {provider, model} } — empty provider/model clears it
+    _user_id: str = Depends(require_auth),
+):
+    import json
+    from core.router import CATEGORIES
+
+    merged = dict(settings.category_routing())
+    for cat, entry in (body or {}).items():
+        if cat not in CATEGORIES:
+            raise HTTPException(status_code=400, detail=f"unknown category '{cat}'")
+        provider = (entry or {}).get("provider", "") if isinstance(entry, dict) else ""
+        model = (entry or {}).get("model", "") if isinstance(entry, dict) else ""
+        if provider and provider not in ("anthropic", "zai"):
+            raise HTTPException(status_code=400, detail="provider must be 'anthropic' or 'zai'")
+        if provider and model:
+            merged[cat] = {"provider": provider, "model": model}
+        else:
+            merged.pop(cat, None)   # cleared
+
+    _set_env("category_routing_json", json.dumps(merged))
+
+    from core.model_client import get_model_client
+    get_model_client().reset()
+
+    return await get_category_routing(_user_id=_user_id)
 
 
 # ─── API keys ─────────────────────────────────────────────────────────────────

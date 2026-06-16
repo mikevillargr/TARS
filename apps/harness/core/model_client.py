@@ -1187,6 +1187,10 @@ class ModelClient:
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
         self._zai: Optional[anthropic.AsyncAnthropic] = None
         self._zai_openai = None   # openai.AsyncOpenAI, lazy-init
+        # Circuit breaker: tier_key -> epoch when the primary went degraded.
+        # In-memory on the singleton — correct for a single pm2 worker. If the
+        # harness is ever scaled horizontally, move this to Redis.
+        self._degraded: Dict[str, float] = {}
 
     @property
     def anthropic(self) -> anthropic.AsyncAnthropic:
@@ -1224,7 +1228,23 @@ class ModelClient:
         self._anthropic = None
         self._zai = None
         self._zai_openai = None
+        self._degraded.clear()   # config changed — give the primary a clean slate
         logger.info("ModelClient reset — API clients will re-initialise on next request")
+
+    # ─── Circuit breaker (primary degraded → use backup, probe to recover) ──────
+
+    def _mark_degraded(self, tier_key: str) -> None:
+        if tier_key not in self._degraded:
+            import time
+            self._degraded[tier_key] = time.time()
+            logger.warning("Tier '%s' primary marked degraded — routing to backup", tier_key)
+
+    def _clear_degraded(self, tier_key: str) -> None:
+        if self._degraded.pop(tier_key, None) is not None:
+            logger.info("Tier '%s' primary recovered — reverting from backup", tier_key)
+
+    def _is_degraded(self, tier_key: str) -> bool:
+        return tier_key in self._degraded
 
     def _resolve_model(self, tier_key: str, provider: str) -> Optional[str]:
         """Return the effective model name for a tier+provider combination."""
@@ -1232,6 +1252,61 @@ class ModelClient:
         if override:
             return override
         return _PROVIDER_DEFAULTS.get((provider, tier_key))
+
+    def _resolve_pair(self, tier_key: str) -> tuple:
+        """Primary (provider, model) for a tier, with sensible final fallbacks."""
+        if tier_key == "vision":
+            provider = settings.vision_provider or (
+                "anthropic" if settings.anthropic_api_key else settings.tier3_provider
+            )
+        else:
+            provider = getattr(settings, f"{tier_key}_provider", "anthropic")
+        model = self._resolve_model(tier_key, provider)
+        if not model:
+            if tier_key == "tier1":
+                model = settings.tier1_model
+            elif tier_key == "tier2":
+                model = "glm-4.7"
+            else:
+                model = "claude-sonnet-4-6"
+        return provider, model
+
+    def _resolve_backup_pair(self, tier_key: str) -> Optional[tuple]:
+        """Backup (provider, model) for a tier, or None when none is configured."""
+        bp = getattr(settings, f"{tier_key}_backup_provider", "")
+        if not bp:
+            return None
+        bm = getattr(settings, f"{tier_key}_backup_model_override", "")
+        if not bm:
+            bm = _PROVIDER_DEFAULTS.get((bp, tier_key))
+        if not bm:
+            bm = "claude-sonnet-4-6" if bp == "anthropic" else "glm-4.7"
+        return bp, bm
+
+    async def _probe(self, provider: str, model: str) -> bool:
+        """Cheap 1-token health check. True if the primary answers quickly."""
+        import asyncio
+        try:
+            if provider == "zai" and _is_openai_path(model):
+                await asyncio.wait_for(
+                    self.zai_openai.chat.completions.create(
+                        model=model, max_tokens=1,
+                        messages=[{"role": "user", "content": "ping"}],
+                    ),
+                    timeout=4.0,
+                )
+            else:
+                await asyncio.wait_for(
+                    self._client_for(provider).messages.create(
+                        model=model, max_tokens=1,
+                        messages=[{"role": "user", "content": "ping"}],
+                    ),
+                    timeout=4.0,
+                )
+            return True
+        except Exception as e:
+            logger.info("Primary probe failed for %s/%s: %s", provider, model, e)
+            return False
 
     def _has_image_content(self, messages: list) -> bool:
         """True when any message contains an Anthropic-format image block."""
@@ -1243,6 +1318,13 @@ class ModelClient:
                         return True
         return False
 
+    # User-visible event types — once one is emitted we've passed the point of
+    # no return and can no longer safely re-run on a backup model.
+    _USER_VISIBLE = {
+        "chunk", "calendar_suggest", "task_suggest", "contact_card",
+        "place_card", "artifact_created", "chart_image", "search_images",
+    }
+
     async def stream(
         self,
         messages: List[Dict[str, str]],
@@ -1251,85 +1333,134 @@ class ModelClient:
         max_tokens: int = 4096,
         tools: Optional[List[Dict]] = None,
         tool_executor=None,
+        forced_provider: Optional[str] = None,
+        forced_model: Optional[str] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        # ── Vision: image blocks present — route to dedicated vision model ────
+        # Task-category forced model (Settings → Task-Category Routing). Swaps
+        # only the model; the tier still governs tools / context / max_tokens.
+        forced = (forced_provider, forced_model) if (forced_provider and forced_model) else None
+
+        # ── Vision: image blocks present — vision routing owns the model ──────
         if self._has_image_content(messages):
-            if settings.vision_provider:
-                _vp = settings.vision_provider
-            elif settings.anthropic_api_key:
-                # Default to Anthropic for vision; Z.ai vision requires explicit opt-in
-                _vp = "anthropic"
-            else:
-                _vp = settings.tier3_provider
-            _vm = settings.vision_model_override or self._resolve_model("vision", _vp)
-            logger.info("Vision content detected — routing to %s (%s)", _vp, _vm)
-            if _vp == "zai":
-                # Z.ai vision (glm-5v-turbo) requires the OpenAI-compatible endpoint
-                _vm = _vm or "glm-5v-turbo"
-                async for event in self._stream_openai(
-                    messages, system, max_tokens,
-                    model=_vm, tools=tools, tool_executor=tool_executor,
-                ):
-                    yield event
-            else:
-                async for event in self._stream_anthropic(
-                    messages, system, max_tokens,
-                    model=_vm, tools=tools, tool_executor=tool_executor,
-                    client=self._client_for(_vp),
-                ):
-                    yield event
+            async for event in self._stream_with_fallback(
+                "vision", messages, system, max_tokens, tools, tool_executor,
+            ):
+                yield event
             return
 
         # ── Tier 3: frontier model ────────────────────────────────────────────
         if tier == ModelTier.TIER3:
-            provider3 = settings.tier3_provider
-            model3 = self._resolve_model("tier3", provider3)
-            if provider3 == "zai" and _is_openai_path(model3):
-                logger.info("Tier3 routed to Z.ai OpenAI endpoint (%s)", model3)
-                async for event in self._stream_openai(
-                    messages, system, max_tokens,
-                    model=model3, tools=tools, tool_executor=tool_executor,
-                ):
-                    yield event
-            else:
-                async for event in self._stream_anthropic(
-                    messages, system, max_tokens,
-                    model=model3, tools=tools, tool_executor=tool_executor,
-                    client=self._client_for(provider3),
-                ):
-                    yield event
+            async for event in self._stream_with_fallback(
+                "tier3", messages, system, max_tokens, tools, tool_executor, forced=forced,
+            ):
+                yield event
             return
 
         # ── Tier 1: fast model — always available, no cold start ─────────────
         if tier == ModelTier.TIER1:
-            provider1 = settings.tier1_provider
-            model1 = self._resolve_model("tier1", provider1) or settings.tier1_model
-            async for event in self._stream_anthropic(
-                messages, system, min(max_tokens, 1024),
-                model=model1, client=self._client_for(provider1),
-                tools=tools, tool_executor=tool_executor,
+            async for event in self._stream_with_fallback(
+                "tier1", messages, system, min(max_tokens, 1024), tools, tool_executor, forced=forced,
             ):
                 yield event
             return
 
         # ── Tier 2: workhorse ─────────────────────────────────────────────────
-        provider2 = settings.tier2_provider
-        model2 = self._resolve_model("tier2", provider2) or "glm-4.7"
-        if provider2 == "zai" and _is_openai_path(model2):
-            logger.info("Tier2 routed to Z.ai OpenAI endpoint (%s)", model2)
+        async for event in self._stream_with_fallback(
+            "tier2", messages, system, max_tokens, tools, tool_executor, forced=forced,
+        ):
+            yield event
+
+    async def _stream_pair(
+        self,
+        provider: str,
+        model: str,
+        messages: List[Dict[str, str]],
+        system: str,
+        max_tokens: int,
+        tools: Optional[List[Dict]],
+        tool_executor,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Route a single (provider, model) pair to the correct endpoint."""
+        if provider == "zai" and _is_openai_path(model):
             async for event in self._stream_openai(
                 messages, system, max_tokens,
-                model=model2, tools=tools, tool_executor=tool_executor,
+                model=model, tools=tools, tool_executor=tool_executor,
             ):
                 yield event
         else:
-            client2 = self._client_for(provider2)
-            logger.info("Tier2 routed to %s (%s)", provider2, model2)
             async for event in self._stream_anthropic(
                 messages, system, max_tokens,
-                model=model2, client=client2, tools=tools, tool_executor=tool_executor,
+                model=model, tools=tools, tool_executor=tool_executor,
+                client=self._client_for(provider),
             ):
                 yield event
+
+    async def _stream_with_fallback(
+        self,
+        tier_key: str,
+        messages: List[Dict[str, str]],
+        system: str,
+        max_tokens: int,
+        tools: Optional[List[Dict]],
+        tool_executor,
+        *,
+        forced: Optional[tuple] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Stream a tier with primary → backup fallback and degraded-state recovery.
+
+        - `forced` (provider, model) replaces the tier's primary (task-category
+          override); the backup still comes from the tier config.
+        - While the tier is degraded and a backup exists, the real primary is
+          probed first and reverted to the moment it answers.
+        - Fallback only fires on a pre-content error (nothing user-visible yet),
+          so we never re-run after tools may have side-effected.
+        """
+        primary = forced or self._resolve_pair(tier_key)
+        backup = self._resolve_backup_pair(tier_key)
+
+        on_primary = True
+        if self._is_degraded(tier_key) and backup is not None:
+            if await self._probe(*primary):
+                self._clear_degraded(tier_key)
+            else:
+                on_primary = False
+
+        active = primary if on_primary else backup
+        logger.info(
+            "Tier '%s' streaming via %s (%s)%s",
+            tier_key, active[0], active[1], "" if on_primary else " [backup — primary degraded]",
+        )
+
+        emitted = False
+        fell_back = False
+        async for event in self._stream_pair(
+            active[0], active[1], messages, system, max_tokens, tools, tool_executor,
+        ):
+            if event.get("type") in self._USER_VISIBLE:
+                emitted = True
+            if (
+                event.get("type") == "error"
+                and not emitted
+                and on_primary
+                and backup is not None
+            ):
+                # Pre-content failure on the primary → swallow the error and
+                # retry on the backup.
+                self._mark_degraded(tier_key)
+                fell_back = True
+                break
+            yield event
+
+        if not fell_back:
+            return
+
+        # Fallback run on the backup pair.
+        yield {"type": "model_fallback", "tier": tier_key, "from": active[1], "to": backup[1]}
+        async for event in self._stream_pair(
+            backup[0], backup[1], messages, system, max_tokens, tools, tool_executor,
+        ):
+            yield event
 
     async def _stream_anthropic(
         self,

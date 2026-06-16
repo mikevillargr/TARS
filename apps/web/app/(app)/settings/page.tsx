@@ -45,8 +45,37 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void 
 // ─── Model routing types & constants ──────────────────────────────────────
 type Provider = "anthropic" | "zai"
 
-interface TierConfig { provider: Provider; model: string }
+interface TierConfig { provider: Provider; model: string; backupProvider: Provider | ""; backupModel: string }
 interface ModelRouting { tier1: TierConfig; tier2: TierConfig; tier3: TierConfig; vision: TierConfig }
+
+// API wire shape (snake_case, backups included)
+interface ApiTierConfig { provider: Provider; model: string; backup_provider: string; backup_model: string }
+interface ApiModelRouting { tier1: ApiTierConfig; tier2: ApiTierConfig; tier3: ApiTierConfig; vision: ApiTierConfig }
+
+function fromApiTier(t: ApiTierConfig): TierConfig {
+  return {
+    provider: t.provider,
+    model: t.model,
+    backupProvider: (t.backup_provider || "") as Provider | "",
+    backupModel: t.backup_model || "",
+  }
+}
+function fromApiRouting(d: ApiModelRouting): ModelRouting {
+  return { tier1: fromApiTier(d.tier1), tier2: fromApiTier(d.tier2), tier3: fromApiTier(d.tier3), vision: fromApiTier(d.vision) }
+}
+
+// ─── Task-category forced routing ──────────────────────────────────────────
+const CATEGORY_DEFS = [
+  { key: "quick_lookup", label: "Quick Lookups",       desc: "Status checks, single-tool reads, short Q&A" },
+  { key: "writing",      label: "Writing & Content",   desc: "Docs, reports, proposals, emails, summaries" },
+  { key: "coding",       label: "Coding & Technical",  desc: "Code generation, debugging, technical Q&A" },
+  { key: "data_viz",     label: "Data & Charts",       desc: "Charts, plots, graphs, visualizing data" },
+  { key: "analysis",     label: "Analysis & Strategy", desc: "Deep analysis, research, client deliverables" },
+  { key: "general",      label: "General Chat",        desc: "Conversational / everything else" },
+] as const
+type CategoryKey = typeof CATEGORY_DEFS[number]["key"]
+interface CategoryConfig { provider: Provider | ""; model: string }
+type CategoryRouting = Record<CategoryKey, CategoryConfig>
 
 const ANTHROPIC_MODELS = [
   { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (fast)" },
@@ -149,14 +178,22 @@ export default function SettingsPage() {
   const [showNewPw, setShowNewPw]   = useState(false)
 
   // Model routing — live from backend
+  const blankTier = (model: string): TierConfig => ({ provider: "anthropic", model, backupProvider: "", backupModel: "" })
   const [routing, setRouting]   = useState<ModelRouting>({
-    tier1:  { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
-    tier2:  { provider: "anthropic", model: "claude-sonnet-4-6" },
-    tier3:  { provider: "anthropic", model: "claude-sonnet-4-6" },
-    vision: { provider: "anthropic", model: "claude-sonnet-4-6" },
+    tier1:  blankTier("claude-haiku-4-5-20251001"),
+    tier2:  blankTier("claude-sonnet-4-6"),
+    tier3:  blankTier("claude-sonnet-4-6"),
+    vision: blankTier("claude-sonnet-4-6"),
   })
   const [routingSaving, setRoutingSaving] = useState(false)
   const [routingSaved,  setRoutingSaved]  = useState(false)
+
+  // Task-category forced routing — live from backend
+  const emptyCategoryRouting = (): CategoryRouting =>
+    CATEGORY_DEFS.reduce((acc, c) => { acc[c.key] = { provider: "", model: "" }; return acc }, {} as CategoryRouting)
+  const [categoryRouting, setCategoryRouting] = useState<CategoryRouting>(emptyCategoryRouting())
+  const [categorySaving, setCategorySaving]   = useState(false)
+  const [categorySaved,  setCategorySaved]    = useState(false)
 
   // API keys — masked values from backend + local edit state
   const [keyEntries, setKeyEntries] = useState<KeyEntry[]>(
@@ -195,8 +232,12 @@ export default function SettingsPage() {
       .then(d => { setName(d.name); setTimezone(d.timezone) })
       .catch(console.error)
 
-    apiGet<ModelRouting>("/settings/model-routing")
-      .then(d => setRouting(d))
+    apiGet<ApiModelRouting>("/settings/model-routing")
+      .then(d => setRouting(fromApiRouting(d)))
+      .catch(console.error)
+
+    apiGet<Record<string, CategoryConfig>>("/settings/model-routing/categories")
+      .then(d => setCategoryRouting(prev => ({ ...prev, ...d } as CategoryRouting)))
       .catch(console.error)
 
     apiGet<ApiKeys>("/settings/api-keys")
@@ -288,7 +329,7 @@ export default function SettingsPage() {
   const setTierProvider = useCallback((tier: keyof ModelRouting, provider: Provider) => {
     setRouting(prev => ({
       ...prev,
-      [tier]: { provider, model: PROVIDER_DEFAULTS[provider][tier] },
+      [tier]: { ...prev[tier], provider, model: PROVIDER_DEFAULTS[provider][tier] },
     }))
   }, [])
 
@@ -296,23 +337,78 @@ export default function SettingsPage() {
     setRouting(prev => ({ ...prev, [tier]: { ...prev[tier], model } }))
   }, [])
 
+  // Backup: "" provider = no backup. Selecting a provider seeds its tier default.
+  const setTierBackupProvider = useCallback((tier: keyof ModelRouting, provider: Provider | "") => {
+    setRouting(prev => ({
+      ...prev,
+      [tier]: {
+        ...prev[tier],
+        backupProvider: provider,
+        backupModel: provider ? PROVIDER_DEFAULTS[provider][tier] : "",
+      },
+    }))
+  }, [])
+
+  const setTierBackupModel = useCallback((tier: keyof ModelRouting, model: string) => {
+    setRouting(prev => ({ ...prev, [tier]: { ...prev[tier], backupModel: model } }))
+  }, [])
+
   async function saveModelRouting() {
     setRoutingSaving(true)
     try {
+      const tierBody = (t: TierConfig) => ({
+        provider: t.provider,
+        model_override: t.model,
+        backup_provider: t.backupProvider,                 // "" clears the backup
+        backup_model_override: t.backupProvider ? t.backupModel : "",
+      })
       const body = {
-        tier1:  { provider: routing.tier1.provider,  model_override: routing.tier1.model },
-        tier2:  { provider: routing.tier2.provider,  model_override: routing.tier2.model },
-        tier3:  { provider: routing.tier3.provider,  model_override: routing.tier3.model },
-        vision: { provider: routing.vision.provider, model_override: routing.vision.model },
+        tier1:  tierBody(routing.tier1),
+        tier2:  tierBody(routing.tier2),
+        tier3:  tierBody(routing.tier3),
+        vision: tierBody(routing.vision),
       }
-      const updated = await apiPatch<ModelRouting>("/settings/model-routing", body)
-      setRouting(updated)
+      const updated = await apiPatch<ApiModelRouting>("/settings/model-routing", body)
+      setRouting(fromApiRouting(updated))
       setRoutingSaved(true)
       setTimeout(() => setRoutingSaved(false), 2000)
     } catch (err) {
       console.error(err)
     } finally {
       setRoutingSaving(false)
+    }
+  }
+
+  // Task-category routing handlers
+  const setCategoryProvider = useCallback((cat: CategoryKey, provider: Provider | "") => {
+    setCategoryRouting(prev => ({
+      ...prev,
+      [cat]: provider
+        ? { provider, model: PROVIDER_DEFAULTS[provider]["tier3"] }   // seed with frontier default
+        : { provider: "", model: "" },
+    }))
+  }, [])
+
+  const setCategoryModel = useCallback((cat: CategoryKey, model: string) => {
+    setCategoryRouting(prev => ({ ...prev, [cat]: { ...prev[cat], model } }))
+  }, [])
+
+  async function saveCategoryRouting() {
+    setCategorySaving(true)
+    try {
+      const body: Record<string, CategoryConfig> = {}
+      for (const c of CATEGORY_DEFS) {
+        const cfg = categoryRouting[c.key]
+        body[c.key] = cfg?.provider ? { provider: cfg.provider, model: cfg.model } : { provider: "", model: "" }
+      }
+      const updated = await apiPatch<Record<string, CategoryConfig>>("/settings/model-routing/categories", body)
+      setCategoryRouting(prev => ({ ...prev, ...updated } as CategoryRouting))
+      setCategorySaved(true)
+      setTimeout(() => setCategorySaved(false), 2000)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setCategorySaving(false)
     }
   }
 
@@ -601,34 +697,152 @@ export default function SettingsPage() {
                       </div>
                     )}
                   </div>
+                  <div className="flex flex-col gap-2 shrink-0">
+                    {/* Primary row */}
+                    <div className="flex items-center gap-2 sm:justify-end">
+                      <span className="text-[10px] font-mono uppercase tracking-wider w-12 shrink-0" style={{ color: "var(--c-ink-faint)" }}>Primary</span>
+                      {/* Provider toggle */}
+                      <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
+                        {(["anthropic", "zai"] as Provider[]).map(p => (
+                          <button
+                            key={p}
+                            onClick={() => setTierProvider(tier.key, p)}
+                            className="px-2.5 py-1 font-medium transition-colors"
+                            style={{
+                              backgroundColor: cfg.provider === p ? "var(--c-moss)" : "var(--c-surface-2)",
+                              color: cfg.provider === p ? "#fff" : "var(--c-ink-faint)",
+                            }}
+                          >
+                            {p === "anthropic" ? "Anthropic" : "Z.ai"}
+                          </button>
+                        ))}
+                      </div>
+                      {/* Model dropdown */}
+                      <select
+                        className="input-field text-xs"
+                        style={{ padding: "0.25rem 0.5rem", minWidth: "11rem" }}
+                        value={cfg.model}
+                        onChange={e => setTierModel(tier.key, e.target.value)}
+                      >
+                        {modelList.map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Backup row */}
+                    <div className="flex items-center gap-2 sm:justify-end">
+                      <span className="text-[10px] font-mono uppercase tracking-wider w-12 shrink-0" style={{ color: "var(--c-ink-faint)" }}>Backup</span>
+                      {/* Backup provider toggle (Off / Anthropic / Z.ai) */}
+                      <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
+                        {([["", "Off"], ["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][]).map(([p, lbl]) => (
+                          <button
+                            key={p || "off"}
+                            onClick={() => setTierBackupProvider(tier.key, p)}
+                            className="px-2.5 py-1 font-medium transition-colors"
+                            style={{
+                              backgroundColor: cfg.backupProvider === p ? "var(--c-moss)" : "var(--c-surface-2)",
+                              color: cfg.backupProvider === p ? "#fff" : "var(--c-ink-faint)",
+                            }}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                      {/* Backup model dropdown — only when a backup provider is set */}
+                      {cfg.backupProvider ? (
+                        <select
+                          className="input-field text-xs"
+                          style={{ padding: "0.25rem 0.5rem", minWidth: "11rem" }}
+                          value={cfg.backupModel}
+                          onChange={e => setTierBackupModel(tier.key, e.target.value)}
+                        >
+                          {(cfg.backupProvider === "zai" ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS) : ANTHROPIC_MODELS).map(m => (
+                            <option key={m.value} value={m.value}>{m.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-xs" style={{ minWidth: "11rem", color: "var(--c-ink-faint)" }}>No fallback</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <p className="text-[11px] leading-relaxed" style={{ color: "var(--c-ink-faint)" }}>
+            Backup takes over automatically if the primary errors or times out, and stays in use
+            until the primary recovers — TARS re-checks the primary each turn and reverts the moment
+            it responds.
+          </p>
+        </section>
+
+        {/* ── Task-Category Routing ── */}
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+              Task-Category Routing
+            </h2>
+            <button
+              onClick={saveCategoryRouting}
+              disabled={categorySaving}
+              className="text-xs px-3 py-1 rounded-md font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              style={{ backgroundColor: categorySaved ? "var(--c-moss)" : "var(--c-surface-2)", color: categorySaved ? "#fff" : "var(--c-ink)" }}
+            >
+              {categorySaving && <Loader2 size={11} className="animate-spin" />}
+              {categorySaved ? "Saved ✓" : "Save"}
+            </button>
+          </div>
+          <p className="text-[11px] leading-relaxed -mt-1" style={{ color: "var(--c-ink-faint)" }}>
+            Force a specific model for a kind of task, overriding tier routing. Leave a category on
+            <span className="font-mono"> Default</span> to use normal tier-based routing.
+          </p>
+
+          <div className="flex flex-col gap-0 rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
+            {CATEGORY_DEFS.map((cat, i) => {
+              const cfg = categoryRouting[cat.key] ?? { provider: "", model: "" }
+              const modelList = cfg.provider === "zai" ? ZAI_MODELS : ANTHROPIC_MODELS
+              return (
+                <div
+                  key={cat.key}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 gap-3"
+                  style={{ borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none", backgroundColor: "var(--c-surface)" }}
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{cat.label}</div>
+                    <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{cat.desc}</div>
+                  </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {/* Provider toggle */}
+                    {/* Provider toggle (Default / Anthropic / Z.ai) */}
                     <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
-                      {(["anthropic", "zai"] as Provider[]).map(p => (
+                      {([["", "Default"], ["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][]).map(([p, lbl]) => (
                         <button
-                          key={p}
-                          onClick={() => setTierProvider(tier.key, p)}
+                          key={p || "default"}
+                          onClick={() => setCategoryProvider(cat.key, p)}
                           className="px-2.5 py-1 font-medium transition-colors"
                           style={{
                             backgroundColor: cfg.provider === p ? "var(--c-moss)" : "var(--c-surface-2)",
                             color: cfg.provider === p ? "#fff" : "var(--c-ink-faint)",
                           }}
                         >
-                          {p === "anthropic" ? "Anthropic" : "Z.ai"}
+                          {lbl}
                         </button>
                       ))}
                     </div>
-                    {/* Model dropdown */}
-                    <select
-                      className="input-field text-xs"
-                      style={{ padding: "0.25rem 0.5rem", minWidth: "11rem" }}
-                      value={cfg.model}
-                      onChange={e => setTierModel(tier.key, e.target.value)}
-                    >
-                      {modelList.map(m => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </select>
+                    {/* Model dropdown — only when a provider override is set */}
+                    {cfg.provider ? (
+                      <select
+                        className="input-field text-xs"
+                        style={{ padding: "0.25rem 0.5rem", minWidth: "11rem" }}
+                        value={cfg.model}
+                        onChange={e => setCategoryModel(cat.key, e.target.value)}
+                      >
+                        {modelList.map(m => (
+                          <option key={m.value} value={m.value}>{m.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-xs" style={{ minWidth: "11rem", color: "var(--c-ink-faint)" }}>Tier default</span>
+                    )}
                   </div>
                 </div>
               )

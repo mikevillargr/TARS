@@ -50,6 +50,24 @@ class Settings(BaseSettings):
     vision_provider: str = ""
     vision_model_override: str = ""
 
+    # Per-tier backup (fallback) model — used when the primary errors/times out.
+    # Blank backup_provider = no backup configured (error passes through as before).
+    # blank backup_model_override = use that provider's tier default.
+    tier1_backup_provider: str = ""
+    tier1_backup_model_override: str = ""
+    tier2_backup_provider: str = ""
+    tier2_backup_model_override: str = ""
+    tier3_backup_provider: str = ""
+    tier3_backup_model_override: str = ""
+    vision_backup_provider: str = ""
+    vision_backup_model_override: str = ""
+
+    # Task-category forced model overrides. JSON object keyed by category:
+    #   { "writing": {"provider": "anthropic", "model": "claude-opus-4-8"}, ... }
+    # Missing/empty = no override → normal tier-based routing.
+    # Use category_routing() to read the parsed dict.
+    category_routing_json: str = "{}"
+
     runpod_api_key: str = ""
     runpod_endpoint_32b: str = ""
     workhorse_model: str = ""   # RunPod model name — set in .env (e.g. meta/llama-3.1-70b-instruct)
@@ -103,6 +121,20 @@ class Settings(BaseSettings):
     tars_repo_path: str = "/opt/tars"
     # Public URL of the TARS app — used in tool responses / system prompt
     tars_app_url: str = "http://localhost:3000"
+
+    def category_routing(self) -> dict:
+        """Parse category_routing_json → { category: {provider, model} }.
+
+        Parsed fresh each call so runtime updates (via _set_env) take effect
+        immediately. Returns {} on any parse error — never raises into the
+        request path.
+        """
+        import json
+        try:
+            data = json.loads(self.category_routing_json or "{}")
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
 
 
 settings = Settings()
