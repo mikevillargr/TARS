@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X, Lock, Volume2, Play } from "lucide-react"
+import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X, Lock, Volume2, Play, ChevronsUpDown } from "lucide-react"
 import { apiGet, apiPatch, apiPost, apiDelete } from "@/lib/api-client"
 import { useDomains, invalidateDomains, type Domain } from "@/hooks/useDomains"
 
@@ -353,6 +353,85 @@ export default function SettingsPage() {
     setRouting(prev => ({ ...prev, [tier]: { ...prev[tier], backupModel: model } }))
   }, [])
 
+  // ── Model/category picker sheet ───────────────────────────────────────────
+  type SheetTarget =
+    | { kind: "tier-primary"; tier: keyof ModelRouting }
+    | { kind: "tier-backup"; tier: keyof ModelRouting }
+    | { kind: "category"; cat: CategoryKey }
+    | null
+  const [sheet, setSheet] = useState<SheetTarget>(null)
+
+  const TIER_LABELS: Record<keyof ModelRouting, string> = {
+    tier1: "Tier 1 — Fast", tier2: "Tier 2 — Workhorse", tier3: "Tier 3 — Frontier", vision: "Vision — Analysis",
+  }
+
+  function modelLabel(provider: Provider | "", model: string, isVision: boolean): string {
+    if (!provider || !model) return ""
+    const list = provider === "zai" ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS) : ANTHROPIC_MODELS
+    return list.find(m => m.value === model)?.label ?? model
+  }
+
+  function getSheetConfig(target: SheetTarget) {
+    if (!target) return null
+    if (target.kind === "tier-primary") {
+      const cfg = routing[target.tier]
+      const isVision = target.tier === "vision"
+      return {
+        title: `${TIER_LABELS[target.tier]} — Primary`,
+        providerOptions: [["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][],
+        provider: cfg.provider as Provider | "",
+        onProvider: (p: Provider | "") => p && setTierProvider(target.tier, p),
+        modelOptions: cfg.provider === "zai" ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS) : ANTHROPIC_MODELS,
+        model: cfg.model,
+        onModel: (m: string) => setTierModel(target.tier, m),
+      }
+    }
+    if (target.kind === "tier-backup") {
+      const cfg = routing[target.tier]
+      const isVision = target.tier === "vision"
+      return {
+        title: `${TIER_LABELS[target.tier]} — Backup`,
+        providerOptions: [["", "Off"], ["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][],
+        provider: cfg.backupProvider,
+        onProvider: (p: Provider | "") => setTierBackupProvider(target.tier, p),
+        modelOptions: cfg.backupProvider === "zai" ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS) : ANTHROPIC_MODELS,
+        model: cfg.backupModel,
+        onModel: (m: string) => setTierBackupModel(target.tier, m),
+      }
+    }
+    // category
+    const cfg = categoryRouting[target.cat] ?? { provider: "", model: "" }
+    const catDef = CATEGORY_DEFS.find(c => c.key === target.cat)!
+    return {
+      title: catDef.label,
+      providerOptions: [["", "Default"], ["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][],
+      provider: cfg.provider,
+      onProvider: (p: Provider | "") => setCategoryProvider(target.cat, p),
+      modelOptions: cfg.provider === "zai" ? ZAI_MODELS : ANTHROPIC_MODELS,
+      model: cfg.model,
+      onModel: (m: string) => setCategoryModel(target.cat, m),
+    }
+  }
+
+  function ValueRow({ label, desc, value, placeholder, onClick }: { label: string; desc?: string; value: string; placeholder: string; onClick: () => void }) {
+    return (
+      <button
+        onClick={onClick}
+        className="flex items-center justify-between w-full px-4 py-3 text-left gap-3 transition-colors"
+        style={{ backgroundColor: "var(--c-surface)" }}
+      >
+        <div className="min-w-0">
+          <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{label}</div>
+          {desc && <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{desc}</div>}
+        </div>
+        <span className="flex items-center gap-1 text-xs shrink-0 max-w-[55%]" style={{ color: value ? "var(--c-ink)" : "var(--c-ink-faint)" }}>
+          <span className="truncate">{value || placeholder}</span>
+          <ChevronsUpDown size={13} style={{ color: "var(--c-ink-faint)" }} />
+        </span>
+      </button>
+    )
+  }
+
   async function saveModelRouting() {
     setRoutingSaving(true)
     try {
@@ -679,92 +758,33 @@ export default function SettingsPage() {
             ] as const).map((tier, i) => {
               const cfg = routing[tier.key]
               const isVision = tier.key === "vision"
-              const modelList = cfg.provider === "zai"
-                ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS)
-                : ANTHROPIC_MODELS
               return (
-                <div
-                  key={tier.key}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 gap-3"
-                  style={{ borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none", backgroundColor: "var(--c-surface)" }}
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{tier.label}</div>
-                    <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{tier.desc}</div>
-                    {isVision && cfg.provider === "zai" && (
-                      <div className="text-[10px] mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
-                        Routes via Z.ai OpenAI-compatible endpoint
-                      </div>
-                    )}
+                <div key={tier.key} style={{ borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none" }}>
+                  <div className="px-4 pt-3 pb-1 flex items-baseline justify-between">
+                    <span className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{tier.label}</span>
+                    <span className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{tier.desc}</span>
                   </div>
-                  <div className="flex flex-col gap-2 shrink-0">
-                    {/* Primary row */}
-                    <div className="flex items-center gap-2 sm:justify-end">
-                      <span className="text-[10px] font-mono uppercase tracking-wider w-12 shrink-0" style={{ color: "var(--c-ink-faint)" }}>Primary</span>
-                      {/* Provider toggle */}
-                      <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
-                        {(["anthropic", "zai"] as Provider[]).map(p => (
-                          <button
-                            key={p}
-                            onClick={() => setTierProvider(tier.key, p)}
-                            className="px-2.5 py-1 font-medium transition-colors"
-                            style={{
-                              backgroundColor: cfg.provider === p ? "var(--c-moss)" : "var(--c-surface-2)",
-                              color: cfg.provider === p ? "#fff" : "var(--c-ink-faint)",
-                            }}
-                          >
-                            {p === "anthropic" ? "Anthropic" : "Z.ai"}
-                          </button>
-                        ))}
-                      </div>
-                      {/* Model dropdown */}
-                      <select
-                        className="input-field text-xs"
-                        style={{ padding: "0.25rem 0.5rem", minWidth: "11rem" }}
-                        value={cfg.model}
-                        onChange={e => setTierModel(tier.key, e.target.value)}
-                      >
-                        {modelList.map(m => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {/* Backup row */}
-                    <div className="flex items-center gap-2 sm:justify-end">
-                      <span className="text-[10px] font-mono uppercase tracking-wider w-12 shrink-0" style={{ color: "var(--c-ink-faint)" }}>Backup</span>
-                      {/* Backup provider toggle (Off / Anthropic / Z.ai) */}
-                      <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
-                        {([["", "Off"], ["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][]).map(([p, lbl]) => (
-                          <button
-                            key={p || "off"}
-                            onClick={() => setTierBackupProvider(tier.key, p)}
-                            className="px-2.5 py-1 font-medium transition-colors"
-                            style={{
-                              backgroundColor: cfg.backupProvider === p ? "var(--c-moss)" : "var(--c-surface-2)",
-                              color: cfg.backupProvider === p ? "#fff" : "var(--c-ink-faint)",
-                            }}
-                          >
-                            {lbl}
-                          </button>
-                        ))}
-                      </div>
-                      {/* Backup model dropdown — only when a backup provider is set */}
-                      {cfg.backupProvider ? (
-                        <select
-                          className="input-field text-xs"
-                          style={{ padding: "0.25rem 0.5rem", minWidth: "11rem" }}
-                          value={cfg.backupModel}
-                          onChange={e => setTierBackupModel(tier.key, e.target.value)}
-                        >
-                          {(cfg.backupProvider === "zai" ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS) : ANTHROPIC_MODELS).map(m => (
-                            <option key={m.value} value={m.value}>{m.label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="text-xs" style={{ minWidth: "11rem", color: "var(--c-ink-faint)" }}>No fallback</span>
-                      )}
-                    </div>
+                  <div style={{ borderTop: "1px solid var(--c-border-faint)" }}>
+                    <ValueRow
+                      label="Primary"
+                      value={`${cfg.provider === "zai" ? "Z.ai" : "Anthropic"} · ${modelLabel(cfg.provider, cfg.model, isVision)}`}
+                      placeholder="Choose model"
+                      onClick={() => setSheet({ kind: "tier-primary", tier: tier.key })}
+                    />
                   </div>
+                  <div style={{ borderTop: "1px solid var(--c-border-faint)" }}>
+                    <ValueRow
+                      label="Backup"
+                      value={cfg.backupProvider ? `${cfg.backupProvider === "zai" ? "Z.ai" : "Anthropic"} · ${modelLabel(cfg.backupProvider, cfg.backupModel, isVision)}` : ""}
+                      placeholder="No fallback"
+                      onClick={() => setSheet({ kind: "tier-backup", tier: tier.key })}
+                    />
+                  </div>
+                  {isVision && cfg.provider === "zai" && (
+                    <div className="px-4 pb-2 text-[10px]" style={{ color: "var(--c-ink-faint)" }}>
+                      Routes via Z.ai OpenAI-compatible endpoint
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -800,50 +820,15 @@ export default function SettingsPage() {
           <div className="flex flex-col gap-0 rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
             {CATEGORY_DEFS.map((cat, i) => {
               const cfg = categoryRouting[cat.key] ?? { provider: "", model: "" }
-              const modelList = cfg.provider === "zai" ? ZAI_MODELS : ANTHROPIC_MODELS
               return (
-                <div
-                  key={cat.key}
-                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 gap-3"
-                  style={{ borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none", backgroundColor: "var(--c-surface)" }}
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{cat.label}</div>
-                    <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>{cat.desc}</div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {/* Provider toggle (Default / Anthropic / Z.ai) */}
-                    <div className="flex rounded-md overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
-                      {([["", "Default"], ["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][]).map(([p, lbl]) => (
-                        <button
-                          key={p || "default"}
-                          onClick={() => setCategoryProvider(cat.key, p)}
-                          className="px-2.5 py-1 font-medium transition-colors"
-                          style={{
-                            backgroundColor: cfg.provider === p ? "var(--c-moss)" : "var(--c-surface-2)",
-                            color: cfg.provider === p ? "#fff" : "var(--c-ink-faint)",
-                          }}
-                        >
-                          {lbl}
-                        </button>
-                      ))}
-                    </div>
-                    {/* Model dropdown — only when a provider override is set */}
-                    {cfg.provider ? (
-                      <select
-                        className="input-field text-xs"
-                        style={{ padding: "0.25rem 0.5rem", minWidth: "11rem" }}
-                        value={cfg.model}
-                        onChange={e => setCategoryModel(cat.key, e.target.value)}
-                      >
-                        {modelList.map(m => (
-                          <option key={m.value} value={m.value}>{m.label}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-xs" style={{ minWidth: "11rem", color: "var(--c-ink-faint)" }}>Tier default</span>
-                    )}
-                  </div>
+                <div key={cat.key} style={{ borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none" }}>
+                  <ValueRow
+                    label={cat.label}
+                    desc={cat.desc}
+                    value={cfg.provider ? `${cfg.provider === "zai" ? "Z.ai" : "Anthropic"} · ${modelLabel(cfg.provider, cfg.model, false)}` : ""}
+                    placeholder="Tier default"
+                    onClick={() => setSheet({ kind: "category", cat: cat.key })}
+                  />
                 </div>
               )
             })}
@@ -1307,6 +1292,67 @@ export default function SettingsPage() {
           )}
         </section>
       </div>
+
+      {/* ── Model/category picker sheet ── */}
+      {sheet && (() => {
+        const config = getSheetConfig(sheet)
+        if (!config) return null
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+            onClick={() => setSheet(null)}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              className="w-full sm:w-[26rem] sm:rounded-2xl rounded-t-2xl flex flex-col"
+              style={{ backgroundColor: "var(--c-surface)", maxHeight: "80vh", border: "1px solid var(--c-border-faint)" }}
+            >
+              <div
+                className="flex items-center justify-between px-4 py-3 shrink-0"
+                style={{ borderBottom: "1px solid var(--c-border-faint)" }}
+              >
+                <span className="text-sm font-semibold" style={{ color: "var(--c-ink)" }}>{config.title}</span>
+                <button onClick={() => setSheet(null)} className="p-1 rounded" style={{ color: "var(--c-ink-faint)" }}>
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="overflow-y-auto px-4 py-4 flex flex-col gap-4">
+                <div className="flex rounded-full overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
+                  {config.providerOptions.map(([p, lbl]) => (
+                    <button
+                      key={p || "off"}
+                      onClick={() => config.onProvider(p)}
+                      className="flex-1 px-3 py-1.5 font-medium transition-colors"
+                      style={{
+                        backgroundColor: config.provider === p ? "var(--c-moss)" : "transparent",
+                        color: config.provider === p ? "#fff" : "var(--c-ink-faint)",
+                      }}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+                {config.provider && (
+                  <div className="flex flex-col gap-0.5">
+                    {config.modelOptions.map(m => (
+                      <button
+                        key={m.value}
+                        onClick={() => { config.onModel(m.value); setSheet(null) }}
+                        className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm text-left transition-colors"
+                        style={{ backgroundColor: config.model === m.value ? "var(--c-moss-soft)" : "transparent", color: "var(--c-ink)" }}
+                      >
+                        <span>{m.label}</span>
+                        {config.model === m.value && <Check size={14} style={{ color: "var(--c-moss)" }} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
