@@ -51,8 +51,8 @@
 | Knowledge | Second Brain (semantic RAG) + pgvector |
 | Tier 1 + 3 inference | Anthropic API (Haiku + Sonnet) |
 | Tier 2 inference | Z.ai API — GLM models (configurable via Settings UI) |
-| Speech-to-text | faster-whisper (self-hosted, CPU, int8) — `WHISPER_MODEL` env var, default "small" |
-| Text-to-speech | Kokoro TTS (kokoro-onnx, embedded in harness process) |
+| Speech-to-text | faster-whisper — open source (MIT, SYSTRAN/faster-whisper), self-hosted CPU int8 — `WHISPER_MODEL` env var, default "small" |
+| Text-to-speech | Kokoro TTS — open source (Apache-2.0, hexgrad/Kokoro-82M via kokoro-onnx), embedded in harness process |
 | Agentic executor | Claude Code via subprocess |
 | Monorepo | Turborepo |
 | Containerization | Docker Compose |

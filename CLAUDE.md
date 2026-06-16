@@ -157,8 +157,8 @@ Claude Haiku classifier (~200ms, Anthropic API)
 | Tier 2 workhorse | Z.ai GLM-4.7 (default) | Configurable via Settings UI per-tier |
 | Tier 3 frontier | Claude Sonnet | Tool use, long context, client-facing work |
 | Embeddings | nomic-embed-text | pgvector semantic search |
-| Speech-to-text | faster-whisper (self-hosted, CPU, int8) | `POST /transcribe` (`api/routes/transcribe.py`); model size via `WHISPER_MODEL` env (default "small"); lazy-loaded singleton, ~500MB RAM |
-| Text-to-speech | Kokoro TTS (kokoro-onnx, embedded in harness) | Sentence-by-sentence streaming via `/api/proxy/tts`; voice + speed configurable in Settings |
+| Speech-to-text | faster-whisper — **open source** (MIT, [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)), self-hosted CPU int8 | `POST /transcribe` (`api/routes/transcribe.py`); model size via `WHISPER_MODEL` env (default "small"); lazy-loaded singleton, ~500MB RAM |
+| Text-to-speech | Kokoro TTS — **open source** ([hexgrad/Kokoro-82M](https://github.com/hexgrad/Kokoro-82M) model, Apache-2.0, run via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)), embedded in harness process | Sentence-by-sentence streaming via `/api/proxy/tts`; voice + speed configurable in Settings |
 
 ### Backup models (per-tier fallback) — since v2.8.0
 Each tier (tier1/2/3/vision) can have an optional **backup** provider+model (Settings → Model
