@@ -190,7 +190,7 @@ function AttachmentList({ attachments, isUser }: { attachments: Attachment[]; is
   )
 }
 
-function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
+export function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -422,6 +422,10 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
       >
         {"_attachments" in msg && msg._attachments && msg._attachments.length > 0 && (
           <AttachmentList attachments={msg._attachments} isUser={false} />
+        )}
+
+        {!isUser && isStreaming && msg.thinking && (
+          <ThinkingBlock text={msg.thinking} done={!!msg.thinkingDone} />
         )}
 
         {!isUser && cards.length > 0 && <ToolResultCards cards={cards} />}

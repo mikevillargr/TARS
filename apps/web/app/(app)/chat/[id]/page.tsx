@@ -17,6 +17,8 @@ interface StreamingMsg {
   content: string
   streaming: true
   cards?: Record<string, unknown>[]
+  thinking?: string
+  thinkingDone?: boolean
 }
 
 export default function ConversationPage() {
@@ -70,6 +72,7 @@ export default function ConversationPage() {
         const decoder = new TextDecoder()
         let buffer = ""
         let accumulated = ""
+        let accumulatedThinking = ""
         const accumulatedCards: Record<string, unknown>[] = []
 
         while (true) {
@@ -86,9 +89,15 @@ export default function ConversationPage() {
             if (raw === "[DONE]") break
             try {
               const evt = JSON.parse(raw)
-              if (evt.type === "chunk") {
+              if (evt.type === "thinking") {
+                accumulatedThinking += evt.text
+                setStreaming((prev) => prev
+                  ? { ...prev, thinking: accumulatedThinking, thinkingDone: false }
+                  : { role: "assistant", content: "", streaming: true, thinking: accumulatedThinking, thinkingDone: false }
+                )
+              } else if (evt.type === "chunk") {
                 accumulated += evt.text
-                setStreaming({ role: "assistant", content: accumulated, streaming: true, cards: accumulatedCards })
+                setStreaming({ role: "assistant", content: accumulated, streaming: true, cards: accumulatedCards, thinking: accumulatedThinking || undefined, thinkingDone: accumulatedThinking.length > 0 })
               } else if (
                 evt.type === "search_images" ||
                 evt.type === "chart_image" ||

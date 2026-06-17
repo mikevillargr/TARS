@@ -17,6 +17,7 @@ import { apiGet, apiPost, apiDelete, apiUpload } from "@/lib/api-client"
 import AgentStatusChip from "@/components/agent-jobs/AgentStatusChip"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
+import { ThinkingBlock } from "@/components/chat/message-thread"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { useTtsPlayback } from "@/hooks/useTtsPlayback"
 import { useConfirm } from "@/components/ui/confirm-dialog"
@@ -73,6 +74,8 @@ interface StreamingMsg {
   role: "assistant"
   content: string
   streaming: true
+  thinking?: string
+  thinkingDone?: boolean
 }
 
 interface AgentStreamMessage {
@@ -1083,6 +1086,9 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
               )}
             </div>
           )}
+          {"streaming" in msg && msg.thinking && (
+            <ThinkingBlock text={msg.thinking} done={!!msg.thinkingDone} />
+          )}
           <MessageContent content={msg.content} />
           {"streaming" in msg && (
             <span className="inline-flex items-center gap-0.5 ml-1 align-middle">
@@ -1843,6 +1849,7 @@ export default function ChatPage() {
       const decoder = new TextDecoder()
       let buffer = ""
       let accumulated = ""
+      let accumulatedThinking = ""
       accumulatedRef.current = ""
 
       while (true) {
@@ -1861,12 +1868,27 @@ export default function ChatPage() {
             const evt = JSON.parse(raw)
             if (stopInitiatedRef.current) break  // user clicked Stop — discard remaining events
 
-            if (evt.type === "chunk") {
+            if (evt.type === "thinking") {
+              accumulatedThinking += evt.text
+              if (chatId === activeChatIdRef.current) {
+                setStreaming((prev) => prev
+                  ? { ...prev, thinking: accumulatedThinking, thinkingDone: false }
+                  : { role: "assistant", content: "", streaming: true, thinking: accumulatedThinking, thinkingDone: false }
+                )
+              }
+            } else if (evt.type === "chunk") {
               accumulated += evt.text
               accumulatedRef.current = accumulated
               // Only update UI if still on this conversation
               if (chatId === activeChatIdRef.current) {
-                setStreaming({ role: "assistant", content: accumulated, streaming: true })
+                setStreaming((prev) => ({
+                  ...(prev ?? {}),
+                  role: "assistant" as const,
+                  content: accumulated,
+                  streaming: true as const,
+                  thinking: accumulatedThinking || undefined,
+                  thinkingDone: accumulatedThinking.length > 0,
+                }))
               }
               // Feed incremental text to TTS — sentences are queued as they complete
               if (isTtsEnabled) tts.feedText(evt.text)

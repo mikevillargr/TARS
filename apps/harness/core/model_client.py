@@ -1693,6 +1693,15 @@ class ModelClient:
         oai_tools = self._to_openai_tools(tools) if tools else None
         total_tokens = 0
 
+        def _partial_tag_suffix(text: str, tag: str) -> int:
+            for i in range(min(len(text), len(tag) - 1), 0, -1):
+                if text[-i:] == tag[:i]:
+                    return i
+            return 0
+
+        _think_buf = ""
+        _in_think = False
+
         try:
             for _round in range(8):
                 kwargs: Dict[str, Any] = dict(
@@ -1724,8 +1733,47 @@ class ModelClient:
                     delta = choice.delta
 
                     if delta.content:
-                        accumulated_text += delta.content
-                        yield {"type": "chunk", "text": delta.content}
+                        _think_buf += delta.content
+                        while _think_buf:
+                            if _in_think:
+                                end_idx = _think_buf.find("</think>")
+                                if end_idx == -1:
+                                    p = _partial_tag_suffix(_think_buf, "</think>")
+                                    if p:
+                                        if len(_think_buf) > p:
+                                            yield {"type": "thinking", "text": _think_buf[:-p]}
+                                        _think_buf = _think_buf[-p:]
+                                        break
+                                    else:
+                                        yield {"type": "thinking", "text": _think_buf}
+                                        _think_buf = ""
+                                else:
+                                    if end_idx > 0:
+                                        yield {"type": "thinking", "text": _think_buf[:end_idx]}
+                                    _in_think = False
+                                    _think_buf = _think_buf[end_idx + 8:].lstrip("\n")
+                            else:
+                                start_idx = _think_buf.find("<think>")
+                                if start_idx == -1:
+                                    p = _partial_tag_suffix(_think_buf, "<think>")
+                                    if p:
+                                        emit = _think_buf[:-p]
+                                        if emit:
+                                            accumulated_text += emit
+                                            yield {"type": "chunk", "text": emit}
+                                        _think_buf = _think_buf[-p:]
+                                        break
+                                    else:
+                                        accumulated_text += _think_buf
+                                        yield {"type": "chunk", "text": _think_buf}
+                                        _think_buf = ""
+                                else:
+                                    before = _think_buf[:start_idx]
+                                    if before:
+                                        accumulated_text += before
+                                        yield {"type": "chunk", "text": before}
+                                    _in_think = True
+                                    _think_buf = _think_buf[start_idx + 7:]
 
                     if delta.tool_calls:
                         for tc in delta.tool_calls:
