@@ -14,17 +14,42 @@ from ingest.pipeline import ingest_file
 
 router = APIRouter()
 
-# MIME type map for generated binary artifacts
+# MIME type map for serving binary artifacts (download + view endpoints)
 _BINARY_MIME = {
+    # Documents
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".pdf":  "application/pdf",
+    ".doc":  "application/msword",
+    ".rtf":  "application/rtf",
+    # Images
     ".jpg":  "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png":  "image/png",
     ".gif":  "image/gif",
     ".webp": "image/webp",
+    ".svg":  "image/svg+xml",
+    # Audio
+    ".mp3":  "audio/mpeg",
+    ".wav":  "audio/wav",
+    ".m4a":  "audio/mp4",
+    ".aac":  "audio/aac",
+    ".ogg":  "audio/ogg",
+    ".flac": "audio/flac",
+    # Video
+    ".mp4":  "video/mp4",
+    ".mov":  "video/quicktime",
+    ".avi":  "video/x-msvideo",
+    ".mkv":  "video/x-matroska",
+    ".webm": "video/webm",
+    ".m4v":  "video/mp4",
+    # Archives
+    ".zip":  "application/zip",
+    ".tar":  "application/x-tar",
+    ".gz":   "application/gzip",
+    ".7z":   "application/x-7z-compressed",
+    ".rar":  "application/vnd.rar",
 }
 
 
@@ -75,12 +100,16 @@ class CreateArtifactRequest(BaseModel):
 
 def _classify_type(filename: str) -> str:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if ext in {"py", "ts", "tsx", "js", "jsx", "go", "rs", "java", "rb", "sh", "diff", "patch"}:
+    if ext in {"py", "ts", "tsx", "js", "jsx", "go", "rs", "java", "rb", "sh",
+               "diff", "patch", "json", "yaml", "yml", "xml", "toml", "sql",
+               "css", "scss", "graphql", "c", "cpp", "h", "cs", "swift", "kt"}:
         return "code"
     if ext in {"csv", "xlsx", "xls"}:
         return "spreadsheet"
-    if ext in {"txt", "vtt", "srt"}:
+    if ext in {"txt", "vtt", "srt", "mp3", "wav", "m4a", "aac", "ogg", "flac"}:
         return "transcript"
+    if ext in {"jpg", "jpeg", "png", "gif", "webp", "svg"}:
+        return "image"
     return "document"
 
 
@@ -416,7 +445,8 @@ async def ingest_artifact(
 
     # Binary formats are stored as base64 — preserves the original file for
     # download/preview. Text extraction happens on-the-fly when injected into chat.
-    # Images are also stored as base64 so Sonnet can analyze them directly via vision.
+    # Images are stored as base64 so Sonnet can analyze them directly via vision.
+    # Audio/video/archives are stored as base64 so the original is downloadable.
     _BINARY_EXTS = {"pdf", "docx", "ppt", "pptx", "xls", "xlsx"}
     _BINARY_MIMES = {
         "application/pdf",
@@ -428,13 +458,28 @@ async def ingest_artifact(
     }
     _IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "webp"}
     _IMAGE_MIMES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
-    # Legacy .doc: stored as base64 (no text extraction), with a note when injected into chat
+    # Legacy .doc: stored as base64 (no text extraction)
     _DOC_LEGACY_EXTS = {"doc"}
     _DOC_LEGACY_MIMES = {"application/msword"}
+    # Audio/video/archives: store raw so the original is downloadable
+    _MEDIA_EXTS = {"mp3", "wav", "m4a", "aac", "ogg", "flac",
+                   "mp4", "mov", "avi", "mkv", "webm", "m4v", "wmv",
+                   "rtf", "zip", "tar", "gz", "bz2", "7z", "rar"}
+    _MEDIA_MIMES = {
+        "audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4",
+        "audio/aac", "audio/ogg", "audio/flac",
+        "video/mp4", "video/quicktime", "video/x-msvideo",
+        "video/x-matroska", "video/webm", "video/x-ms-wmv",
+        "application/rtf", "text/rtf",
+        "application/zip", "application/x-tar",
+        "application/gzip", "application/x-bzip2",
+        "application/x-7z-compressed", "application/vnd.rar",
+    }
 
     if (ext in _BINARY_EXTS or detected_mime in _BINARY_MIMES
             or ext in _IMAGE_EXTS or detected_mime in _IMAGE_MIMES
-            or ext in _DOC_LEGACY_EXTS or detected_mime in _DOC_LEGACY_MIMES):
+            or ext in _DOC_LEGACY_EXTS or detected_mime in _DOC_LEGACY_MIMES
+            or ext in _MEDIA_EXTS or detected_mime in _MEDIA_MIMES):
         content = "base64:" + base64.b64encode(content_bytes).decode()
         size_bytes = len(content_bytes)
         # Override type for images so the UI can distinguish and render them correctly
