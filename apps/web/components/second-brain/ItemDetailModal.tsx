@@ -16,6 +16,7 @@ import { useDomains } from "@/hooks/useDomains"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { TiptapEditor, type MentionRef } from "./TiptapEditor"
+import { useContactPopup } from "@/context/ContactPopupContext"
 import type { Link as LinkType, ItemProperties } from "@tars/types"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ export interface ItemDetailModalProps {
   onClose: () => void
   onDeleted: (id: string) => void
   onUpdated: (item: KnowledgeItem) => void
+  onNavigateToItem?: (id: string) => void
   searchChunk?: string | null
 }
 
@@ -79,10 +81,12 @@ export function ItemDetailModal({
   onClose,
   onDeleted,
   onUpdated,
+  onNavigateToItem,
   searchChunk,
 }: ItemDetailModalProps) {
   const router = useRouter()
   const isMobile = useIsMobile()
+  const { openContact } = useContactPopup()
   const { domains } = useDomains()
   const [item, setItem]               = useState<KnowledgeItemDetail | null>(null)
   const [loading, setLoading]         = useState(false)
@@ -181,6 +185,16 @@ export function ItemDetailModal({
       setAutoFilling(false)
     }
   }
+
+  const handleMentionClick = useCallback((id: string, type: string, rect: DOMRect) => {
+    if (type === "contact") {
+      openContact(id, rect)
+    } else if (type === "knowledge_item") {
+      onNavigateToItem?.(id)
+    } else if (type === "task") {
+      router.push(`/tasks?id=${id}`)
+    }
+  }, [openContact, onNavigateToItem, router])
 
   const handleMentionsExtracted = useCallback((mentions: MentionRef[]) => {
     if (!item || mentions.length === 0) return
@@ -383,6 +397,7 @@ export function ItemDetailModal({
         onChange={setDocMarkdown}
         onWordCount={setWordCount}
         onMentionsExtracted={handleMentionsExtracted}
+        onMentionClick={handleMentionClick}
         placeholder="Start writing…"
       />
     </div>
@@ -637,18 +652,28 @@ export function ItemDetailModal({
         <div className="space-y-1.5 pt-3 border-t" style={{ borderColor: "var(--c-border-faint)" }}>
           <span className="tars-label">Referenced by</span>
           <div className="space-y-1">
-            {backlinks.map(link => (
-              <div key={link.id} className="flex items-center gap-2 text-xs py-1">
-                <span className="tars-label" style={{ color: "var(--c-moss)" }}>{link.source_type.replace("_", " ")}</span>
-                <span className="flex-1 truncate" style={{ color: "var(--c-ink)" }}>{link.target_title ?? link.source_id}</span>
-                <span className="tars-label">{link.relationship}</span>
-                {link.target_url && (
-                  <a href={link.target_url} target="_blank" rel="noreferrer" style={{ color: "var(--c-ink-faint)" }}>
-                    <ArrowUpRight size={11} />
-                  </a>
-                )}
-              </div>
-            ))}
+            {backlinks.map(link => {
+              const isNavable = link.source_type === "knowledge_item" && onNavigateToItem
+              const isContact = link.source_type === "contact"
+              const title = link.source_title ?? link.source_id
+              return (
+                <div
+                  key={link.id}
+                  className="flex items-center gap-2 text-xs py-1 rounded-md px-1 transition-colors"
+                  style={{ cursor: (isNavable || isContact) ? "pointer" : "default" }}
+                  onClick={() => {
+                    if (isNavable) onNavigateToItem(link.source_id)
+                    else if (isContact) router.push(`/contacts?id=${link.source_id}`)
+                  }}
+                  onMouseEnter={e => { if (isNavable || isContact) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "" }}
+                >
+                  <span className="tars-label" style={{ color: "var(--c-moss)", flexShrink: 0 }}>{link.source_type.replace("_", " ")}</span>
+                  <span className="flex-1 truncate" style={{ color: "var(--c-ink)" }}>{title}</span>
+                  {(isNavable || isContact) && <ArrowUpRight size={11} style={{ color: "var(--c-ink-faint)", flexShrink: 0 }} />}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

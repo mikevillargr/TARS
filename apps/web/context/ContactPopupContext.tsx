@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { ContactPopup } from "@/components/contacts/ContactPopup"
 
 interface ContactPopupContextValue {
-  openContact: (contactId: string, anchorEl: HTMLElement) => void
+  openContact: (contactId: string, anchorElOrRect: HTMLElement | DOMRect) => void
   closeContact: () => void
 }
 
@@ -21,9 +21,9 @@ export function ContactPopupProvider({ children }: { children: React.ReactNode }
   const [contactId, setContactId] = useState<string | null>(null)
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null)
 
-  const openContact = useCallback((id: string, el: HTMLElement) => {
+  const openContact = useCallback((id: string, elOrRect: HTMLElement | DOMRect) => {
     setContactId(id)
-    setAnchorRect(el.getBoundingClientRect())
+    setAnchorRect(elOrRect instanceof DOMRect ? elOrRect : elOrRect.getBoundingClientRect())
   }, [])
 
   const closeContact = useCallback(() => {

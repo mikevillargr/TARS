@@ -35,6 +35,7 @@ class LinkOut(BaseModel):
     relationship: str
     context: Optional[str]
     created_at: datetime
+    source_title: Optional[str] = None
     target_title: Optional[str] = None
     target_url: Optional[str] = None
 
@@ -90,10 +91,12 @@ async def _resolve_title(db: AsyncSession, entity_type: str, entity_id: str) -> 
 
 
 async def _enrich(db: AsyncSession, link: Link) -> LinkOut:
-    title, url = await _resolve_title(db, link.target_type, link.target_id)
+    source_title, _ = await _resolve_title(db, link.source_type, link.source_id)
+    target_title, target_url = await _resolve_title(db, link.target_type, link.target_id)
     out = LinkOut.model_validate(link)
-    out.target_title = title
-    out.target_url = url
+    out.source_title = source_title
+    out.target_title = target_title
+    out.target_url = target_url
     return out
 
 

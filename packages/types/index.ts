@@ -81,6 +81,7 @@ export interface Link {
   relationship: string
   context?: string
   created_at: string
+  source_title?: string
   target_title?: string
   target_url?: string
 }

@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.9.2 |
+| Version | v2.9.3 |
 | Released | 2026-06-17 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -153,6 +153,13 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.9.3 — 2026-06-17
+**Fix: bidirectional linking fully wired**
+- Mention chip clicks now do something: contact → ContactPopup, knowledge_item → navigate to that item's modal, task → /tasks?id=.
+- Backlinks panel shows the source item's title (who's referencing this item) and each row is clickable — knowledge_item rows navigate to that item, contact rows go to /contacts?id=.
+- Links API `_enrich` now resolves both `source_title` and `target_title`.
+- `ContactPopupContext.openContact` accepts `HTMLElement | DOMRect` (TiptapEditor passes DOMRect).
 
 ### v2.9.2 — 2026-06-17
 **Fix: Contacts list truncation + missing phone numbers**

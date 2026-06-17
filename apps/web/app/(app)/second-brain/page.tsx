@@ -592,6 +592,7 @@ export default function SecondBrainPage() {
         onUpdated={(updated) => {
           setItems(prev => prev.map(i => i.id === updated.id ? { ...i, ...updated } : i))
         }}
+        onNavigateToItem={setSelectedId}
         searchChunk={selectedSearchChunk}
       />
 
