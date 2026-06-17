@@ -145,10 +145,13 @@ async def _sync_one_user(db: AsyncSession, user_id: str) -> dict:
     try:
         people, new_token = client.list_connections(state.sync_token)
     except HttpError as e:
-        # 410 GONE → sync token expired, fall back to full sync once
         status = getattr(e, "status_code", None) or getattr(e.resp, "status", None)
-        if status == 410:
-            log.info("Sync token expired for user %s — full resync", user_id)
+        # 410 GONE or 400 EXPIRED_SYNC_TOKEN → wipe token, full resync
+        is_expired = status == 410 or (
+            status == 400 and "EXPIRED_SYNC_TOKEN" in str(e)
+        )
+        if is_expired:
+            log.info("Sync token expired (HTTP %s) for user %s — full resync", status, user_id)
             state.sync_token = None
             full_sync = True
             people, new_token = client.list_connections(sync_token=None)
