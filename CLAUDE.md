@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.9.1 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.9.2 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -841,6 +841,9 @@ v2.7.3  Fix: blank charts — both render paths appended their own savefig() AFT
         savefig fired post-close and wrote a blank canvas. New _strip_chart_io() removes
         the model's show/savefig/close so the harness saves while the figure is open.
         Tool desc + CHARTS prompt now say build-only. Harness-only, no schema change.
+v2.9.2  Fix: Contacts — all contacts now load (limit 100 → 5000 in frontend call); phone numbers
+        shown in detail panel header + Contact Info section in Overview tab (all emails + phones
+        from Google sync). Web-only, no schema change.
 v2.9.1  Fix: Second Brain mobile header layout — title + 6-icon view toggle no longer crush on
         375px. Mobile: title row + full-width view toggle row below. Desktop: unchanged single row.
         Page-level Capture button hidden on mobile (topbar + already handles it). Web-only, no

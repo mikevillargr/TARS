@@ -19,7 +19,7 @@ function ContactsInner() {
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("id"))
 
   useEffect(() => {
-    apiGet<Contact[]>("/contacts")
+    apiGet<Contact[]>("/contacts?limit=5000")
       .then(setContacts)
       .catch(console.error)
       .finally(() => setLoading(false))

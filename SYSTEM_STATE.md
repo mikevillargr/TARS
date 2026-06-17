@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.9.1 |
+| Version | v2.9.2 |
 | Released | 2026-06-17 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -153,6 +153,11 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.9.2 — 2026-06-17
+**Fix: Contacts list truncation + missing phone numbers**
+- Frontend now requests up to 5000 contacts (was hardcoded to 100); DB has 3055.
+- Phone numbers displayed in contact header (below email) and in a new "Contact Info" section in the Overview tab showing all emails and phones from Google sync with type labels.
 
 ### v2.9.1 — 2026-06-17
 **Fix: Second Brain mobile header layout**

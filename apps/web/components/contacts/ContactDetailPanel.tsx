@@ -108,6 +108,11 @@ export function ContactDetailPanel({ contactId }: Props) {
                 {contact.primary_email}
               </div>
             )}
+            {contact.primary_phone && (
+              <div style={{ fontSize: 11, color: "var(--c-ink-faint)", marginTop: 1, fontFamily: "var(--font-mono)" }}>
+                {contact.primary_phone}
+              </div>
+            )}
           </div>
         </div>
 
@@ -166,6 +171,28 @@ export function ContactDetailPanel({ contactId }: Props) {
       <div style={{ flex: 1, overflowY: "auto", padding: "1rem 1.25rem" }}>
         {activeTab === "Overview" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            {/* Contact details — emails + phones */}
+            {((contact.emails?.length ?? 0) > 0 || (contact.phones?.length ?? 0) > 0) && (
+              <div>
+                <div className="tars-label" style={{ marginBottom: "0.5rem" }}>Contact Info</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  {(contact.emails ?? []).map((e: { value?: string; type?: string }, i: number) => e.value && (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <Mail size={12} style={{ color: "var(--c-ink-faint)", flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: "var(--c-ink)", fontFamily: "var(--font-mono)" }}>{e.value}</span>
+                      {e.type && <span className="tars-label">{e.type}</span>}
+                    </div>
+                  ))}
+                  {(contact.phones ?? []).map((p: { value?: string; type?: string }, i: number) => p.value && (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <Phone size={12} style={{ color: "var(--c-ink-faint)", flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: "var(--c-ink)", fontFamily: "var(--font-mono)" }}>{p.value}</span>
+                      {p.type && <span className="tars-label">{p.type}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {context && (
               <div>
                 <div className="tars-label" style={{ marginBottom: "0.5rem" }}>Activity</div>
