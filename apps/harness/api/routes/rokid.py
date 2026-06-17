@@ -369,6 +369,9 @@ async def _stream_to_glasses(
                                 "content": final,
                                 "timestamp": _now_ms(),
                             })
+                        # Auto-save any glasses photo to Artifacts (fire-and-forget)
+                        if image_b64:
+                            asyncio.create_task(_save_glasses_photo(token, image_b64))
                         return
 
                     elif ev_type == "error":
@@ -401,6 +404,32 @@ async def _stream_to_glasses(
 def _now_ms() -> int:
     import time
     return int(time.time() * 1000)
+
+
+async def _save_glasses_photo(token: str, image_b64: str) -> None:
+    """Auto-save a glasses-captured photo to the Artifacts library."""
+    from datetime import datetime as _dt
+    ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"glasses_{ts}.jpg"
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as _c:
+            r = await _c.post(
+                f"{_HARNESS_BASE}/api/artifacts",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "filename": filename,
+                    "type": "image",
+                    "source": "upload",
+                    "content": f"base64:{image_b64}",
+                    "tags": ["glasses", "photo"],
+                },
+            )
+            if r.status_code in (200, 201):
+                log.info("Glasses photo saved to artifacts: %s", filename)
+            else:
+                log.warning("Glasses photo artifact save failed (%s): %s", r.status_code, r.text[:200])
+    except Exception as exc:
+        log.warning("Failed to save glasses photo to artifacts: %s", exc)
 
 
 _TOOL_LABELS = {

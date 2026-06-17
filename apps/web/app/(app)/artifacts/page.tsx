@@ -9,6 +9,7 @@ import {
   FileText, Code2, FileSpreadsheet, FileAudio, BarChart2,
   ChevronDown, Loader2, Trash2, Eye, Brain, ListTodo, Check, Image,
   BookOpen, LayoutList, AlignLeft, Table,
+  Braces, FileVideo, FileMusic, Film,
 } from "lucide-react"
 import { apiGet, apiDelete } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
@@ -71,6 +72,26 @@ const EXT_META: Record<string, { icon: React.ReactNode; bg: string; color: strin
   // Plain text / markdown
   md:    { icon: <AlignLeft size={16} />,     bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "Markdown" },
   txt:   { icon: <AlignLeft size={16} />,     bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "Text" },
+  rtf:   { icon: <AlignLeft size={16} />,     bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "RTF" },
+  // Data / config
+  json:  { icon: <Braces size={16} />,        bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "JSON" },
+  yaml:  { icon: <Braces size={16} />,        bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "YAML" },
+  yml:   { icon: <Braces size={16} />,        bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "YAML" },
+  xml:   { icon: <Braces size={16} />,        bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "XML" },
+  toml:  { icon: <Braces size={16} />,        bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "TOML" },
+  // Vector / SVG
+  svg:   { icon: <Image size={16} />,         bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "SVG" },
+  // Audio
+  mp3:   { icon: <FileMusic size={16} />,     bg: "var(--c-rose-soft)",  color: "var(--c-rose)",      label: "MP3" },
+  wav:   { icon: <FileMusic size={16} />,     bg: "var(--c-rose-soft)",  color: "var(--c-rose)",      label: "WAV" },
+  m4a:   { icon: <FileMusic size={16} />,     bg: "var(--c-rose-soft)",  color: "var(--c-rose)",      label: "M4A" },
+  aac:   { icon: <FileMusic size={16} />,     bg: "var(--c-rose-soft)",  color: "var(--c-rose)",      label: "AAC" },
+  // Video
+  mp4:   { icon: <Film size={16} />,          bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "MP4" },
+  mov:   { icon: <Film size={16} />,          bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "MOV" },
+  avi:   { icon: <Film size={16} />,          bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "AVI" },
+  webm:  { icon: <FileVideo size={16} />,     bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "WebM" },
+  mkv:   { icon: <Film size={16} />,          bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "MKV" },
 }
 
 function fileMeta(filename: string, type: string) {
