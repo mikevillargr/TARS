@@ -1182,6 +1182,66 @@ def _is_openai_path(model: Optional[str]) -> bool:
     return bool(model) and (model.startswith("glm-5") or model == "glm-5v-turbo")
 
 
+def _partial_tag_suffix(text: str, tag: str) -> int:
+    """Length of the longest suffix of text that is a prefix of tag."""
+    for i in range(min(len(text), len(tag) - 1), 0, -1):
+        if text[-i:] == tag[:i]:
+            return i
+    return 0
+
+
+def _route_think_token(
+    token: str,
+    buf: str,
+    in_think: bool,
+) -> tuple:
+    """
+    Feed one token into the <think>…</think> state machine.
+    Returns (events, new_buf, new_in_think) where events is a list of
+    {"type": "thinking"|"chunk", "text": ...} dicts to yield.
+    """
+    events = []
+    buf += token
+    while buf:
+        if in_think:
+            end_idx = buf.find("</think>")
+            if end_idx == -1:
+                p = _partial_tag_suffix(buf, "</think>")
+                if p:
+                    if len(buf) > p:
+                        events.append({"type": "thinking", "text": buf[:-p]})
+                    buf = buf[-p:]
+                    break
+                else:
+                    events.append({"type": "thinking", "text": buf})
+                    buf = ""
+            else:
+                if end_idx > 0:
+                    events.append({"type": "thinking", "text": buf[:end_idx]})
+                in_think = False
+                buf = buf[end_idx + 8:].lstrip("\n")
+        else:
+            start_idx = buf.find("<think>")
+            if start_idx == -1:
+                p = _partial_tag_suffix(buf, "<think>")
+                if p:
+                    emit = buf[:-p]
+                    if emit:
+                        events.append({"type": "chunk", "text": emit})
+                    buf = buf[-p:]
+                    break
+                else:
+                    events.append({"type": "chunk", "text": buf})
+                    buf = ""
+            else:
+                before = buf[:start_idx]
+                if before:
+                    events.append({"type": "chunk", "text": before})
+                in_think = True
+                buf = buf[start_idx + 7:]
+    return events, buf, in_think
+
+
 class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
@@ -1483,6 +1543,8 @@ class ModelClient:
         current_messages = list(messages)
         total_input = 0
         total_output = 0
+        _think_buf = ""
+        _in_think = False
 
         try:
             for _round in range(8):  # max 8 tool-call rounds before giving up
@@ -1505,7 +1567,9 @@ class ModelClient:
 
                 async with _client.messages.stream(**kwargs) as stream:
                     async for text in stream.text_stream:
-                        yield {"type": "chunk", "text": text}
+                        events, _think_buf, _in_think = _route_think_token(text, _think_buf, _in_think)
+                        for ev in events:
+                            yield ev
 
                     final = await stream.get_final_message()
                     total_input += final.usage.input_tokens
@@ -1693,12 +1757,6 @@ class ModelClient:
         oai_tools = self._to_openai_tools(tools) if tools else None
         total_tokens = 0
 
-        def _partial_tag_suffix(text: str, tag: str) -> int:
-            for i in range(min(len(text), len(tag) - 1), 0, -1):
-                if text[-i:] == tag[:i]:
-                    return i
-            return 0
-
         _think_buf = ""
         _in_think = False
 
@@ -1733,47 +1791,11 @@ class ModelClient:
                     delta = choice.delta
 
                     if delta.content:
-                        _think_buf += delta.content
-                        while _think_buf:
-                            if _in_think:
-                                end_idx = _think_buf.find("</think>")
-                                if end_idx == -1:
-                                    p = _partial_tag_suffix(_think_buf, "</think>")
-                                    if p:
-                                        if len(_think_buf) > p:
-                                            yield {"type": "thinking", "text": _think_buf[:-p]}
-                                        _think_buf = _think_buf[-p:]
-                                        break
-                                    else:
-                                        yield {"type": "thinking", "text": _think_buf}
-                                        _think_buf = ""
-                                else:
-                                    if end_idx > 0:
-                                        yield {"type": "thinking", "text": _think_buf[:end_idx]}
-                                    _in_think = False
-                                    _think_buf = _think_buf[end_idx + 8:].lstrip("\n")
-                            else:
-                                start_idx = _think_buf.find("<think>")
-                                if start_idx == -1:
-                                    p = _partial_tag_suffix(_think_buf, "<think>")
-                                    if p:
-                                        emit = _think_buf[:-p]
-                                        if emit:
-                                            accumulated_text += emit
-                                            yield {"type": "chunk", "text": emit}
-                                        _think_buf = _think_buf[-p:]
-                                        break
-                                    else:
-                                        accumulated_text += _think_buf
-                                        yield {"type": "chunk", "text": _think_buf}
-                                        _think_buf = ""
-                                else:
-                                    before = _think_buf[:start_idx]
-                                    if before:
-                                        accumulated_text += before
-                                        yield {"type": "chunk", "text": before}
-                                    _in_think = True
-                                    _think_buf = _think_buf[start_idx + 7:]
+                        events, _think_buf, _in_think = _route_think_token(delta.content, _think_buf, _in_think)
+                        for ev in events:
+                            if ev["type"] == "chunk":
+                                accumulated_text += ev["text"]
+                            yield ev
 
                     if delta.tool_calls:
                         for tc in delta.tool_calls:
