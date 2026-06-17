@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
-from sqlalchemy import String, Text, Integer, Float, Boolean, DateTime, ForeignKey, JSON, Enum
+from sqlalchemy import String, Text, Integer, Float, Boolean, DateTime, ForeignKey, JSON, Enum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 
@@ -217,6 +217,7 @@ class KnowledgeItem(Base):
     source_title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     source_author: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     starred: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    properties: Mapped[dict] = mapped_column(JSON, default=dict)
     saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     last_accessed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     access_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -262,6 +263,30 @@ class Artifact(Base):
     tags: Mapped[list] = mapped_column(JSON, default=list)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+# ── Universal Links ──────────────────────────────────────────────────────────
+
+class Link(Base):
+    """Polymorphic cross-module link between any two TARS entities."""
+    __tablename__ = "links"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    # source_type / target_type: "task" | "meeting" | "knowledge_item" | "artifact" | "contact"
+    source_type: Mapped[str] = mapped_column(String, nullable=False)
+    source_id: Mapped[str] = mapped_column(String, nullable=False)
+    target_type: Mapped[str] = mapped_column(String, nullable=False)
+    target_id: Mapped[str] = mapped_column(String, nullable=False)
+    # relationship: "mentions" | "related_to" | "created_from" | "blocks" | "references"
+    relationship: Mapped[str] = mapped_column(String, nullable=False, default="mentions")
+    context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "source_type", "source_id", "target_type", "target_id", "relationship",
+            name="uq_links",
+        ),
+    )
 
 
 # ── Google People API ────────────────────────────────────────────────────────

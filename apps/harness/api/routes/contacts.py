@@ -287,6 +287,104 @@ async def reject_pending(
     await db.commit()
 
 
+# ── Routes: contact context ──────────────────────────────────────────────────
+
+class RecentMeetingOut(BaseModel):
+    id: str
+    title: str
+    started_at: Optional[datetime]
+
+class LinkedTaskOut(BaseModel):
+    id: str
+    title: str
+    status: str
+
+class LinkedKnowledgeOut(BaseModel):
+    id: str
+    title: str
+    type: str
+
+class ContactContextOut(BaseModel):
+    contact: ContactOut
+    link_count: int
+    recent_meetings: List[RecentMeetingOut]
+    linked_tasks: List[LinkedTaskOut]
+    linked_knowledge: List[LinkedKnowledgeOut]
+
+
+@router.get("/{contact_id}/context", response_model=ContactContextOut)
+async def get_contact_context(
+    contact_id: str,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    from db.models import Link, Task, KnowledgeItem, Meeting as MeetingModel
+
+    contact_row = (await db.execute(
+        select(Contact).where(Contact.id == contact_id, Contact.user_id == user_id)
+    )).scalar_one_or_none()
+    if not contact_row:
+        raise HTTPException(404, "Contact not found")
+
+    from sqlalchemy import and_ as sa_and
+    # Links involving this contact (source or target)
+    all_links = (await db.execute(
+        select(Link).where(
+            Link.user_id == user_id,
+            or_(
+                sa_and(Link.source_type == "contact", Link.source_id == contact_id),
+                sa_and(Link.target_type == "contact", Link.target_id == contact_id),
+            ),
+        )
+    )).scalars().all()
+    link_count = len(all_links)
+
+    # Meetings where contact's name or email appears in attendees (JSON array cast to text)
+    from sqlalchemy import cast as sa_cast, Text
+    meeting_filters = []
+    if contact_row.primary_email:
+        meeting_filters.append(sa_cast(MeetingModel.attendees, Text).ilike(f"%{contact_row.primary_email}%"))
+    if contact_row.display_name:
+        meeting_filters.append(sa_cast(MeetingModel.attendees, Text).ilike(f"%{contact_row.display_name}%"))
+
+    recent_meetings: list[RecentMeetingOut] = []
+    if meeting_filters:
+        meetings_rows = (await db.execute(
+            select(MeetingModel)
+            .where(MeetingModel.user_id == user_id)
+            .where(or_(*meeting_filters))
+            .order_by(MeetingModel.started_at.desc())
+            .limit(5)
+        )).scalars().all()
+        recent_meetings = [RecentMeetingOut(id=m.id, title=m.title or "Meeting", started_at=m.started_at) for m in meetings_rows]
+
+    # Linked tasks + knowledge from links
+    task_ids    = [l.target_id for l in all_links if l.target_type == "task"] + [l.source_id for l in all_links if l.source_type == "task"]
+    ki_ids      = [l.target_id for l in all_links if l.target_type == "knowledge_item"] + [l.source_id for l in all_links if l.source_type == "knowledge_item"]
+
+    linked_tasks: list[LinkedTaskOut] = []
+    if task_ids:
+        task_rows = (await db.execute(
+            select(Task).where(Task.id.in_(task_ids), Task.user_id == user_id).limit(10)
+        )).scalars().all()
+        linked_tasks = [LinkedTaskOut(id=t.id, title=t.title, status=t.status) for t in task_rows]
+
+    linked_knowledge: list[LinkedKnowledgeOut] = []
+    if ki_ids:
+        ki_rows = (await db.execute(
+            select(KnowledgeItem).where(KnowledgeItem.id.in_(ki_ids), KnowledgeItem.user_id == user_id).limit(10)
+        )).scalars().all()
+        linked_knowledge = [LinkedKnowledgeOut(id=k.id, title=k.source_title or "Note", type=k.type) for k in ki_rows]
+
+    return ContactContextOut(
+        contact=ContactOut.model_validate(contact_row),
+        link_count=link_count,
+        recent_meetings=recent_meetings,
+        linked_tasks=linked_tasks,
+        linked_knowledge=linked_knowledge,
+    )
+
+
 # ── Routes: manual sync trigger ──────────────────────────────────────────────
 @router.post("/sync", response_model=SyncOut)
 async def manual_sync(

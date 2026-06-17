@@ -5,11 +5,15 @@ import { useSearchParams } from "next/navigation"
 import {
   Search, LayoutGrid, List as ListIcon,
   Link as LinkIcon, FileText, File, Mic, Plus, Menu, X, Loader2,
-  BookOpen, Tag, Star,
+  BookOpen, Tag, Star, Columns2, Image as ImageIcon, Table2, CalendarRange,
 } from "lucide-react"
 import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
 import { ItemDetailModal } from "@/components/second-brain/ItemDetailModal"
 import { CaptureModal } from "@/components/second-brain/CaptureModal"
+import { KanbanView } from "@/components/second-brain/KanbanView"
+import { GalleryView } from "@/components/second-brain/GalleryView"
+import { TableView } from "@/components/second-brain/TableView"
+import { TimelineView } from "@/components/second-brain/TimelineView"
 import { useDomains } from "@/hooks/useDomains"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -26,8 +30,20 @@ interface KnowledgeItem {
   domain: string | null
   access_count: number
   starred: boolean
+  properties: { status?: string; type?: string; priority?: string }
   saved_at: string
 }
+
+type ViewMode = "grid" | "list" | "kanban" | "gallery" | "table" | "timeline"
+
+const VIEW_ICONS: { mode: ViewMode; Icon: React.ElementType; title: string }[] = [
+  { mode: "grid",     Icon: LayoutGrid,    title: "Grid" },
+  { mode: "list",     Icon: ListIcon,      title: "List" },
+  { mode: "kanban",   Icon: Columns2,      title: "Kanban" },
+  { mode: "gallery",  Icon: ImageIcon,     title: "Gallery" },
+  { mode: "table",    Icon: Table2,        title: "Table" },
+  { mode: "timeline", Icon: CalendarRange, title: "Timeline" },
+]
 
 interface SearchResult {
   item_id: string
@@ -71,7 +87,10 @@ export default function SecondBrainPage() {
   const { domains: domainList } = useDomains()
   const [items, setItems]                       = useState<KnowledgeItem[]>([])
   const [loading, setLoading]                   = useState(true)
-  const [viewMode, setViewMode]                 = useState<"grid" | "list">("grid")
+  const [viewMode, setViewMode]                 = useState<ViewMode>(() => {
+    if (typeof window !== "undefined") return (localStorage.getItem("tars_sb_view") as ViewMode) ?? "grid"
+    return "grid"
+  })
   const [selectedId, setSelectedId]             = useState<string | null>(null)
   const [isMobileSidebarOpen, setMobileSidebar] = useState(false)
   const [selectedDomain, setSelectedDomain]     = useState("All")
@@ -110,6 +129,22 @@ export default function SecondBrainPage() {
       setItems(prev => prev.map(i => i.id === id ? { ...i, starred: current } : i))
     }
   }, [])
+
+  function setAndPersistView(mode: ViewMode) {
+    setViewMode(mode)
+    localStorage.setItem("tars_sb_view", mode)
+  }
+
+  const handleStatusChange = useCallback(async (id: string, status: string) => {
+    const prev = items.find(i => i.id === id)
+    if (!prev) return
+    setItems(arr => arr.map(i => i.id === id ? { ...i, properties: { ...i.properties, status } } : i))
+    try {
+      await apiPatch(`/second-brain/items/${id}`, { properties: { status } })
+    } catch {
+      setItems(arr => arr.map(i => i.id === id ? { ...i, properties: prev.properties } : i))
+    }
+  }, [items])
 
   // Debounced semantic search
   useEffect(() => {
@@ -349,8 +384,17 @@ export default function SecondBrainPage() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-0.5 p-1 rounded-lg" style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}>
-                  <button onClick={() => setViewMode("grid")} className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: viewMode === "grid" ? "var(--c-surface)" : "transparent", color: viewMode === "grid" ? "var(--c-ink)" : "var(--c-ink-faint)" }}><LayoutGrid size={15} /></button>
-                  <button onClick={() => setViewMode("list")} className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: viewMode === "list" ? "var(--c-surface)" : "transparent", color: viewMode === "list" ? "var(--c-ink)" : "var(--c-ink-faint)" }}><ListIcon size={15} /></button>
+                  {VIEW_ICONS.map(({ mode, Icon, title }) => (
+                    <button
+                      key={mode}
+                      onClick={() => setAndPersistView(mode)}
+                      title={title}
+                      className="p-1.5 rounded-md transition-colors"
+                      style={{ backgroundColor: viewMode === mode ? "var(--c-surface)" : "transparent", color: viewMode === mode ? "var(--c-ink)" : "var(--c-ink-faint)" }}
+                    >
+                      <Icon size={15} />
+                    </button>
+                  ))}
                 </div>
                 <button
                   onClick={() => setShowCapture(true)}
@@ -393,9 +437,36 @@ export default function SecondBrainPage() {
           </div>
         </div>
 
-        {/* Items grid/list */}
+        {/* Items grid/list/kanban/gallery/table/timeline */}
         <div className="flex-1 overflow-y-auto p-5">
-          <div className={`max-w-4xl mx-auto ${viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" : "space-y-2"}`}>
+          {/* Kanban / Gallery / Table / Timeline non-grid views */}
+          {viewMode === "kanban" && !loading && (
+            <div className="max-w-none">
+              <KanbanView
+                items={displayItems}
+                onStatusChange={handleStatusChange}
+                onItemClick={setSelectedId}
+                onToggleStar={toggleStar}
+              />
+            </div>
+          )}
+          {viewMode === "gallery" && !loading && (
+            <div className="max-w-4xl mx-auto">
+              <GalleryView items={displayItems} onItemClick={setSelectedId} onToggleStar={toggleStar} />
+            </div>
+          )}
+          {viewMode === "table" && !loading && (
+            <div className="max-w-5xl mx-auto">
+              <TableView items={displayItems} onItemClick={setSelectedId} />
+            </div>
+          )}
+          {viewMode === "timeline" && !loading && (
+            <div className="max-w-2xl mx-auto">
+              <TimelineView items={displayItems} onItemClick={setSelectedId} onToggleStar={toggleStar} />
+            </div>
+          )}
+          {/* Grid / List */}
+          <div className={`max-w-4xl mx-auto ${["grid", "list"].includes(viewMode) ? (viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" : "space-y-2") : "hidden"}`}>
             {loading ? (
               <div className="col-span-full py-16 flex justify-center">
                 <Loader2 size={22} className="animate-spin" style={{ color: "var(--c-ink-faint)" }} />
@@ -510,7 +581,7 @@ export default function SecondBrainPage() {
       <CaptureModal
         open={showCapture}
         onClose={() => setShowCapture(false)}
-        onSaved={(item) => setItems(prev => [{ ...item, starred: false }, ...prev])}
+        onSaved={(item) => setItems(prev => [{ ...item, starred: false, properties: {} }, ...prev])}
         initialTitle={captureInitialTitle}
       />
     </div>

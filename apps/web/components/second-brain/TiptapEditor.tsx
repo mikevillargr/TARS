@@ -13,13 +13,20 @@ import {
   List, ListOrdered, Quote, Code, Minus,
   Link2, ImageIcon, Eraser, Loader2,
   Wand2, Scissors, Expand, RefreshCw, ChevronRight,
-  Pilcrow,
+  Pilcrow, Lightbulb, AlertTriangle, ToggleLeft,
 } from "lucide-react"
+import { CalloutNode } from "./extensions/CalloutNode"
+import { ToggleNode } from "./extensions/ToggleNode"
+import { MentionExtension } from "./extensions/MentionExtension"
+
+export interface MentionRef { id: string; type: string }
 
 export interface TiptapEditorProps {
   content: string
   onChange: (markdown: string) => void
   onWordCount?: (count: number) => void
+  onMentionsExtracted?: (mentions: MentionRef[]) => void
+  onMentionClick?: (id: string, type: string, rect: DOMRect) => void
   placeholder?: string
   readOnly?: boolean
   autoFocus?: boolean
@@ -176,16 +183,19 @@ type SlashCmd = {
 }
 
 const SLASH_COMMANDS: SlashCmd[] = [
-  { label: "Ask TARS…",      icon: Wand2,         special: "ask-tars" },
-  { label: "Paragraph",      icon: Pilcrow,       action: (e) => e?.chain().focus().setParagraph().run() },
-  { label: "Heading 1",      icon: Heading1,      action: (e) => e?.chain().focus().toggleHeading({ level: 1 }).run() },
-  { label: "Heading 2",      icon: Heading2,      action: (e) => e?.chain().focus().toggleHeading({ level: 2 }).run() },
-  { label: "Heading 3",      icon: Heading3,      action: (e) => e?.chain().focus().toggleHeading({ level: 3 }).run() },
-  { label: "Bullet list",    icon: List,          action: (e) => e?.chain().focus().toggleBulletList().run() },
-  { label: "Ordered list",   icon: ListOrdered,   action: (e) => e?.chain().focus().toggleOrderedList().run() },
-  { label: "Blockquote",     icon: Quote,         action: (e) => e?.chain().focus().toggleBlockquote().run() },
-  { label: "Code block",     icon: Code,          action: (e) => e?.chain().focus().toggleCodeBlock().run() },
-  { label: "Divider",        icon: Minus,         action: (e) => e?.chain().focus().setHorizontalRule().run() },
+  { label: "Ask TARS…",         icon: Wand2,         special: "ask-tars" },
+  { label: "Paragraph",         icon: Pilcrow,       action: (e) => e?.chain().focus().setParagraph().run() },
+  { label: "Heading 1",         icon: Heading1,      action: (e) => e?.chain().focus().toggleHeading({ level: 1 }).run() },
+  { label: "Heading 2",         icon: Heading2,      action: (e) => e?.chain().focus().toggleHeading({ level: 2 }).run() },
+  { label: "Heading 3",         icon: Heading3,      action: (e) => e?.chain().focus().toggleHeading({ level: 3 }).run() },
+  { label: "Bullet list",       icon: List,          action: (e) => e?.chain().focus().toggleBulletList().run() },
+  { label: "Ordered list",      icon: ListOrdered,   action: (e) => e?.chain().focus().toggleOrderedList().run() },
+  { label: "Blockquote",        icon: Quote,         action: (e) => e?.chain().focus().toggleBlockquote().run() },
+  { label: "Code block",        icon: Code,          action: (e) => e?.chain().focus().toggleCodeBlock().run() },
+  { label: "Divider",           icon: Minus,         action: (e) => e?.chain().focus().setHorizontalRule().run() },
+  { label: "Callout — Note",    icon: Lightbulb,     action: (e) => (e?.chain().focus() as any)?.setCallout("note").run() },
+  { label: "Callout — Warning", icon: AlertTriangle, action: (e) => (e?.chain().focus() as any)?.setCallout("warning").run() },
+  { label: "Toggle",            icon: ToggleLeft,    action: (e) => (e?.chain().focus() as any)?.insertToggle().run() },
 ]
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────
@@ -278,6 +288,8 @@ export function TiptapEditor({
   content,
   onChange,
   onWordCount,
+  onMentionsExtracted,
+  onMentionClick,
   placeholder = "Start writing, or type '/' for commands…",
   readOnly = false,
   autoFocus = false,
@@ -313,6 +325,9 @@ export function TiptapEditor({
       Placeholder.configure({ placeholder }),
       Typography,
       Markdown.configure({ html: false, transformCopiedText: true, tightLists: true }),
+      CalloutNode,
+      ToggleNode,
+      MentionExtension,
     ],
     editable: !readOnly,
     autofocus: autoFocus ? "end" : false,
@@ -322,6 +337,15 @@ export function TiptapEditor({
       onChange(md)
       if (onWordCount) {
         onWordCount(editor.getText().split(/\s+/).filter(Boolean).length)
+      }
+      if (onMentionsExtracted) {
+        const mentions: MentionRef[] = []
+        editor.state.doc.descendants((node) => {
+          if (node.type.name === "mention") {
+            mentions.push({ id: node.attrs.id, type: node.attrs.type ?? "unknown" })
+          }
+        })
+        onMentionsExtracted(mentions)
       }
     },
   })
@@ -528,6 +552,14 @@ export function TiptapEditor({
         ref={editorContainerRef}
         className="flex-1 overflow-y-auto cursor-text relative"
         onMouseDown={e => { if (e.target === e.currentTarget) editor.commands.focus() }}
+        onClick={e => {
+          const chip = (e.target as HTMLElement).closest("[data-mention]") as HTMLElement | null
+          if (chip && onMentionClick) {
+            const id = chip.getAttribute("data-id") ?? ""
+            const type = chip.getAttribute("data-type") ?? ""
+            if (id) onMentionClick(id, type, chip.getBoundingClientRect())
+          }
+        }}
       >
         <EditorContent editor={editor} className="h-full" />
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -8,13 +8,15 @@ import {
   ChevronLeft, X, Pencil, Check, Copy, ExternalLink, Trash2,
   MessageSquare, Loader2, Tag, Layers, ChevronDown, ChevronUp,
   Link as LinkIcon, FileText, Mic, File, BookOpen, ListTodo, Star,
+  Sparkles, ArrowUpRight,
 } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { apiGet, apiPatch, apiDelete } from "@/lib/api-client"
 import { useDomains } from "@/hooks/useDomains"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { TiptapEditor } from "./TiptapEditor"
+import { TiptapEditor, type MentionRef } from "./TiptapEditor"
+import type { Link as LinkType, ItemProperties } from "@tars/types"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,7 @@ interface KnowledgeItem {
   domain: string | null
   access_count: number
   starred: boolean
+  properties: ItemProperties
   saved_at: string
 }
 
@@ -37,6 +40,19 @@ interface KnowledgeItemDetail extends KnowledgeItem {
   clean_content: string | null
   chunk_count: number
 }
+
+// ─── Property helpers ──────────────────────────────────────────────────────────
+
+const STATUS_LABEL: Record<string, string> = { raw: "Raw", developing: "Developing", actionable: "Actionable", archived: "Archived" }
+const STATUS_STYLE: Record<string, { bg: string; color: string; border?: string }> = {
+  raw:        { bg: "color-mix(in srgb, var(--c-amber) 15%, transparent)", color: "var(--c-amber)" },
+  developing: { bg: "transparent", color: "var(--c-moss)", border: "1px solid color-mix(in srgb, var(--c-moss) 40%, transparent)" },
+  actionable: { bg: "var(--c-moss)", color: "white" },
+  archived:   { bg: "var(--c-surface-2)", color: "var(--c-ink-faint)" },
+}
+const TYPE_VALUES   = ["idea", "project", "reference", "research"]
+const PRIORITY_VALUES = ["high", "medium", "low"]
+const STATUS_VALUES   = ["raw", "developing", "actionable", "archived"]
 
 export interface ItemDetailModalProps {
   itemId: string | null
@@ -75,6 +91,10 @@ export function ItemDetailModal({
   const [editNote, setEditNote]       = useState("")
   const [editTags, setEditTags]       = useState("")
   const [editDomain, setEditDomain]   = useState("")
+  const [editProps, setEditProps]     = useState<ItemProperties>({})
+  const [editingProps, setEditingProps] = useState(false)
+  const [autoFilling, setAutoFilling] = useState(false)
+  const [backlinks, setBacklinks]     = useState<LinkType[]>([])
   const [docMarkdown, setDocMarkdown] = useState("")
   const [wordCount, setWordCount]     = useState(0)
   const [saving, setSaving]           = useState(false)
@@ -85,9 +105,10 @@ export function ItemDetailModal({
   const lastSavedContent              = useRef("")
   const lastSavedTitle                = useRef("")
   const [showFull, setShowFull]       = useState(false)
+  const mentionSyncTimer              = useRef<ReturnType<typeof setTimeout> | null>(null)
   const confirm                       = useConfirm()
 
-  const isDocument = item?.type === "document" || item?.type === "note"
+  const isDocument = item?.type === "document" || item?.type === "note" || item?.type === "voice"
 
   useEffect(() => {
     if (!itemId) return
@@ -97,14 +118,21 @@ export function ItemDetailModal({
     setShowFull(false)
     setDocMarkdown("")
     setTaskAdded(false)
-    apiGet<KnowledgeItemDetail>(`/second-brain/items/${itemId}`)
-      .then((d) => {
+    setBacklinks([])
+    setEditProps({})
+    Promise.all([
+      apiGet<KnowledgeItemDetail>(`/second-brain/items/${itemId}`),
+      apiGet<LinkType[]>(`/links?target_type=knowledge_item&target_id=${itemId}`).catch(() => [] as LinkType[]),
+    ])
+      .then(([d, links]) => {
         setItem(d)
         setEditTitle(d.source_title ?? "")
         setEditNote(d.personal_note ?? "")
         setEditTags((d.tags ?? []).join(", "))
         setEditDomain(d.domain ?? "work")
-        if (d.type === "document") {
+        setEditProps(d.properties ?? {})
+        setBacklinks(links)
+        if (d.type === "document" || d.type === "note") {
           setDocMarkdown(d.clean_content ?? "")
           lastSavedContent.current = d.clean_content ?? ""
           lastSavedTitle.current = d.source_title ?? ""
@@ -123,16 +151,57 @@ export function ItemDetailModal({
         personal_note: editNote || null,
         tags: editTags.split(",").map(t => t.trim()).filter(Boolean),
         domain: editDomain,
+        properties: editProps,
       })
       setItem(updated)
       onUpdated(updated)
       setEditing(false)
+      setEditingProps(false)
     } catch (err) {
       console.error(err)
     } finally {
       setSaving(false)
     }
   }
+
+  async function autoFillProperties() {
+    if (!item) return
+    setAutoFilling(true)
+    try {
+      const res = await fetch(`/api/proxy/second-brain/items/${item.id}/properties/auto`, { method: "POST" })
+      if (res.ok) {
+        const d = await res.json() as KnowledgeItemDetail
+        setItem(d)
+        setEditProps(d.properties ?? {})
+        onUpdated(d)
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setAutoFilling(false)
+    }
+  }
+
+  const handleMentionsExtracted = useCallback((mentions: MentionRef[]) => {
+    if (!item || mentions.length === 0) return
+    if (mentionSyncTimer.current) clearTimeout(mentionSyncTimer.current)
+    mentionSyncTimer.current = setTimeout(async () => {
+      const links = mentions.map(m => ({
+        source_type: "knowledge_item",
+        source_id: item.id,
+        target_type: m.type,
+        target_id: m.id,
+        relationship: "mentions",
+      }))
+      try {
+        await fetch("/api/proxy/links/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ links }),
+        })
+      } catch { /* silent */ }
+    }, 2000)
+  }, [item])
 
   async function toggleStar() {
     if (!item) return
@@ -157,6 +226,7 @@ export function ItemDetailModal({
         personal_note: editNote || null,
         tags: editTags.split(",").map(t => t.trim()).filter(Boolean),
         domain: editDomain,
+        properties: editProps,
         clean_content: docMarkdown,
       })
       setItem(updated)
@@ -312,6 +382,7 @@ export function ItemDetailModal({
         resetKey={item.id}
         onChange={setDocMarkdown}
         onWordCount={setWordCount}
+        onMentionsExtracted={handleMentionsExtracted}
         placeholder="Start writing…"
       />
     </div>
@@ -371,6 +442,127 @@ export function ItemDetailModal({
           ))}
         </div>
       )}
+      {/* ─── Properties section ─── */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="tars-label">Properties</span>
+          <div className="flex items-center gap-1">
+            {editingProps ? (
+              <button
+                onClick={async () => { await saveMetadata(); setEditingProps(false) }}
+                className="text-[10px] px-2 py-0.5 rounded flex items-center gap-1"
+                style={{ color: "var(--c-moss)" }}
+              >
+                {saving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
+                Save
+              </button>
+            ) : (
+              <button
+                onClick={() => setEditingProps(true)}
+                className="text-[10px] px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+                style={{ color: "var(--c-ink-faint)" }}
+              >
+                <Pencil size={9} /> Edit
+              </button>
+            )}
+            <button
+              onClick={autoFillProperties}
+              disabled={autoFilling}
+              className="text-[10px] px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+              style={{ color: "var(--c-ink-faint)" }}
+            >
+              {autoFilling ? <Loader2 size={9} className="animate-spin" /> : <Sparkles size={9} />}
+              Auto-fill
+            </button>
+          </div>
+        </div>
+        {editingProps ? (
+          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border)" }}>
+            {[
+              { key: "status", label: "Status", options: STATUS_VALUES },
+              { key: "type",   label: "Type",   options: TYPE_VALUES },
+              { key: "priority", label: "Priority", options: PRIORITY_VALUES },
+            ].map(({ key, label, options }) => (
+              <div key={key} className="flex items-center px-3 py-2 border-b last:border-b-0" style={{ borderColor: "var(--c-border-faint)" }}>
+                <span className="tars-label w-20 shrink-0">{label}</span>
+                <select
+                  value={(editProps as any)[key] ?? ""}
+                  onChange={e => setEditProps(p => ({ ...p, [key]: e.target.value || undefined }))}
+                  className="flex-1 text-xs bg-transparent outline-none"
+                  style={{ color: "var(--c-ink)" }}
+                >
+                  <option value="">—</option>
+                  {options.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+            ))}
+            {Object.entries(editProps.custom ?? {}).map(([k, v]) => (
+              <div key={k} className="flex items-center gap-2 px-3 py-2 border-b" style={{ borderColor: "var(--c-border-faint)" }}>
+                <input
+                  value={k}
+                  readOnly
+                  className="tars-label w-20 bg-transparent border-none outline-none shrink-0"
+                  style={{ color: "var(--c-ink-faint)" }}
+                />
+                <input
+                  value={v}
+                  onChange={e => setEditProps(p => ({ ...p, custom: { ...p.custom, [k]: e.target.value } }))}
+                  className="flex-1 text-xs bg-transparent outline-none border-none"
+                  style={{ color: "var(--c-ink)" }}
+                />
+                <button
+                  onClick={() => setEditProps(p => {
+                    const c = { ...(p.custom ?? {}) }
+                    delete c[k]
+                    return { ...p, custom: c }
+                  })}
+                  style={{ color: "var(--c-ink-faint)" }}
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => {
+                const key = prompt("Property name:")
+                if (key?.trim()) setEditProps(p => ({ ...p, custom: { ...(p.custom ?? {}), [key.trim()]: "" } }))
+              }}
+              className="w-full text-left px-3 py-2 text-[10px] transition-colors"
+              style={{ color: "var(--c-ink-faint)" }}
+            >
+              + Add property
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {editProps.status && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-medium uppercase" style={{ ...STATUS_STYLE[editProps.status] }}>
+                {STATUS_LABEL[editProps.status] ?? editProps.status}
+              </span>
+            )}
+            {editProps.type && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-medium uppercase" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }}>
+                {editProps.type}
+              </span>
+            )}
+            {editProps.priority && (
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full font-mono font-medium uppercase"
+                style={{
+                  backgroundColor: editProps.priority === "high" ? "color-mix(in srgb, var(--c-amber) 15%, transparent)" : "var(--c-surface-2)",
+                  color: editProps.priority === "high" ? "var(--c-amber)" : "var(--c-ink-muted)",
+                }}
+              >
+                {editProps.priority}
+              </span>
+            )}
+            {!editProps.status && !editProps.type && !editProps.priority && (
+              <span className="text-[10px]" style={{ color: "var(--c-ink-faint)" }}>No properties — click Auto-fill or Edit</span>
+            )}
+          </div>
+        )}
+      </div>
+
       {searchChunk && (
         <div className="rounded-lg p-3" style={{ backgroundColor: "var(--c-amber-soft)", border: "1px solid color-mix(in srgb, var(--c-amber) 30%, transparent)" }}>
           <p className="text-[10px] font-semibold font-mono uppercase tracking-wider mb-1" style={{ color: "var(--c-amber)" }}>Matched passage</p>
@@ -440,6 +632,27 @@ export function ItemDetailModal({
           )}
         </div>
       )}
+      {/* ─── Backlinks section ─── */}
+      {backlinks.length > 0 && (
+        <div className="space-y-1.5 pt-3 border-t" style={{ borderColor: "var(--c-border-faint)" }}>
+          <span className="tars-label">Referenced by</span>
+          <div className="space-y-1">
+            {backlinks.map(link => (
+              <div key={link.id} className="flex items-center gap-2 text-xs py-1">
+                <span className="tars-label" style={{ color: "var(--c-moss)" }}>{link.source_type.replace("_", " ")}</span>
+                <span className="flex-1 truncate" style={{ color: "var(--c-ink)" }}>{link.target_title ?? link.source_id}</span>
+                <span className="tars-label">{link.relationship}</span>
+                {link.target_url && (
+                  <a href={link.target_url} target="_blank" rel="noreferrer" style={{ color: "var(--c-ink-faint)" }}>
+                    <ArrowUpRight size={11} />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="pt-3 border-t text-[10px] space-y-0.5" style={{ borderColor: "var(--c-border-faint)", color: "var(--c-ink-faint)" }}>
         <p>Saved {new Date(item.saved_at).toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })}</p>
         {item.access_count > 0 && <p>Referenced by TARS {item.access_count}×</p>}

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import auth, health, chat, tasks, meetings, calendar
 from api.routes import second_brain, agent_jobs, artifacts
+from api.routes import links as links_route
 from api.routes import cron, connectors, memory, contacts
 from api.routes import settings as settings_route
 from api.routes import tesla as tesla_route
@@ -233,6 +234,7 @@ app.include_router(connectors.router, prefix="/api/connectors")
 app.include_router(email_route.router, prefix="/api/email")
 app.include_router(memory.router, prefix="/api/memory")
 app.include_router(contacts.router, prefix="/api/contacts")
+app.include_router(links_route.router, prefix="/api/links", tags=["links"])
 app.include_router(settings_route.router, prefix="/api/settings")
 app.include_router(tesla_route.router, prefix="/api/tesla")
 app.include_router(preview_route.router, prefix="/api")

@@ -27,6 +27,7 @@ class KnowledgeItemOut(BaseModel):
     domain: Optional[str]
     access_count: int
     starred: bool = False
+    properties: dict = {}
     saved_at: datetime
 
     class Config:
@@ -60,6 +61,7 @@ class UpdateItemRequest(BaseModel):
     tags: Optional[List[str]] = None
     domain: Optional[str] = None
     starred: Optional[bool] = None
+    properties: Optional[dict] = None
     clean_content: Optional[str] = None   # document content edit — triggers re-embed + re-chunk
 
 
@@ -138,6 +140,7 @@ async def get_item(
         domain=item.domain,
         access_count=item.access_count,
         starred=item.starred,
+        properties=item.properties or {},
         saved_at=item.saved_at,
         clean_content=item.clean_content,
         chunk_count=chunk_count,
@@ -165,6 +168,8 @@ async def update_item(
         item.domain = body.domain
     if body.starred is not None:
         item.starred = body.starred
+    if body.properties is not None:
+        item.properties = {**(item.properties or {}), **body.properties}
     if body.clean_content is not None:
         from sqlalchemy import delete as _delete
         from memory.embeddings import embed_one, embed
@@ -213,6 +218,7 @@ async def update_item(
         domain=item.domain,
         access_count=item.access_count,
         starred=item.starred,
+        properties=item.properties or {},
         saved_at=item.saved_at,
         clean_content=item.clean_content,
         chunk_count=chunk_count,
@@ -434,3 +440,82 @@ async def delete_item(
     removed = await second_brain.remove_item(db, item_id, user_id)
     if not removed:
         raise HTTPException(status_code=404, detail="Item not found")
+
+
+@router.post("/items/{item_id}/properties/auto", response_model=KnowledgeItemDetailOut)
+async def auto_populate_properties(
+    item_id: str,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Use Haiku to infer status/type/priority from item content and merge into properties."""
+    item = await second_brain.get_item(db, item_id, user_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    from core.config import settings as _cfg
+    from core.model_client import get_model_client as _gmc
+
+    content_snippet = (item.summary or item.clean_content or "")[:1200]
+    title = item.source_title or ""
+
+    prompt = (
+        f'Analyze this knowledge item and return ONLY a valid JSON object with these exact keys:\n'
+        f'{{"status": "<raw|developing|actionable|archived>", '
+        f'"type": "<idea|project|reference|research>", '
+        f'"priority": "<high|medium|low>"}}\n\n'
+        f'Title: {title}\n'
+        f'Content: {content_snippet}\n\n'
+        f'Choose the values that best fit. Return ONLY the JSON object, no explanation.'
+    )
+
+    try:
+        _p = _cfg.tier1_provider
+        client = _gmc().zai if _p == "zai" else _gmc().anthropic
+        _model = _cfg.tier1_model_override or ("glm-4.5-air" if _p == "zai" else _cfg.tier1_model)
+        resp = await client.messages.create(
+            model=_model,
+            max_tokens=64,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = resp.content[0].text.strip()
+        import json as _json
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        inferred = _json.loads(raw)
+    except Exception:
+        inferred = {}
+
+    if inferred:
+        item.properties = {**(item.properties or {}), **inferred}
+        await db.commit()
+        await db.refresh(item)
+
+    count_result = await db.execute(
+        select(func.count(DocumentChunk.id)).where(
+            DocumentChunk.knowledge_item_id == item_id
+        )
+    )
+    chunk_count = count_result.scalar() or 0
+
+    return KnowledgeItemDetailOut(
+        id=item.id,
+        type=item.type,
+        url=item.url,
+        source_title=item.source_title,
+        source_author=item.source_author,
+        summary=item.summary,
+        personal_note=item.personal_note,
+        tags=item.tags or [],
+        domain=item.domain,
+        access_count=item.access_count,
+        starred=item.starred,
+        properties=item.properties or {},
+        saved_at=item.saved_at,
+        clean_content=item.clean_content,
+        chunk_count=chunk_count,
+    )

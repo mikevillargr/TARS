@@ -12,6 +12,7 @@ import { CaptureModal } from "@/components/second-brain/CaptureModal"
 import { CommandPalette } from "@/components/shell/CommandPalette"
 import { ConfirmProvider } from "@/components/ui/confirm-dialog"
 import { NotificationProvider, useNotificationContext } from "@/context/NotificationContext"
+import { ContactPopupProvider } from "@/context/ContactPopupContext"
 
 // ─── Notification sound (Web Audio API — no file needed) ────────────────────
 
@@ -365,7 +366,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <NotificationProvider>
       <ConfirmProvider>
-        <AppLayoutInner>{children}</AppLayoutInner>
+        <ContactPopupProvider>
+          <AppLayoutInner>{children}</AppLayoutInner>
+        </ContactPopupProvider>
       </ConfirmProvider>
     </NotificationProvider>
   )

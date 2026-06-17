@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
-  Mail, Clock, Plug, Database, Settings, Archive, Sun, Moon, Monitor, LogOut,
+  Mail, Clock, Plug, Database, Settings, Archive, Sun, Moon, Monitor, LogOut, Users,
 } from "lucide-react"
 import {
   Sidebar,
@@ -24,7 +24,7 @@ import { useNotificationContext } from "@/context/NotificationContext"
 
 const iconMap = {
   MessageSquare, CheckSquare, Video, CalendarDays, Brain, Cpu,
-  Mail, Clock, Plug, Database, Settings, Archive,
+  Mail, Clock, Plug, Database, Settings, Archive, Users,
 } as const
 
 function TarsLogo() {

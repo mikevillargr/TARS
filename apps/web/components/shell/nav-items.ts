@@ -2,6 +2,7 @@ export const navItems = [
   { label: "Chat", href: "/chat", icon: "MessageSquare" },
   { label: "Tasks", href: "/tasks", icon: "CheckSquare" },
   { label: "Meetings", href: "/meetings", icon: "Video" },
+  { label: "Contacts", href: "/contacts", icon: "Users" },
   { label: "Calendar", href: "/calendar", icon: "CalendarDays" },
   { label: "Second Brain", href: "/second-brain", icon: "Brain" },
   { label: "Agent Jobs", href: "/agent-jobs", icon: "Cpu" },

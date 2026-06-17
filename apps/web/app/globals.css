@@ -198,6 +198,23 @@
   .tars-label--moss { color: var(--c-moss); }
   .tars-label--muted { color: var(--c-ink-muted); }
 
+  /* Inline [[mention]] chip rendered by MentionExtension */
+  .tars-mention-chip {
+    display: inline;
+    background: color-mix(in srgb, var(--c-moss) 12%, transparent);
+    color: var(--c-moss);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid color-mix(in srgb, var(--c-moss) 25%, transparent);
+    white-space: nowrap;
+  }
+  .tars-mention-chip:hover {
+    background: color-mix(in srgb, var(--c-moss) 20%, transparent);
+  }
+
   /* Page / section titles — replaces ad-hoc `text-2xl font-bold`.
      Medium weight + negative tracking = the Linear/Warp display feel. */
   .tars-title {
