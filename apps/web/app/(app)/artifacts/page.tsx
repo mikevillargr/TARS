@@ -8,6 +8,7 @@ import {
   Archive, Search, Grid2x2, List, Download, MessageSquare, X,
   FileText, Code2, FileSpreadsheet, FileAudio, BarChart2,
   ChevronDown, Loader2, Trash2, Eye, Brain, ListTodo, Check, Image,
+  BookOpen, LayoutList, AlignLeft, Table,
 } from "lucide-react"
 import { apiGet, apiDelete } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
@@ -49,12 +50,40 @@ const TYPE_META: Record<string, { icon: React.ReactNode; bg: string; color: stri
   image:       { icon: <Image size={16} />,           bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "Image" },
 }
 
+// Extension → icon/color. Takes precedence over type-based lookup.
+const EXT_META: Record<string, { icon: React.ReactNode; bg: string; color: string; label: string }> = {
+  // Documents
+  pdf:   { icon: <BookOpen size={16} />,      bg: "var(--c-rose-soft)",  color: "var(--c-rose)",      label: "PDF" },
+  docx:  { icon: <FileText size={16} />,      bg: "var(--c-moss-soft)",  color: "var(--c-moss)",      label: "Word" },
+  doc:   { icon: <FileText size={16} />,      bg: "var(--c-moss-soft)",  color: "var(--c-moss)",      label: "Word" },
+  pptx:  { icon: <LayoutList size={16} />,    bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "Slides" },
+  ppt:   { icon: <LayoutList size={16} />,    bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "Slides" },
+  // Spreadsheets
+  xlsx:  { icon: <FileSpreadsheet size={16} />, bg: "var(--c-moss-soft)", color: "var(--c-moss)",     label: "Excel" },
+  xls:   { icon: <FileSpreadsheet size={16} />, bg: "var(--c-moss-soft)", color: "var(--c-moss)",     label: "Excel" },
+  csv:   { icon: <Table size={16} />,           bg: "var(--c-moss-soft)", color: "var(--c-moss)",     label: "CSV" },
+  // Images
+  png:   { icon: <Image size={16} />,         bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "PNG" },
+  jpg:   { icon: <Image size={16} />,         bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "JPEG" },
+  jpeg:  { icon: <Image size={16} />,         bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "JPEG" },
+  gif:   { icon: <Image size={16} />,         bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "GIF" },
+  webp:  { icon: <Image size={16} />,         bg: "var(--c-amber-soft)", color: "var(--c-amber)",     label: "WebP" },
+  // Plain text / markdown
+  md:    { icon: <AlignLeft size={16} />,     bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "Markdown" },
+  txt:   { icon: <AlignLeft size={16} />,     bg: "var(--c-surface-2)",  color: "var(--c-ink-muted)", label: "Text" },
+}
+
+function fileMeta(filename: string, type: string) {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? ""
+  return EXT_META[ext] ?? TYPE_META[type.toLowerCase()] ?? TYPE_META.document
+}
+
 function typeMeta(type: string) {
   return TYPE_META[type.toLowerCase()] ?? TYPE_META.document
 }
 
-function TypeIcon({ type, size = "sm" }: { type: string; size?: "sm" | "lg" }) {
-  const meta = typeMeta(type)
+function TypeIcon({ type, filename = "", size = "sm" }: { type: string; filename?: string; size?: "sm" | "lg" }) {
+  const meta = filename ? fileMeta(filename, type) : typeMeta(type)
   const dim  = size === "lg" ? "w-10 h-10 text-base" : "w-8 h-8 text-sm"
   return (
     <span
@@ -103,8 +132,13 @@ function isXlsx(detail: ArtifactDetail | null) {
   return name.endsWith(".xlsx") || name.endsWith(".xls")
 }
 
+const _IMG_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp"])
+
 function isImageArtifact(detail: ArtifactDetail | null) {
-  return detail?.type === "image"
+  if (!detail) return false
+  if (detail.type === "image") return true
+  const ext = detail.filename?.split(".").pop()?.toLowerCase() ?? ""
+  return _IMG_EXTS.has(ext)
 }
 
 // ─── Grid card ────────────────────────────────────────────────────────────────
@@ -162,7 +196,7 @@ function GridCard({
         </div>
       ) : (
         <div className="flex items-start gap-3 flex-1 min-h-0">
-          <TypeIcon type={artifact.type} />
+          <TypeIcon type={artifact.type} filename={artifact.filename} />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium leading-snug line-clamp-2" style={{ color: "var(--c-ink)" }}>{artifact.filename}</p>
             <p className="text-[11px] mt-0.5 truncate" style={{ color: "var(--c-ink-faint)" }}>{sourceLabel(artifact.source)}</p>
@@ -309,10 +343,10 @@ function ArtifactModal({
         setDetail(d)
         setLoading(false)
 
-        // Fetch preview for binary artifacts (DOCX / PPTX)
+        // Fetch preview for binary artifacts (DOCX / PPTX / XLSX)
         // PDF handled by iframe; images handled by <img>; code / text displayed directly
-        const isImageType = d.type === "image"
-        if (d.content?.startsWith("base64:") && !d.filename?.toLowerCase().endsWith(".pdf") && !isImageType) {
+        const isImageFile = isImageArtifact(d)
+        if (d.content?.startsWith("base64:") && !d.filename?.toLowerCase().endsWith(".pdf") && !isImageFile) {
           setPreviewLoading(true)
           try {
             const p = await fetch(`/api/proxy/artifacts/${artifactId}/preview`)
@@ -352,7 +386,7 @@ function ArtifactModal({
     onClose()
   }
 
-  const meta = detail ? typeMeta(detail.type) : typeMeta("document")
+  const meta = detail ? fileMeta(detail.filename, detail.type) : typeMeta("document")
   const isCode = detail?.type === "code"
   const isBinary = isBinaryArtifact(detail)
   const showImagePreview = isBinary && isImageArtifact(detail)
@@ -375,7 +409,7 @@ function ArtifactModal({
         >
           {/* Row 1: icon + filename/subtitle + mobile-close */}
           <div className="flex items-center gap-2 min-w-0">
-            {detail && <TypeIcon type={detail.type} size="sm" />}
+            {detail && <TypeIcon type={detail.type} filename={detail.filename} size="sm" />}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold truncate" style={{ color: "var(--c-ink)" }}>
                 {detail?.filename ?? "…"}
@@ -884,7 +918,7 @@ export default function ArtifactsPage() {
                   onMouseLeave={e => { if (selectedId !== a.id) e.currentTarget.style.backgroundColor = "transparent" }}
                 >
                   <span className="flex items-center gap-2 truncate">
-                    <TypeIcon type={a.type} size="sm" />
+                    <TypeIcon type={a.type} filename={a.filename} size="sm" />
                     <span className="text-xs font-medium truncate" style={{ color: "var(--c-ink)" }}>{a.filename}</span>
                   </span>
                   <span className="text-xs" style={{ color: "var(--c-ink-muted)" }}>{typeMeta(a.type).label}</span>

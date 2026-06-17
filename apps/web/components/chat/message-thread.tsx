@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
-import { Download, FileCode, FileSpreadsheet, FileText, X } from "lucide-react"
+import { ChevronRight, Download, FileCode, FileSpreadsheet, FileText, X } from "lucide-react"
 import { ModelBadge } from "./model-badge"
 import { cn } from "@/lib/utils"
 
@@ -29,6 +29,8 @@ interface StreamingMessage {
   content: string
   streaming: true
   cards?: Record<string, unknown>[]
+  thinking?: string
+  thinkingDone?: boolean
 }
 
 function formatSize(bytes: number): string {
@@ -188,6 +190,107 @@ function AttachmentList({ attachments, isUser }: { attachments: Attachment[]; is
   )
 }
 
+function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!done && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [text, done])
+
+  if (!done) {
+    return (
+      <div
+        className="mb-2.5 rounded-r-md"
+        style={{ borderLeft: "2px solid var(--c-moss)", backgroundColor: "color-mix(in srgb, var(--c-moss) 6%, transparent)" }}
+      >
+        <div className="px-3 pt-2 pb-0.5 flex items-center gap-2">
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+            style={{
+              backgroundColor: "var(--c-moss)",
+              animation: "tars-think-pulse 1.2s ease-in-out infinite",
+            }}
+          />
+          <span
+            className="font-mono text-[10px] tracking-[0.12em] uppercase font-medium"
+            style={{ color: "var(--c-moss)" }}
+          >
+            reasoning
+          </span>
+        </div>
+        <div
+          ref={scrollRef}
+          className="px-3 pb-2 overflow-y-auto"
+          style={{ maxHeight: 112, scrollbarWidth: "none" }}
+        >
+          <p
+            className="font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap"
+            style={{ color: "var(--c-ink-faint)" }}
+          >
+            {text}
+            <span
+              className="inline-block w-1.5 h-3.5 ml-0.5 align-[-3px]"
+              style={{
+                backgroundColor: "var(--c-moss)",
+                animation: "tars-think-blink 0.9s step-end infinite",
+              }}
+            />
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mb-2.5">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 transition-colors"
+        style={{
+          fontFamily: "var(--font-mono, monospace)",
+          fontSize: 10,
+          letterSpacing: "0.10em",
+          textTransform: "uppercase",
+          color: "var(--c-ink-faint)",
+          border: "0.5px solid var(--c-border-faint)",
+          background: "var(--c-surface)",
+        }}
+      >
+        <span
+          className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+          style={{ backgroundColor: "var(--c-moss)" }}
+        />
+        [reasoned]
+        <ChevronRight
+          size={10}
+          style={{
+            transition: "transform 0.15s",
+            transform: expanded ? "rotate(90deg)" : "rotate(0deg)",
+          }}
+        />
+      </button>
+      {expanded && (
+        <div
+          className="mt-1 rounded-r-sm px-3 py-2"
+          style={{
+            borderLeft: "1.5px solid var(--c-border-faint)",
+            fontFamily: "var(--font-mono, monospace)",
+            fontSize: 11.5,
+            lineHeight: 1.7,
+            color: "var(--c-ink-faint)",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {text}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function MessageThread({
   messages,
   streaming,
@@ -228,10 +331,51 @@ export function MessageThread({
   )
 }
 
+function ChartImageCard({ card }: { card: Record<string, unknown> }) {
+  const title = typeof card.title === "string" ? card.title : "chart"
+  const b64   = card.image_base64 as string
+  const src   = `data:image/png;base64,${b64}`
+
+  const download = () => {
+    const a = document.createElement("a")
+    a.href = src
+    a.download = title + ".png"
+    a.click()
+  }
+
+  return (
+    <div
+      className="my-3 rounded-xl overflow-hidden"
+      style={{ border: "1px solid var(--c-border)" }}
+    >
+      <div
+        className="flex items-center justify-between px-3 py-1.5"
+        style={{ backgroundColor: "var(--c-surface-2)", borderBottom: "1px solid var(--c-border)" }}
+      >
+        <span className="text-[11px] font-mono" style={{ color: "var(--c-ink-faint)" }}>{title}</span>
+        <button
+          onClick={download}
+          className="text-[10px] px-2 py-0.5 rounded transition-colors"
+          style={{ color: "var(--c-ink-faint)" }}
+          onMouseEnter={e => (e.currentTarget.style.color = "var(--c-ink)")}
+          onMouseLeave={e => (e.currentTarget.style.color = "var(--c-ink-faint)")}
+        >
+          download
+        </button>
+      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={title} style={{ display: "block", maxWidth: "100%", width: "100%" }} />
+    </div>
+  )
+}
+
 function ToolResultCards({ cards }: { cards: Record<string, unknown>[] }) {
   return (
     <>
       {cards.map((card, i) => {
+        if (card.type === "chart_image" && typeof card.image_base64 === "string") {
+          return <ChartImageCard key={i} card={card} />
+        }
         if (card.type === "search_images" && Array.isArray(card.images)) {
           return (
             <SearchImagesCard

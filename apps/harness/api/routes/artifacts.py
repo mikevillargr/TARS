@@ -327,8 +327,16 @@ async def preview_artifact(
             import docx as _docx
             from io import BytesIO as _BIO
             doc = _docx.Document(_BIO(raw))
-            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-            return {"text": "\n\n".join(paragraphs[:300]), "type": "docx"}
+            texts: list[str] = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    texts.append(para.text)
+            for table in doc.tables:
+                for row in table.rows:
+                    row_cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                    if row_cells:
+                        texts.append(" | ".join(row_cells))
+            return {"text": "\n\n".join(texts[:400]), "type": "docx"}
         except Exception as exc:
             return {"text": f"(preview extraction failed: {exc})", "type": "text"}
 
