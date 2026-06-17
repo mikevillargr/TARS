@@ -102,8 +102,8 @@ export interface Contact {
   job_title?: string
   biography?: string
   tars_context?: string
-  emails: string[]
-  phones: string[]
+  emails: { value: string; type?: string }[]
+  phones: { value: string; type?: string }[]
   is_directory: boolean
   is_other_contact: boolean
   last_synced_at?: string

@@ -176,14 +176,14 @@ export function ContactDetailPanel({ contactId }: Props) {
               <div>
                 <div className="tars-label" style={{ marginBottom: "0.5rem" }}>Contact Info</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                  {(contact.emails ?? []).map((e: { value?: string; type?: string }, i: number) => e.value && (
+                  {(contact.emails ?? []).map((e, i) => e.value && (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <Mail size={12} style={{ color: "var(--c-ink-faint)", flexShrink: 0 }} />
                       <span style={{ fontSize: 13, color: "var(--c-ink)", fontFamily: "var(--font-mono)" }}>{e.value}</span>
                       {e.type && <span className="tars-label">{e.type}</span>}
                     </div>
                   ))}
-                  {(contact.phones ?? []).map((p: { value?: string; type?: string }, i: number) => p.value && (
+                  {(contact.phones ?? []).map((p, i) => p.value && (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                       <Phone size={12} style={{ color: "var(--c-ink-faint)", flexShrink: 0 }} />
                       <span style={{ fontSize: 13, color: "var(--c-ink)", fontFamily: "var(--font-mono)" }}>{p.value}</span>
