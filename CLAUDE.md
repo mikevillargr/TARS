@@ -841,6 +841,12 @@ v2.7.3  Fix: blank charts — both render paths appended their own savefig() AFT
         savefig fired post-close and wrote a blank canvas. New _strip_chart_io() removes
         the model's show/savefig/close so the harness saves while the figure is open.
         Tool desc + CHARTS prompt now say build-only. Harness-only, no schema change.
+v2.9.4  Fix: Second Brain auto-save — three bugs. (1) Stale closure: saveDocument is now a
+        stable useCallback([]) reading all fields from a saveValuesRef updated after every render.
+        (2) Changes lost on navigate: flush useEffect fires saveDocument() when itemId changes,
+        guarded by hasUnsavedChanges + currentItemIdRef to prevent stale setItem race. (3) Spurious
+        normalization save on open: TiptapEditor setContent(_, false) suppresses onUpdate on initial
+        load so docMarkdown and lastSavedContent start equal. Web-only, no schema change.
 v2.9.3  Fix: mention chip clicks fully wired — contact chip → ContactPopup, knowledge item chip
         → navigate to that item's modal, task chip → /tasks?id=. Backlinks panel now shows
         source_title (the item doing the referencing, not the target) and each row is clickable.

@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.9.3 |
-| Released | 2026-06-17 |
+| Version | v2.9.4 |
+| Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -153,6 +153,12 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.9.4 — 2026-06-18
+**Fix: Second Brain auto-save — three save bugs fixed**
+- **Stale closure**: `saveDocument` was a plain `async function` re-created each render. The 1.5s debounce could fire a version with stale `editTags`/`editDomain`/`editProps`. Fixed: `saveDocument` is now a stable `useCallback([])` that reads all current values from a `saveValuesRef` updated after every render.
+- **Changes lost on navigation**: clicking a backlink or mention within 1.5s of typing cancelled the pending auto-save (the `docMarkdown` reset to `""` triggered the `useEffect` cleanup which cleared the timeout). Fixed: a flush `useEffect` fires `saveDocument()` immediately when `itemId` changes, guarded by `hasUnsavedChanges` ref. A `currentItemIdRef` guard prevents stale `setItem` calls if the PATCH response arrives after navigation.
+- **Spurious normalization save on open**: `tiptap-markdown` serializes content slightly differently from the stored string, triggering an auto-save on every item open. Fixed: `setContent(..., false)` in TiptapEditor suppresses `onUpdate` during initial content load, so `docMarkdown` is set directly from the DB value and matches `lastSavedContent`.
 
 ### v2.9.3 — 2026-06-17
 **Fix: bidirectional linking fully wired**
