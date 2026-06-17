@@ -295,10 +295,12 @@ export function TiptapEditor({
   autoFocus = false,
   resetKey,
 }: TiptapEditorProps) {
-  const imageInputRef       = useRef<HTMLInputElement>(null)
-  const contentSet          = useRef(false)
-  const prevResetKey        = useRef(resetKey)
-  const editorContainerRef  = useRef<HTMLDivElement>(null)
+  const imageInputRef        = useRef<HTMLInputElement>(null)
+  const contentSet           = useRef(false)
+  const prevResetKey         = useRef(resetKey)
+  const editorContainerRef   = useRef<HTMLDivElement>(null)
+  const onMentionClickRef    = useRef(onMentionClick)
+  useEffect(() => { onMentionClickRef.current = onMentionClick }, [onMentionClick])
 
   // ── AI generation state (freestyle "Ask TARS") ───────────────────────────
   const [genVisible, setGenVisible]   = useState(false)
@@ -321,7 +323,7 @@ export function TiptapEditor({
     extensions: [
       StarterKit,
       Image.configure({ inline: false, allowBase64: true }),
-      Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer" } }),
+      Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" } }),
       Placeholder.configure({ placeholder }),
       Typography,
       Markdown.configure({ html: false, transformCopiedText: true, tightLists: true }),
@@ -331,6 +333,28 @@ export function TiptapEditor({
     ],
     editable: !readOnly,
     autofocus: autoFocus ? "end" : false,
+    editorProps: {
+      handleClick(_view, _pos, event) {
+        const target = event.target as HTMLElement
+        // Mention chips — route by type
+        const chip = target.closest("[data-mention]") as HTMLElement | null
+        if (chip) {
+          const id = chip.getAttribute("data-id") ?? ""
+          const type = chip.getAttribute("data-type") ?? ""
+          if (id && onMentionClickRef.current) {
+            onMentionClickRef.current(id, type, chip.getBoundingClientRect())
+            return true
+          }
+        }
+        // Links — open in new tab
+        const link = target.closest("a[href]") as HTMLAnchorElement | null
+        if (link?.href) {
+          window.open(link.href, "_blank", "noreferrer")
+          return true
+        }
+        return false
+      },
+    },
     onUpdate: ({ editor }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const md: string = (editor.storage as any).markdown?.getMarkdown?.() ?? editor.getText()
@@ -552,14 +576,6 @@ export function TiptapEditor({
         ref={editorContainerRef}
         className="flex-1 overflow-y-auto cursor-text relative"
         onMouseDown={e => { if (e.target === e.currentTarget) editor.commands.focus() }}
-        onClick={e => {
-          const chip = (e.target as HTMLElement).closest("[data-mention]") as HTMLElement | null
-          if (chip && onMentionClick) {
-            const id = chip.getAttribute("data-id") ?? ""
-            const type = chip.getAttribute("data-type") ?? ""
-            if (id) onMentionClick(id, type, chip.getBoundingClientRect())
-          }
-        }}
       >
         <EditorContent editor={editor} className="h-full" />
 

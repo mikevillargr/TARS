@@ -3,7 +3,23 @@ import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance, type Props } from 'tippy.js'
 import { MentionList, type MentionItem } from './MentionList'
 
-export const MentionExtension = Mention.configure({
+// Extend first to register the `type` attr, then configure suggestion/rendering.
+// Without this, Tiptap drops `type` because it's not in addAttributes() and
+// node.attrs.type is always undefined — so click routing never works.
+export const MentionExtension = Mention
+  .extend({
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        type: {
+          default: 'unknown',
+          parseHTML: el => el.getAttribute('data-type') ?? 'unknown',
+          renderHTML: attrs => ({ 'data-type': attrs.type ?? 'unknown' }),
+        },
+      }
+    },
+  })
+  .configure({
   HTMLAttributes: {
     class: 'tars-mention-chip',
   },
