@@ -216,12 +216,13 @@ _CODING_RE = re.compile(
 
 _WRITING_RE = re.compile(
     r"\b("
-    r"write (a |an |the |me )?(full|complete|detailed|comprehensive|long|short|quick)? ?(document|report|proposal|brief|memo|summary|plan|email|letter|post|article|doc|blog|caption|copy)"
+    r"write (a |an |the |me ?(a |an )?)?(full|complete|detailed|comprehensive|long|short|quick)? ?(document|report|proposal|brief|memo|summary|plan|email|letter|post|article|doc|blog|caption|copy)"
     r"|write up (a |an )?"
     r"|draft (a |an )?(proposal|contract|email|memo|document|report|brief|plan|letter|message|reply|response)"
     r"|(create|generate|make|build|prepare|put together) (a |an )?(presentation|slide.?deck|deck|document|docx|pptx|pdf|report|brief|memo|proposal|summary)"
     r"|rewrite|reword|rephrase|proofread|polish (this|the|my)"
     r"|summari[sz]e (this|the|my|it)"
+    r"|reply (to|with) (this|the|an?|my)? ?(email|message|thread)"
     r")\b",
     re.IGNORECASE,
 )

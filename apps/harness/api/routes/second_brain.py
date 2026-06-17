@@ -372,14 +372,21 @@ async def ai_generate(
     parts.append(f"Write: {body.prompt}")
     user_message = "\n\n".join(parts)
 
+    # Use writing category routing if configured; fall back to tier3.
+    _writing_override = settings.category_routing().get("writing")
+    if _writing_override:
+        _gen_provider = _writing_override["provider"]
+        _gen_model = _writing_override["model"]
+    else:
+        _gen_provider = settings.tier3_provider
+        _gen_model = settings.tier3_model_override or ("glm-4.7" if _gen_provider == "zai" else "claude-sonnet-4-6")
+
     async def generate():
         try:
             from core.model_client import get_model_client as _gmc2
-            _p3 = settings.tier3_provider
-            client = _gmc2().zai if _p3 == "zai" else _gmc2().anthropic
-            _m3 = settings.tier3_model_override or ("glm-4.7" if _p3 == "zai" else "claude-sonnet-4-6")
+            client = _gmc2().zai if _gen_provider == "zai" else _gmc2().anthropic
             async with client.messages.stream(
-                model=_m3,
+                model=_gen_model,
                 max_tokens=2048,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
