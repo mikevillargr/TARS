@@ -65,11 +65,22 @@ async def _upsert_contact(
         if not email:
             return  # no email → nothing useful to store
 
+        # Always try by google_resource_name first (avoids unique-constraint collisions
+        # that happen when the same otherContact resource exists under a different email)
+        by_resource = await db.execute(
+            select(Contact).where(Contact.google_resource_name == resource_name)
+        )
+        existing_by_resource = by_resource.scalar_one_or_none()
+        if existing_by_resource:
+            for k, v in contact_data.items():
+                setattr(existing_by_resource, k, v)
+            return
+
         # Check if a saved contact with this email already exists — skip if so
         saved_result = await db.execute(
             select(Contact).where(
                 Contact.user_id == user_id,
-                Contact.primary_email == email,
+                Contact.primary_email.ilike(email),
                 Contact.is_other_contact == False,  # noqa: E712
             )
         )
@@ -80,16 +91,15 @@ async def _upsert_contact(
         other_result = await db.execute(
             select(Contact).where(
                 Contact.user_id == user_id,
-                Contact.primary_email == email,
+                Contact.primary_email.ilike(email),
                 Contact.is_other_contact == True,  # noqa: E712
             )
         )
         existing_other = other_result.scalar_one_or_none()
         if existing_other:
-            # Update in-place (may carry a better display_name from a later record)
             for k, v in contact_data.items():
                 setattr(existing_other, k, v)
-            return  # done — no new row
+            return
 
         db.add(Contact(user_id=user_id, **contact_data))
         return
