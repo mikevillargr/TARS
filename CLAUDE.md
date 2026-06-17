@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.8.0 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.9.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -841,6 +841,13 @@ v2.7.3  Fix: blank charts — both render paths appended their own savefig() AFT
         savefig fired post-close and wrote a blank canvas. New _strip_chart_io() removes
         the model's show/savefig/close so the harness saves while the figure is open.
         Tool desc + CHARTS prompt now say build-only. Harness-only, no schema change.
+v2.9.0  Feature: Second Brain Notion-like layer — universal linking, properties, views, Contacts.
+        Universal links table (polymorphic, bidirectional). Per-item properties (status/type/
+        priority + custom) with Haiku auto-fill. [[mention]] syntax with Tiptap MentionExtension
+        + tippy.js dropdown + bulk link sync. CalloutNode and ToggleNode Tiptap extensions. 6 view
+        modes (grid/list/kanban/gallery/table/timeline) with localStorage persistence. Contacts
+        page (two-panel, ContactDetailPanel tabs, ContactPopup floating, ContactPopupContext).
+        /contacts/{id}/context endpoint. Migrations: k8l9m0n1o2p3 (links), l9m0n1o2p3q4 (properties).
 v2.8.0  Feature: per-tier backup models + task-category forced routing. (1) Each tier gets
         an optional backup provider+model; on a pre-content primary failure the harness emits
         model_fallback and re-runs on the backup, with an in-memory per-tier circuit breaker

@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.8.0 |
-| Released | 2026-06-16 |
+| Version | v2.9.0 |
+| Released | 2026-06-17 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -153,6 +153,18 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.9.0 — 2026-06-17
+**Feature: Second Brain Notion-like layer — universal linking, properties, views, Contacts**
+- **Universal linking layer.** New `links` table (polymorphic source/target across task/meeting/knowledge_item/artifact/contact). `GET/POST/DELETE /api/links`, `POST /api/links/bulk`, `GET /api/links/search` (mention autocomplete). Bidirectional backlinks panel in ItemDetailModal.
+- **Item properties.** `properties JSONB` column on `knowledge_items` (status/type/priority + custom key-value). `PATCH /second-brain/items/{id}` merges properties. `POST /second-brain/items/{id}/properties/auto` uses Haiku to auto-infer status/type/priority from content.
+- **[[mention]] syntax.** Tiptap MentionExtension with `[[` trigger and tippy.js dropdown. Mention chips rendered as `.tars-mention-chip` inline chips. Debounced bulk link sync on save.
+- **Tiptap extensions.** CalloutNode (note/warning/action/insight with left border + emoji) and ToggleNode (collapsible with summary attribute + NodeViewRenderer).
+- **Database views.** 6 view modes in Second Brain: grid, list, kanban (native HTML5 drag-drop + status change), gallery (domain color header), table (sortable columns), timeline (grouped by month). View mode persisted to localStorage.
+- **Contacts module.** New `/contacts` page (two-panel, search, detail). `ContactDetailPanel` with Overview/Meetings/Tasks/Knowledge tabs + auto-save notes. `ContactPopup` (floating, portal). `ContactPopupContext` (universal — open from anywhere). Contacts added to sidebar nav.
+- **Contact context endpoint.** `GET /contacts/{id}/context` returns link count, recent meetings (attendee text-search), linked tasks, linked knowledge.
+- Migrations: `k8l9m0n1o2p3` (links table), `l9m0n1o2p3q4` (knowledge_item.properties).
+- Packages: `@tiptap/extension-mention@^2.27.2`, `@tiptap/suggestion@^2.27.2`.
 
 ### v2.8.0 — 2026-06-16
 **Feature: per-tier backup models + task-category forced routing**
