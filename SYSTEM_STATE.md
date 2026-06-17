@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.9.0 |
+| Version | v2.9.1 |
 | Released | 2026-06-17 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -153,6 +153,13 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.9.1 — 2026-06-17
+**Fix: Second Brain mobile header layout**
+- View mode toggle and title no longer crush each other on mobile (375px).
+- On mobile: title on its own row (truncated), 6 view icons in a full-width evenly-spaced row below.
+- On desktop (sm+): unchanged single-row layout (title + view toggle + Capture button).
+- Page-level Capture button hidden on mobile — topbar `+` already handles it.
 
 ### v2.9.0 — 2026-06-17
 **Feature: Second Brain Notion-like layer — universal linking, properties, views, Contacts**

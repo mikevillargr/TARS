@@ -371,18 +371,20 @@ export default function SecondBrainPage() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="p-5 border-b shrink-0" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
+        <div className="px-5 pt-5 pb-3 border-b shrink-0" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
           <div className="max-w-4xl mx-auto space-y-3">
+            {/* Title row */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <button className="md:hidden p-2 -ml-2 rounded-md" style={{ color: "var(--c-ink-faint)" }} onClick={() => setMobileSidebar(true)}>
+              <div className="flex items-center gap-3 min-w-0">
+                <button className="md:hidden p-2 -ml-2 rounded-md shrink-0" style={{ color: "var(--c-ink-faint)" }} onClick={() => setMobileSidebar(true)}>
                   <Menu size={20} />
                 </button>
-                <h1 className="font-semibold text-xl" style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}>
+                <h1 className="font-semibold text-xl truncate" style={{ color: "var(--c-ink)", fontFamily: "var(--font-heading), serif" }}>
                   {query ? "Search Results" : selectedTag ? `#${selectedTag}` : selectedDomain === "All" ? "Second Brain" : selectedDomain}
                 </h1>
               </div>
-              <div className="flex items-center gap-2">
+              {/* Desktop: view toggle + capture in title row */}
+              <div className="hidden sm:flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-0.5 p-1 rounded-lg" style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}>
                   {VIEW_ICONS.map(({ mode, Icon, title }) => (
                     <button
@@ -398,11 +400,27 @@ export default function SecondBrainPage() {
                 </div>
                 <button
                   onClick={() => setShowCapture(true)}
-                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium"
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium shrink-0"
                   style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
                 >
                   <Plus size={15} /> Capture
                 </button>
+              </div>
+            </div>
+            {/* Mobile: view toggle row (capture lives in topbar) */}
+            <div className="flex sm:hidden items-center gap-2">
+              <div className="flex items-center gap-0.5 p-1 rounded-lg flex-1" style={{ backgroundColor: "var(--c-surface-2)", border: "1px solid var(--c-border)" }}>
+                {VIEW_ICONS.map(({ mode, Icon, title }) => (
+                  <button
+                    key={mode}
+                    onClick={() => setAndPersistView(mode)}
+                    title={title}
+                    className="flex-1 flex justify-center p-1.5 rounded-md transition-colors"
+                    style={{ backgroundColor: viewMode === mode ? "var(--c-surface)" : "transparent", color: viewMode === mode ? "var(--c-ink)" : "var(--c-ink-faint)" }}
+                  >
+                    <Icon size={15} />
+                  </button>
+                ))}
               </div>
             </div>
 
