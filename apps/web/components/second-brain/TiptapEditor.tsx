@@ -384,7 +384,10 @@ export function TiptapEditor({
     }
     if (!contentSet.current) {
       // tiptap-markdown overrides setContent to accept a markdown string
-      editor.commands.setContent(content || "")
+      // Pass false to suppress onUpdate so the parent's docMarkdown state
+      // isn't overwritten by the tiptap-serialized version (which may differ
+      // slightly from the stored string and would trigger a spurious auto-save)
+      editor.commands.setContent(content || "", false)
       contentSet.current = true
       if (onWordCount) {
         onWordCount(editor.getText().split(/\s+/).filter(Boolean).length)

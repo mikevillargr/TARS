@@ -114,6 +114,16 @@ export function ItemDetailModal({
 
   const isDocument = item?.type === "document" || item?.type === "note" || item?.type === "voice"
 
+  // Refs that always hold the latest values — lets saveDocument be a stable useCallback
+  const saveValuesRef  = useRef({ item, editTitle, editNote, editTags, editDomain, editProps, docMarkdown })
+  const onUpdatedRef   = useRef(onUpdated)
+  const currentItemIdRef = useRef<string | null>(null)
+  const hasUnsavedChanges = useRef(false)
+  useEffect(() => {
+    saveValuesRef.current = { item, editTitle, editNote, editTags, editDomain, editProps, docMarkdown }
+    onUpdatedRef.current  = onUpdated
+  })
+
   useEffect(() => {
     if (!itemId) return
     setLoading(true)
@@ -129,6 +139,8 @@ export function ItemDetailModal({
       apiGet<LinkType[]>(`/links?target_type=knowledge_item&target_id=${itemId}`).catch(() => [] as LinkType[]),
     ])
       .then(([d, links]) => {
+        currentItemIdRef.current = d.id
+        hasUnsavedChanges.current = false
         setItem(d)
         setEditTitle(d.source_title ?? "")
         setEditNote(d.personal_note ?? "")
@@ -231,11 +243,14 @@ export function ItemDetailModal({
     }
   }
 
-  async function saveDocument() {
+  // Stable save function — reads latest values from refs so it never has stale closures
+  const saveDocument = useCallback(async () => {
+    const { item, editTitle, editNote, editTags, editDomain, editProps, docMarkdown } = saveValuesRef.current
     if (!item) return
+    const itemId = item.id
     setSaving(true)
     try {
-      const updated = await apiPatch<KnowledgeItemDetail>(`/second-brain/items/${item.id}`, {
+      const updated = await apiPatch<KnowledgeItemDetail>(`/second-brain/items/${itemId}`, {
         source_title: editTitle || null,
         personal_note: editNote || null,
         tags: editTags.split(",").map(t => t.trim()).filter(Boolean),
@@ -243,10 +258,14 @@ export function ItemDetailModal({
         properties: editProps,
         clean_content: docMarkdown,
       })
-      setItem(updated)
-      onUpdated(updated)
+      // Guard: only update React state if we're still viewing the same item
+      if (currentItemIdRef.current === itemId) {
+        setItem(updated)
+        onUpdatedRef.current(updated)
+      }
       lastSavedContent.current = docMarkdown
       lastSavedTitle.current = editTitle
+      hasUnsavedChanges.current = false
       setSaveStatus("saved")
       setTimeout(() => setSaveStatus(s => s === "saved" ? "idle" : s), 2000)
     } catch (err) {
@@ -255,17 +274,27 @@ export function ItemDetailModal({
     } finally {
       setSaving(false)
     }
-  }
+  }, [])
 
-  // Auto-save for document items — debounced 1.5s after last keystroke
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Auto-save — debounced 1.5s after last change to content or title
   useEffect(() => {
     if (!item || !isDocument) return
     if (docMarkdown === lastSavedContent.current && editTitle === lastSavedTitle.current) return
+    hasUnsavedChanges.current = true
     setSaveStatus("saving")
-    const t = setTimeout(() => { saveDocument() }, 1500)
+    const t = setTimeout(saveDocument, 1500)
     return () => clearTimeout(t)
-  }, [docMarkdown, editTitle])
+  }, [docMarkdown, editTitle, item, isDocument, saveDocument])
+
+  // Flush any pending save when navigating to a different item or closing the modal
+  useEffect(() => {
+    if (!itemId) return
+    return () => {
+      if (hasUnsavedChanges.current) {
+        saveDocument()
+      }
+    }
+  }, [itemId, saveDocument])
 
   async function copyContent() {
     const text = item?.clean_content ?? item?.summary ?? ""
