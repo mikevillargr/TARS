@@ -841,6 +841,11 @@ v2.7.3  Fix: blank charts — both render paths appended their own savefig() AFT
         savefig fired post-close and wrote a blank canvas. New _strip_chart_io() removes
         the model's show/savefig/close so the harness saves while the figure is open.
         Tool desc + CHARTS prompt now say build-only. Harness-only, no schema change.
+v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [[id|type|label]]
+        in clean_content. MentionExtension.addStorage().markdown.serialize writes the format;
+        .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
+        which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
+        Harness + web, no schema change.
 v2.9.4  Fix: Second Brain auto-save — three bugs. (1) Stale closure: saveDocument is now a
         stable useCallback([]) reading all fields from a saveValuesRef updated after every render.
         (2) Changes lost on navigate: flush useEffect fires saveDocument() when itemId changes,

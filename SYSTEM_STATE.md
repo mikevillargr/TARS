@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.9.4 |
+| Version | v2.9.5 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -153,6 +153,14 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.9.5 — 2026-06-18
+**Feat: mention round-trip — chips survive save and reload**
+- Storage format: `[[id|type|label]]` in `clean_content` (e.g. `[[abc123|contact|John Doe]]`).
+- `MentionExtension.addStorage().markdown.serialize` — writes `[[id|type|label]]` so tiptap-markdown outputs the round-trippable format.
+- `MentionExtension.addStorage().markdown.parse.setup` — adds a markdown-it inline rule (before 'escape') that converts `[[id|type|label]]` back to `<span data-mention data-id data-type data-label>` which tiptap DOM-parses into a mention node (via `parseHTML`).
+- `renderText` updated to emit `[[id|type|label]]` as plain-text fallback; `renderHTML` now writes `data-label` so the label attr round-trips.
+- Harness PATCH: strips `[[id|type|label]]` → label text before embedding and chunking so mention markers don't pollute semantic search.
 
 ### v2.9.4 — 2026-06-18
 **Fix: Second Brain auto-save — three save bugs fixed**
