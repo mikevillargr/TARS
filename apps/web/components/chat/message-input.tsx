@@ -162,6 +162,16 @@ export function MessageInput({ onSend, disabled }: Props) {
           </div>
         )}
 
+        <div className="relative">
+          <div className="absolute bottom-full left-0 right-0 mb-1.5 z-50">
+            <MentionDropdown
+              open={mention.open}
+              results={mention.results}
+              selectedIndex={mention.selectedIndex}
+              onSelect={mention.select}
+            />
+          </div>
+
         <div
           className={cn(
             "flex items-end gap-2 rounded-2xl border border-border bg-muted/50 px-3 py-3 transition-colors",
@@ -192,30 +202,20 @@ export function MessageInput({ onSend, disabled }: Props) {
             <Camera className="size-4" />
           </label>
 
-          <div className="relative flex-1 min-w-0">
-            <div className="absolute bottom-full left-0 right-0 mb-1.5 z-50">
-              <MentionDropdown
-                open={mention.open}
-                results={mention.results}
-                selectedIndex={mention.selectedIndex}
-                onSelect={mention.select}
-              />
-            </div>
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={handleInput}
-              onKeyDown={handleKeyDown}
-              onBlur={mention.dismiss}
-              placeholder="Message TARS… (type [[ to mention)"
-              rows={1}
-              disabled={disabled}
-              className={cn(
-                "w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground",
-                "focus:outline-none disabled:opacity-50 leading-relaxed"
-              )}
-            />
-          </div>
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleInput}
+            onKeyDown={handleKeyDown}
+            onBlur={mention.dismiss}
+            placeholder="Message TARS… (type [[ to mention)"
+            rows={1}
+            disabled={disabled}
+            className={cn(
+              "flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground",
+              "focus:outline-none disabled:opacity-50 leading-relaxed"
+            )}
+          />
 
           <Button
             size="icon"
@@ -230,6 +230,7 @@ export function MessageInput({ onSend, disabled }: Props) {
             )}
           </Button>
         </div>
+        </div>{/* end relative dropdown wrapper */}
 
         {/* Hidden inputs */}
         <input
