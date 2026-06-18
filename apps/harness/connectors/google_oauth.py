@@ -29,6 +29,12 @@ PEOPLE_SCOPES = [
     "https://www.googleapis.com/auth/contacts.other.readonly", # otherContacts.list (people you've emailed)
     # directory.readonly omitted — requires Google Workspace; breaks OAuth for personal accounts
 ]
+WORKSPACE_SCOPES = [
+    "https://www.googleapis.com/auth/drive",          # find + read + write any Drive file
+    "https://www.googleapis.com/auth/documents",      # Docs read/write
+    "https://www.googleapis.com/auth/spreadsheets",   # Sheets read/write
+    "https://www.googleapis.com/auth/presentations",  # Slides read/write
+]
 
 _REDIRECT_BASE = "https://tarsmv.duckdns.org"
 _REDIRECT_BASE_LOCAL = "http://localhost:8000"
@@ -41,6 +47,8 @@ def _scopes(connector: str) -> list[str]:
         return GMAIL_SCOPES
     if connector == "google_people":
         return PEOPLE_SCOPES
+    if connector == "google_workspace":
+        return WORKSPACE_SCOPES
     return GCAL_SCOPES
 
 
@@ -49,6 +57,8 @@ def _client_id(connector: str) -> str:
         return settings.gmail_client_id
     if connector == "google_people":
         return settings.google_people_client_id
+    if connector == "google_workspace":
+        return settings.google_workspace_client_id
     return settings.gcal_client_id
 
 
@@ -57,6 +67,8 @@ def _client_secret(connector: str) -> str:
         return settings.gmail_client_secret
     if connector == "google_people":
         return settings.google_people_client_secret
+    if connector == "google_workspace":
+        return settings.google_workspace_client_secret
     return settings.gcal_client_secret
 
 

@@ -34,6 +34,16 @@ def list_connectors() -> List[ConnectorStatus]:
             metadata={"description": "Contact graph + auto-enrichment", "auth_type": "oauth2"},
         ),
         ConnectorStatus(
+            id="google_workspace",
+            name="Google Workspace",
+            status="disconnected",  # upgraded to "connected" in route if DB token exists
+            capabilities=["read", "write"],
+            metadata={
+                "description": "Read & write Google Docs, Sheets, and Slides by link",
+                "auth_type": "oauth2",
+            },
+        ),
+        ConnectorStatus(
             id="strava",
             name="Strava",
             status="disconnected",  # upgraded in route if DB token exists

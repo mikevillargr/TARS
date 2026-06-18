@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     gcal_client_secret: str = ""
     google_people_client_id: str = ""
     google_people_client_secret: str = ""
+    google_workspace_client_id: str = ""
+    google_workspace_client_secret: str = ""
 
     strava_client_id: str = ""
     strava_client_secret: str = ""

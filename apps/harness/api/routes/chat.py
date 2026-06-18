@@ -30,6 +30,8 @@ from core.model_client import (
     GET_STRAVA_STATS_TOOL, GET_STRAVA_ZONES_TOOL,
     GET_TESLA_STATUS_TOOL, TESLA_COMMAND_TOOL, GET_TESLA_SESSIONS_TOOL,
     GENERATE_CHART_TOOL, GET_CURRENT_TIME_TOOL,
+    READ_GOOGLE_DOC_TOOL, UPDATE_GOOGLE_DOC_TOOL,
+    UPDATE_GOOGLE_SHEET_TOOL, CREATE_GOOGLE_DOC_TOOL,
     REQUEST_ESCALATION_TOOL,
 )
 from core.context_assembler import assemble
@@ -792,6 +794,10 @@ async def send_message(
         GET_TESLA_SESSIONS_TOOL,
         GET_CURRENT_TIME_TOOL,
         GENERATE_CHART_TOOL,
+        READ_GOOGLE_DOC_TOOL,
+        UPDATE_GOOGLE_DOC_TOOL,
+        UPDATE_GOOGLE_SHEET_TOOL,
+        CREATE_GOOGLE_DOC_TOOL,
         *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
     ]
     queue: asyncio.Queue = asyncio.Queue()
@@ -989,6 +995,59 @@ async def send_message(
                         except Exception as exc:
                             log.warning("save_to_second_brain tool failed: %s", exc)
                             return f"Failed to save to Second Brain: {exc}"
+
+                    if name in ("read_google_doc", "update_google_doc",
+                                "update_google_sheet", "create_google_doc"):
+                        try:
+                            import asyncio as _asyncio
+                            from memory.second_brain import load_workspace_client
+                            from connectors.google_drive import parse_file_id
+                            from ingest.pipeline import ingest_file
+
+                            client = await load_workspace_client(bg_db)
+                            if client is None:
+                                return ("Google Workspace isn't connected. Connect it in "
+                                        "Connectors to read or edit Google Docs/Sheets/Slides.")
+                            loop = _asyncio.get_event_loop()
+
+                            if name == "create_google_doc":
+                                res = await loop.run_in_executor(
+                                    None, client.create_doc,
+                                    tool_input["title"], tool_input.get("body", ""),
+                                )
+                                return f"Created Google Doc '{tool_input['title']}': {res['url']}"
+
+                            file_id = parse_file_id(tool_input["url"])
+                            if not file_id:
+                                return f"Couldn't parse a Google file ID from: {tool_input['url']}"
+
+                            if name == "read_google_doc":
+                                rng = tool_input.get("sheet_range")
+                                if rng:
+                                    rows = await loop.run_in_executor(
+                                        None, client.read_sheet, file_id, rng)
+                                    return "\n".join("\t".join(str(c) for c in r) for r in rows) or "(empty range)"
+                                content_bytes, filename, mime = await loop.run_in_executor(
+                                    None, client.fetch_as_file, file_id)
+                                parsed = await ingest_file(content_bytes, filename, mime)
+                                text = parsed["content"]
+                                return text[:20000] if text else "(document is empty)"
+
+                            if name == "update_google_doc":
+                                await loop.run_in_executor(
+                                    None, client.append_to_doc, file_id, tool_input["text"])
+                                return "Appended to the Google Doc."
+
+                            if name == "update_google_sheet":
+                                values = tool_input["values"]
+                                rng = tool_input["range"]
+                                mode = tool_input.get("mode", "append")
+                                fn = client.update_sheet if mode == "update" else client.append_sheet_rows
+                                await loop.run_in_executor(None, fn, file_id, rng, values)
+                                return f"{mode.capitalize()}d {len(values)} row(s) in the sheet."
+                        except Exception as exc:
+                            log.warning("%s tool failed: %s", name, exc)
+                            return f"Google Workspace action failed: {exc}"
 
                     if name in ("lookup_contact", "search_contacts"):
                         try:

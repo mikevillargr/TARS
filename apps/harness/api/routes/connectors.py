@@ -20,20 +20,22 @@ router = APIRouter()
 # ── Single source of truth: connector id → human name / capabilities ──────────
 # Used by both the OAuth callback and the status enrichment in get_connectors.
 _CONNECTOR_NAMES = {
-    "gmail":         "Gmail",
-    "gcal":          "Google Calendar",
-    "google_people": "Google Contacts",
-    "strava":        "Strava",
-    "garmin":        "Garmin Connect",
+    "gmail":            "Gmail",
+    "gcal":             "Google Calendar",
+    "google_people":    "Google Contacts",
+    "google_workspace": "Google Workspace",
+    "strava":           "Strava",
+    "garmin":           "Garmin Connect",
 }
 _CONNECTOR_CAPS = {
-    "gmail":         ["read", "webhook"],
-    "gcal":          ["read", "write"],
-    "google_people": ["read", "write"],
-    "strava":        ["read"],
-    "garmin":        ["read"],
+    "gmail":            ["read", "webhook"],
+    "gcal":             ["read", "write"],
+    "google_people":    ["read", "write"],
+    "google_workspace": ["read", "write"],
+    "strava":           ["read"],
+    "garmin":           ["read"],
 }
-_GOOGLE_CONNECTORS = {"gmail", "gcal", "google_people"}
+_GOOGLE_CONNECTORS = {"gmail", "gcal", "google_people", "google_workspace"}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────

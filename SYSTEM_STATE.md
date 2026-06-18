@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.9.5 |
+| Version | v2.10.0 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -116,6 +116,7 @@ requests are excluded — vision routing owns model choice.
 | Strava | read | Live |
 | Tesla (Tessie) | read, write (full vehicle control) | Live |
 | Google Contacts | read, write, weekly sync | Live |
+| Google Workspace | read & write Docs/Sheets/Slides by link | Live |
 | OpenStreetMap (Places) | read (no API key) | Live |
 
 ---
@@ -153,6 +154,14 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.0 — 2026-06-18
+**Feat: Google Workspace connector — read & write Docs/Sheets/Slides by link**
+- New OAuth connector `google_workspace` (scopes: drive, documents, spreadsheets, presentations). Reuses the existing generic Google OAuth authorize/callback flow — registered in `_CONNECTOR_NAMES`/`_GOOGLE_CONNECTORS` and `connectors/registry.py`.
+- `connectors/google_drive.py`: `GoogleWorkspaceClient` — parses a file ID from any docs.google.com / drive.google.com URL; `fetch_as_file` exports native Google files to Office formats (Doc→docx, Sheet→xlsx, Slides→pptx) so the **existing** `ingest/parsers` handle them with zero new parser code; non-native files downloaded via `files.get_media`. Write surface: `append_to_doc`, `create_doc`, `update_sheet`, `append_sheet_rows`, `read_sheet`.
+- Second Brain: `second_brain.ingest_url` now detects Google links and routes them through the connector (export → parse → chunk → embed) instead of trafilatura, which only ever saw a login wall.
+- Chat tools: `read_google_doc` (live read, incl. Sheets A1 range), `update_google_doc` (append), `update_google_sheet` (update/append rows), `create_google_doc` (new doc). Dispatched in `chat.py::_tool_executor`.
+- Env: `GOOGLE_WORKSPACE_CLIENT_ID` / `GOOGLE_WORKSPACE_CLIENT_SECRET`. Requires Drive + Docs + Sheets + Slides APIs enabled on the Google Cloud project. No DB migration.
 
 ### v2.9.5 — 2026-06-18
 **Feat: mention round-trip — chips survive save and reload**

@@ -1136,6 +1136,83 @@ REQUEST_ESCALATION_TOOL = {
     },
 }
 
+READ_GOOGLE_DOC_TOOL = {
+    "name": "read_google_doc",
+    "description": (
+        "Read the LIVE content of a Google Docs, Sheets, or Slides link. "
+        "Use this whenever Mike pastes or references a docs.google.com / "
+        "drive.google.com URL and wants you to summarize, analyze, extract, or "
+        "answer questions about its current contents. Returns the up-to-date text "
+        "(Docs/Slides) or cell values (Sheets) — not a stale saved copy."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "The full Google Docs/Sheets/Slides/Drive URL"},
+            "sheet_range": {
+                "type": "string",
+                "description": "Optional A1 range for Sheets (e.g. 'Sheet1!A1:F50'). Ignored for Docs/Slides.",
+            },
+        },
+        "required": ["url"],
+    },
+}
+
+UPDATE_GOOGLE_DOC_TOOL = {
+    "name": "update_google_doc",
+    "description": (
+        "Append text to the end of an existing Google Doc identified by its URL. "
+        "Use when Mike asks you to add notes, a section, or content to a specific Doc."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "The Google Docs URL to append to"},
+            "text": {"type": "string", "description": "Plain text to append (a leading newline is added automatically)"},
+        },
+        "required": ["url", "text"],
+    },
+}
+
+UPDATE_GOOGLE_SHEET_TOOL = {
+    "name": "update_google_sheet",
+    "description": (
+        "Write values into a Google Sheet identified by its URL. Use mode='update' "
+        "to overwrite a specific A1 range, or mode='append' to add rows below "
+        "existing data. Values are a 2-D array (list of rows)."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "The Google Sheets URL"},
+            "range": {"type": "string", "description": "A1 notation, e.g. 'Sheet1!A2:C2' (update) or 'Sheet1!A1' (append anchor)"},
+            "values": {
+                "type": "array",
+                "items": {"type": "array", "items": {}},
+                "description": "2-D array of cell values, e.g. [[\"Name\",\"Total\"],[\"NCH\",1200]]",
+            },
+            "mode": {"type": "string", "enum": ["update", "append"], "description": "Default 'append'."},
+        },
+        "required": ["url", "range", "values"],
+    },
+}
+
+CREATE_GOOGLE_DOC_TOOL = {
+    "name": "create_google_doc",
+    "description": (
+        "Create a NEW Google Doc in Mike's Drive with a title and optional body text. "
+        "Returns the new doc's URL. Use when Mike asks you to draft something as a Google Doc."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "Title of the new document"},
+            "body": {"type": "string", "description": "Optional initial body text"},
+        },
+        "required": ["title"],
+    },
+}
+
 
 # ─── Provider / model config ──────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.9.3 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.10.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -350,6 +350,7 @@ class Connector:
 |---|---|
 | Gmail | read, webhook |
 | Google Calendar | read, write |
+| Google Workspace | read & write Docs/Sheets/Slides by link (Drive export → existing parsers) |
 | Fireflies | read, webhook (meeting.ended) |
 | Growth Rocket tools | read, write (RedditPipe, AlwaysSunny, Poe grader) |
 
@@ -846,6 +847,16 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.10.0 Feature: Google Workspace connector — read & write Google Docs/Sheets/Slides by
+        link. New `google_workspace` OAuth connector (drive/documents/spreadsheets/
+        presentations scopes) reusing the generic Google OAuth flow. connectors/
+        google_drive.py exports native Google files to Office formats (Doc→docx,
+        Sheet→xlsx, Slides→pptx) so existing ingest parsers handle them with no new
+        parser code; also live read + write (append doc, update/append sheet rows,
+        create doc). second_brain.ingest_url routes Google links through the connector
+        instead of trafilatura. New chat tools: read_google_doc, update_google_doc,
+        update_google_sheet, create_google_doc. New env: GOOGLE_WORKSPACE_CLIENT_ID/
+        SECRET. No DB migration.
 v2.9.4  Fix: Second Brain auto-save — three bugs. (1) Stale closure: saveDocument is now a
         stable useCallback([]) reading all fields from a saveValuesRef updated after every render.
         (2) Changes lost on navigate: flush useEffect fires saveDocument() when itemId changes,

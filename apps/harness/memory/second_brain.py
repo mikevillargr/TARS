@@ -65,6 +65,15 @@ async def ingest_url(
     import asyncio
     import trafilatura
 
+    # Google Docs/Sheets/Slides links are auth-gated — trafilatura only sees a
+    # login wall. Route them through the Workspace connector (export → parse).
+    from connectors.google_drive import is_google_workspace_url
+    if is_google_workspace_url(url):
+        return await _ingest_google_workspace_url(
+            db=db, user_id=user_id, url=url,
+            personal_note=personal_note, tags=tags, domain=domain,
+        )
+
     # fetch_url is blocking — run off the event loop
     loop = asyncio.get_event_loop()
     downloaded = await loop.run_in_executor(None, trafilatura.fetch_url, url)
@@ -84,6 +93,61 @@ async def ingest_url(
         title=title,
         url=url,
         author=author,
+        personal_note=personal_note,
+        tags=tags,
+        domain=domain,
+    )
+
+
+async def load_workspace_client(db: AsyncSession):
+    """Load a connected GoogleWorkspaceClient, or None if not connected."""
+    from db.models import Connector
+    from connectors.google_drive import GoogleWorkspaceClient
+
+    conn = (await db.execute(
+        select(Connector).where(Connector.name == "Google Workspace").limit(1)
+    )).scalar_one_or_none()
+    if not conn or not conn.auth.get("refresh_token"):
+        return None
+    return GoogleWorkspaceClient(conn.auth)
+
+
+async def _ingest_google_workspace_url(
+    db: AsyncSession,
+    user_id: str,
+    url: str,
+    personal_note: str = "",
+    tags: List[str] = [],
+    domain: Optional[str] = None,
+) -> KnowledgeItem:
+    """Export a Google Doc/Sheet/Slides link, parse it, and ingest as a URL item."""
+    import asyncio
+    from connectors.google_drive import parse_file_id
+    from ingest.pipeline import ingest_file
+
+    client = await load_workspace_client(db)
+    if client is None:
+        raise ValueError(
+            "Google Workspace isn't connected — connect it in Connectors to ingest Google links."
+        )
+
+    file_id = parse_file_id(url)
+    if not file_id:
+        raise ValueError(f"Couldn't parse a Google file ID from: {url}")
+
+    loop = asyncio.get_event_loop()
+    content_bytes, filename, mime = await loop.run_in_executor(
+        None, client.fetch_as_file, file_id
+    )
+    parsed = await ingest_file(content_bytes, filename, mime)
+
+    return await _ingest_content(
+        db=db,
+        user_id=user_id,
+        item_type="url",
+        content=parsed["content"],
+        title=parsed.get("display_title") or filename,
+        url=url,
         personal_note=personal_note,
         tags=tags,
         domain=domain,
