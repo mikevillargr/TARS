@@ -524,7 +524,7 @@ export default function ConnectorsPage() {
                       </div>
                       <div className="text-xs mt-0.5" style={{ color: "var(--c-ink-faint)" }}>
                         {c.status === "connected"
-                          ? c.last_synced_at ? `Synced ${formatSyncedAt(c.last_synced_at)}` : "Not yet synced"
+                          ? c.last_synced_at ? `Synced ${formatSyncedAt(c.last_synced_at)}` : "Connected"
                           : "Not connected"}
                       </div>
                     </div>
@@ -618,7 +618,7 @@ export default function ConnectorsPage() {
                     Sync Status
                   </div>
                   <div className="rounded-lg p-3 text-xs" style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}>
-                    {selected.last_synced_at ? `Last synced ${formatSyncedAt(selected.last_synced_at)}` : "Not yet synced"}
+                    {selected.last_synced_at ? `Last synced ${formatSyncedAt(selected.last_synced_at)}` : "Connected"}
                   </div>
                 </div>
 

@@ -65,6 +65,34 @@ def update_interval(name: str, interval_sec: int) -> JobState:
 
 # ─── Runner ───────────────────────────────────────────────────────────────────
 
+# Sync-job name → connector row name, so a successful run uniformly stamps
+# last_synced_at on the connector regardless of each sync fn's internal
+# early-returns (no-new-data, etc.). Only connected rows are stamped.
+_JOB_CONNECTOR_NAMES = {
+    "fireflies_sync":     "Fireflies",
+    "google_people_sync": "Google Contacts",
+    "strava_sync":        "Strava",
+    "garmin_sync":        "Garmin Connect",
+}
+
+
+async def _stamp_connector_synced(connector_name: str) -> None:
+    """Mark a connector's last_synced_at to now — only if it's connected."""
+    from db.session import AsyncSessionLocal
+    from db.models import Connector
+    from sqlalchemy import select
+    try:
+        async with AsyncSessionLocal() as db:
+            conn = (await db.execute(
+                select(Connector).where(Connector.name == connector_name)
+            )).scalar_one_or_none()
+            if conn and conn.status == "connected":
+                conn.last_synced_at = datetime.now(timezone.utc)
+                await db.commit()
+    except Exception as exc:
+        log.warning("Could not stamp last_synced_at for %s: %s", connector_name, exc)
+
+
 async def _run_job(
     state: JobState,
     fn: Callable[[], Coroutine[Any, Any, None]],
@@ -77,6 +105,9 @@ async def _run_job(
         state.last_error  = None
         state.run_count  += 1
         log.info("Cron job '%s' completed OK (run #%d)", state.name, state.run_count)
+        connector_name = _JOB_CONNECTOR_NAMES.get(state.name)
+        if connector_name:
+            await _stamp_connector_synced(connector_name)
     except Exception as exc:
         state.last_status = "error"
         state.last_error  = str(exc)
