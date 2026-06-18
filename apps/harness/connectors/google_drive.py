@@ -125,6 +125,57 @@ class GoogleWorkspaceClient:
             supportsAllDrives=True,
         ).execute()
 
+    # ── search ──────────────────────────────────────────────────────────────────
+    def search_files(self, query: str, limit: int = 10, file_type: str = "") -> list[dict]:
+        """
+        Search Drive by name + full-text content. Returns newest-first matches.
+
+        file_type optionally narrows to "doc" | "sheet" | "slides" | "pdf" | "folder".
+        Each result: {name, type, url, file_id, modified}.
+        """
+        type_mimes = {
+            "doc":    "application/vnd.google-apps.document",
+            "sheet":  "application/vnd.google-apps.spreadsheet",
+            "slides": "application/vnd.google-apps.presentation",
+            "folder": "application/vnd.google-apps.folder",
+            "pdf":    "application/pdf",
+        }
+        clauses = ["trashed = false"]
+        if query:
+            safe = query.replace("'", "\\'")
+            clauses.append(f"(name contains '{safe}' or fullText contains '{safe}')")
+        if file_type and file_type in type_mimes:
+            clauses.append(f"mimeType = '{type_mimes[file_type]}'")
+
+        result = self.drive.files().list(
+            q=" and ".join(clauses),
+            pageSize=min(max(limit, 1), 50),
+            orderBy="modifiedTime desc",
+            fields="files(id, name, mimeType, modifiedTime, webViewLink)",
+            spaces="drive",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+
+        out = []
+        for f in result.get("files", []):
+            mime = f.get("mimeType", "")
+            pretty = {
+                "application/vnd.google-apps.document": "doc",
+                "application/vnd.google-apps.spreadsheet": "sheet",
+                "application/vnd.google-apps.presentation": "slides",
+                "application/vnd.google-apps.folder": "folder",
+                "application/pdf": "pdf",
+            }.get(mime, mime.split(".")[-1] if "." in mime else "file")
+            out.append({
+                "name": f.get("name", ""),
+                "type": pretty,
+                "url": f.get("webViewLink", ""),
+                "file_id": f.get("id", ""),
+                "modified": (f.get("modifiedTime") or "")[:10],
+            })
+        return out
+
     # ── read: download as parseable bytes ──────────────────────────────────────
     def fetch_as_file(self, file_id: str) -> Tuple[bytes, str, str]:
         """

@@ -1197,6 +1197,30 @@ UPDATE_GOOGLE_SHEET_TOOL = {
     },
 }
 
+SEARCH_DRIVE_TOOL = {
+    "name": "search_drive",
+    "description": (
+        "Search Mike's Google Drive by file name and full-text content. Use when he "
+        "refers to a Drive file by description rather than pasting a link "
+        "(e.g. 'find the AA Law tracker', 'what sheets do I have for OpenRice', "
+        "'pull up my latest proposal doc'). Returns newest-first matches with name, "
+        "type, and URL. Follow up with read_google_doc on a result's URL to read it."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Keywords to match in file name or contents"},
+            "file_type": {
+                "type": "string",
+                "enum": ["doc", "sheet", "slides", "pdf", "folder"],
+                "description": "Optional — narrow to a specific file type",
+            },
+            "limit": {"type": "integer", "description": "Max results (default 10, max 50)"},
+        },
+        "required": ["query"],
+    },
+}
+
 CREATE_GOOGLE_DOC_TOOL = {
     "name": "create_google_doc",
     "description": (

@@ -32,7 +32,7 @@ from core.model_client import (
     GET_TESLA_STATUS_TOOL, TESLA_COMMAND_TOOL, GET_TESLA_SESSIONS_TOOL,
     GENERATE_CHART_TOOL, GET_CURRENT_TIME_TOOL,
     READ_GOOGLE_DOC_TOOL, UPDATE_GOOGLE_DOC_TOOL,
-    UPDATE_GOOGLE_SHEET_TOOL, CREATE_GOOGLE_DOC_TOOL,
+    UPDATE_GOOGLE_SHEET_TOOL, CREATE_GOOGLE_DOC_TOOL, SEARCH_DRIVE_TOOL,
     REQUEST_ESCALATION_TOOL,
 )
 from core.context_assembler import assemble
@@ -855,6 +855,7 @@ async def send_message(
         UPDATE_GOOGLE_DOC_TOOL,
         UPDATE_GOOGLE_SHEET_TOOL,
         CREATE_GOOGLE_DOC_TOOL,
+        SEARCH_DRIVE_TOOL,
         *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
     ]
     queue: asyncio.Queue = asyncio.Queue()
@@ -1054,7 +1055,8 @@ async def send_message(
                             return f"Failed to save to Second Brain: {exc}"
 
                     if name in ("read_google_doc", "update_google_doc",
-                                "update_google_sheet", "create_google_doc"):
+                                "update_google_sheet", "create_google_doc",
+                                "search_drive"):
                         try:
                             import asyncio as _asyncio
                             from memory.second_brain import load_workspace_client
@@ -1066,6 +1068,21 @@ async def send_message(
                                 return ("Google Workspace isn't connected. Connect it in "
                                         "Connectors to read or edit Google Docs/Sheets/Slides.")
                             loop = _asyncio.get_event_loop()
+
+                            if name == "search_drive":
+                                results = await loop.run_in_executor(
+                                    None, client.search_files,
+                                    tool_input["query"],
+                                    int(tool_input.get("limit", 10)),
+                                    tool_input.get("file_type", ""),
+                                )
+                                if not results:
+                                    return f"No Drive files found matching '{tool_input['query']}'."
+                                lines = [
+                                    f"- {r['name']} ({r['type']}, modified {r['modified']}) — {r['url']}"
+                                    for r in results
+                                ]
+                                return f"Found {len(results)} Drive file(s):\n" + "\n".join(lines)
 
                             if name == "create_google_doc":
                                 res = await loop.run_in_executor(
