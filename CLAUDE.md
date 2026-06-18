@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.10.5 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.10.6 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -350,7 +350,7 @@ class Connector:
 |---|---|
 | Gmail | read, webhook |
 | Google Calendar | read, write |
-| Google Workspace | read & write Docs/Sheets/Slides by link (Drive export → existing parsers) |
+| Google Workspace | search Drive + read & write Docs/Sheets/Slides by link (Drive export → existing parsers) |
 | Fireflies | read, webhook (meeting.ended) |
 | Growth Rocket tools | read, write (RedditPipe, AlwaysSunny, Poe grader) |
 
@@ -847,6 +847,10 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.10.6 Feat: Drive search in Google Workspace connector. GoogleWorkspaceClient.search_files
+        queries Drive by name + fullText (optional type filter), newest-first. New search_drive
+        chat tool lets TARS find files by description instead of a pasted link; results feed
+        read_google_doc. Harness-only, no schema change.
 v2.10.5 Fix: [[ in chat now triggers mention dropdown. API min_length=1 caused 422
         on empty q; changed to default="" and returns recent contacts/knowledge/tasks
         when q is empty. Hook dropped the query.length<1 early-return. Harness + web.

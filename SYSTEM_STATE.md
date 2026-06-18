@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.5 |
+| Version | v2.10.6 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -116,7 +116,7 @@ requests are excluded — vision routing owns model choice.
 | Strava | read | Live |
 | Tesla (Tessie) | read, write (full vehicle control) | Live |
 | Google Contacts | read, write, weekly sync | Live |
-| Google Workspace | read & write Docs/Sheets/Slides by link | Live |
+| Google Workspace | search Drive + read & write Docs/Sheets/Slides | Live |
 | OpenStreetMap (Places) | read (no API key) | Live |
 
 ---
@@ -154,6 +154,11 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.6 — 2026-06-18
+**Feat: Drive search in Google Workspace connector**
+- `GoogleWorkspaceClient.search_files(query, limit, file_type)` queries Drive by name + `fullText` content (optional type filter: doc/sheet/slides/pdf/folder), newest-first, returning name/type/url/file_id/modified (`connectors/google_drive.py`).
+- New `search_drive` chat tool so TARS can find files by description ("find the AA Law tracker") instead of needing a pasted link; results feed `read_google_doc` for follow-up. Registered + dispatched in `chat.py`. No schema change.
 
 ### v2.10.5 — 2026-06-18
 **Fix: [[ mention trigger in chat now works — shows results on empty query**
