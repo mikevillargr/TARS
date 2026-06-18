@@ -37,7 +37,23 @@ interface Props {
 }
 
 export function MentionDropdown({ open, results, selectedIndex, onSelect }: Props) {
-  if (!open || results.length === 0) return null
+  if (!open) return null
+  if (results.length === 0) {
+    return (
+      <div style={{
+        background: "var(--c-surface)",
+        border: "1px solid var(--c-border)",
+        borderRadius: 8,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+        padding: "8px 12px",
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+        color: "var(--c-ink-faint)",
+      }}>
+        Searching…
+      </div>
+    )
+  }
 
   // Group by type
   const groups: Record<string, MentionSuggestion[]> = {}
