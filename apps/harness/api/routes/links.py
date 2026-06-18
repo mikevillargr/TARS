@@ -15,12 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import require_auth
 from db.session import get_db
-from db.models import Link, KnowledgeItem, Contact, Task, Meeting, Artifact
+from db.models import Link, KnowledgeItem, Contact, Task, Meeting, Artifact, Memory
 
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-VALID_TYPES = {"task", "meeting", "knowledge_item", "artifact", "contact"}
+VALID_TYPES = {"task", "meeting", "knowledge_item", "artifact", "contact", "memory"}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -87,6 +87,11 @@ async def _resolve_title(db: AsyncSession, entity_type: str, entity_id: str) -> 
         row = (await db.execute(select(Artifact.filename).where(Artifact.id == entity_id))).first()
         if row:
             return row.filename, None
+    elif entity_type == "memory":
+        row = (await db.execute(select(Memory.content).where(Memory.id == entity_id))).first()
+        if row:
+            snippet = (row.content or "")[:60]
+            return (snippet + "…") if len(row.content or "") > 60 else snippet, None
     return None, None
 
 

@@ -8,6 +8,8 @@ import {
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useRouter } from "next/navigation"
+import { MentionTextarea } from "@/components/ui/MentionTextarea"
+import { stripToLabels, syncMentionLinks, type MentionRef } from "@/lib/mentions"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -141,7 +143,7 @@ function TaskCard({
             lineHeight: "1.4",
           }}
         >
-          {task.description}
+          {stripToLabels(task.description)}
         </p>
       )}
 
@@ -196,6 +198,7 @@ function TaskModal({
   const [editing, setEditing]       = useState(false)
   const [title, setTitle]           = useState(task.title)
   const [description, setDesc]      = useState(task.description ?? "")
+  const [descMentions, setDescMentions] = useState<MentionRef[]>([])
   const [priority, setPriority]     = useState(task.priority)
   const [status, setStatus]         = useState(task.status)
   const [dueAt, setDueAt]           = useState(task.due_at ? task.due_at.slice(0, 10) : "")
@@ -274,6 +277,7 @@ function TaskModal({
       })
       onUpdate(updated)
       setEditing(false)
+      void syncMentionLinks("task", task.id, descMentions)
     } catch (err) { console.error(err) }
     finally { setSaving(false) }
   }
@@ -450,11 +454,13 @@ function TaskModal({
           {/* Description */}
           <div>
             <label className="block text-[0.6rem] font-semibold font-mono uppercase tracking-wider mb-1.5" style={{ color: "var(--c-ink-faint)" }}>Description</label>
-            <textarea
+            <MentionTextarea
               value={description}
-              onChange={e => { setDesc(e.target.value); setEditing(true) }}
+              onChange={wire => { setDesc(wire); setEditing(true) }}
+              onMentionsChange={setDescMentions}
+              resetKey={task.id}
               rows={3}
-              placeholder="Add a description…"
+              placeholder="Add a description…  (type @ to mention)"
               className="input-field w-full text-xs resize-none"
               style={{ lineHeight: "1.5" }}
             />

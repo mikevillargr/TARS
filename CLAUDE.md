@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.10.9 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.11.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -847,6 +847,19 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.11.0 Feature: universal @-mentions across the app + Second Brain persistence fix.
+        (1) SB bug root cause: @tiptap/extension-mention default parseHTML matches
+        span[data-type="mention"] but our chips put the entity type in data-type and mark
+        themselves data-mention → on reload the chip wasn't recognized, degraded to text, next
+        save dropped the id. Fixed: parseHTML()→[{tag:'span[data-mention]'}] + explicit
+        data-id/data-label parsers (MentionExtension.ts). SB trigger switched [[→@.
+        (2) Reusable layer: lib/mentions.ts (stripToLabels/parseWireToDisplay/toWire/
+        currentMentions/syncMentionLinks) + components/ui/MentionTextarea.tsx (drop-in textarea:
+        friendly @Label display, lossless [[id|type|label]] storage, fixed-position dropdown,
+        emits mentions for link sync). Wired into Tasks (description→task links), Mnemon (memory
+        content, stores stripped text + memory links), Calendar (new Description field, clean text
+        to Google). Meetings left read-only by request. (3) Harness: 'memory' added to
+        links.VALID_TYPES + Memory title resolver. Verified in-browser. No DB migration.
 v2.10.9 Fix: chat mentions display as friendly `@Label`, not raw [[id|type|label]]. A plain
         <textarea> can't render chips, so selectMention inserts `@Label` + a mentionMapRef
         (label→{id,type}); at send, handleSend expands @Label → [[id|type|label]] (longest-first

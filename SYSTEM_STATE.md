@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.9 |
+| Version | v2.11.0 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,15 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.11.0 — 2026-06-18
+**Feature: universal @-mentions across the app + Second Brain persistence fix**
+- **Second Brain bug fixed (root cause):** `@tiptap/extension-mention`'s default `parseHTML` matches `span[data-type="mention"]`, but our chips carry the entity type in `data-type` (contact/knowledge_item/task) and mark themselves with `data-mention`. On reload the chip was never recognized as a mention node, degraded to text, and the next save dropped the id — silently breaking the link. Added `parseHTML() → [{ tag: 'span[data-mention]' }]` plus explicit `data-id`/`data-label` attribute parsers (`components/second-brain/extensions/MentionExtension.ts`). Verified end-to-end: chip survives close/reopen with id intact.
+- **Second Brain trigger switched `[[` → `@`** (empty query shows recent items, matching chat).
+- **Reusable mention layer for plain textareas:** new `lib/mentions.ts` (`WIRE_RE`, `stripToLabels`, `parseWireToDisplay`, `toWire`, `currentMentions`, `syncMentionLinks`) + `components/ui/MentionTextarea.tsx` — a drop-in `<textarea>` that shows friendly `@Label` tokens, persists the lossless `[[id|type|label]]` wire format, renders a fixed-position dropdown, and emits the mention list for link sync.
+- **Wired into Tasks** (description; creates `task → entity` links on save, card preview shows stripped labels), **Mnemon** (add-memory content; stores clean label text for embeddings + creates `memory → entity` links), and **Calendar** (new event Description field; clean text sent to Google). Chat already had `@` mentions (v2.10.8/9). Meetings left read-only by request.
+- **Backend:** `memory` added to `links.VALID_TYPES` (bulk-create silently skips unknown source types) + a Memory title resolver in `_resolve_title`. Without this, memory links would have been dropped.
+- Verified in-browser against a local harness. Web + harness, no DB migration (links table already exists).
 
 ### v2.10.9 — 2026-06-18
 **Fix: chat mentions show a friendly `@Label` instead of the raw `[[id|type|label]]` marker**

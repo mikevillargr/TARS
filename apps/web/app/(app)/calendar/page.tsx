@@ -17,6 +17,8 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api-client"
+import { MentionTextarea } from "@/components/ui/MentionTextarea"
+import { stripToLabels } from "@/lib/mentions"
 
 type ViewMode = "month" | "week" | "day"
 type EventType = "gcal" | "meeting" | "task" | "cron" | "agent"
@@ -309,6 +311,7 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
   const [startTime, setStartTime] = useState("09:00")
   const [durationMin, setDurationMin] = useState(60)
   const [location, setLocation] = useState("")
+  const [description, setDescription] = useState("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
@@ -322,6 +325,7 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
         start: `${date}T${startTime}:00`,
         duration_min: durationMin,
         location: location.trim() || undefined,
+        description: stripToLabels(description).trim() || undefined,
       })
       onCreated()
       onClose()
@@ -376,6 +380,16 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
               <label className="block text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-1">Location</label>
               <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Optional" className="input-field w-full" />
             </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-1">Description</label>
+            <MentionTextarea
+              value={description}
+              onChange={setDescription}
+              rows={2}
+              placeholder="Optional notes…  (type @ to mention)"
+              className="input-field w-full resize-none"
+            />
           </div>
           {error && <p className="text-xs" style={{ color: "var(--c-rose)" }}>{error}</p>}
         </div>

@@ -15,12 +15,32 @@ export const MentionExtension = Mention
     addAttributes() {
       return {
         ...this.parent?.(),
+        // Explicit data-* parsers so a serialized chip round-trips on reload.
+        id: {
+          default: null,
+          parseHTML: el => el.getAttribute('data-id'),
+          renderHTML: attrs => (attrs.id ? { 'data-id': attrs.id } : {}),
+        },
+        label: {
+          default: null,
+          parseHTML: el => el.getAttribute('data-label'),
+          renderHTML: attrs => (attrs.label ? { 'data-label': attrs.label } : {}),
+        },
         type: {
           default: 'unknown',
           parseHTML: el => el.getAttribute('data-type') ?? 'unknown',
           renderHTML: attrs => ({ 'data-type': attrs.type ?? 'unknown' }),
         },
       }
+    },
+
+    // CRITICAL: the default mention parseHTML matches span[data-type="mention"],
+    // but our chips carry the ENTITY type in data-type (contact/knowledge_item/task)
+    // and mark themselves with data-mention. Without this matcher, reloaded content
+    // is never recognized as a mention node — the chip degrades to text and the next
+    // save drops the id, silently breaking the link. Match on data-mention instead.
+    parseHTML() {
+      return [{ tag: 'span[data-mention]' }]
     },
 
     addStorage() {
@@ -86,12 +106,12 @@ export const MentionExtension = Mention
   },
 
   suggestion: {
-    char: '[[',
+    char: '@',
 
     items: async ({ query }: { query: string }): Promise<MentionItem[]> => {
-      if (!query || query.length < 1) return []
+      // Empty query (just after "@") returns recent items, matching the chat composer.
       try {
-        const res = await fetch(`/api/proxy/links/search?q=${encodeURIComponent(query)}`)
+        const res = await fetch(`/api/proxy/links/search?q=${encodeURIComponent(query ?? "")}`)
         if (!res.ok) return []
         return await res.json()
       } catch {

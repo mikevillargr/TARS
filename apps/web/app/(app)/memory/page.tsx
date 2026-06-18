@@ -5,6 +5,8 @@ import { Database, Search, Trash2, Zap, Plus, X, ChevronDown } from "lucide-reac
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useDomains } from "@/hooks/useDomains"
+import { MentionTextarea } from "@/components/ui/MentionTextarea"
+import { stripToLabels, syncMentionLinks, type MentionRef } from "@/lib/mentions"
 
 interface Memory {
   id: string
@@ -41,6 +43,7 @@ export default function MemoryPage() {
   const [searching, setSearching]         = useState(false)
   const [showAdd, setShowAdd]             = useState(false)
   const [addContent, setAddContent]       = useState("")
+  const [addMentions, setAddMentions]     = useState<MentionRef[]>([])
   const [addDomain, setAddDomain]         = useState("work")
   const [addImportance, setAddImportance] = useState(3)
   const [saving, setSaving]               = useState(false)
@@ -125,15 +128,19 @@ export default function MemoryPage() {
     if (!addContent.trim()) return
     setSaving(true)
     try {
+      // Store clean label text (markers stripped) so embeddings/prompts stay clean;
+      // entity relationships are captured separately as link records below.
       const mem = await apiPost<Memory>("/memory/memories", {
-        content: addContent.trim(),
+        content: stripToLabels(addContent).trim(),
         domain: addDomain,
         source: "manual",
         importance: addImportance,
       })
       setMemories((prev) => [mem, ...prev])
       setTotal(prev => prev + 1)
+      void syncMentionLinks("memory", mem.id, addMentions)
       setAddContent("")
+      setAddMentions([])
       setShowAdd(false)
     } catch (e) {
       console.error(e)
@@ -299,11 +306,14 @@ export default function MemoryPage() {
               <h2 className="font-semibold text-lg" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>Add Memory</h2>
               <button onClick={() => setShowAdd(false)} className="p-1 text-ink-muted hover:text-ink"><X size={18} /></button>
             </div>
-            <textarea
+            <MentionTextarea
               value={addContent}
-              onChange={(e) => setAddContent(e.target.value)}
-              placeholder="What should TARS remember?"
+              onChange={setAddContent}
+              onMentionsChange={setAddMentions}
+              resetKey={showAdd ? "open" : "closed"}
+              placeholder="What should TARS remember?  (type @ to mention)"
               className="input-field w-full h-28 text-sm resize-none mb-4"
+              rows={4}
               autoFocus
             />
             <div className="flex gap-3 mb-4">
