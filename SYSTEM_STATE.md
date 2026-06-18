@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.6 |
+| Version | v2.10.7 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,13 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.7 — 2026-06-18
+**Fix: [[ mention dropdown now actually appears in the main chat composer**
+- Root cause: the `[[` autocomplete had been wired into `components/chat/message-input.tsx`, but that component is only used by the `/chat/[id]` sub-route. The primary chat experience (`/chat` landing page) uses its own inline composer inside the 111KB `app/(app)/chat/page.tsx` monolith, which had no mention handling — so typing `[[` did nothing.
+- Inlined mention detection directly into the `/chat/page.tsx` composer: `detectMention()` runs synchronously in the textarea `onChange` (regex `/\[\[([^\]\n]*)$/` against text before cursor), debounced fetch to `/api/proxy/links/search`, `selectMention()` inserts `[[id|type|label]]`, arrow/enter/escape keyboard nav in `onKeyDown`.
+- Dropdown renders via `MentionDropdown` with `position: fixed` (anchored to the textarea's `getBoundingClientRect`) to escape the chat thread's `overflow-x-hidden` clipping. Verified working in-browser before deploy.
+- Web-only, no schema change.
 
 ### v2.10.6 — 2026-06-18
 **Feat: Drive search in Google Workspace connector**

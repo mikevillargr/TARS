@@ -22,6 +22,8 @@ import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { useTtsPlayback } from "@/hooks/useTtsPlayback"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useNotificationContext } from "@/context/NotificationContext"
+import { MentionDropdown } from "@/components/ui/MentionDropdown"
+import type { MentionSuggestion } from "@/hooks/useMentionAutocomplete"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -1440,6 +1442,58 @@ export default function ChatPage() {
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
   const fileInputRef                                = useRef<HTMLInputElement>(null)
   const cameraInputRef                              = useRef<HTMLInputElement>(null)
+
+  // ── [[mention]] autocomplete ──────────────────────────────────────────────
+  const [mentionOpen, setMentionOpen]       = useState(false)
+  const [mentionResults, setMentionResults] = useState<MentionSuggestion[]>([])
+  const [mentionIndex, setMentionIndex]     = useState(0)
+  const [mentionAnchor, setMentionAnchor]   = useState<{ top: number; left: number; width: number } | null>(null)
+  const mentionTriggerPos = useRef(-1)
+  const mentionFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function detectMention(el: HTMLTextAreaElement) {
+    const val = el.value
+    const cursor = el.selectionStart ?? val.length
+    const match = val.slice(0, cursor).match(/\[\[([^\]\n]*)$/)
+    if (match) {
+      mentionTriggerPos.current = cursor - match[0].length
+      const query = match[1]
+      const rect = el.getBoundingClientRect()
+      setMentionAnchor({ top: rect.top, left: rect.left, width: rect.width })
+      setMentionOpen(true)
+      setMentionIndex(0)
+      if (mentionFetchTimer.current) clearTimeout(mentionFetchTimer.current)
+      mentionFetchTimer.current = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/proxy/links/search?q=${encodeURIComponent(query)}`)
+          if (res.ok) setMentionResults(await res.json())
+        } catch { /* silent */ }
+      }, 150)
+    } else {
+      setMentionOpen(false)
+      setMentionAnchor(null)
+      setMentionResults([])
+    }
+  }
+
+  function selectMention(item: MentionSuggestion) {
+    const el = textareaRef.current
+    if (!el) return
+    const cursor = el.selectionStart ?? inputValue.length
+    const before = inputValue.slice(0, mentionTriggerPos.current)
+    const after = inputValue.slice(cursor)
+    const chip = `[[${item.id}|${item.type}|${item.title}]]`
+    setInputValue(before + chip + " " + after)
+    setMentionOpen(false)
+    setMentionAnchor(null)
+    setMentionResults([])
+    requestAnimationFrame(() => {
+      el.focus()
+      const pos = before.length + chip.length + 1
+      el.setSelectionRange(pos, pos)
+    })
+  }
+  // ──────────────────────────────────────────────────────────────────────────
   const activeChatIdRef                             = useRef<string | null>(activeChatId)
   // NOTE: This AbortController is intentionally NOT connected to any
   // visibilitychange, blur, or beforeunload event. Chat completion requests
@@ -2427,17 +2481,43 @@ export default function ChatPage() {
               }}
             >
               {/* E2E-TEST-MARKER-9F4Z */}
+              {/* [[mention]] dropdown — fixed position escapes overflow clipping */}
+              {mentionOpen && mentionAnchor && (
+                <div
+                  style={{
+                    position: "fixed",
+                    bottom: `calc(100vh - ${mentionAnchor.top}px + 8px)`,
+                    left: mentionAnchor.left,
+                    width: mentionAnchor.width,
+                    zIndex: 9999,
+                  }}
+                >
+                  <MentionDropdown
+                    open={mentionOpen}
+                    results={mentionResults}
+                    selectedIndex={mentionIndex}
+                    onSelect={selectMention}
+                  />
+                </div>
+              )}
               <textarea
                 ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => {
                   setInputValue(e.target.value)
+                  detectMention(e.target)
                   // Auto-grow
                   const el = e.target
                   el.style.height = "auto"
                   el.style.height = Math.min(el.scrollHeight, 180) + "px"
                 }}
                 onKeyDown={(e) => {
+                  if (mentionOpen && mentionResults.length > 0) {
+                    if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionResults.length - 1)); return }
+                    if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return }
+                    if (e.key === "Enter") { e.preventDefault(); if (mentionResults[mentionIndex]) selectMention(mentionResults[mentionIndex]); return }
+                    if (e.key === "Escape") { e.preventDefault(); setMentionOpen(false); setMentionAnchor(null); return }
+                  }
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
                 }}
                 className="w-full bg-transparent border-none focus:ring-0 resize-none text-sm focus:outline-none px-4 pt-3 pb-1"

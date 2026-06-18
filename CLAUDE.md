@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.10.6 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.10.7 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -847,6 +847,11 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.10.7 Fix: [[ mention dropdown now appears in the MAIN chat composer. The trigger had been
+        wired into components/chat/message-input.tsx, but that's only used by /chat/[id]; the
+        primary /chat landing page uses its own inline composer inside the 111KB
+        app/(app)/chat/page.tsx. Inlined detectMention() in the textarea onChange + fixed-position
+        MentionDropdown (escapes the thread's overflow-x-hidden). Verified in-browser. Web-only.
 v2.10.6 Feat: Drive search in Google Workspace connector. GoogleWorkspaceClient.search_files
         queries Drive by name + fullText (optional type filter), newest-first. New search_drive
         chat tool lets TARS find files by description instead of a pasted link; results feed
