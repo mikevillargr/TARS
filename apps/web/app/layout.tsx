@@ -17,7 +17,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "TARS",
-  description: "Personal AI Operating System",
+  description: "Life OS",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

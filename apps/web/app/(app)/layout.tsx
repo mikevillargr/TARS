@@ -276,29 +276,32 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
               <Search size={18} />
             </button>
 
-            {/* 8-bit TARS monolith pixel art — 8×12 pixel grid at 3px each */}
+            {/* 8-bit TARS — 10×12 pixel grid at 3px, tilted -10° like its rolling walk */}
             <div className="hidden sm:flex items-center" aria-hidden="true" title="TARS">
-              <svg width="24" height="36" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-                {/* Top cap */}
-                <rect x="0" y="0" width="24" height="3" fill="var(--c-moss)"/>
-                {/* Segment 1 outer shell */}
-                <rect x="0" y="3" width="3" height="12" fill="var(--c-moss)"/>
-                <rect x="21" y="3" width="3" height="12" fill="var(--c-moss)"/>
-                {/* Segment 1 inner cavity */}
-                <rect x="3" y="3" width="18" height="12" fill="#0f1a15"/>
-                {/* Segment 1 amber LED (centered, 2px tall) */}
-                <rect x="9" y="6" width="6" height="6" fill="var(--c-amber)"/>
-                {/* Joint band */}
-                <rect x="0" y="15" width="24" height="6" fill="#0a1210"/>
-                {/* Segment 2 outer shell */}
-                <rect x="0" y="21" width="3" height="12" fill="var(--c-moss)"/>
-                <rect x="21" y="21" width="3" height="12" fill="var(--c-moss)"/>
-                {/* Segment 2 inner cavity */}
-                <rect x="3" y="21" width="18" height="12" fill="#0f1a15"/>
-                {/* Segment 2 amber LED */}
-                <rect x="9" y="24" width="6" height="6" fill="var(--c-amber)"/>
-                {/* Bottom cap */}
-                <rect x="0" y="33" width="24" height="3" fill="var(--c-moss)"/>
+              <svg width="38" height="44" viewBox="0 0 38 44" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+                <g transform="rotate(-10 19 22) translate(4 4)">
+                  {/* Top cap */}
+                  <rect x="0" y="0" width="30" height="3" fill="var(--c-moss)"/>
+                  {/* Segment 1 outer walls */}
+                  <rect x="0" y="3" width="3" height="12" fill="var(--c-moss)"/>
+                  <rect x="27" y="3" width="3" height="12" fill="var(--c-moss)"/>
+                  {/* Segment 1 inner cavity */}
+                  <rect x="3" y="3" width="24" height="12" fill="#0f1a15"/>
+                  {/* Eyes — two amber 2×2 pixel squares, upper cavity */}
+                  <rect x="6" y="6" width="6" height="6" fill="var(--c-amber)"/>
+                  <rect x="18" y="6" width="6" height="6" fill="var(--c-amber)"/>
+                  {/* Joint band */}
+                  <rect x="0" y="15" width="30" height="6" fill="#0a1210"/>
+                  {/* Segment 2 outer walls */}
+                  <rect x="0" y="21" width="3" height="12" fill="var(--c-moss)"/>
+                  <rect x="27" y="21" width="3" height="12" fill="var(--c-moss)"/>
+                  {/* Segment 2 inner cavity */}
+                  <rect x="3" y="21" width="24" height="12" fill="#0f1a15"/>
+                  {/* Segment 2 amber LED bar */}
+                  <rect x="9" y="24" width="12" height="3" fill="var(--c-amber)"/>
+                  {/* Bottom cap */}
+                  <rect x="0" y="33" width="30" height="3" fill="var(--c-moss)"/>
+                </g>
               </svg>
             </div>
 

@@ -65,7 +65,7 @@ export default function LoginPage() {
           >
             TARS
           </h1>
-          <p className="tars-label tars-label--muted">Personal AI Operating System</p>
+          <p className="tars-label tars-label--muted">Life OS</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
