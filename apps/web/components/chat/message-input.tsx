@@ -42,7 +42,7 @@ export function MessageInput({ onSend, disabled }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
-  const mention = useMentionAutocomplete(value, setValue, textareaRef)
+  const mention = useMentionAutocomplete(setValue, textareaRef)
 
   const submit = useCallback(() => {
     const trimmed = value.trim()
@@ -62,6 +62,7 @@ export function MessageInput({ onSend, disabled }: Props) {
   }
 
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    mention.onInput(e)
     setValue(e.target.value)
     const el = e.target
     el.style.height = "auto"

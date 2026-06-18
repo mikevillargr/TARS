@@ -16,7 +16,6 @@ export interface MentionAnchor {
 }
 
 export function useMentionAutocomplete(
-  value: string,
   onChange: (value: string) => void,
   textareaRef: RefObject<HTMLTextAreaElement | null>
 ) {
@@ -26,50 +25,58 @@ export function useMentionAutocomplete(
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [anchor, setAnchor] = useState<MentionAnchor | null>(null)
   const triggerPosRef = useRef(-1)
+  const valueRef = useRef("")
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Detect [[ trigger behind the cursor
-  useEffect(() => {
-    const el = textareaRef.current
-    if (!el) return
-    const cursor = el.selectionStart ?? value.length
-    const textBeforeCursor = value.slice(0, cursor)
+  // Called synchronously from the textarea's onChange — cursor position is correct here
+  const onInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const el = e.target
+    const val = el.value
+    valueRef.current = val
+    const cursor = el.selectionStart ?? val.length
+    const textBeforeCursor = val.slice(0, cursor)
     const match = textBeforeCursor.match(/\[\[([^\]\n]*)$/)
     if (match) {
+      const newQuery = match[1]
       triggerPosRef.current = cursor - match[0].length
-      setQuery(match[1])
-      setOpen(true)
-      setSelectedIndex(0)
-      // Calculate fixed position from textarea rect
       const rect = el.getBoundingClientRect()
       setAnchor({ top: rect.top, left: rect.left, width: rect.width })
+      setQuery(newQuery)
+      setOpen(true)
+      setSelectedIndex(0)
     } else {
       setOpen(false)
       setAnchor(null)
     }
-  }, [value, textareaRef])
+  }, [])
 
-  // Debounced search — empty query shows recent items
+  // Fetch suggestions when query/open changes
   useEffect(() => {
     if (!open) { setResults([]); return }
     if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current)
     fetchTimerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/proxy/links/search?q=${encodeURIComponent(query)}`)
-        if (res.ok) setResults(await res.json())
+        if (res.ok) {
+          const data = await res.json()
+          setResults(data)
+        }
       } catch { /* silent */ }
-    }, 200)
+    }, 150)
     return () => { if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current) }
   }, [query, open])
 
   const select = useCallback((item: MentionSuggestion) => {
     const el = textareaRef.current
     if (!el) return
-    const cursor = el.selectionStart ?? value.length
-    const before = value.slice(0, triggerPosRef.current)
-    const after = value.slice(cursor)
+    const val = valueRef.current
+    const cursor = el.selectionStart ?? val.length
+    const before = val.slice(0, triggerPosRef.current)
+    const after = val.slice(cursor)
     const chip = `[[${item.id}|${item.type}|${item.title}]]`
-    onChange(before + chip + " " + after)
+    const newVal = before + chip + " " + after
+    valueRef.current = newVal
+    onChange(newVal)
     setOpen(false)
     setResults([])
     setAnchor(null)
@@ -78,11 +85,10 @@ export function useMentionAutocomplete(
       const pos = before.length + chip.length + 1
       el.setSelectionRange(pos, pos)
     })
-  }, [value, onChange, textareaRef])
+  }, [onChange, textareaRef])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!open) return false
-    if (results.length === 0) return false
+    if (!open || results.length === 0) return false
     if (e.key === "ArrowDown") {
       e.preventDefault()
       setSelectedIndex(i => Math.min(i + 1, results.length - 1))
@@ -106,7 +112,7 @@ export function useMentionAutocomplete(
     return false
   }, [open, results, selectedIndex, select])
 
-  const dismiss = useCallback(() => setOpen(false), [])
+  const dismiss = useCallback(() => { setOpen(false); setAnchor(null) }, [])
 
-  return { open, results, selectedIndex, select, handleKeyDown, dismiss, anchor }
+  return { open, results, selectedIndex, select, handleKeyDown, dismiss, anchor, onInput }
 }
