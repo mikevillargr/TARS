@@ -215,26 +215,27 @@ async def delete_link(
 
 @router.get("/search", response_model=List[MentionSearchResult])
 async def search_mentions(
-    q: str = Query(..., min_length=1),
+    q: str = Query(default=""),
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    """Autocomplete for [[mention]] picker. Returns contacts, knowledge items, tasks."""
-    pattern = f"%{q}%"
+    """Autocomplete for [[mention]] picker. Returns contacts, knowledge items, tasks.
+    Empty q returns recent items across all types."""
     results: List[MentionSearchResult] = []
 
     # Contacts
-    contacts = (await db.execute(
-        select(Contact)
-        .where(Contact.user_id == user_id)
-        .where(
+    contact_q = select(Contact).where(Contact.user_id == user_id)
+    if q:
+        pattern = f"%{q}%"
+        contact_q = contact_q.where(
             or_(
                 Contact.display_name.ilike(pattern),
                 Contact.primary_email.ilike(pattern),
                 Contact.organization.ilike(pattern),
             )
         )
-        .limit(5)
+    contacts = (await db.execute(
+        contact_q.order_by(Contact.updated_at.desc()).limit(5)
     )).scalars().all()
     for c in contacts:
         results.append(MentionSearchResult(
@@ -245,11 +246,11 @@ async def search_mentions(
         ))
 
     # Knowledge items
+    items_q = select(KnowledgeItem).where(KnowledgeItem.user_id == user_id)
+    if q:
+        items_q = items_q.where(KnowledgeItem.source_title.ilike(f"%{q}%"))
     items = (await db.execute(
-        select(KnowledgeItem)
-        .where(KnowledgeItem.user_id == user_id)
-        .where(KnowledgeItem.source_title.ilike(pattern))
-        .limit(5)
+        items_q.order_by(KnowledgeItem.saved_at.desc()).limit(5)
     )).scalars().all()
     for item in items:
         results.append(MentionSearchResult(
@@ -260,11 +261,15 @@ async def search_mentions(
         ))
 
     # Tasks
-    tasks = (await db.execute(
+    tasks_q = (
         select(Task)
         .where(Task.user_id == user_id)
-        .where(Task.title.ilike(pattern))
-        .limit(5)
+        .where(Task.status != "done")
+    )
+    if q:
+        tasks_q = tasks_q.where(Task.title.ilike(f"%{q}%"))
+    tasks = (await db.execute(
+        tasks_q.order_by(Task.updated_at.desc()).limit(5)
     )).scalars().all()
     for t in tasks:
         results.append(MentionSearchResult(

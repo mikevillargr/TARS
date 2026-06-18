@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.10.3 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.10.5 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -847,6 +847,9 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.10.5 Fix: [[ in chat now triggers mention dropdown. API min_length=1 caused 422
+        on empty q; changed to default="" and returns recent contacts/knowledge/tasks
+        when q is empty. Hook dropped the query.length<1 early-return. Harness + web.
 v2.10.3 Fix: mention chips survive save in Second Brain. tiptap-markdown's addStorage
         discovery is unreliable through extend().configure() chains — with html:false it
         falls back to writing `[mention]` for unknown nodes. onUpdate now walks the doc

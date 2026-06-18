@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.3 |
+| Version | v2.10.5 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,17 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.5 — 2026-06-18
+**Fix: [[ mention trigger in chat now works — shows results on empty query**
+- API had `min_length=1` on `q` → 422 for empty string; changed to `default=""`. Empty query now returns 5 recent contacts + 5 recent knowledge items + 5 recent open tasks ordered by updated_at/saved_at.
+- Frontend hook dropped `query.length < 1` early-return so `[[` immediately fetches and shows the dropdown without needing extra characters typed.
+- Harness + web, no schema change.
+
+### v2.10.4 — 2026-06-18
+**Fix: connector sync-status accuracy**
+- Connected connectors no longer mislabeled "Not yet synced". Card + detail panel now read "Connected" when connected without a sync timestamp, and "Synced X ago" once a real sync stamps `last_synced_at` (`connectors/page.tsx`). Read-on-demand connectors (Gmail, Calendar, Workspace, Tesla, Places) legitimately never sync, so "Connected" is the accurate baseline.
+- Backend: `last_synced_at` was never being written for most connectors — `_sync_fireflies` didn't stamp the connector row at all, `_sync_google_people` stamped Contact rows (not the connector), and `_sync_strava` only stamped on the happy path. Now stamped uniformly in the generic `_run_job` runner via `_JOB_CONNECTOR_NAMES` map after any successful sync (only for `connected` rows). `jobs/scheduler.py`. No schema change.
 
 ### v2.10.3 — 2026-06-18
 **Fix: mention chips survive save in Second Brain**

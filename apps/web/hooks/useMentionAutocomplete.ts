@@ -38,11 +38,10 @@ export function useMentionAutocomplete(
     }
   }, [value, textareaRef])
 
-  // Debounced search
+  // Debounced search — empty query shows recent items
   useEffect(() => {
     if (!open) { setResults([]); return }
     if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current)
-    if (query.length < 1) { setResults([]); return }
     fetchTimerRef.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/proxy/links/search?q=${encodeURIComponent(query)}`)
