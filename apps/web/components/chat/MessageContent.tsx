@@ -8,6 +8,7 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { Copy, Check, BookOpen, Code2, Image } from "lucide-react"
 import { apiPost } from "@/lib/api-client"
 import { UrlPreviewCard } from "./UrlPreviewCard"
+import { WIRE_RE } from "@/lib/mentions"
 
 // ─── URL detection ────────────────────────────────────────────────
 const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/g
@@ -19,7 +20,12 @@ function extractUrls(text: string): string[] {
 // Convert raw HTML <a href="tel:..."> and <a href="mailto:..."> tags to
 // markdown links so ReactMarkdown can render them (it strips raw HTML by default).
 function preprocessContent(content: string): string {
-  return content.replace(
+  // Render [[id|type|label]] mentions as Slack-style bold "@Label"
+  const withMentions = content.replace(
+    WIRE_RE,
+    (_m, _id, _type, label) => `**@${label}**`
+  )
+  return withMentions.replace(
     /<a\s+href="((?:tel|mailto):[^"]+)"[^>]*>(.*?)<\/a>/gi,
     (_match, href, text) => `[${text}](${href})`
   )

@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.11.0 |
+| Version | v2.11.1 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,12 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.11.1 — 2026-06-18
+**Feature: chat mentions render Slack-style bold**
+- Chat message bubbles now render `[[id|type|label]]` mentions as bold **@Label** (`preprocessContent` in `components/chat/MessageContent.tsx` rewrites the wire markers to `**@label**` before ReactMarkdown).
+- To support this on reload, the harness now persists the WIRE form of user messages again (`db_content = content` in `api/routes/chat.py`) instead of the stripped form — the model still receives the mention-stripped text via `full_text`. The optimistic bubble also uses the wire content so the just-sent message bolds immediately.
+- Verified in-browser: sent a message with a mention → bubble showed bold `@Label`, no raw markers; confirmed wire markers persisted in the stored message. Web + harness, no schema change.
 
 ### v2.11.0 — 2026-06-18
 **Feature: universal @-mentions across the app + Second Brain persistence fix**

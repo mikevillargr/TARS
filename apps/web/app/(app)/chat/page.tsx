@@ -1818,17 +1818,16 @@ export default function ChatPage() {
 
   const handleSend = useCallback(async (overrideContent?: string, overrideArtifactId?: string) => {
     const rawContent = (overrideContent ?? inputValue).trim()
-    // Expand "@Label" display tokens: `content` (→ harness) gets the [[id|type|label]] wire
-    // markers so _resolve_mentions can inject entity context; `displayContent` (→ chat bubble)
-    // shows just the plain label. Longest labels first so "@James" can't shadow "@James Shorrock".
+    // Expand "@Label" display tokens → [[id|type|label]] wire markers. The harness uses these
+    // to inject entity context (and strips them before the model sees the text); the chat
+    // renderer turns them into bold "@Label". Longest labels first so "@James" can't shadow
+    // "@James Shorrock".
     let content = rawContent
-    let displayContent = rawContent
     if (mentionMapRef.current.size > 0) {
       const labels = [...mentionMapRef.current.keys()].sort((a, b) => b.length - a.length)
       for (const label of labels) {
         const m = mentionMapRef.current.get(label)!
         content = content.split(`@${label}`).join(`[[${m.id}|${m.type}|${label}]]`)
-        displayContent = displayContent.split(`@${label}`).join(label)
       }
     }
     if (busy || (!content && attachments.length === 0)) return
@@ -1857,7 +1856,7 @@ export default function ChatPage() {
     const tempUser: Message = {
       id: `temp-${Date.now()}`,
       role: "user",
-      content: displayContent,
+      content,
       created_at: new Date().toISOString(),
       ...(pendingAttachments.length > 0 && {
         _attachments: pendingAttachments.map((f) => ({

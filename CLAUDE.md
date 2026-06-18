@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.11.0 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.11.1 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -847,6 +847,10 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.11.1 Feature: chat mentions render Slack-style bold. MessageContent.preprocessContent
+        rewrites [[id|type|label]] → **@label** before ReactMarkdown. Harness reverted to storing
+        the WIRE form of user messages (db_content = content) so reload can bold them; model still
+        gets stripped text via full_text. Optimistic bubble uses wire content too. Web + harness.
 v2.11.0 Feature: universal @-mentions across the app + Second Brain persistence fix.
         (1) SB bug root cause: @tiptap/extension-mention default parseHTML matches
         span[data-type="mention"] but our chips put the entity type in data-type and mark
