@@ -1450,6 +1450,9 @@ export default function ChatPage() {
   const [mentionAnchor, setMentionAnchor]   = useState<{ top: number; left: number; width: number } | null>(null)
   const mentionTriggerPos = useRef(-1)
   const mentionFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Maps the friendly "@Label" shown in the textarea → the wire marker [[id|type|label]].
+  // Used at send time to expand display tokens back into the format the harness parses.
+  const mentionMapRef = useRef<Map<string, { id: string; type: string }>>(new Map())
 
   function detectMention(el: HTMLTextAreaElement) {
     const val = el.value
@@ -1483,14 +1486,16 @@ export default function ChatPage() {
     const cursor = el.selectionStart ?? inputValue.length
     const before = inputValue.slice(0, mentionTriggerPos.current)
     const after = inputValue.slice(cursor)
-    const chip = `[[${item.id}|${item.type}|${item.title}]]`
-    setInputValue(before + chip + " " + after)
+    // Insert a friendly display token; remember how to expand it at send time
+    const token = `@${item.title}`
+    mentionMapRef.current.set(item.title, { id: item.id, type: item.type })
+    setInputValue(before + token + " " + after)
     setMentionOpen(false)
     setMentionAnchor(null)
     setMentionResults([])
     requestAnimationFrame(() => {
       el.focus()
-      const pos = before.length + chip.length + 1
+      const pos = before.length + token.length + 1
       el.setSelectionRange(pos, pos)
     })
   }
@@ -1812,7 +1817,20 @@ export default function ChatPage() {
   }
 
   const handleSend = useCallback(async (overrideContent?: string, overrideArtifactId?: string) => {
-    const content = (overrideContent ?? inputValue).trim()
+    const rawContent = (overrideContent ?? inputValue).trim()
+    // Expand "@Label" display tokens: `content` (→ harness) gets the [[id|type|label]] wire
+    // markers so _resolve_mentions can inject entity context; `displayContent` (→ chat bubble)
+    // shows just the plain label. Longest labels first so "@James" can't shadow "@James Shorrock".
+    let content = rawContent
+    let displayContent = rawContent
+    if (mentionMapRef.current.size > 0) {
+      const labels = [...mentionMapRef.current.keys()].sort((a, b) => b.length - a.length)
+      for (const label of labels) {
+        const m = mentionMapRef.current.get(label)!
+        content = content.split(`@${label}`).join(`[[${m.id}|${m.type}|${label}]]`)
+        displayContent = displayContent.split(`@${label}`).join(label)
+      }
+    }
     if (busy || (!content && attachments.length === 0)) return
 
     // Capture and reset voice flag — true only when user sent via mic
@@ -1826,6 +1844,7 @@ export default function ChatPage() {
     const initialConvLength = messages.length  // snapshot before this send (used by recovery poll)
     setBusy(true)
     setInputValue("")
+    mentionMapRef.current.clear()
     setCalendarSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
@@ -1838,7 +1857,7 @@ export default function ChatPage() {
     const tempUser: Message = {
       id: `temp-${Date.now()}`,
       role: "user",
-      content,
+      content: displayContent,
       created_at: new Date().toISOString(),
       ...(pendingAttachments.length > 0 && {
         _attachments: pendingAttachments.map((f) => ({

@@ -713,8 +713,9 @@ async def send_message(
     # Build the text that goes to the model (doc text prepended)
     full_text = ("\n\n".join(doc_snippets) + "\n\n" + stripped_content).strip() if doc_snippets else stripped_content
 
-    # Store plain text in DB (don't persist image bytes)
-    db_content = content or " · ".join(
+    # Store plain text in DB (don't persist image bytes). Persist the mention-stripped
+    # text (labels only, markers removed) so reloaded conversations read cleanly.
+    db_content = stripped_content or " · ".join(
         (f"[image]" if b["type"] == "image" else "") for b in image_blocks
     ) or "[attachment]"
     user_msg = Message(

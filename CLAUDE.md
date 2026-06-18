@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.10.8 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.10.9 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -847,6 +847,12 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.10.9 Fix: chat mentions display as friendly `@Label`, not raw [[id|type|label]]. A plain
+        <textarea> can't render chips, so selectMention inserts `@Label` + a mentionMapRef
+        (label→{id,type}); at send, handleSend expands @Label → [[id|type|label]] (longest-first
+        split/join) for the harness while the bubble shows the plain label. Harness stores
+        stripped_content (labels only) so reloads are clean. chat/page.tsx + message-input.tsx +
+        chat.py. Verified in-browser against local harness.
 v2.10.8 Change: mention trigger is now `@` instead of `[[`. Detection regex /(^|\s)@([^\s@]*)$/
         (start-of-input or after whitespace — avoids email false-triggers) in all three composers
         (chat/page.tsx, message-input.tsx, useMentionAutocomplete). Stored wire format unchanged —

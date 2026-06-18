@@ -45,6 +45,8 @@ export function MessageInput({ onSend, disabled }: Props) {
   const mentionTriggerPos = useRef(-1)
   const mentionQuery = useRef("")
   const mentionFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Maps the friendly "@Label" shown in the textarea → the wire marker, expanded at send time
+  const mentionMapRef = useRef<Map<string, { id: string; type: string }>>(new Map())
 
   function openMention(query: string, rect: DOMRect) {
     mentionQuery.current = query
@@ -74,12 +76,13 @@ export function MessageInput({ onSend, disabled }: Props) {
     const cursor = el.selectionStart ?? value.length
     const before = value.slice(0, mentionTriggerPos.current)
     const after = value.slice(cursor)
-    const chip = `[[${item.id}|${item.type}|${item.title}]]`
-    setValue(before + chip + " " + after)
+    const token = `@${item.title}`
+    mentionMapRef.current.set(item.title, { id: item.id, type: item.type })
+    setValue(before + token + " " + after)
     closeMention()
     requestAnimationFrame(() => {
       el.focus()
-      const pos = before.length + chip.length + 1
+      const pos = before.length + token.length + 1
       el.setSelectionRange(pos, pos)
     })
   }
@@ -88,9 +91,19 @@ export function MessageInput({ onSend, disabled }: Props) {
   const submit = useCallback(() => {
     const trimmed = value.trim()
     if ((!trimmed && attachments.length === 0) || disabled) return
-    onSend(trimmed, attachments)
+    // Expand "@Label" display tokens → [[id|type|label]] wire markers (longest label first)
+    let wire = trimmed
+    if (mentionMapRef.current.size > 0) {
+      const labels = [...mentionMapRef.current.keys()].sort((a, b) => b.length - a.length)
+      for (const label of labels) {
+        const m = mentionMapRef.current.get(label)!
+        wire = wire.split(`@${label}`).join(`[[${m.id}|${m.type}|${label}]]`)
+      }
+    }
+    onSend(wire, attachments)
     setValue("")
     setAttachments([])
+    mentionMapRef.current.clear()
     if (textareaRef.current) textareaRef.current.style.height = "auto"
   }, [value, attachments, disabled, onSend])
 

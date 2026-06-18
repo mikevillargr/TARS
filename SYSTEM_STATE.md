@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.8 |
+| Version | v2.10.9 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,13 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.9 — 2026-06-18
+**Fix: chat mentions show a friendly `@Label` instead of the raw `[[id|type|label]]` marker**
+- Selecting a mention now inserts a display token `@Label` into the textarea (a plain `<textarea>` can't render styled chips). A per-composer `mentionMapRef` (label → {id,type}) remembers the selection.
+- At send time, `handleSend` expands `@Label` → `[[id|type|label]]` (longest label first, literal split/join — no regex escaping) for the harness so `_resolve_mentions` still injects entity context; the optimistic user bubble shows the plain label (no `@`, no markers).
+- Harness now persists the **mention-stripped** text (`stripped_content`, labels only) instead of the raw markers, so reloaded conversations read cleanly (`api/routes/chat.py` `db_content`).
+- Applied to both the main `chat/page.tsx` composer and the `message-input.tsx` sibling. Verified end-to-end in-browser against a local harness (textarea token / wire payload / clean bubble all confirmed). Web + harness, no schema change.
 
 ### v2.10.8 — 2026-06-18
 **Change: mention trigger is now `@` instead of `[[`**
