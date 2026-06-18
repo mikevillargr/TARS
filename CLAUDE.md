@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.11.1 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.11.2 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -847,6 +847,10 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.11.2 Fix: contact @-mentions show email to disambiguate duplicates. search_mentions
+        (links.py) leads contact subtitle with primary_email then org/title
+        ("j.shorrock@aalaw.com · AA Law"). Shared dropdown → applies to all mention surfaces.
+        Harness-only. Verified in-browser with two same-named test contacts.
 v2.11.1 Feature: chat mentions render Slack-style bold. MessageContent.preprocessContent
         rewrites [[id|type|label]] → **@label** before ReactMarkdown. Harness reverted to storing
         the WIRE form of user messages (db_content = content) so reload can bold them; model still

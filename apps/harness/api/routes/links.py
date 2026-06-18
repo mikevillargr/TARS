@@ -243,11 +243,14 @@ async def search_mentions(
         contact_q.order_by(Contact.updated_at.desc()).limit(5)
     )).scalars().all()
     for c in contacts:
+        # Lead the subtitle with the email — it's the disambiguator when several
+        # contacts share a display name. Append org/title for extra context.
+        sub_parts = [p for p in [c.primary_email, c.organization or c.job_title] if p]
         results.append(MentionSearchResult(
             id=c.id,
             type="contact",
             title=c.display_name or c.primary_email or "Contact",
-            subtitle=c.job_title or c.organization,
+            subtitle=" · ".join(sub_parts) if sub_parts else None,
         ))
 
     # Knowledge items

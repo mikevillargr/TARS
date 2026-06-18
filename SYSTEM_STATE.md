@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.11.1 |
+| Version | v2.11.2 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,10 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.11.2 — 2026-06-18
+**Fix: contact mentions show email to disambiguate duplicates**
+- The `@`-mention dropdown now leads a contact's subtitle with its email (then org/title), e.g. `j.shorrock@aalaw.com · AA Law` — so duplicate-named contacts (a common Google Contacts situation) are distinguishable at selection time. `search_mentions` contact result in `api/routes/links.py`. Applies to every mention surface (chat, Second Brain, tasks, mnemon) since they share the dropdown. Harness-only, no schema change. Verified in-browser with two same-named test contacts.
 
 ### v2.11.1 — 2026-06-18
 **Feature: chat mentions render Slack-style bold**
