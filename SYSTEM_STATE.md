@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.7 |
+| Version | v2.10.8 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,12 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.8 — 2026-06-18
+**Change: mention trigger is now `@` instead of `[[`**
+- Detection regex changed to `/(^|\s)@([^\s@]*)$/` (matches `@` only at start-of-input or after whitespace, so email addresses like `mike@growth-rocket.com` don't false-trigger). Updated in all three composers: the main `app/(app)/chat/page.tsx` inline composer, `components/chat/message-input.tsx` (the `/chat/[id]` sub-route), and the `useMentionAutocomplete` hook.
+- The stored wire format is unchanged — selecting a mention still inserts `[[id|type|label]]`, which the harness `_resolve_mentions` parses as before. Only the input trigger char changed; no harness change.
+- Verified in-browser before deploy. Web-only, no schema change.
 
 ### v2.10.7 — 2026-06-18
 **Fix: [[ mention dropdown now actually appears in the main chat composer**

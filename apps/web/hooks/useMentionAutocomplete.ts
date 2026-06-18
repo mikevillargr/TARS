@@ -35,10 +35,10 @@ export function useMentionAutocomplete(
     valueRef.current = val
     const cursor = el.selectionStart ?? val.length
     const textBeforeCursor = val.slice(0, cursor)
-    const match = textBeforeCursor.match(/\[\[([^\]\n]*)$/)
+    const match = textBeforeCursor.match(/(^|\s)@([^\s@]*)$/)
     if (match) {
-      const newQuery = match[1]
-      triggerPosRef.current = cursor - match[0].length
+      const newQuery = match[2]
+      triggerPosRef.current = cursor - match[2].length - 1
       const rect = el.getBoundingClientRect()
       setAnchor({ top: rect.top, left: rect.left, width: rect.width })
       setQuery(newQuery)

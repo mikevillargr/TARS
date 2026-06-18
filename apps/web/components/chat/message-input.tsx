@@ -114,13 +114,13 @@ export function MessageInput({ onSend, disabled }: Props) {
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
 
-    // Mention detection
+    // Mention detection — "@" at start-of-input or after whitespace
     const cursor = el.selectionStart ?? val.length
     const before = val.slice(0, cursor)
-    const match = before.match(/\[\[([^\]\n]*)$/)
+    const match = before.match(/(^|\s)@([^\s@]*)$/)
     if (match) {
-      mentionTriggerPos.current = cursor - match[0].length
-      openMention(match[1], el.getBoundingClientRect())
+      mentionTriggerPos.current = cursor - match[2].length - 1
+      openMention(match[2], el.getBoundingClientRect())
     } else {
       if (mentionOpen) closeMention()
     }
@@ -275,7 +275,7 @@ export function MessageInput({ onSend, disabled }: Props) {
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             onBlur={closeMention}
-            placeholder="Message TARS… (type [[ to mention)"
+            placeholder="Message TARS… (type @ to mention)"
             rows={1}
             disabled={disabled}
             className={cn(

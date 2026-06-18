@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.10.7 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.10.8 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -847,6 +847,10 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.10.8 Change: mention trigger is now `@` instead of `[[`. Detection regex /(^|\s)@([^\s@]*)$/
+        (start-of-input or after whitespace — avoids email false-triggers) in all three composers
+        (chat/page.tsx, message-input.tsx, useMentionAutocomplete). Stored wire format unchanged —
+        still inserts [[id|type|label]] which the harness parses as before. Web-only.
 v2.10.7 Fix: [[ mention dropdown now appears in the MAIN chat composer. The trigger had been
         wired into components/chat/message-input.tsx, but that's only used by /chat/[id]; the
         primary /chat landing page uses its own inline composer inside the 111KB

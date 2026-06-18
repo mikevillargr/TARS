@@ -1454,10 +1454,11 @@ export default function ChatPage() {
   function detectMention(el: HTMLTextAreaElement) {
     const val = el.value
     const cursor = el.selectionStart ?? val.length
-    const match = val.slice(0, cursor).match(/\[\[([^\]\n]*)$/)
+    // Trigger on "@" at start-of-input or after whitespace (avoids email false-positives)
+    const match = val.slice(0, cursor).match(/(^|\s)@([^\s@]*)$/)
     if (match) {
-      mentionTriggerPos.current = cursor - match[0].length
-      const query = match[1]
+      const query = match[2]
+      mentionTriggerPos.current = cursor - query.length - 1 // position of the "@"
       const rect = el.getBoundingClientRect()
       setMentionAnchor({ top: rect.top, left: rect.left, width: rect.width })
       setMentionOpen(true)
