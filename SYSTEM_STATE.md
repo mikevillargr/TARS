@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.1 |
+| Version | v2.10.2 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,10 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.2 — 2026-06-18
+**Polish: Google Workspace connector icon**
+- Added `GoogleDriveLogo` (official tri-color Drive triangle SVG) in `connectors/page.tsx` and mapped `id === "google_workspace"` to it, replacing the generic initials fallback. Web-only, no schema change.
 
 ### v2.10.1 — 2026-06-18
 **Feat: universal [[mention]] autocomplete in chat composer**
