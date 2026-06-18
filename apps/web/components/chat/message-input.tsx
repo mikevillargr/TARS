@@ -4,8 +4,8 @@ import React, { useState, useRef, useCallback, useEffect } from "react"
 import { Camera, FileCode, FileSpreadsheet, FileText, Loader2, Paperclip, Send, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useMentionAutocomplete } from "@/hooks/useMentionAutocomplete"
 import { MentionDropdown } from "@/components/ui/MentionDropdown"
+import type { MentionSuggestion } from "@/hooks/useMentionAutocomplete"
 
 interface Props {
   onSend: (content: string, attachments: File[]) => void
@@ -21,17 +21,11 @@ function formatSize(bytes: number): string {
 function FileTypeIcon({ file, className }: { file: File; className?: string }) {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
   const ct = file.type.toLowerCase()
-
-  if (ct.startsWith("image/")) return null // thumbnails handle their own display
-
-  if (ct === "application/pdf" || ext === "pdf")
-    return <FileText className={cn("text-red-400", className)} />
-  if (ct.includes("spreadsheet") || ["xlsx", "xls", "csv"].includes(ext))
-    return <FileSpreadsheet className={cn("text-green-400", className)} />
-  if (ct.includes("presentation") || ext === "pptx")
-    return <FileText className={cn("text-orange-400", className)} />
-  if (["json", "yaml", "yml", "xml"].includes(ext))
-    return <FileCode className={cn("text-purple-400", className)} />
+  if (ct.startsWith("image/")) return null
+  if (ct === "application/pdf" || ext === "pdf") return <FileText className={cn("text-red-400", className)} />
+  if (ct.includes("spreadsheet") || ["xlsx", "xls", "csv"].includes(ext)) return <FileSpreadsheet className={cn("text-green-400", className)} />
+  if (ct.includes("presentation") || ext === "pptx") return <FileText className={cn("text-orange-400", className)} />
+  if (["json", "yaml", "yml", "xml"].includes(ext)) return <FileCode className={cn("text-purple-400", className)} />
   return <FileText className={cn("text-muted-foreground", className)} />
 }
 
@@ -42,7 +36,54 @@ export function MessageInput({ onSend, disabled }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
-  const mention = useMentionAutocomplete(setValue, textareaRef)
+
+  // ── Inline mention state ───────────────────────────────────────────────────
+  const [mentionOpen, setMentionOpen] = useState(false)
+  const [mentionResults, setMentionResults] = useState<MentionSuggestion[]>([])
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const [mentionAnchor, setMentionAnchor] = useState<{ top: number; left: number; width: number } | null>(null)
+  const mentionTriggerPos = useRef(-1)
+  const mentionQuery = useRef("")
+  const mentionFetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function openMention(query: string, rect: DOMRect) {
+    mentionQuery.current = query
+    mentionTriggerPos.current = -1  // will be set by caller
+    setMentionOpen(true)
+    setMentionIndex(0)
+    setMentionAnchor({ top: rect.top, left: rect.left, width: rect.width })
+    if (mentionFetchTimer.current) clearTimeout(mentionFetchTimer.current)
+    mentionFetchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/proxy/links/search?q=${encodeURIComponent(query)}`)
+        if (res.ok) setMentionResults(await res.json())
+      } catch { /* silent */ }
+    }, 150)
+  }
+
+  function closeMention() {
+    setMentionOpen(false)
+    setMentionAnchor(null)
+    setMentionResults([])
+    if (mentionFetchTimer.current) clearTimeout(mentionFetchTimer.current)
+  }
+
+  function selectMention(item: MentionSuggestion) {
+    const el = textareaRef.current
+    if (!el) return
+    const cursor = el.selectionStart ?? value.length
+    const before = value.slice(0, mentionTriggerPos.current)
+    const after = value.slice(cursor)
+    const chip = `[[${item.id}|${item.type}|${item.title}]]`
+    setValue(before + chip + " " + after)
+    closeMention()
+    requestAnimationFrame(() => {
+      el.focus()
+      const pos = before.length + chip.length + 1
+      el.setSelectionRange(pos, pos)
+    })
+  }
+  // ──────────────────────────────────────────────────────────────────────────
 
   const submit = useCallback(() => {
     const trimmed = value.trim()
@@ -54,7 +95,12 @@ export function MessageInput({ onSend, disabled }: Props) {
   }, [value, attachments, disabled, onSend])
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (mention.handleKeyDown(e)) return
+    if (mentionOpen && mentionResults.length > 0) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionResults.length - 1)); return }
+      if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return }
+      if (e.key === "Enter" && mentionResults[mentionIndex]) { e.preventDefault(); selectMention(mentionResults[mentionIndex]); return }
+      if (e.key === "Escape") { e.preventDefault(); closeMention(); return }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       submit()
@@ -62,11 +108,22 @@ export function MessageInput({ onSend, disabled }: Props) {
   }
 
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    mention.onInput(e)
-    setValue(e.target.value)
     const el = e.target
+    const val = el.value
+    setValue(val)
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+
+    // Mention detection
+    const cursor = el.selectionStart ?? val.length
+    const before = val.slice(0, cursor)
+    const match = before.match(/\[\[([^\]\n]*)$/)
+    if (match) {
+      mentionTriggerPos.current = cursor - match[0].length
+      openMention(match[1], el.getBoundingClientRect())
+    } else {
+      if (mentionOpen) closeMention()
+    }
   }
 
   function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
@@ -81,7 +138,6 @@ export function MessageInput({ onSend, disabled }: Props) {
 
   function handlePastedImages(e: React.ClipboardEvent | ClipboardEvent) {
     const cd = (e as React.ClipboardEvent).clipboardData ?? (e as ClipboardEvent).clipboardData
-    // Diagnostic: log what's in the clipboard every time paste fires
     console.log("[TARS paste]", {
       itemCount: cd?.items?.length ?? 0,
       fileCount: cd?.files?.length ?? 0,
@@ -163,25 +219,25 @@ export function MessageInput({ onSend, disabled }: Props) {
           </div>
         )}
 
-        <div className="relative">
-          {mention.open && mention.anchor && (
-            <div
-              style={{
-                position: "fixed",
-                bottom: `calc(100vh - ${mention.anchor.top}px + 8px)`,
-                left: mention.anchor.left,
-                width: mention.anchor.width,
-                zIndex: 9999,
-              }}
-            >
-              <MentionDropdown
-                open={mention.open}
-                results={mention.results}
-                selectedIndex={mention.selectedIndex}
-                onSelect={mention.select}
-              />
-            </div>
-          )}
+        {/* Mention dropdown — fixed position escapes overflow clipping */}
+        {mentionOpen && mentionAnchor && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: `calc(100vh - ${mentionAnchor.top}px + 8px)`,
+              left: mentionAnchor.left,
+              width: mentionAnchor.width,
+              zIndex: 9999,
+            }}
+          >
+            <MentionDropdown
+              open={mentionOpen}
+              results={mentionResults}
+              selectedIndex={mentionIndex}
+              onSelect={selectMention}
+            />
+          </div>
+        )}
 
         <div
           className={cn(
@@ -218,7 +274,7 @@ export function MessageInput({ onSend, disabled }: Props) {
             value={value}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
-            onBlur={mention.dismiss}
+            onBlur={closeMention}
             placeholder="Message TARS… (type [[ to mention)"
             rows={1}
             disabled={disabled}
@@ -241,7 +297,6 @@ export function MessageInput({ onSend, disabled }: Props) {
             )}
           </Button>
         </div>
-        </div>{/* end relative dropdown wrapper */}
 
         {/* Hidden inputs */}
         <input
