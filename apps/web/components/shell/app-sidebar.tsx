@@ -80,7 +80,7 @@ export function AppSidebar() {
             >
               TARS
             </span>
-            <span className="tars-label tars-label--moss">Personal AI OS</span>
+            <span className="tars-label tars-label--moss">AI Life Operating System</span>
           </div>
         </div>
       </SidebarHeader>

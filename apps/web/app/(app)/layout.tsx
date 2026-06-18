@@ -124,7 +124,6 @@ function BottomTabBar() {
 // ─── Inner layout (consumes notification context) ───────────────────────────
 
 function AppLayoutInner({ children }: { children: React.ReactNode }) {
-  const [agentActive] = useState(true)
   const [captureOpen, setCaptureOpen] = useState(false)
   const [cmdOpen, setCmdOpen] = useState(false)
   const router = useRouter()
@@ -277,19 +276,31 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
               <Search size={18} />
             </button>
 
-            {agentActive && (
-              <div
-                className="tars-label flex items-center gap-2 px-2.5 py-1.5 rounded-full border hidden sm:flex"
-                style={{
-                  backgroundColor: "var(--c-moss-soft)",
-                  borderColor: "color-mix(in srgb, var(--c-moss) 25%, transparent)",
-                  color: "var(--c-moss)",
-                }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-moss animate-pulse" />
-                Agent Active
-              </div>
-            )}
+            {/* 8-bit TARS monolith pixel art — 8×12 pixel grid at 3px each */}
+            <div className="hidden sm:flex items-center" aria-hidden="true" title="TARS">
+              <svg width="24" height="36" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+                {/* Top cap */}
+                <rect x="0" y="0" width="24" height="3" fill="var(--c-moss)"/>
+                {/* Segment 1 outer shell */}
+                <rect x="0" y="3" width="3" height="12" fill="var(--c-moss)"/>
+                <rect x="21" y="3" width="3" height="12" fill="var(--c-moss)"/>
+                {/* Segment 1 inner cavity */}
+                <rect x="3" y="3" width="18" height="12" fill="#0f1a15"/>
+                {/* Segment 1 amber LED (centered, 2px tall) */}
+                <rect x="9" y="6" width="6" height="6" fill="var(--c-amber)"/>
+                {/* Joint band */}
+                <rect x="0" y="15" width="24" height="6" fill="#0a1210"/>
+                {/* Segment 2 outer shell */}
+                <rect x="0" y="21" width="3" height="12" fill="var(--c-moss)"/>
+                <rect x="21" y="21" width="3" height="12" fill="var(--c-moss)"/>
+                {/* Segment 2 inner cavity */}
+                <rect x="3" y="21" width="18" height="12" fill="#0f1a15"/>
+                {/* Segment 2 amber LED */}
+                <rect x="9" y="24" width="6" height="6" fill="var(--c-amber)"/>
+                {/* Bottom cap */}
+                <rect x="0" y="33" width="24" height="3" fill="var(--c-moss)"/>
+              </svg>
+            </div>
 
             {/* Sound toggle */}
             <button
