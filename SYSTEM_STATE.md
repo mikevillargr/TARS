@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.2 |
+| Version | v2.10.3 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,12 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.3 — 2026-06-18
+**Fix: mention chips survive save in Second Brain**
+- `tiptap-markdown`'s `addStorage` discovery is unreliable through `extend().configure()` chains — with `html: false` it falls back to writing `[mention]` for unrecognised nodes, stripping the `[[id|type|label]]` round-trip format on every edit.
+- `TiptapEditor.onUpdate` now walks the prosemirror doc for mention nodes in order, then replaces any `[mention]` fallback tokens with the correct `[[id|type|label]]` format. No-op if `addStorage.markdown.serialize` is already firing correctly.
+- Web-only, no schema change.
 
 ### v2.10.2 — 2026-06-18
 **Polish: Google Workspace connector icon**

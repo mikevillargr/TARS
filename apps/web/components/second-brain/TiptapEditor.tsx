@@ -357,7 +357,23 @@ export function TiptapEditor({
     },
     onUpdate: ({ editor }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const md: string = (editor.storage as any).markdown?.getMarkdown?.() ?? editor.getText()
+      let md: string = (editor.storage as any).markdown?.getMarkdown?.() ?? editor.getText()
+      // tiptap-markdown may not pick up our serialize via addStorage when Mention is
+      // extend().configure()d — it falls back to [mention] with html:false.
+      // Walk the doc, collect mention nodes in order, replace any [mention] tokens.
+      const mentions: Array<{ id: string; type: string; label: string }> = []
+      editor.state.doc.descendants(node => {
+        if (node.type.name === "mention") {
+          mentions.push({ id: node.attrs.id ?? "", type: node.attrs.type ?? "unknown", label: node.attrs.label ?? node.attrs.id ?? "" })
+        }
+      })
+      if (mentions.length > 0) {
+        let i = 0
+        md = md.replace(/\[mention\]/g, () => {
+          const m = mentions[i++]
+          return m ? `[[${m.id}|${m.type}|${m.label}]]` : "[mention]"
+        })
+      }
       onChange(md)
       if (onWordCount) {
         onWordCount(editor.getText().split(/\s+/).filter(Boolean).length)

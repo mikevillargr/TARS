@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.10.2 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.10.3 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -847,6 +847,12 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.10.3 Fix: mention chips survive save in Second Brain. tiptap-markdown's addStorage
+        discovery is unreliable through extend().configure() chains — with html:false it
+        falls back to writing `[mention]` for unknown nodes. onUpdate now walks the doc
+        for mention nodes in order, then replaces any `[mention]` fallback tokens with
+        the correct [[id|type|label]] format. No-op if addStorage serialize is already
+        working. Web-only, no schema change.
 v2.10.1 Feat: universal [[mention]] autocomplete in chat composer. useMentionAutocomplete
         hook detects [[ trigger, fetches /api/proxy/links/search, handles keyboard nav,
         inserts [[id|type|label]] chip. MentionDropdown component (grouped by type).
