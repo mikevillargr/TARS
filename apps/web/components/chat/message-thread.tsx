@@ -6,6 +6,11 @@ import { ChevronRight, Download, FileCode, FileSpreadsheet, FileText, X } from "
 import { ModelBadge } from "./model-badge"
 import { cn } from "@/lib/utils"
 
+// Strip [[id|type|label]] mention markers → `[[label]]` for display in message bubbles
+function stripMentions(content: string): string {
+  return content.replace(/\[\[[^\]|]+\|[^\]|]+\|([^\]]+)\]\]/g, "`[[$1]]`")
+}
+
 export interface Attachment {
   name: string
   url: string
@@ -466,7 +471,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
                 ),
               }}
             >
-              {msg.content}
+              {isUser ? stripMentions(msg.content) : msg.content}
             </ReactMarkdown>
           </div>
         )}

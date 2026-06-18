@@ -4,6 +4,8 @@ import React, { useState, useRef, useCallback, useEffect } from "react"
 import { Camera, FileCode, FileSpreadsheet, FileText, Loader2, Paperclip, Send, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useMentionAutocomplete } from "@/hooks/useMentionAutocomplete"
+import { MentionDropdown } from "@/components/ui/MentionDropdown"
 
 interface Props {
   onSend: (content: string, attachments: File[]) => void
@@ -40,6 +42,7 @@ export function MessageInput({ onSend, disabled }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
+  const mention = useMentionAutocomplete(value, setValue, textareaRef)
 
   const submit = useCallback(() => {
     const trimmed = value.trim()
@@ -51,6 +54,7 @@ export function MessageInput({ onSend, disabled }: Props) {
   }, [value, attachments, disabled, onSend])
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (mention.handleKeyDown(e)) return
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       submit()
@@ -188,19 +192,30 @@ export function MessageInput({ onSend, disabled }: Props) {
             <Camera className="size-4" />
           </label>
 
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            placeholder="Message TARS…"
-            rows={1}
-            disabled={disabled}
-            className={cn(
-              "flex-1 resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground",
-              "focus:outline-none disabled:opacity-50 leading-relaxed"
-            )}
-          />
+          <div className="relative flex-1 min-w-0">
+            <div className="absolute bottom-full left-0 right-0 mb-1.5 z-50">
+              <MentionDropdown
+                open={mention.open}
+                results={mention.results}
+                selectedIndex={mention.selectedIndex}
+                onSelect={mention.select}
+              />
+            </div>
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              onBlur={mention.dismiss}
+              placeholder="Message TARS… (type [[ to mention)"
+              rows={1}
+              disabled={disabled}
+              className={cn(
+                "w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground",
+                "focus:outline-none disabled:opacity-50 leading-relaxed"
+              )}
+            />
+          </div>
 
           <Button
             size="icon"

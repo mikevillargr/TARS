@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import logging
+import re as _re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import json as _json
@@ -38,6 +39,55 @@ from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from db.session import get_db, AsyncSessionLocal
 from db.models import Conversation, Message, User, Task, Artifact
+
+_MENTION_RE = _re.compile(r'\[\[([^\]|]+)\|([^\]|]+)\|([^\]]+)\]\]')
+
+
+async def _resolve_mentions(content: str, user_id: str, db: AsyncSession) -> tuple[str, list[str]]:
+    """Parse [[id|type|label]] mentions, fetch entity context, return (stripped_content, snippets)."""
+    snippets: list[str] = []
+    seen: set[str] = set()
+
+    for match in _MENTION_RE.finditer(content):
+        entity_id, entity_type, label = match.group(1), match.group(2), match.group(3)
+        key = f"{entity_type}:{entity_id}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        try:
+            if entity_type == "contact":
+                from db.models import Contact
+                row = await db.get(Contact, entity_id)
+                if row and row.user_id == user_id:
+                    parts = [f"[Contact: {row.display_name}]"]
+                    if row.primary_email: parts.append(f"Email: {row.primary_email}")
+                    if row.primary_phone: parts.append(f"Phone: {row.primary_phone}")
+                    if row.organization:  parts.append(f"Org: {row.organization}")
+                    if row.job_title:     parts.append(f"Title: {row.job_title}")
+                    if row.tars_context:  parts.append(f"Notes: {row.tars_context}")
+                    snippets.append("\n".join(parts))
+
+            elif entity_type == "knowledge_item":
+                from db.models import KnowledgeItem
+                row = await db.get(KnowledgeItem, entity_id)
+                if row and row.user_id == user_id:
+                    title = row.source_title or label
+                    body = (row.clean_content or row.raw_content or "")[:1500]
+                    snippets.append(f"[Knowledge: {title}]\n{body}")
+
+            elif entity_type == "task":
+                row = await db.get(Task, entity_id)
+                if row and row.user_id == user_id:
+                    parts = [f"[Task: {row.title}]", f"Status: {row.status}"]
+                    if row.description: parts.append(row.description[:500])
+                    snippets.append("\n".join(parts))
+
+        except Exception:
+            log.warning("_resolve_mentions: failed to fetch %s:%s", entity_type, entity_id)
+
+    stripped = _MENTION_RE.sub(lambda m: m.group(3), content)
+    return stripped, snippets
 
 router = APIRouter()
 
@@ -653,8 +703,15 @@ async def send_message(
             forced_model = _override["model"]
             log.info("Category '%s' → forced model %s (%s)", task_category, forced_model, forced_provider)
 
+    # Resolve [[id|type|label]] mentions — inject entity context, strip markers from model text
+    if _MENTION_RE.search(content):
+        stripped_content, mention_snippets = await _resolve_mentions(content, user_id, db)
+        doc_snippets = mention_snippets + doc_snippets
+    else:
+        stripped_content = content
+
     # Build the text that goes to the model (doc text prepended)
-    full_text = ("\n\n".join(doc_snippets) + "\n\n" + content).strip() if doc_snippets else content
+    full_text = ("\n\n".join(doc_snippets) + "\n\n" + stripped_content).strip() if doc_snippets else stripped_content
 
     # Store plain text in DB (don't persist image bytes)
     db_content = content or " · ".join(

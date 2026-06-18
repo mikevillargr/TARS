@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.10.0 |
+| Version | v2.10.1 |
 | Released | 2026-06-18 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -154,6 +154,14 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.10.1 — 2026-06-18
+**Feat: universal [[mention]] autocomplete in chat composer**
+- Type `[[` anywhere in the chat textarea to trigger mention autocomplete (contacts, knowledge items, tasks). `useMentionAutocomplete` hook detects the trigger, debounce-fetches `/api/proxy/links/search`, handles ↑↓ Enter Escape keyboard nav, and inserts `[[id|type|label]]` at the cursor.
+- `MentionDropdown` component renders grouped suggestions (CONTACTS / NOTE / TASK) with avatar circles, name, subtitle, and type badge — same visual design as the Tiptap MentionList.
+- Harness: `_resolve_mentions` parses `[[id|type|label]]` markers from the user message, fetches entity context from DB (contact info, knowledge item content, task details), prepends snippets to `doc_snippets` (so the model gets full entity context), and strips markers from the text sent to the model.
+- Message display: user messages show `[[id|type|label]]` markers as `` `[[label]]` `` (code-styled) so they read cleanly in the thread.
+- No schema change.
 
 ### v2.10.0 — 2026-06-18
 **Feat: Google Workspace connector — read & write Docs/Sheets/Slides by link**
