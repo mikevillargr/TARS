@@ -9,6 +9,12 @@ export interface MentionSuggestion {
   subtitle?: string
 }
 
+export interface MentionAnchor {
+  top: number
+  left: number
+  width: number
+}
+
 export function useMentionAutocomplete(
   value: string,
   onChange: (value: string) => void,
@@ -18,6 +24,7 @@ export function useMentionAutocomplete(
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<MentionSuggestion[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [anchor, setAnchor] = useState<MentionAnchor | null>(null)
   const triggerPosRef = useRef(-1)
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -33,8 +40,12 @@ export function useMentionAutocomplete(
       setQuery(match[1])
       setOpen(true)
       setSelectedIndex(0)
+      // Calculate fixed position from textarea rect
+      const rect = el.getBoundingClientRect()
+      setAnchor({ top: rect.top, left: rect.left, width: rect.width })
     } else {
       setOpen(false)
+      setAnchor(null)
     }
   }, [value, textareaRef])
 
@@ -61,6 +72,7 @@ export function useMentionAutocomplete(
     onChange(before + chip + " " + after)
     setOpen(false)
     setResults([])
+    setAnchor(null)
     requestAnimationFrame(() => {
       el.focus()
       const pos = before.length + chip.length + 1
@@ -96,5 +108,5 @@ export function useMentionAutocomplete(
 
   const dismiss = useCallback(() => setOpen(false), [])
 
-  return { open, results, selectedIndex, select, handleKeyDown, dismiss }
+  return { open, results, selectedIndex, select, handleKeyDown, dismiss, anchor }
 }

@@ -163,14 +163,24 @@ export function MessageInput({ onSend, disabled }: Props) {
         )}
 
         <div className="relative">
-          <div className="absolute bottom-full left-0 right-0 mb-1.5 z-50">
-            <MentionDropdown
-              open={mention.open}
-              results={mention.results}
-              selectedIndex={mention.selectedIndex}
-              onSelect={mention.select}
-            />
-          </div>
+          {mention.open && mention.anchor && (
+            <div
+              style={{
+                position: "fixed",
+                bottom: `calc(100vh - ${mention.anchor.top}px + 8px)`,
+                left: mention.anchor.left,
+                width: mention.anchor.width,
+                zIndex: 9999,
+              }}
+            >
+              <MentionDropdown
+                open={mention.open}
+                results={mention.results}
+                selectedIndex={mention.selectedIndex}
+                onSelect={mention.select}
+              />
+            </div>
+          )}
 
         <div
           className={cn(
