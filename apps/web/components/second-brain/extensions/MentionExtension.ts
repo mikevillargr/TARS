@@ -3,9 +3,13 @@ import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance, type Props } from 'tippy.js'
 import { MentionList, type MentionItem } from './MentionList'
 
-// Extend first to register the `type` attr, then configure suggestion/rendering.
-// Without this, Tiptap drops `type` because it's not in addAttributes() and
-// node.attrs.type is always undefined — so click routing never works.
+// Stored format: [[id|type|label]]
+// e.g. [[abc123|contact|John Doe]]
+// This survives save/reload: serialize writes it, the markdown-it rule parses it back.
+function esc(s: string) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 export const MentionExtension = Mention
   .extend({
     addAttributes() {
@@ -18,10 +22,53 @@ export const MentionExtension = Mention
         },
       }
     },
+
+    addStorage() {
+      return {
+        markdown: {
+          // Serialize mention node → [[id|type|label]] in stored markdown
+          serialize(state: any, node: any) {
+            const id    = node.attrs.id    ?? ''
+            const type  = node.attrs.type  ?? 'unknown'
+            const label = node.attrs.label ?? node.attrs.id ?? ''
+            state.write(`[[${id}|${type}|${label}]]`)
+          },
+
+          parse: {
+            // Add a markdown-it inline rule that converts [[id|type|label]]
+            // back to a <span data-mention …> that tiptap's DOM parser can recognize.
+            // html_inline tokens from custom rules always render regardless of html:false.
+            setup(markdownit: any) {
+              markdownit.inline.ruler.before('escape', 'tars_mention', (state: any, silent: boolean) => {
+                const src = state.src.slice(state.pos)
+                // Match [[id|type|label]] — label may contain anything except ]]
+                const match = src.match(/^\[\[([^\]|]+)\|([^\]|]+)\|([^\]]+?)\]\]/)
+                if (!match) return false
+                if (!silent) {
+                  const [, id, type, label] = match
+                  const token = state.push('html_inline', '', 0)
+                  token.content = `<span data-mention="" data-id="${esc(id)}" data-type="${esc(type)}" data-label="${esc(label)}" class="tars-mention-chip">[[${esc(label)}]]</span>`
+                }
+                state.pos += match[0].length
+                return true
+              })
+            },
+          },
+        },
+      }
+    },
   })
   .configure({
   HTMLAttributes: {
     class: 'tars-mention-chip',
+  },
+
+  // renderText is used by tiptap-markdown as a fallback for serialization
+  renderText({ node }) {
+    const id    = node.attrs.id    ?? ''
+    const type  = node.attrs.type  ?? 'unknown'
+    const label = node.attrs.label ?? node.attrs.id ?? ''
+    return `[[${id}|${type}|${label}]]`
   },
 
   renderHTML({ node }) {
@@ -29,8 +76,9 @@ export const MentionExtension = Mention
       'span',
       {
         'data-mention': '',
-        'data-id': node.attrs.id,
-        'data-type': node.attrs.type ?? 'unknown',
+        'data-id':    node.attrs.id,
+        'data-type':  node.attrs.type ?? 'unknown',
+        'data-label': node.attrs.label ?? node.attrs.id,
         class: 'tars-mention-chip',
       },
       `[[${node.attrs.label ?? node.attrs.id}]]`,

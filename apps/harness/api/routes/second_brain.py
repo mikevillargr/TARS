@@ -171,20 +171,24 @@ async def update_item(
     if body.properties is not None:
         item.properties = {**(item.properties or {}), **body.properties}
     if body.clean_content is not None:
+        import re as _re
         from sqlalchemy import delete as _delete
         from memory.embeddings import embed_one, embed
         from memory.chunker import chunk_text
         item.clean_content = body.clean_content
         item.raw_content = body.clean_content
+        # Strip [[id|type|label]] mention markers before embedding/chunking
+        # so the stored round-trip format doesn't pollute semantic search
+        clean_for_embed = _re.sub(r'\[\[[^\]|]+\|[^\]|]+\|([^\]]+)\]\]', r'\1', body.clean_content)
         # Re-compute item-level embedding
-        summary_text = " ".join(body.clean_content.split()[:800])
+        summary_text = " ".join(clean_for_embed.split()[:800])
         item.embedding = embed_one(summary_text) if summary_text else None
         item.summary = summary_text[:500] if summary_text else None
         # Delete old chunks and re-chunk
         await db.execute(
             _delete(DocumentChunk).where(DocumentChunk.knowledge_item_id == item_id)
         )
-        chunks = chunk_text(body.clean_content)
+        chunks = chunk_text(clean_for_embed)
         if chunks:
             chunk_embeddings = embed(chunks)
             for i, (chunk_str, emb) in enumerate(zip(chunks, chunk_embeddings)):
