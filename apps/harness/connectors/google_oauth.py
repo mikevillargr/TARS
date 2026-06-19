@@ -77,7 +77,7 @@ def _redirect_uri(connector: str, via_production: bool) -> str:
     return f"{base}/api/connectors/oauth/callback/{connector}"
 
 
-def get_auth_url(connector: str, via_production: bool = True) -> str:
+def get_auth_url(connector: str, via_production: bool = True, state: str | None = None) -> str:
     """Build Google auth URL without PKCE so token exchange works across requests."""
     params = {
         "response_type": "code",
@@ -87,6 +87,8 @@ def get_auth_url(connector: str, via_production: bool = True) -> str:
         "access_type": "offline",
         "prompt": "consent",
     }
+    if state:
+        params["state"] = state
     return f"{_AUTH_URI}?{urllib.parse.urlencode(params)}"
 
 

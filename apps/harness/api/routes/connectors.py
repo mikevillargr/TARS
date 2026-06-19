@@ -20,22 +20,35 @@ router = APIRouter()
 # ── Single source of truth: connector id → human name / capabilities ──────────
 # Used by both the OAuth callback and the status enrichment in get_connectors.
 _CONNECTOR_NAMES = {
-    "gmail":            "Gmail",
-    "gcal":             "Google Calendar",
-    "google_people":    "Google Contacts",
-    "google_workspace": "Google Workspace",
-    "strava":           "Strava",
-    "garmin":           "Garmin Connect",
+    "gmail":                     "Gmail",
+    "gcal":                      "Google Calendar",
+    "google_people":             "Google Contacts",
+    "google_workspace":          "Google Workspace",
+    "gmail_personal":            "Gmail (Personal)",
+    "gcal_personal":             "Google Calendar (Personal)",
+    "google_workspace_personal": "Google Workspace (Personal)",
+    "strava":                    "Strava",
+    "garmin":                    "Garmin Connect",
 }
 _CONNECTOR_CAPS = {
-    "gmail":            ["read", "webhook"],
-    "gcal":             ["read", "write"],
-    "google_people":    ["read", "write"],
-    "google_workspace": ["read", "write"],
-    "strava":           ["read"],
-    "garmin":           ["read"],
+    "gmail":                     ["read", "webhook"],
+    "gcal":                      ["read", "write"],
+    "google_people":             ["read", "write"],
+    "google_workspace":          ["read", "write"],
+    "gmail_personal":            ["read"],
+    "gcal_personal":             ["read"],
+    "google_workspace_personal": ["read", "write"],
+    "strava":                    ["read"],
+    "garmin":                    ["read"],
 }
-_GOOGLE_CONNECTORS = {"gmail", "gcal", "google_people", "google_workspace"}
+# Base connector type for personal variants (maps to OAuth credentials + redirect URI)
+_PERSONAL_BASE = {
+    "gmail_personal":            "gmail",
+    "gcal_personal":             "gcal",
+    "google_workspace_personal": "google_workspace",
+}
+_GOOGLE_CONNECTORS = {"gmail", "gcal", "google_people", "google_workspace",
+                      "gmail_personal", "gcal_personal", "google_workspace_personal"}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -160,7 +173,10 @@ async def oauth_authorize(connector: str, request: Request, db: AsyncSession = D
         raise HTTPException(status_code=400, detail="Unknown connector")
 
     from connectors.google_oauth import get_auth_url
-    url = get_auth_url(connector, via_production=via_prod)
+    # Personal variants use the base connector's OAuth creds + redirect URI, with state=personal
+    base = _PERSONAL_BASE.get(connector, connector)
+    state = "personal" if connector in _PERSONAL_BASE else None
+    url = get_auth_url(base, via_production=via_prod, state=state)
     return RedirectResponse(url)
 
 
@@ -171,6 +187,7 @@ async def oauth_callback(
     db: AsyncSession = Depends(get_db),
     code: Optional[str] = None,
     error: Optional[str] = None,
+    state: Optional[str] = None,
 ):
     """OAuth callback — handles both Google and Strava. No JWT needed — browser-driven."""
     via_prod = "localhost" not in str(request.base_url)
@@ -238,6 +255,17 @@ async def oauth_callback(
     from connectors.google_oauth import exchange_code
 
     via_prod = "localhost" not in str(request.base_url)
+
+    # If state=personal, this callback is for a personal account variant
+    # The base connector OAuth creds were used for the flow, but we save to the _personal name
+    is_personal = state == "personal"
+    if is_personal:
+        # e.g. "gmail" callback with state=personal → resolve to "gmail_personal" connector ID
+        _BASE_TO_PERSONAL = {v: k for k, v in _PERSONAL_BASE.items()}
+        resolved_connector = _BASE_TO_PERSONAL.get(connector, connector)
+    else:
+        resolved_connector = connector
+
     try:
         auth = await exchange_code(connector, code, via_production=via_prod)
     except Exception as exc:
@@ -250,10 +278,11 @@ async def oauth_callback(
     if not user:
         raise HTTPException(status_code=500, detail="No user in database")
 
+    conn_name = _CONNECTOR_NAMES[resolved_connector]
     conn_result = await db.execute(
         select(Connector).where(
             Connector.user_id == user.id,
-            Connector.name == _CONNECTOR_NAMES[connector],
+            Connector.name == conn_name,
         )
     )
     conn = conn_result.scalar_one_or_none()
@@ -263,19 +292,19 @@ async def oauth_callback(
     else:
         conn = Connector(
             user_id=user.id,
-            name=_CONNECTOR_NAMES[connector],
+            name=conn_name,
             status="connected",
             auth=auth,
-            capabilities=_CONNECTOR_CAPS[connector],
+            capabilities=_CONNECTOR_CAPS[resolved_connector],
         )
         db.add(conn)
 
     await db.commit()
-    log.info("%s connected for user %s", _CONNECTOR_NAMES[connector], user.id)
+    log.info("%s connected for user %s", conn_name, user.id)
 
     # Redirect back to connectors page
     base = "https://tarsmv.duckdns.org" if via_prod else "http://localhost:3000"
-    return RedirectResponse(f"{base}/connectors?connected={connector}")
+    return RedirectResponse(f"{base}/connectors?connected={resolved_connector}")
 
 
 @router.delete("/oauth/{connector}", status_code=204)
@@ -284,7 +313,7 @@ async def oauth_disconnect(
     _: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    if connector not in _GOOGLE_CONNECTORS and connector != "strava":
+    if connector not in _GOOGLE_CONNECTORS and connector not in ("strava",):
         raise HTTPException(status_code=400, detail="Unknown connector")
 
     user_result = await db.execute(select(User).limit(1))

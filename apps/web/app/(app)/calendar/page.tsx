@@ -21,7 +21,7 @@ import { MentionTextarea } from "@/components/ui/MentionTextarea"
 import { stripToLabels } from "@/lib/mentions"
 
 type ViewMode = "month" | "week" | "day"
-type EventType = "gcal" | "meeting" | "task" | "cron" | "agent"
+type EventType = "gcal" | "gcal_personal" | "meeting" | "task" | "cron" | "agent"
 
 interface CalendarEventOut {
   id: string
@@ -47,7 +47,8 @@ interface CalendarEvent {
 }
 
 const TYPE_STYLES: Record<EventType, { dot: string; bg: string; text: string; borderColor: string; icon: React.ElementType; label: string }> = {
-  gcal:    { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "var(--c-moss)",      icon: CalendarIcon, label: "Calendar" },
+  gcal:         { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "var(--c-moss)",      icon: CalendarIcon, label: "Calendar" },
+  gcal_personal: { dot: "bg-moss",      bg: "bg-moss-soft",   text: "text-moss",      borderColor: "var(--c-moss)",      icon: CalendarIcon, label: "Personal Calendar" },
   meeting: { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "var(--c-moss)",      icon: Video,        label: "Meeting"  },
   task:    { dot: "bg-amber",      bg: "bg-amber-soft",  text: "text-amber",     borderColor: "var(--c-amber)",     icon: CheckSquare,  label: "Task"     },
   cron:    { dot: "bg-ink-muted",  bg: "bg-surface-2",   text: "text-ink",       borderColor: "var(--c-ink-muted)", icon: ClockIcon,    label: "Cron Job" },

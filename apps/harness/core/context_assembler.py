@@ -275,47 +275,48 @@ Never use em-dashes (—) in your responses. Use commas, colons, or restructure 
 
 
 async def _fetch_gmail_context(db: AsyncSession, user_id: str) -> str:
-    try:
-        from sqlalchemy import select
-        from db.models import Connector
-        result = await db.execute(
-            select(Connector).where(
-                Connector.user_id == user_id,
-                Connector.name == "Gmail",
+    from sqlalchemy import select
+    from db.models import Connector
+    from connectors.gmail import GmailClient
+
+    async def _inbox_section(conn_name: str, label: str) -> str:
+        try:
+            result = await db.execute(
+                select(Connector).where(
+                    Connector.user_id == user_id,
+                    Connector.name == conn_name,
+                )
             )
-        )
-        conn = result.scalar_one_or_none()
-        if not conn or not conn.auth.get("refresh_token"):
+            conn = result.scalar_one_or_none()
+            if not conn or not conn.auth.get("refresh_token"):
+                return ""
+            loop = asyncio.get_event_loop()
+            client = GmailClient(conn.auth)
+            summaries = await loop.run_in_executor(None, lambda: client.get_inbox_summary(12))
+            if not summaries:
+                return f"\n[GMAIL — {label}]\nInbox is empty.\n"
+            unread = [s for s in summaries if s["unread"]]
+            read   = [s for s in summaries if not s["unread"]]
+            lines = [f"\n[GMAIL — {label} INBOX]"]
+            if unread:
+                lines.append(f"Unread ({len(unread)}):")
+                for s in unread:
+                    tid = s.get("thread_id", "")[:8]
+                    lines.append(f"  • [{tid}] {s['from_name']}: {s['subject']} — {s['snippet'][:120]}")
+            if read:
+                lines.append(f"Recent read ({len(read)}):")
+                for s in read[:5]:
+                    tid = s.get("thread_id", "")[:8]
+                    lines.append(f"  · [{tid}] {s['from_name']}: {s['subject']} — {s['snippet'][:80]}")
+            lines.append("")
+            return "\n".join(lines)
+        except Exception as exc:
+            log.warning("Gmail context fetch failed (%s): %s", label, exc)
             return ""
 
-        from connectors.gmail import GmailClient
-        loop = asyncio.get_event_loop()
-        client = GmailClient(conn.auth)
-        summaries = await loop.run_in_executor(None, lambda: client.get_inbox_summary(12))
-
-        if not summaries:
-            return "\n[GMAIL]\nInbox is empty.\n"
-
-        unread = [s for s in summaries if s["unread"]]
-        read   = [s for s in summaries if not s["unread"]]
-
-        lines = ["\n[GMAIL — LIVE INBOX]"]
-        if unread:
-            lines.append(f"Unread ({len(unread)}):")
-            for s in unread:
-                tid = s.get("thread_id", "")[:8]
-                lines.append(f"  • [{tid}] {s['from_name']}: {s['subject']} — {s['snippet'][:120]}")
-        if read:
-            lines.append(f"Recent read ({len(read)}):")
-            for s in read[:5]:
-                tid = s.get("thread_id", "")[:8]
-                lines.append(f"  · [{tid}] {s['from_name']}: {s['subject']} — {s['snippet'][:80]}")
-        lines.append("")
-        return "\n".join(lines)
-
-    except Exception as exc:
-        log.warning("Gmail context fetch failed: %s", exc)
-        return ""
+    work = await _inbox_section("Gmail", "WORK")
+    personal = await _inbox_section("Gmail (Personal)", "PERSONAL")
+    return work + personal
 
 
 async def _fetch_tasks_context(db: AsyncSession, user_id: str) -> str:
@@ -381,45 +382,48 @@ async def _fetch_meetings_context(db: AsyncSession, user_id: str, limit: int = 7
 
 
 async def _fetch_gcal_context(db: AsyncSession, user_id: str, tz_name: str = "Asia/Manila") -> str:
-    try:
-        from sqlalchemy import select
-        from db.models import Connector
-        result = await db.execute(
-            select(Connector).where(
-                Connector.user_id == user_id,
-                Connector.name == "Google Calendar",
+    from sqlalchemy import select
+    from db.models import Connector
+    from connectors.google_calendar import GoogleCalendarClient
+
+    async def _cal_section(conn_name: str, label: str) -> str:
+        try:
+            result = await db.execute(
+                select(Connector).where(
+                    Connector.user_id == user_id,
+                    Connector.name == conn_name,
+                )
             )
-        )
-        conn = result.scalar_one_or_none()
-        if not conn or not conn.auth.get("refresh_token"):
+            conn = result.scalar_one_or_none()
+            if not conn or not conn.auth.get("refresh_token"):
+                return ""
+            loop = asyncio.get_event_loop()
+            client = GoogleCalendarClient(conn.auth)
+            events = await loop.run_in_executor(None, lambda: client.get_upcoming_summary(days=30, max_results=30))
+            if not events:
+                return ""
+            lines = [f"\n[CALENDAR — {label}, next 30 days ({tz_name})]"]
+            for e in events:
+                time_str = _format_event_time(e["start"], e["all_day"], tz_name)
+                event_id = e.get("id", "")
+                id_tag = f" [{event_id}]" if event_id else ""
+                line = f"  • {time_str} — {e['title']}{id_tag}"
+                if e.get("location"):
+                    line += f" @ {e['location']}"
+                if e.get("attendees"):
+                    names = ", ".join(e["attendees"][:4])
+                    line += f" ({names})"
+                lines.append(line)
+            lines.append("")
+            return "\n".join(lines)
+        except Exception as exc:
+            log.warning("GCal context fetch failed (%s): %s", label, exc)
             return ""
 
-        from connectors.google_calendar import GoogleCalendarClient
-        loop = asyncio.get_event_loop()
-        client = GoogleCalendarClient(conn.auth)
-        events = await loop.run_in_executor(None, lambda: client.get_upcoming_summary(days=30, max_results=30))
-
-        if not events:
-            return "\n[CALENDAR — UPCOMING]\nNo events in the next 7 days.\n"
-
-        lines = [f"\n[CALENDAR — UPCOMING EVENTS, next 30 days ({tz_name})]"]
-        for e in events:
-            time_str = _format_event_time(e["start"], e["all_day"], tz_name)
-            event_id = e.get("id", "")
-            id_tag = f" [{event_id}]" if event_id else ""
-            line = f"  • {time_str} — {e['title']}{id_tag}"
-            if e.get("location"):
-                line += f" @ {e['location']}"
-            if e.get("attendees"):
-                names = ", ".join(e["attendees"][:4])
-                line += f" ({names})"
-            lines.append(line)
-        lines.append("")
-        return "\n".join(lines)
-
-    except Exception as exc:
-        log.warning("GCal context fetch failed: %s", exc)
-        return ""
+    work = await _cal_section("Google Calendar", "WORK CALENDAR")
+    personal = await _cal_section("Google Calendar (Personal)", "PERSONAL CALENDAR")
+    combined = work + personal
+    return combined if combined.strip() else ""
 
 
 async def _fetch_strava_context(db: AsyncSession, user_id: str) -> str:

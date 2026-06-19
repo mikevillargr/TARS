@@ -127,13 +127,13 @@ function GenericConnectorLogo({ name, size = 28 }: { name: string; size?: number
 }
 
 function ConnectorLogo({ id, name, size = 28 }: { id: string; name: string; size?: number }) {
-  if (id === "gmail")         return <GmailLogo size={size} />
-  if (id === "gcal")          return <GoogleCalendarLogo size={size} />
-  if (id === "google_people") return <GoogleContactsLogo size={size} />
-  if (id === "google_workspace") return <GoogleDriveLogo size={size} />
-  if (id === "fireflies")     return <FirefliesLogo size={size} />
-  if (id === "strava")        return <StravaLogo size={size} />
-  if (id === "garmin")        return <GarminLogo size={size} />
+  if (id === "gmail" || id === "gmail_personal")                       return <GmailLogo size={size} />
+  if (id === "gcal" || id === "gcal_personal")                         return <GoogleCalendarLogo size={size} />
+  if (id === "google_people")                                          return <GoogleContactsLogo size={size} />
+  if (id === "google_workspace" || id === "google_workspace_personal") return <GoogleDriveLogo size={size} />
+  if (id === "fireflies")                                              return <FirefliesLogo size={size} />
+  if (id === "strava")                                                 return <StravaLogo size={size} />
+  if (id === "garmin")                                                 return <GarminLogo size={size} />
   return <GenericConnectorLogo name={name} size={size} />
 }
 

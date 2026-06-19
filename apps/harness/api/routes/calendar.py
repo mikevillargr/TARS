@@ -55,16 +55,18 @@ async def list_events(
 
     events: List[CalendarEventOut] = []
 
-    # Google Calendar events
-    try:
-        r = await db.execute(
-            select(Connector).where(
-                Connector.user_id == user_id,
-                Connector.name == "Google Calendar",
+    # Google Calendar events — work and personal accounts
+    async def _fetch_gcal_events(conn_name: str, event_type: str) -> None:
+        try:
+            r = await db.execute(
+                select(Connector).where(
+                    Connector.user_id == user_id,
+                    Connector.name == conn_name,
+                )
             )
-        )
-        conn = r.scalar_one_or_none()
-        if conn and conn.auth.get("refresh_token"):
+            conn = r.scalar_one_or_none()
+            if not conn or not conn.auth.get("refresh_token"):
+                return
             from connectors.google_calendar import GoogleCalendarClient
             loop = asyncio.get_event_loop()
             client = GoogleCalendarClient(conn.auth)
@@ -96,8 +98,8 @@ async def list_events(
                     for a in e.get("attendees", [])
                 ]
                 events.append(CalendarEventOut(
-                    id=f"gcal-{e['id']}",
-                    type="gcal",
+                    id=f"{event_type}-{e['id']}",
+                    type=event_type,
                     title=e.get("summary", "Untitled"),
                     start=start_str,
                     end=end_str,
@@ -108,8 +110,11 @@ async def list_events(
                     source_id=e["id"],
                     description=e.get("description"),
                 ))
-    except Exception as exc:
-        log.warning("GCal events fetch failed: %s", exc)
+        except Exception as exc:
+            log.warning("GCal events fetch failed (%s): %s", conn_name, exc)
+
+    await _fetch_gcal_events("Google Calendar", "gcal")
+    await _fetch_gcal_events("Google Calendar (Personal)", "gcal_personal")
 
     # Tasks with due dates in range
     try:

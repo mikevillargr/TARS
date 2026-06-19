@@ -44,6 +44,27 @@ def list_connectors() -> List[ConnectorStatus]:
             },
         ),
         ConnectorStatus(
+            id="gmail_personal",
+            name="Gmail (Personal)",
+            status="disconnected",
+            capabilities=["read"],
+            metadata={"description": "Personal email read", "auth_type": "oauth2"},
+        ),
+        ConnectorStatus(
+            id="gcal_personal",
+            name="Google Calendar (Personal)",
+            status="disconnected",
+            capabilities=["read"],
+            metadata={"description": "Personal calendar events", "auth_type": "oauth2"},
+        ),
+        ConnectorStatus(
+            id="google_workspace_personal",
+            name="Google Workspace (Personal)",
+            status="disconnected",
+            capabilities=["read", "write"],
+            metadata={"description": "Read & write personal Google Docs, Sheets, and Slides", "auth_type": "oauth2"},
+        ),
+        ConnectorStatus(
             id="strava",
             name="Strava",
             status="disconnected",  # upgraded in route if DB token exists

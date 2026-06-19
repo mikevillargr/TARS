@@ -1458,36 +1458,55 @@ async def send_message(
                         try:
                             from sqlalchemy import select as _select
                             from db.models import Connector
-                            conn_result = await bg_db.execute(
-                                _select(Connector).where(
-                                    Connector.user_id == user_id,
-                                    Connector.name == "Gmail",
-                                )
-                            )
-                            conn = conn_result.scalar_one_or_none()
-                            if not conn or not conn.auth.get("refresh_token"):
-                                return "Gmail not connected."
-
                             from connectors.gmail import GmailClient, extract_thread_text
                             import asyncio as _asyncio
 
-                            gclient = GmailClient(conn.auth)
                             loop = _asyncio.get_event_loop()
 
-                            thread_id = tool_input.get("thread_id", "").strip()
-                            if not thread_id and tool_input.get("search_query"):
-                                threads = await loop.run_in_executor(
-                                    None,
-                                    lambda: gclient.list_threads(
-                                        query=tool_input["search_query"], max_results=1
-                                    ),
+                            # Build list of connected Gmail accounts (work first, then personal)
+                            gmail_conns: list[tuple[str, object]] = []
+                            for conn_name, acct_label in [("Gmail", "work"), ("Gmail (Personal)", "personal")]:
+                                r = await bg_db.execute(
+                                    _select(Connector).where(
+                                        Connector.user_id == user_id,
+                                        Connector.name == conn_name,
+                                    )
                                 )
-                                if not threads:
+                                c = r.scalar_one_or_none()
+                                if c and c.auth.get("refresh_token"):
+                                    gmail_conns.append((acct_label, c))
+
+                            if not gmail_conns:
+                                return "Gmail not connected."
+
+                            thread_id = tool_input.get("thread_id", "").strip()
+                            search_query = tool_input.get("search_query", "")
+
+                            # For search: query all accounts, combine results
+                            if not thread_id and search_query:
+                                all_results: list[str] = []
+                                for acct_label, c in gmail_conns:
+                                    gclient = GmailClient(c.auth)
+                                    threads = await loop.run_in_executor(
+                                        None,
+                                        lambda gc=gclient: gc.list_threads(query=search_query, max_results=3),
+                                    )
+                                    if threads:
+                                        for t in threads[:1]:
+                                            thread = await loop.run_in_executor(None, lambda gc=gclient, tid=t["id"]: gc.get_thread(tid))
+                                            body = extract_thread_text(thread)
+                                            if body:
+                                                all_results.append(f"[{acct_label.upper()} GMAIL]\n{body[:3000]}")
+                                if not all_results:
                                     return "No email found matching that search."
-                                thread_id = threads[0]["id"]
+                                return "\n\n---\n\n".join(all_results)
 
                             if not thread_id:
                                 return "Provide a thread_id or search_query."
+
+                            # For thread_id: try work account first, then personal
+                            gclient = GmailClient(gmail_conns[0][1].auth)
+                            acct_label = gmail_conns[0][0]
 
                             # thread_id from context is first 8 chars — find full id
                             if len(thread_id) == 8:
@@ -1498,6 +1517,17 @@ async def send_message(
                                 match = next((t["id"] for t in candidates if t["id"].startswith(thread_id)), None)
                                 if match:
                                     thread_id = match
+                                elif len(gmail_conns) > 1:
+                                    # Try personal account
+                                    gclient = GmailClient(gmail_conns[1][1].auth)
+                                    acct_label = gmail_conns[1][0]
+                                    candidates2 = await loop.run_in_executor(
+                                        None,
+                                        lambda: gclient.list_threads(query="in:inbox", max_results=20),
+                                    )
+                                    match2 = next((t["id"] for t in candidates2 if t["id"].startswith(thread_id)), None)
+                                    if match2:
+                                        thread_id = match2
 
                             thread = await loop.run_in_executor(None, lambda: gclient.get_thread(thread_id))
                             body = extract_thread_text(thread)
