@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.11.3 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.12.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -854,6 +854,14 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.12.0 Feat: 8 chat stream enrichment features — live tool progress indicator (animated
+        spinner, ephemeral SSE-only), follow-up suggestion chips (3 Haiku-generated per
+        response, persist in follow_ups[]), context source citations (Mnemon + Second Brain
+        disclosure toggle, persist in context_sources[]), email thread card (from read_email),
+        YouTube embed player + GitHub repo card (URL type dispatch in UrlPreviewCard), Strava
+        activity card (from get_strava_* tools), meeting card (from read_meeting). All 5 card
+        types persist in tool_results and replay via InlineMessageCards. done event now carries
+        follow_ups[] and context_sources[]. Web + harness, no DB migration.
 v2.11.2 Fix: contact @-mentions show email to disambiguate duplicates. search_mentions
         (links.py) leads contact subtitle with primary_email then org/title
         ("j.shorrock@aalaw.com · AA Law"). Shared dropdown → applies to all mention surfaces.
