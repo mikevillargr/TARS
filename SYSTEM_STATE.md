@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.11.2 |
-| Released | 2026-06-18 |
+| Version | v2.11.3 |
+| Released | 2026-06-19 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -111,7 +111,10 @@ requests are excluded — vision routing owns model choice.
 | Connector | Capabilities | Status |
 |---|---|---|
 | Gmail | read, webhook | Live |
+| Gmail (Personal) | read | Live — connect via Connectors page |
 | Google Calendar | read, write | Live |
+| Google Calendar (Personal) | read | Live — connect via Connectors page |
+| Google Workspace (Personal) | read, write | Live — connect via Connectors page |
 | Fireflies | read, webhook (meeting.ended) | Live |
 | Strava | read | Live |
 | Tesla (Tessie) | read, write (full vehicle control) | Live |
@@ -154,6 +157,15 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.11.3 — 2026-06-19
+**Feature: multi-account Google support — personal Gmail, Calendar, and Drive**
+- Three new connector slots: `Gmail (Personal)`, `Google Calendar (Personal)`, `Google Workspace (Personal)`. Each appears as its own card in the Connectors page.
+- OAuth reuses existing Google credentials — same client IDs, same redirect URIs. A `state=personal` param in the OAuth URL distinguishes personal from work at the callback; no Google Cloud Console changes needed.
+- Context assembler fans out to both work and personal Gmail/Calendar accounts, labeling each section `[GMAIL — WORK INBOX]` / `[GMAIL — PERSONAL INBOX]` etc. in the system prompt.
+- `read_email` chat tool searches both accounts and merges results for search queries; resolves thread IDs against work first, then personal.
+- Calendar UI (`/calendar`) includes events from both Google Calendar accounts, with `gcal_personal` event type (same moss color, distinct "Personal Calendar" label).
+- No DB migration required — new connector rows use existing `Connector` model with distinct names.
 
 ### v2.11.2 — 2026-06-18
 **Fix: contact mentions show email to disambiguate duplicates**

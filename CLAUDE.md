@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.11.2 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.11.3 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -349,8 +349,11 @@ class Connector:
 | Connector | Capabilities |
 |---|---|
 | Gmail | read, webhook |
+| Gmail (Personal) | read — separate account slot, same OAuth credentials, state=personal |
 | Google Calendar | read, write |
+| Google Calendar (Personal) | read — separate account slot |
 | Google Workspace | search Drive + read & write Docs/Sheets/Slides by link (Drive export → existing parsers) |
+| Google Workspace (Personal) | read, write — separate account slot |
 | Fireflies | read, webhook (meeting.ended) |
 | Growth Rocket tools | read, write (RedditPipe, AlwaysSunny, Poe grader) |
 
@@ -847,6 +850,10 @@ v2.9.5  Feat: mention round-trip — chips survive save/reload. Storage format [
         .parse.setup adds a markdown-it inline rule that converts it back to <span data-mention>
         which tiptap DOM-parses to a mention node. Harness strips markers before embedding.
         Harness + web, no schema change.
+v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. Three new connector
+        slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
+        credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
+        read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
 v2.11.2 Fix: contact @-mentions show email to disambiguate duplicates. search_mentions
         (links.py) leads contact subtitle with primary_email then org/title
         ("j.shorrock@aalaw.com · AA Law"). Shared dropdown → applies to all mention surfaces.
