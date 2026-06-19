@@ -24,6 +24,17 @@ import { useConfirm } from "@/components/ui/confirm-dialog"
 import { useNotificationContext } from "@/context/NotificationContext"
 import { MentionDropdown } from "@/components/ui/MentionDropdown"
 import type { MentionSuggestion } from "@/hooks/useMentionAutocomplete"
+import { ToolProgressStack } from "@/components/chat/ToolProgressLine"
+import type { ToolProgress } from "@/components/chat/ToolProgressLine"
+import { FollowUpChips } from "@/components/chat/FollowUpChips"
+import { ContextSources } from "@/components/chat/ContextSources"
+import type { ContextSource } from "@/components/chat/ContextSources"
+import { EmailThreadCard } from "@/components/chat/EmailThreadCard"
+import type { EmailThread } from "@/components/chat/EmailThreadCard"
+import { StravaActivityCard, StravaActivityList } from "@/components/chat/StravaActivityCard"
+import type { StravaActivity } from "@/components/chat/StravaActivityCard"
+import { MeetingCard } from "@/components/chat/MeetingCard"
+import type { MeetingCardData } from "@/components/chat/MeetingCard"
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Conversation {
@@ -46,6 +57,8 @@ interface Message {
   model_used?: string
   tool_calls?: string[]
   tool_results?: Array<{ type: string; [k: string]: unknown }>
+  follow_ups?: string[]
+  context_sources?: ContextSource[]
   created_at: string
   _attachments?: AttachmentMeta[]
 }
@@ -966,6 +979,15 @@ function InlineMessageCards({
           }
           return <EmailDraftCard key={key} draft={draft} onDismiss={() => dismiss(key)} />
         }
+        if (evt.type === "email_thread_card") {
+          return <EmailThreadCard key={key} thread={e as unknown as EmailThread} onDismiss={() => dismiss(key)} onAsk={onAsk} />
+        }
+        if (evt.type === "strava_activity_card") {
+          return <StravaActivityCard key={key} activity={e as unknown as StravaActivity} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "meeting_card") {
+          return <MeetingCard key={key} meeting={e as unknown as MeetingCardData} onDismiss={() => dismiss(key)} />
+        }
         return null
       })}
     </div>
@@ -1247,12 +1269,19 @@ interface MessageAreaProps {
   contactResults: ContactResultSet[]
   placeResults: PlaceResultSet[]
   emailDrafts: EmailDraft[]
+  toolProgressItems: ToolProgress[]
+  emailThreadCards: EmailThread[]
+  stravaCards: StravaActivity[]
+  meetingCards: MeetingCardData[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
   setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
   setPlaceResults: React.Dispatch<React.SetStateAction<PlaceResultSet[]>>
   setEmailDrafts: React.Dispatch<React.SetStateAction<EmailDraft[]>>
+  setEmailThreadCards: React.Dispatch<React.SetStateAction<EmailThread[]>>
+  setStravaCards: React.Dispatch<React.SetStateAction<StravaActivity[]>>
+  setMeetingCards: React.Dispatch<React.SetStateAction<MeetingCardData[]>>
   setAgentStreamMessages: React.Dispatch<React.SetStateAction<AgentStreamMessage[]>>
   onAsk: (q: string) => void
   quoteIndex: number
@@ -1267,12 +1296,19 @@ const MessageArea = memo(function MessageArea({
   contactResults,
   placeResults,
   emailDrafts,
+  toolProgressItems,
+  emailThreadCards,
+  stravaCards,
+  meetingCards,
   setCalendarSuggestions,
   setTaskSuggestions,
   setArtifactNotifications,
   setContactResults,
   setPlaceResults,
   setEmailDrafts,
+  setEmailThreadCards,
+  setStravaCards,
+  setMeetingCards,
   setAgentStreamMessages,
   onAsk,
   quoteIndex,
@@ -1281,6 +1317,8 @@ const MessageArea = memo(function MessageArea({
   const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
     || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
     || emailDrafts.length > 0
+    || toolProgressItems.length > 0 || emailThreadCards.length > 0
+    || stravaCards.length > 0 || meetingCards.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-24 md:p-6 md:pb-28 space-y-6">
       {allMessages.length === 0 ? (
@@ -1329,11 +1367,32 @@ const MessageArea = memo(function MessageArea({
                     onAsk={onAsk}
                   />
                 )}
+                {/* Context sources + follow-up chips for saved assistant messages */}
+                {msg.role === "assistant" && !("streaming" in msg) && (
+                  <>
+                    {"context_sources" in msg && Array.isArray((msg as Message).context_sources) && (msg as Message).context_sources!.length > 0 && (
+                      <div className="max-w-3xl mx-auto pl-0 sm:pl-11">
+                        <ContextSources sources={(msg as Message).context_sources!} />
+                      </div>
+                    )}
+                    {"follow_ups" in msg && Array.isArray((msg as Message).follow_ups) && (msg as Message).follow_ups!.length > 0 && (
+                      <div className="max-w-3xl mx-auto pl-0 sm:pl-11">
+                        <FollowUpChips suggestions={(msg as Message).follow_ups!} onAsk={onAsk} />
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             )
           }
         </React.Fragment>
       ))}
+      {/* Tool progress — shown while streaming (ephemeral, not persisted) */}
+      {toolProgressItems.length > 0 && (
+        <div className="max-w-3xl mx-auto pl-0 sm:pl-11">
+          <ToolProgressStack items={toolProgressItems} />
+        </div>
+      )}
       {/* Global card section — live preview during streaming only */}
       {hasCards && (
         <div className="max-w-3xl mx-auto pl-0 sm:pl-11 flex flex-col gap-2">
@@ -1380,6 +1439,28 @@ const MessageArea = memo(function MessageArea({
               onDismiss={() => setEmailDrafts(prev => prev.filter(x => x.draft_id !== d.draft_id))}
             />
           ))}
+          {emailThreadCards.map((t, i) => (
+            <EmailThreadCard
+              key={`email-thread-${i}`}
+              thread={t}
+              onDismiss={() => setEmailThreadCards(prev => prev.filter((_, j) => j !== i))}
+              onAsk={onAsk}
+            />
+          ))}
+          {stravaCards.map((a, i) => (
+            <StravaActivityCard
+              key={`strava-${a.id ?? i}`}
+              activity={a}
+              onDismiss={() => setStravaCards(prev => prev.filter((_, j) => j !== i))}
+            />
+          ))}
+          {meetingCards.map((m, i) => (
+            <MeetingCard
+              key={`meeting-card-${m.id ?? i}`}
+              meeting={m}
+              onDismiss={() => setMeetingCards(prev => prev.filter((_, j) => j !== i))}
+            />
+          ))}
         </div>
       )}
       <div ref={messagesEndRef} className="shrink-0" style={{ height: 160 }} />
@@ -1418,6 +1499,11 @@ export default function ChatPage() {
   const [contactResults, setContactResults]               = useState<ContactResultSet[]>([])
   const [placeResults, setPlaceResults]                   = useState<PlaceResultSet[]>([])
   const [emailDrafts, setEmailDrafts]                     = useState<EmailDraft[]>([])
+  // New card state
+  const [toolProgressItems, setToolProgressItems]         = useState<ToolProgress[]>([])
+  const [emailThreadCards, setEmailThreadCards]           = useState<EmailThread[]>([])
+  const [stravaCards, setStravaCards]                     = useState<StravaActivity[]>([])
+  const [meetingCards, setMeetingCards]                   = useState<MeetingCardData[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   // Conversations with unread async messages (e.g. agent completions)
@@ -2039,6 +2125,37 @@ export default function ChatPage() {
                   created_at: new Date().toISOString(),
                 }])
               }
+            } else if (evt.type === "tool_progress") {
+              if (chatId === activeChatIdRef.current) {
+                const prog: ToolProgress = { tool: evt.tool as string, status: evt.status as string, done: evt.done as boolean ?? false }
+                setToolProgressItems(prev => {
+                  const existing = prev.findIndex(p => p.tool === prog.tool && !p.done)
+                  if (existing >= 0) {
+                    const next = [...prev]
+                    next[existing] = prog
+                    return next
+                  }
+                  return [...prev, prog]
+                })
+              }
+            } else if (evt.type === "email_thread_card") {
+              if (chatId === activeChatIdRef.current) {
+                const card = evt as unknown as EmailThread
+                streamingCardsRef.current.push({ type: "email_thread_card", ...card })
+                setEmailThreadCards(prev => [...prev, card])
+              }
+            } else if (evt.type === "strava_activity_card") {
+              if (chatId === activeChatIdRef.current) {
+                const card = evt as unknown as StravaActivity
+                streamingCardsRef.current.push({ type: "strava_activity_card", ...card })
+                setStravaCards(prev => [...prev, card])
+              }
+            } else if (evt.type === "meeting_card") {
+              if (chatId === activeChatIdRef.current) {
+                const card = evt as unknown as MeetingCardData
+                streamingCardsRef.current.push({ type: "meeting_card", ...card })
+                setMeetingCards(prev => [...prev, card])
+              }
             } else if (evt.type === "done") {
               // Flush any remaining text in the TTS buffer
               if (isTtsEnabled) tts.flushBuffer()
@@ -2055,6 +2172,8 @@ export default function ChatPage() {
                 model_used: evt.model,
                 created_at: new Date().toISOString(),
                 ...(streamingCardsRef.current.length > 0 && { tool_results: [...streamingCardsRef.current] }),
+                ...(Array.isArray(evt.follow_ups) && evt.follow_ups.length > 0 && { follow_ups: evt.follow_ups as string[] }),
+                ...(Array.isArray(evt.context_sources) && evt.context_sources.length > 0 && { context_sources: evt.context_sources as ContextSource[] }),
               }
               if (chatId === activeChatIdRef.current) {
                 setMessages((prev) => [...prev.filter((m) => m.id !== tempUser.id), tempUser, finalMsg])
@@ -2065,6 +2184,10 @@ export default function ChatPage() {
                 setContactResults([])
                 setPlaceResults([])
                 setEmailDrafts([])
+                setToolProgressItems([])
+                setEmailThreadCards([])
+                setStravaCards([])
+                setMeetingCards([])
               }
               // Refresh conversation list to pick up the title (generated async after done)
               apiGet<Conversation[]>("/chat/conversations").then(setConversations).catch(console.error)
@@ -2426,12 +2549,19 @@ export default function ChatPage() {
           contactResults={contactResults}
           placeResults={placeResults}
           emailDrafts={emailDrafts}
+          toolProgressItems={toolProgressItems}
+          emailThreadCards={emailThreadCards}
+          stravaCards={stravaCards}
+          meetingCards={meetingCards}
           setCalendarSuggestions={setCalendarSuggestions}
           setTaskSuggestions={setTaskSuggestions}
           setArtifactNotifications={setArtifactNotifications}
           setContactResults={setContactResults}
           setPlaceResults={setPlaceResults}
           setEmailDrafts={setEmailDrafts}
+          setEmailThreadCards={setEmailThreadCards}
+          setStravaCards={setStravaCards}
+          setMeetingCards={setMeetingCards}
           setAgentStreamMessages={setAgentStreamMessages}
           onAsk={handleAsk}
           quoteIndex={quoteIndex}

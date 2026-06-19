@@ -95,6 +95,37 @@ router = APIRouter()
 _active_bg_tasks: set = set()
 
 
+async def _generate_follow_ups(history: list[dict]) -> list[str]:
+    """Generate 3 short follow-up questions using Haiku. Non-blocking — returns [] on any failure."""
+    try:
+        from core.config import settings as _cfg
+        from anthropic import AsyncAnthropic as _AA
+        _ac = _AA(api_key=_cfg.anthropic_api_key)
+        _last = history[-4:] if len(history) >= 4 else history
+        _exchange = "\n".join(f"{m['role'].upper()}: {(m.get('content') or '')[:250]}" for m in _last)
+        _resp = await _ac.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=120,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Based on this conversation, give exactly 3 short follow-up questions "
+                    "(max 10 words each) the user might naturally ask next. "
+                    "Return only a JSON array of strings, nothing else.\n\n"
+                    f"{_exchange}\n\nJSON array:"
+                ),
+            }],
+        )
+        import json as _json2
+        _text = _resp.content[0].text.strip()
+        _parsed = _json2.loads(_text)
+        if isinstance(_parsed, list):
+            return [str(s) for s in _parsed[:3]]
+    except Exception:
+        pass
+    return []
+
+
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class ConversationOut(BaseModel):
@@ -791,6 +822,9 @@ async def send_message(
     )
 
     # --- Memory context injection ---
+    # context_sources is populated here (outer scope) and read inside background_generate
+    # so the done event can surface which memories/knowledge were injected.
+    _context_sources: list[dict] = []
     try:
         from memory import mnemon as _mnemon_mod
         from memory import second_brain as _sb_mod
@@ -800,12 +834,23 @@ async def send_message(
         for _m in _mnemon_results:
             if _m.content:
                 _mem_parts.append(_m.content)
+                _context_sources.append({
+                    "id": str(_m.id),
+                    "type": "memory",
+                    "title": (_m.content[:60].split("\n")[0]).strip() or "Memory",
+                })
         for _r in _sb_results:
             _chunk = _r.get("chunk")
             _item = _r.get("item")
             _text = _chunk.content if _chunk else (_item.summary or "" if _item else "")
             if _text:
                 _mem_parts.append(_text)
+                if _item:
+                    _context_sources.append({
+                        "id": str(_item.id),
+                        "type": "knowledge",
+                        "title": (_item.source_title or _item.url or "Knowledge item")[:80],
+                    })
         if _mem_parts:
             _memory_block = "\n".join(_mem_parts)
             system_prompt = f"Memory context (from Mnemon & Second Brain):\n{_memory_block}\n\n{system_prompt}"
@@ -883,8 +928,13 @@ async def send_message(
                     tool_results.append(event)
                     await queue.put(sse_event(event))
 
+                async def _emit_progress(tool: str, status: str, done: bool = False) -> None:
+                    """Emit a live tool-progress indicator to the client (not persisted)."""
+                    await queue.put(sse_event({"type": "tool_progress", "tool": tool, "status": status, "done": done}))
+
                 async def _tool_executor(name: str, tool_input: dict) -> str:
                     if name == "create_task":
+                        await _emit_progress("create_task", "Creating task…")
                         task = Task(
                             user_id=user_id,
                             title=tool_input["title"],
@@ -1455,6 +1505,7 @@ async def send_message(
                             return f"Failed to update contact: {exc}"
 
                     if name == "read_email":
+                        await _emit_progress("read_email", "Searching Gmail…")
                         try:
                             from sqlalchemy import select as _select
                             from db.models import Connector
@@ -1560,6 +1611,33 @@ async def send_message(
                             except Exception as exc:
                                 log.warning("Failed to enqueue email senders: %s", exc)
 
+                            # Emit email_thread_card so the frontend renders a structured card
+                            try:
+                                _card_msgs = thread.get("messages", [])
+                                _first_msg = _card_msgs[0] if _card_msgs else {}
+                                _hdrs = {h["name"]: h["value"] for h in _first_msg.get("payload", {}).get("headers", [])}
+                                _from_raw = _hdrs.get("From", "")
+                                import email.utils as _eu
+                                _sender_name, _sender_email = _eu.parseaddr(_from_raw)
+                                _subject = _hdrs.get("Subject", "(no subject)")
+                                _date_raw = _hdrs.get("Date", "")
+                                import email.utils as _eu2
+                                _date_parsed = _eu2.parsedate_to_datetime(_date_raw).isoformat() if _date_raw else ""
+                                _snippet = body[:180].replace("\n", " ").strip()
+                                await _emit_card({
+                                    "type": "email_thread_card",
+                                    "subject": _subject,
+                                    "sender_name": _sender_name or _sender_email,
+                                    "sender_email": _sender_email,
+                                    "date": _date_parsed,
+                                    "snippet": _snippet,
+                                    "thread_id": thread_id,
+                                    "account": acct_label,
+                                })
+                                await _emit_progress("read_email", f"Read email: {_subject[:40]}", done=True)
+                            except Exception as _ce:
+                                log.warning("email_thread_card emission failed: %s", _ce)
+
                             # Cap at 4000 chars to stay within token budget
                             if len(body) > 4000:
                                 body = body[:4000] + "\n\n[... email truncated ...]"
@@ -1611,6 +1689,7 @@ async def send_message(
                             return f"Failed to sync meetings: {exc}"
 
                     if name == "read_meeting":
+                        await _emit_progress("read_meeting", "Reading meeting notes…")
                         try:
                             from sqlalchemy import select as _select
                             from db.models import Meeting, MeetingActionItem
@@ -1661,12 +1740,30 @@ async def send_message(
                             elif not include_transcript and meeting.transcript:
                                 parts.append(f"\n(Transcript available — call read_meeting again with include_transcript=true to see it.)")
 
+                            # Emit meeting_card so the frontend renders a structured card
+                            try:
+                                _summary_excerpt = (meeting.summary or "")[:200].replace("\n", " ").strip() or None
+                                await _emit_card({
+                                    "type": "meeting_card",
+                                    "id": str(meeting.id),
+                                    "title": meeting.title,
+                                    "date": meeting.started_at.isoformat() if meeting.started_at else None,
+                                    "attendees": meeting.attendees or [],
+                                    "summary_excerpt": _summary_excerpt,
+                                    "status": meeting.status,
+                                    "action_item_count": len(action_items),
+                                })
+                                await _emit_progress("read_meeting", f"Read: {meeting.title[:40]}", done=True)
+                            except Exception as _ce:
+                                log.warning("meeting_card emission failed: %s", _ce)
+
                             return "\n".join(parts)
                         except Exception as exc:
                             log.warning("read_meeting tool failed: %s", exc)
                             return f"Failed to read meeting: {exc}"
 
                     if name == "web_search":
+                        await _emit_progress("web_search", "Searching the web…")
                         try:
                             from core.config import settings as _settings
                             if not _settings.tavily_api_key:
@@ -2068,6 +2165,7 @@ async def send_message(
                             return f"Failed to retrieve saved places: {exc}"
 
                     if name == "create_agent_job":
+                        await _emit_progress("create_agent_job", "Launching agent…")
                         try:
                             from db.models import AgentJob
                             agent_type = tool_input.get("agent_type", "evolutionarist")
@@ -2105,6 +2203,8 @@ async def send_message(
                             return f"Failed to create agent job: {exc}"
 
                     if name in ("get_strava_activities", "get_strava_activity", "get_strava_stats", "get_strava_zones"):
+                        _strava_label = {"get_strava_activities": "Fetching rides…", "get_strava_activity": "Fetching activity…", "get_strava_stats": "Fetching stats…", "get_strava_zones": "Fetching training zones…"}.get(name, "Fetching Strava data…")
+                        await _emit_progress(name, _strava_label)
                         try:
                             from sqlalchemy import select as _select
                             from db.models import Connector as _Connector
@@ -2151,6 +2251,28 @@ async def send_message(
                                     _acts = [a for a in _acts if a.get("sport_type", "").lower() == _sport]
                                 if not _acts:
                                     return "No activities found."
+                                # Emit strava_activity_card for up to 5 most recent
+                                try:
+                                    for _sa in _acts[:5]:
+                                        await _emit_card({
+                                            "type": "strava_activity_card",
+                                            "id": _sa["id"],
+                                            "name": _sa["name"],
+                                            "sport_type": _sa.get("sport_type", "Ride"),
+                                            "date": _sa.get("start_date", ""),
+                                            "distance_km": _sa["distance_km"],
+                                            "duration": _sa["duration"],
+                                            "elevation_m": _sa.get("elevation_m"),
+                                            "avg_hr": _sa.get("avg_hr"),
+                                            "avg_speed_kph": _sa.get("avg_speed_kph"),
+                                            "avg_watts": _sa.get("avg_watts"),
+                                            "suffer_score": _sa.get("suffer_score"),
+                                            "pr_count": _sa.get("pr_count"),
+                                            "calories": _sa.get("calories"),
+                                        })
+                                    await _emit_progress("get_strava_activities", f"Found {len(_acts)} activities", done=True)
+                                except Exception as _se:
+                                    log.warning("strava_activity_card emission failed: %s", _se)
                                 _lines = [f"Strava activities ({len(_acts)}):"]
                                 for _a in _acts:
                                     _d = (_a.get("start_date") or "")[:10]
@@ -2181,6 +2303,28 @@ async def send_message(
                                 if _a.get("calories"):            _lines.append(f"Calories: {_a['calories']}")
                                 if _a.get("device_name"):         _lines.append(f"Device: {_a['device_name']}")
                                 if _a.get("description"):         _lines.append(f"Notes: {_a['description']}")
+                                # Emit single-activity card
+                                try:
+                                    await _emit_card({
+                                        "type": "strava_activity_card",
+                                        "id": _a["id"],
+                                        "name": _a["name"],
+                                        "sport_type": _a.get("sport_type", "Ride"),
+                                        "date": _a.get("start_date", ""),
+                                        "distance_km": _a["distance_km"],
+                                        "duration": _a["duration"],
+                                        "elevation_m": _a.get("elevation_m"),
+                                        "avg_hr": _a.get("avg_hr"),
+                                        "max_hr": _a.get("max_hr"),
+                                        "avg_speed_kph": _a.get("avg_speed_kph"),
+                                        "avg_watts": _a.get("avg_watts"),
+                                        "suffer_score": _a.get("suffer_score"),
+                                        "pr_count": _a.get("pr_count"),
+                                        "calories": _a.get("calories"),
+                                    })
+                                    await _emit_progress("get_strava_activity", f"Fetched {_a['name'][:30]}", done=True)
+                                except Exception as _se:
+                                    log.warning("strava_activity_card (single) emission failed: %s", _se)
                                 return "\n".join(_lines)
 
                             if name == "get_strava_stats":
@@ -2685,7 +2829,21 @@ plt.close('all')
             # Include final content so the frontend can replace its accumulated
             # stream text (which may differ if we modified it post-stream,
             # e.g. replacing a matplotlib code block with an inline image).
-            await queue.put(sse_event({"type": "done", "model": model_used, "tokens": tokens_used, "content": assistant_content}))
+            # Generate follow-up suggestions (cheap Haiku call, ~400ms).
+            _follow_ups: list[str] = []
+            try:
+                _convo_so_far = messages + [{"role": "assistant", "content": assistant_content}]
+                _follow_ups = await _generate_follow_ups(_convo_so_far)
+            except Exception:
+                pass
+            await queue.put(sse_event({
+                "type": "done",
+                "model": model_used,
+                "tokens": tokens_used,
+                "content": assistant_content,
+                "follow_ups": _follow_ups,
+                "context_sources": _context_sources,
+            }))
             await queue.put(sse_done())
 
             # ── Phase 3: persist (client already showing the response) ───────
