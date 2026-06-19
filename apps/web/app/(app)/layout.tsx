@@ -276,31 +276,36 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
               <Search size={18} />
             </button>
 
-            {/* 8-bit TARS — 10×12 pixel grid at 3px, tilted -10° like its rolling walk */}
+            {/* TARS peeking — 12-col face at 3px/pixel, −8° tilt, body clips below frame */}
             <div className="hidden sm:flex items-center" aria-hidden="true" title="TARS">
-              <svg width="38" height="44" viewBox="0 0 38 44" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
-                <g transform="rotate(-10 19 22) translate(4 4)">
+              <svg width="36" height="30" viewBox="0 0 36 30" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+                <g transform="rotate(-8 18 15)">
                   {/* Top cap */}
-                  <rect x="0" y="0" width="30" height="3" fill="var(--c-moss)"/>
-                  {/* Segment 1 outer walls */}
-                  <rect x="0" y="3" width="3" height="12" fill="var(--c-moss)"/>
-                  <rect x="27" y="3" width="3" height="12" fill="var(--c-moss)"/>
-                  {/* Segment 1 inner cavity */}
-                  <rect x="3" y="3" width="24" height="12" fill="#0f1a15"/>
-                  {/* Eyes — two amber 2×2 pixel squares, upper cavity */}
-                  <rect x="6" y="6" width="6" height="6" fill="var(--c-amber)"/>
-                  <rect x="18" y="6" width="6" height="6" fill="var(--c-amber)"/>
-                  {/* Joint band */}
-                  <rect x="0" y="15" width="30" height="6" fill="#0a1210"/>
-                  {/* Segment 2 outer walls */}
-                  <rect x="0" y="21" width="3" height="12" fill="var(--c-moss)"/>
-                  <rect x="27" y="21" width="3" height="12" fill="var(--c-moss)"/>
-                  {/* Segment 2 inner cavity */}
-                  <rect x="3" y="21" width="24" height="12" fill="#0f1a15"/>
-                  {/* Segment 2 amber LED bar */}
-                  <rect x="9" y="24" width="12" height="3" fill="var(--c-amber)"/>
-                  {/* Bottom cap */}
-                  <rect x="0" y="33" width="30" height="3" fill="var(--c-moss)"/>
+                  <rect x="0" y="0" width="36" height="3" fill="var(--c-moss)"/>
+                  {/* Face outer walls */}
+                  <rect x="0" y="3" width="3" height="21" fill="var(--c-moss)"/>
+                  <rect x="33" y="3" width="3" height="21" fill="var(--c-moss)"/>
+                  {/* Face inner cavity */}
+                  <rect x="3" y="3" width="30" height="21" fill="#0f1a15"/>
+                  {/* Raised eyebrow above left eye — quizzical character */}
+                  <rect x="6" y="3" width="6" height="3" fill="var(--c-amber)" opacity="0.55"/>
+                  {/* Left eye 3×3 pixels */}
+                  <rect x="6" y="6" width="9" height="9" fill="var(--c-amber)"/>
+                  {/* Left eye glint — top-right corner pixel */}
+                  <rect x="12" y="6" width="3" height="3" fill="#fff8d4"/>
+                  {/* Right eye 3×3 pixels */}
+                  <rect x="21" y="6" width="9" height="9" fill="var(--c-amber)"/>
+                  {/* Right eye glint */}
+                  <rect x="27" y="6" width="3" height="3" fill="#fff8d4"/>
+                  {/* Joint — dark band at bottom of visible face */}
+                  <rect x="0" y="24" width="36" height="9" fill="#0a1210"/>
+                  {/* Body (below viewBox — creates peeking effect, clipped at y=30) */}
+                  <rect x="0" y="33" width="36" height="3" fill="var(--c-moss)"/>
+                  <rect x="0" y="36" width="3" height="12" fill="var(--c-moss)"/>
+                  <rect x="33" y="36" width="3" height="12" fill="var(--c-moss)"/>
+                  <rect x="3" y="36" width="30" height="12" fill="#0f1a15"/>
+                  <rect x="12" y="40" width="12" height="3" fill="var(--c-amber)"/>
+                  <rect x="0" y="48" width="36" height="3" fill="var(--c-moss)"/>
                 </g>
               </svg>
             </div>
