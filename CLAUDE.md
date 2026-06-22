@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.13.0 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.13.1 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -871,6 +871,10 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.13.1 Fix: verbal approval for email — confirm_send_email tool. send_email still shows
+        draft card; if Mike verbally approves ('go ahead', 'send it', 'yes'), model calls
+        confirm_send_email with same fields to execute immediately. Enables Clawsses
+        verbal email-send flow. Harness-only, no schema change.
 v2.13.0 Feat: Reminders — quick personal checklist. New Reminder model (text, done, due_at),
         CRUD at /api/reminders, two agent tools (create_reminder / list_reminders with
         create_task/create_reminder distinction in context assembler), /reminders page

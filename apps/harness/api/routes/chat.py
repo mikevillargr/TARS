@@ -21,7 +21,7 @@ from core.model_client import (
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     UPDATE_CALENDAR_EVENT_TOOL, DELETE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
-    READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
+    READ_EMAIL_TOOL, SEND_EMAIL_TOOL, CONFIRM_SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
     CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
@@ -876,6 +876,7 @@ async def send_message(
         SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL,
         SEND_EMAIL_TOOL,
+        CONFIRM_SEND_EMAIL_TOOL,
         READ_MEETING_TOOL,
         SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL,
@@ -1699,6 +1700,47 @@ async def send_message(
                             "thread_id": tool_input.get("thread_id"),
                         })
                         return "Draft prepared. Showing it to Mike for approval before sending."
+
+                    if name == "confirm_send_email":
+                        try:
+                            from sqlalchemy import select as _select
+                            from db.models import Connector
+                            import asyncio as _asyncio
+                            conn_result = await bg_db.execute(
+                                _select(Connector).where(
+                                    Connector.user_id == user_id,
+                                    Connector.name == "Gmail",
+                                )
+                            )
+                            conn = conn_result.scalar_one_or_none()
+                            if not conn or not conn.auth.get("refresh_token"):
+                                return "Gmail not connected — can't send."
+                            from connectors.gmail import GmailClient
+                            gclient = GmailClient(conn.auth)
+                            loop = _asyncio.get_event_loop()
+                            thread_id = tool_input.get("thread_id")
+                            if thread_id and len(thread_id) == 8:
+                                candidates = await loop.run_in_executor(
+                                    None,
+                                    lambda: gclient.list_threads(query="in:inbox", max_results=20),
+                                )
+                                match = next((t["id"] for t in candidates if t["id"].startswith(thread_id)), None)
+                                thread_id = match if match else None
+                            await _emit_progress("confirm_send_email", "Sending email…")
+                            await loop.run_in_executor(
+                                None,
+                                lambda: gclient.send_email(
+                                    to=tool_input["to"],
+                                    subject=tool_input["subject"],
+                                    body=tool_input["body"],
+                                    cc=tool_input.get("cc"),
+                                    thread_id=thread_id,
+                                ),
+                            )
+                            return f"Email sent to {tool_input['to']}."
+                        except Exception as exc:
+                            log.warning("confirm_send_email failed: %s", exc)
+                            return f"Failed to send email: {exc}"
 
                     if name == "sync_meetings":
                         try:

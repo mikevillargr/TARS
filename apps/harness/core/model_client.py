@@ -238,9 +238,10 @@ SEND_EMAIL_TOOL = {
     "description": (
         "Prepare an email draft for Mike to review. Call this when he asks you to draft, "
         "write, reply to, forward, or send an email. This tool NEVER sends automatically — "
-        "it surfaces a draft card in the chat so Mike can read it and approve before anything "
-        "goes out. Do NOT describe what you're about to send in your text reply; just call "
-        "this tool and let the draft card speak for itself. "
+        "it surfaces a draft card in the chat. After showing the draft, if Mike verbally "
+        "approves ('go ahead', 'send it', 'yes'), call confirm_send_email with the same "
+        "fields to actually send. Do NOT describe what you're about to send in your text "
+        "reply; just call this tool and let the draft card speak for itself. "
         "For replies to an existing thread, supply the thread_id shown as [thread_id] in "
         "the Gmail context."
     ),
@@ -270,6 +271,28 @@ SEND_EMAIL_TOOL = {
                     "Include when replying to an existing email thread."
                 ),
             },
+        },
+        "required": ["to", "subject", "body"],
+    },
+}
+
+CONFIRM_SEND_EMAIL_TOOL = {
+    "name": "confirm_send_email",
+    "description": (
+        "Send an email immediately. Use ONLY when Mike has verbally approved a draft "
+        "shown earlier in this conversation ('go ahead', 'send it', 'yes send', 'go send'). "
+        "Do NOT use to compose and send in one shot — always draft first with send_email, "
+        "then confirm here when Mike approves. Pass the exact to/subject/body/cc/thread_id "
+        "from the draft."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "to": {"type": "string", "description": "Recipient email address(es), comma-separated."},
+            "subject": {"type": "string", "description": "Email subject line."},
+            "body": {"type": "string", "description": "Plain-text email body."},
+            "cc": {"type": "string", "description": "CC address(es). Omit if not needed."},
+            "thread_id": {"type": "string", "description": "Thread ID for replies — from the prior send_email call."},
         },
         "required": ["to", "subject", "body"],
     },

@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.13.0 |
+| Version | v2.13.1 |
 | Released | 2026-06-22 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -158,6 +158,13 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.13.1 — 2026-06-22
+**Fix: verbal email approval for Clawsses**
+- New `confirm_send_email` tool — executes Gmail send immediately, ONLY when Mike verbally approves a draft shown earlier in the conversation ('go ahead', 'send it', 'yes send')
+- `send_email` unchanged — still surfaces draft card; description updated to instruct model to follow up with `confirm_send_email` on verbal approval
+- Enables glasses HUD (Clawsses) verbal email-send flow without chip interaction
+- Harness-only, no schema change
 
 ### v2.13.0 — 2026-06-22
 **Feat: Reminders — quick personal checklist**
