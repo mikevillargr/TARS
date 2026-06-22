@@ -33,12 +33,13 @@ from core.model_client import (
     GENERATE_CHART_TOOL, GET_CURRENT_TIME_TOOL,
     READ_GOOGLE_DOC_TOOL, UPDATE_GOOGLE_DOC_TOOL,
     UPDATE_GOOGLE_SHEET_TOOL, CREATE_GOOGLE_DOC_TOOL, SEARCH_DRIVE_TOOL,
+    CREATE_REMINDER_TOOL, LIST_REMINDERS_TOOL,
     REQUEST_ESCALATION_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from db.session import get_db, AsyncSessionLocal
-from db.models import Conversation, Message, User, Task, Artifact
+from db.models import Conversation, Message, User, Task, Artifact, Reminder
 
 _MENTION_RE = _re.compile(r'\[\[([^\]|]+)\|([^\]|]+)\|([^\]]+)\]\]')
 
@@ -903,6 +904,8 @@ async def send_message(
         UPDATE_GOOGLE_SHEET_TOOL,
         CREATE_GOOGLE_DOC_TOOL,
         SEARCH_DRIVE_TOOL,
+        CREATE_REMINDER_TOOL,
+        LIST_REMINDERS_TOOL,
         *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
     ]
     queue: asyncio.Queue = asyncio.Queue()
@@ -947,6 +950,44 @@ async def send_message(
                         await bg_db.commit()
                         priority = tool_input.get("priority", "normal")
                         return f"Task created: '{tool_input['title']}' added to inbox (priority: {priority})."
+
+                    if name == "create_reminder":
+                        await _emit_progress("create_reminder", "Adding reminder…")
+                        from datetime import datetime as _dt
+                        due_at = None
+                        if tool_input.get("due_at"):
+                            try:
+                                due_at = _dt.fromisoformat(tool_input["due_at"])
+                            except ValueError:
+                                pass
+                        reminder = Reminder(
+                            user_id=user_id,
+                            text=tool_input["text"],
+                            due_at=due_at,
+                        )
+                        bg_db.add(reminder)
+                        await bg_db.commit()
+                        return f"Reminder added: '{tool_input['text']}'." + (f" Due: {due_at.strftime('%b %-d')}" if due_at else "")
+
+                    if name == "list_reminders":
+                        from sqlalchemy import select as _sel
+                        result = await bg_db.execute(
+                            _sel(Reminder)
+                            .where(Reminder.user_id == user_id, Reminder.done.is_(False))
+                            .order_by(Reminder.due_at.nullslast(), Reminder.created_at.desc())
+                        )
+                        reminders = result.scalars().all()
+                        if not reminders:
+                            return "No pending reminders."
+                        lines = []
+                        from datetime import datetime as _dt2, timezone as _tz
+                        now = _dt2.now(_tz.utc)
+                        for r in reminders:
+                            due = ""
+                            if r.due_at:
+                                due = f" (due {r.due_at.strftime('%b %-d')})"
+                            lines.append(f"• {r.text}{due}")
+                        return f"{len(reminders)} pending reminder(s):\n" + "\n".join(lines)
 
                     if name == "create_calendar_event":
                         try:

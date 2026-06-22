@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.12.2 |
+| Version | v2.13.0 |
 | Released | 2026-06-22 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -88,12 +88,13 @@ requests are excluded — vision routing owns model choice.
 
 ---
 
-## Active Components (11)
+## Active Components (12)
 
 | # | Component | Route | Status |
 |---|---|---|---|
 | 1 | Chat | /chat | Live |
 | 2 | Tasks | /tasks | Live |
+| 2b | Reminders | /reminders | Live — quick personal checklist, separate from Tasks; groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
 | 3 | Meetings | /meetings | Live |
 | 4 | Calendar | /calendar | Live |
 | 5 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval |
@@ -157,6 +158,18 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.13.0 — 2026-06-22
+**Feat: Reminders — quick personal checklist**
+- New `Reminder` model (`reminders` table) — `text`, `done`, `due_at`; separate from Tasks (no pipeline, priority, or connector tracking)
+- CRUD API: `GET/POST /api/reminders/`, `PATCH /api/reminders/{id}`, `DELETE /api/reminders/{id}`
+- Two new agent tools: `create_reminder` (add instantly, use for "remind me to…" / "don't forget") and `list_reminders` (returns pending reminders)
+- Tool guidance in context assembler: create_reminder vs create_task distinction
+- `/reminders` page — inline quick-add (Enter to submit), grouped sections (Overdue / Today / Tomorrow / Upcoming / Someday), collapsible Done section, inline double-click editing, optimistic UI
+- Sidebar nav: Reminders added between Tasks and Meetings with Bell icon
+- Command palette: "Go to Reminders" shortcut
+- Migration: `m0n1o2p3q4r5`
+- Harness + web; migration required
 
 ### v2.12.2 — 2026-06-22
 **Fix: verbal approval path for write actions (Clawsses support)**

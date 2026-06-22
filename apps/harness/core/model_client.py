@@ -1245,6 +1245,39 @@ CREATE_GOOGLE_DOC_TOOL = {
 }
 
 
+CREATE_REMINDER_TOOL = {
+    "name": "create_reminder",
+    "description": (
+        "Create a quick personal reminder in Mike's Reminders list. "
+        "Use for quick personal items: 'remind me to', 'don't forget', 'note to self'. "
+        "Distinct from create_task — reminders are frictionless checklist items with no "
+        "pipeline, priority, or connector tracking. Use create_task for work action items."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "The reminder text (what to remember)"},
+            "due_at": {"type": "string", "description": "Optional due date/time in ISO 8601 format"},
+        },
+        "required": ["text"],
+    },
+}
+
+LIST_REMINDERS_TOOL = {
+    "name": "list_reminders",
+    "description": (
+        "Fetch Mike's pending reminders. Use when Mike asks 'what are my reminders?', "
+        "'what do I need to remember?', 'show my reminders', or when context suggests "
+        "you should check what he has pending."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+}
+
+
 # ─── Provider / model config ──────────────────────────────────────────────────
 
 _ZAI_MODELS = {

@@ -6,7 +6,7 @@ import {
   Search, X, Loader2,
   CheckSquare, FileText, Video, MessageSquare, BookOpen,
   Plus, Globe, ArrowRight, Brain, CalendarDays, Zap,
-  LayoutDashboard, ChevronRight,
+  LayoutDashboard, ChevronRight, Bell,
 } from "lucide-react"
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -41,6 +41,7 @@ interface FlatItem {
 const NAV_SHORTCUTS = [
   { id: "nav-chat",        title: "Go to Chat",         href: "/chat",         icon: MessageSquare },
   { id: "nav-tasks",       title: "Go to Tasks",        href: "/tasks",        icon: CheckSquare },
+  { id: "nav-reminders",  title: "Go to Reminders",   href: "/reminders",   icon: Bell },
   { id: "nav-brain",       title: "Go to Second Brain", href: "/second-brain", icon: Brain },
   { id: "nav-calendar",    title: "Go to Calendar",     href: "/calendar",     icon: CalendarDays },
   { id: "nav-meetings",    title: "Go to Meetings",     href: "/meetings",     icon: Video },
