@@ -62,8 +62,8 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
   const [discoverResults, setDiscoverResults] = useState<DiscoverResult[]>([])
   const [discoverLoading, setDiscoverLoading] = useState(false)
   const [discoverError, setDiscoverError] = useState("")
-  const [addingFeed, setAddingFeed] = useState<string | null>(null)
-  const [addFeedError, setAddFeedError] = useState<Record<string, string>>({})
+  // per-feed state: undefined = idle, "adding" = in progress, "done" = success, string = error message
+  const [feedState, setFeedState] = useState<Record<string, "adding" | "done" | string>>({})
 
   // Presets tab
   const [presets, setPresets] = useState<PresetPack[]>([])
@@ -121,8 +121,9 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
   }
 
   async function handleAddDiscovered(result: DiscoverResult) {
-    setAddingFeed(result.feed_url)
-    setAddFeedError((prev) => ({ ...prev, [result.feed_url]: "" }))
+    const key = result.feed_url
+    if (feedState[key] === "adding" || feedState[key] === "done") return
+    setFeedState((prev) => ({ ...prev, [key]: "adding" }))
     try {
       await apiPost("/feed/sources", {
         url: result.feed_url,
@@ -131,12 +132,11 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
         favicon_url: result.icon_url || undefined,
         category: category.trim() || undefined,
       })
+      setFeedState((prev) => ({ ...prev, [key]: "done" }))
       onAdded()
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to add feed"
-      setAddFeedError((prev) => ({ ...prev, [result.feed_url]: msg }))
-    } finally {
-      setAddingFeed(null)
+      const msg = e instanceof Error ? e.message : "Failed to add"
+      setFeedState((prev) => ({ ...prev, [key]: msg }))
     }
   }
 
@@ -338,65 +338,72 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
 
               {discoverResults.length > 0 ? (
                 <div className="space-y-1">
-                  {discoverResults.map((result) => (
-                    <div
-                      key={result.feed_url}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-[var(--c-border)] hover:border-[var(--moss)]/40 transition-colors"
-                      style={{ background: "var(--c-surface)" }}
-                    >
-                      {/* Icon */}
-                      {result.icon_url ? (
-                        <img src={result.icon_url} alt="" className="w-6 h-6 rounded shrink-0" />
-                      ) : (
-                        <div className="w-6 h-6 rounded bg-[var(--c-surface-raised)] shrink-0 flex items-center justify-center">
-                          <Rss size={12} className="text-[var(--c-ink-faint)]" />
-                        </div>
-                      )}
-
-                      {/* Text */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[var(--c-ink)] truncate">{result.name}</p>
-                        {result.description && (
-                          <p className="text-xs text-[var(--c-ink-faint)] truncate mt-0.5">{result.description}</p>
+                  {discoverResults.map((result) => {
+                    const st = feedState[result.feed_url]
+                    const isAdding = st === "adding"
+                    const isDone = st === "done"
+                    const isError = st && st !== "adding" && st !== "done"
+                    return (
+                      <div
+                        key={result.feed_url}
+                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                          isDone
+                            ? "border-[var(--moss)]/50 bg-[var(--moss)]/5"
+                            : isError
+                            ? "border-rose-500/40 bg-rose-500/5"
+                            : "border-[var(--c-border)] hover:border-[var(--moss)]/40"
+                        }`}
+                        style={!isDone && !isError ? { background: "var(--c-surface)" } : undefined}
+                      >
+                        {/* Icon */}
+                        {result.icon_url ? (
+                          <img src={result.icon_url} alt="" className="w-6 h-6 rounded shrink-0" />
+                        ) : (
+                          <div className="w-6 h-6 rounded bg-[var(--c-surface-raised)] shrink-0 flex items-center justify-center">
+                            <Rss size={12} className="text-[var(--c-ink-faint)]" />
+                          </div>
                         )}
-                        <div className="flex items-center gap-3 mt-1">
-                          {result.subscribers && (
+
+                        {/* Text */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[var(--c-ink)] truncate">{result.name}</p>
+                          {isError ? (
+                            <p className="text-xs text-rose-400 mt-0.5">{st}</p>
+                          ) : result.description ? (
+                            <p className="text-xs text-[var(--c-ink-faint)] truncate mt-0.5">{result.description}</p>
+                          ) : null}
+                          {result.subscribers && !isError && (
                             <span className="tars-label text-[var(--c-ink-faint)]">
                               {result.subscribers.toLocaleString()} subscribers
                             </span>
                           )}
-                          {result.website_url && (
-                            <a
-                              href={result.website_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="tars-label text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] flex items-center gap-0.5"
-                            >
-                              <ExternalLink size={9} />
-                              site
-                            </a>
-                          )}
                         </div>
-                        {addFeedError[result.feed_url] && (
-                          <p className="text-xs text-rose-400 mt-1">{addFeedError[result.feed_url]}</p>
-                        )}
-                      </div>
 
-                      {/* Add button — always visible, pinned to card right */}
-                      <button
-                        onClick={() => handleAddDiscovered(result)}
-                        disabled={addingFeed === result.feed_url}
-                        className="shrink-0 flex items-center gap-1.5 tars-label px-3 py-2 rounded-md transition-colors disabled:opacity-40"
-                        style={{ background: "var(--moss)", color: "var(--c-surface)" }}
-                      >
-                        {addingFeed === result.feed_url
-                          ? <Loader2 size={12} className="animate-spin" />
-                          : <Plus size={12} />
-                        }
-                        ADD
-                      </button>
-                    </div>
-                  ))}
+                        {/* Add button — explicit type="button" so no form submit confusion */}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleAddDiscovered(result) }}
+                          disabled={isAdding || isDone}
+                          className="shrink-0 w-16 flex items-center justify-center gap-1.5 tars-label py-2 rounded-md transition-colors"
+                          style={{
+                            background: isDone ? "var(--moss)" : isError ? "rgb(239 68 68 / 0.15)" : "var(--moss)",
+                            color: isDone ? "var(--c-surface)" : isError ? "rgb(239 68 68)" : "var(--c-surface)",
+                            opacity: isAdding ? 0.7 : 1,
+                          }}
+                        >
+                          {isAdding ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : isDone ? (
+                            <>✓ ADDED</>
+                          ) : isError ? (
+                            <>RETRY</>
+                          ) : (
+                            <><Plus size={12} />ADD</>
+                          )}
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : discoverError ? (
                 <div className="p-4 rounded-lg border border-rose-500/30 bg-rose-500/5">
