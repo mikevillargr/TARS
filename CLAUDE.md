@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.13.3 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.13.4 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -871,6 +871,12 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.13.4 Feat: rolling context compaction. Conversations over 20 messages trigger a Haiku
+        summary of the oldest messages (all but last 10). Summary stored in
+        context_snapshot.rolling_summary, cutoff timestamp in summary_cutoff_at. On load:
+        only post-cutoff messages fetched (limit 30), summary injected as synthetic
+        exchange at top. Context window stays flat indefinitely. Zero streaming latency
+        added. Migration o2p3q4r5s6t7. Harness-only.
 v2.13.3 Perf: slash system prompt 60% + token analytics. Tier 2 prompt cut from 18k → ~5k
         tokens (SYSTEM_STATE.md restricted to Tier 3 only; capabilities block rewritten concisely).
         Real token tracking: input_tokens column on messages (migration n1o2p3q4r5s6); model_client
