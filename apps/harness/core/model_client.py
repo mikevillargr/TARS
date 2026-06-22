@@ -55,10 +55,11 @@ class ModelTier(str, Enum):
 PROPOSE_CALENDAR_EVENT_TOOL = {
     "name": "propose_calendar_event",
     "description": (
-        "Suggest adding an event to the user's Google Calendar. Use this when the "
-        "conversation establishes a specific date, time, and activity — e.g. a meeting "
-        "invitation in an email, a deadline to block time for, or a call just scheduled. "
-        "Do NOT use for vague future plans or hypotheticals."
+        "Propose adding an event to the user's Google Calendar. Use this for ALL calendar "
+        "event creation — whether the user explicitly asks ('add this to my calendar', "
+        "'schedule a meeting with X') or you detect an implied event from context. "
+        "NEVER create calendar events autonomously. Always use this tool so Mike can "
+        "confirm before anything is added. Do NOT use for vague future plans or hypotheticals."
     ),
     "input_schema": {
         "type": "object",
@@ -97,10 +98,11 @@ CREATE_CALENDAR_EVENT_TOOL = {
 UPDATE_CALENDAR_EVENT_TOOL = {
     "name": "update_calendar_event",
     "description": (
-        "Update an existing Google Calendar event. Use when the user asks to reschedule, "
-        "rename, change the time, location, duration, attendees, or description of an event. "
-        "Pass only the fields that should change — unspecified fields are left as-is. "
-        "The event_id is shown in brackets in the calendar context, e.g. [abc12345]."
+        "Propose updating an existing Google Calendar event. Use when the user asks to "
+        "reschedule, rename, change the time, location, duration, attendees, or description "
+        "of an event. Pass only the fields that should change — unspecified fields are "
+        "left as-is. The event_id is shown in brackets in the calendar context, e.g. [abc12345]. "
+        "NEVER apply the update autonomously — this shows Mike a confirmation chip first."
     ),
     "input_schema": {
         "type": "object",
@@ -120,9 +122,9 @@ UPDATE_CALENDAR_EVENT_TOOL = {
 DELETE_CALENDAR_EVENT_TOOL = {
     "name": "delete_calendar_event",
     "description": (
-        "Delete a Google Calendar event. Use when the user asks to cancel, remove, or delete "
-        "a specific event. The event_id is shown in brackets in the calendar context, e.g. [abc12345]. "
-        "Execute immediately — do not ask for confirmation."
+        "Propose deleting a Google Calendar event. Use when the user asks to cancel, remove, "
+        "or delete a specific event. The event_id is shown in brackets in the calendar context, "
+        "e.g. [abc12345]. NEVER delete autonomously — this shows Mike a confirmation chip first."
     ),
     "input_schema": {
         "type": "object",
@@ -137,9 +139,7 @@ DELETE_CALENDAR_EVENT_TOOL = {
 CREATE_TASK_TOOL = {
     "name": "create_task",
     "description": (
-        "Create a task in the user's task inbox. Use this when the user explicitly asks "
-        "you to add, create, track, or remember a task, to-do, action item, follow-up, "
-        "or reminder. Execute immediately — do not ask for confirmation."
+        "DEPRECATED — do not use. Use propose_task instead for all task creation."
     ),
     "input_schema": {
         "type": "object",
@@ -156,9 +156,10 @@ CREATE_TASK_TOOL = {
 PROPOSE_TASK_TOOL = {
     "name": "propose_task",
     "description": (
-        "Suggest a task when you proactively detect an implied action item from context "
-        "that the user has NOT explicitly asked you to track. Shows a confirmation chip. "
-        "Do NOT use when the user explicitly asks you to add a task — use create_task instead."
+        "Propose a task for Mike to confirm. Use this for ALL task creation — whether the "
+        "user explicitly asks ('add this as a task', 'remind me to', 'create a to-do') or "
+        "you proactively detect an implied action item. NEVER create tasks autonomously. "
+        "Always use this tool so Mike can confirm before anything is added to his inbox."
     ),
     "input_schema": {
         "type": "object",
@@ -1635,7 +1636,10 @@ class ModelClient:
         client: Optional[anthropic.AsyncAnthropic] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         # Tools that emit a suggestion chip — user confirms before action
-        _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
+        _SUGGESTION_TOOLS = {
+            "propose_calendar_event", "propose_task",
+            "update_calendar_event", "delete_calendar_event",
+        }
 
         # Use provided client (e.g. z.ai) or fall back to the default Anthropic client
         _client = client if client is not None else self.anthropic
@@ -1684,6 +1688,10 @@ class ModelClient:
                             yield {"type": "calendar_suggest", "tool_use_id": b.id, **b.input}
                         elif b.name == "propose_task":
                             yield {"type": "task_suggest", "tool_use_id": b.id, **b.input}
+                        elif b.name == "update_calendar_event":
+                            yield {"type": "calendar_update_suggest", "tool_use_id": b.id, **b.input}
+                        elif b.name == "delete_calendar_event":
+                            yield {"type": "calendar_delete_suggest", "tool_use_id": b.id, **b.input}
 
                     if final.stop_reason != "tool_use" or not tool_uses:
                         # Natural completion — no more tool calls needed
@@ -1848,7 +1856,10 @@ class ModelClient:
         tool_executor=None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Stream via Z.ai's OpenAI-compatible endpoint (GLM-5.x and glm-5v-turbo)."""
-        _SUGGESTION_TOOLS = {"propose_calendar_event", "propose_task"}
+        _SUGGESTION_TOOLS = {
+            "propose_calendar_event", "propose_task",
+            "update_calendar_event", "delete_calendar_event",
+        }
 
         # GLM-5.x uses a thinking phase that consumes tokens before the actual response.
         # Ensure we have enough headroom (8192 minimum) so thinking doesn't exhaust the budget.
@@ -1935,6 +1946,10 @@ class ModelClient:
                         yield {"type": "calendar_suggest", "tool_use_id": tu["id"], **tu["input"]}
                     elif tu["name"] == "propose_task":
                         yield {"type": "task_suggest", "tool_use_id": tu["id"], **tu["input"]}
+                    elif tu["name"] == "update_calendar_event":
+                        yield {"type": "calendar_update_suggest", "tool_use_id": tu["id"], **tu["input"]}
+                    elif tu["name"] == "delete_calendar_event":
+                        yield {"type": "calendar_delete_suggest", "tool_use_id": tu["id"], **tu["input"]}
 
                 # Escalation: if any tool call is request_escalation, signal and stop
                 for tu in tool_uses:

@@ -865,12 +865,10 @@ async def send_message(
     # reliably emit raw ```python blocks on its own. Tier 1/2 also get
     # REQUEST_ESCALATION_TOOL to hand off to Tier 3 when a task exceeds them.
     tools = [
-        CREATE_TASK_TOOL,
-        CREATE_CALENDAR_EVENT_TOOL,
+        PROPOSE_TASK_TOOL,
+        PROPOSE_CALENDAR_EVENT_TOOL,
         UPDATE_CALENDAR_EVENT_TOOL,
         DELETE_CALENDAR_EVENT_TOOL,
-        PROPOSE_CALENDAR_EVENT_TOOL,
-        PROPOSE_TASK_TOOL,
         SAVE_MEMORY_TOOL,
         SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL,
@@ -2671,7 +2669,7 @@ plt.close('all')
                     elif event["type"] == "model_fallback":
                         log.warning("Tier %s fell back: %s → %s", event.get("tier"), event.get("from"), event.get("to"))
                         await queue.put(sse_event(event))
-                    elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
+                    elif event["type"] in ("calendar_suggest", "task_suggest", "calendar_update_suggest", "calendar_delete_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
                         tool_results.append(event)
                         await queue.put(sse_event(event))
                     elif event["type"] == "done":
@@ -2712,7 +2710,7 @@ plt.close('all')
                         elif event["type"] == "model_fallback":
                             log.warning("Tier %s fell back: %s → %s", event.get("tier"), event.get("from"), event.get("to"))
                             await queue.put(sse_event(event))
-                        elif event["type"] in ("calendar_suggest", "task_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
+                        elif event["type"] in ("calendar_suggest", "task_suggest", "calendar_update_suggest", "calendar_delete_suggest", "contact_card", "place_card", "artifact_created", "chart_image", "search_images"):
                             tool_results.append(event)
                             await queue.put(sse_event(event))
                         elif event["type"] == "done":

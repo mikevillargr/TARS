@@ -13,7 +13,7 @@ import {
   Volume2, VolumeX, AudioLines,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
-import { apiGet, apiPost, apiDelete, apiUpload } from "@/lib/api-client"
+import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from "@/lib/api-client"
 import AgentStatusChip from "@/components/agent-jobs/AgentStatusChip"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
@@ -117,6 +117,23 @@ interface CalendarSuggestion {
   duration_min?: number
   description?: string
   location?: string
+}
+
+interface CalendarUpdateSuggestion {
+  tool_use_id: string
+  event_id: string
+  title?: string
+  datetime_iso?: string
+  duration_min?: number
+  description?: string
+  location?: string
+  attendees?: string[]
+}
+
+interface CalendarDeleteSuggestion {
+  tool_use_id: string
+  event_id: string
+  title?: string
 }
 
 interface EmailDraft {
@@ -256,6 +273,125 @@ function TaskSuggestChip({ suggestion, onDismiss }: { suggestion: TaskSuggestion
       >
         {adding ? <Loader2 size={10} className="animate-spin" /> : null}
         Add Task
+      </button>
+      <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+    </div>
+  )
+}
+
+// ─── Calendar update approval chip ──────────────────────────────
+function CalendarUpdateChip({ suggestion, onDismiss }: { suggestion: CalendarUpdateSuggestion; onDismiss: () => void }) {
+  const [applying, setApplying] = useState(false)
+  const [applied, setApplied]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+
+  async function confirmUpdate() {
+    setApplying(true)
+    setError(null)
+    try {
+      await apiPatch(`/calendar/events/${suggestion.event_id}`, {
+        title:        suggestion.title ?? null,
+        datetime_iso: suggestion.datetime_iso ?? null,
+        duration_min: suggestion.duration_min ?? null,
+        description:  suggestion.description ?? null,
+        location:     suggestion.location ?? null,
+        attendees:    suggestion.attendees ?? null,
+      })
+      setApplied(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed")
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  if (applied) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
+        <Calendar size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Calendar event updated</span>
+        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+      </div>
+    )
+  }
+
+  const changes: string[] = []
+  if (suggestion.title) changes.push(`title → "${suggestion.title}"`)
+  if (suggestion.datetime_iso) changes.push(`time → ${formatSuggestTime(suggestion.datetime_iso)}`)
+  if (suggestion.duration_min) changes.push(`duration → ${suggestion.duration_min}min`)
+  if (suggestion.location) changes.push(`location → ${suggestion.location}`)
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}>
+      <Calendar size={12} style={{ color: "var(--c-amber)", flexShrink: 0 }} />
+      <div className="flex-1 min-w-0">
+        <span className="font-medium" style={{ color: "var(--c-ink)" }}>Update event</span>
+        {changes.length > 0 && <span className="ml-1.5" style={{ color: "var(--c-ink-faint)" }}>{changes.join(", ")}</span>}
+        {error && <span className="ml-1.5" style={{ color: "var(--c-rose)" }}>{error}</span>}
+      </div>
+      <button
+        onClick={confirmUpdate}
+        disabled={applying}
+        className="shrink-0 font-medium disabled:opacity-50 flex items-center gap-1"
+        style={{ color: "var(--c-moss)" }}
+        onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+        onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+      >
+        {applying ? <Loader2 size={10} className="animate-spin" /> : null}
+        Confirm
+      </button>
+      <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+    </div>
+  )
+}
+
+// ─── Calendar delete approval chip ──────────────────────────────
+function CalendarDeleteChip({ suggestion, onDismiss }: { suggestion: CalendarDeleteSuggestion; onDismiss: () => void }) {
+  const [deleting, setDeleting] = useState(false)
+  const [deleted, setDeleted]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
+
+  async function confirmDelete() {
+    setDeleting(true)
+    setError(null)
+    try {
+      await apiDelete(`/calendar/events/${suggestion.event_id}`)
+      setDeleted(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (deleted) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
+        <Calendar size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
+        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Event deleted</span>
+        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-sm" style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)" }}>
+      <Calendar size={12} style={{ color: "var(--c-rose)", flexShrink: 0 }} />
+      <div className="flex-1 min-w-0">
+        <span className="font-medium" style={{ color: "var(--c-ink)" }}>Delete</span>
+        {suggestion.title && <span className="ml-1.5" style={{ color: "var(--c-ink-faint)" }}>{suggestion.title}</span>}
+        {error && <span className="ml-1.5" style={{ color: "var(--c-rose)" }}>{error}</span>}
+      </div>
+      <button
+        onClick={confirmDelete}
+        disabled={deleting}
+        className="shrink-0 font-medium disabled:opacity-50 flex items-center gap-1"
+        style={{ color: "var(--c-rose)" }}
+        onMouseEnter={e => (e.currentTarget.style.textDecoration = "underline")}
+        onMouseLeave={e => (e.currentTarget.style.textDecoration = "none")}
+      >
+        {deleting ? <Loader2 size={10} className="animate-spin" /> : null}
+        Delete
       </button>
       <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
     </div>
@@ -959,6 +1095,12 @@ function InlineMessageCards({
         if (evt.type === "calendar_suggest") {
           return <CalendarSuggestChip key={key} suggestion={evt as unknown as CalendarSuggestion} onDismiss={() => dismiss(key)} />
         }
+        if (evt.type === "calendar_update_suggest") {
+          return <CalendarUpdateChip key={key} suggestion={evt as unknown as CalendarUpdateSuggestion} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "calendar_delete_suggest") {
+          return <CalendarDeleteChip key={key} suggestion={evt as unknown as CalendarDeleteSuggestion} onDismiss={() => dismiss(key)} />
+        }
         if (evt.type === "task_suggest") {
           return <TaskSuggestChip key={key} suggestion={evt as unknown as TaskSuggestion} onDismiss={() => dismiss(key)} />
         }
@@ -1264,6 +1406,8 @@ function AgentStreamBubble({
 interface MessageAreaProps {
   allMessages: (Message | StreamingMsg | AgentStreamMessage)[]
   calendarSuggestions: CalendarSuggestion[]
+  calendarUpdateSuggestions: CalendarUpdateSuggestion[]
+  calendarDeleteSuggestions: CalendarDeleteSuggestion[]
   taskSuggestions: TaskSuggestion[]
   artifactNotifications: ArtifactNotification[]
   contactResults: ContactResultSet[]
@@ -1274,6 +1418,8 @@ interface MessageAreaProps {
   stravaCards: StravaActivity[]
   meetingCards: MeetingCardData[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
+  setCalendarUpdateSuggestions: React.Dispatch<React.SetStateAction<CalendarUpdateSuggestion[]>>
+  setCalendarDeleteSuggestions: React.Dispatch<React.SetStateAction<CalendarDeleteSuggestion[]>>
   setTaskSuggestions: React.Dispatch<React.SetStateAction<TaskSuggestion[]>>
   setArtifactNotifications: React.Dispatch<React.SetStateAction<ArtifactNotification[]>>
   setContactResults: React.Dispatch<React.SetStateAction<ContactResultSet[]>>
@@ -1291,6 +1437,8 @@ interface MessageAreaProps {
 const MessageArea = memo(function MessageArea({
   allMessages,
   calendarSuggestions,
+  calendarUpdateSuggestions,
+  calendarDeleteSuggestions,
   taskSuggestions,
   artifactNotifications,
   contactResults,
@@ -1301,6 +1449,8 @@ const MessageArea = memo(function MessageArea({
   stravaCards,
   meetingCards,
   setCalendarSuggestions,
+  setCalendarUpdateSuggestions,
+  setCalendarDeleteSuggestions,
   setTaskSuggestions,
   setArtifactNotifications,
   setContactResults,
@@ -1314,7 +1464,7 @@ const MessageArea = memo(function MessageArea({
   quoteIndex,
   messagesEndRef,
 }: MessageAreaProps) {
-  const hasCards = calendarSuggestions.length > 0 || taskSuggestions.length > 0
+  const hasCards = calendarSuggestions.length > 0 || calendarUpdateSuggestions.length > 0 || calendarDeleteSuggestions.length > 0 || taskSuggestions.length > 0
     || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
     || emailDrafts.length > 0
     || toolProgressItems.length > 0 || emailThreadCards.length > 0
@@ -1401,6 +1551,20 @@ const MessageArea = memo(function MessageArea({
               key={s.tool_use_id}
               suggestion={s}
               onDismiss={() => setCalendarSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+            />
+          ))}
+          {calendarUpdateSuggestions.map((s) => (
+            <CalendarUpdateChip
+              key={s.tool_use_id}
+              suggestion={s}
+              onDismiss={() => setCalendarUpdateSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
+            />
+          ))}
+          {calendarDeleteSuggestions.map((s) => (
+            <CalendarDeleteChip
+              key={s.tool_use_id}
+              suggestion={s}
+              onDismiss={() => setCalendarDeleteSuggestions(prev => prev.filter(x => x.tool_use_id !== s.tool_use_id))}
             />
           ))}
           {taskSuggestions.map((s) => (
@@ -1493,6 +1657,8 @@ export default function ChatPage() {
   const [streaming, setStreaming]                   = useState<StreamingMsg | null>(null)
   const [busy, setBusy]                             = useState(false)
   const [calendarSuggestions, setCalendarSuggestions]     = useState<CalendarSuggestion[]>([])
+  const [calendarUpdateSuggestions, setCalendarUpdateSuggestions] = useState<CalendarUpdateSuggestion[]>([])
+  const [calendarDeleteSuggestions, setCalendarDeleteSuggestions] = useState<CalendarDeleteSuggestion[]>([])
   const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
   const [agentStreamMessages, setAgentStreamMessages]     = useState<AgentStreamMessage[]>([])
@@ -1664,6 +1830,8 @@ export default function ChatPage() {
     setStreaming(null)
     setBusy(false)
     setCalendarSuggestions([])
+    setCalendarUpdateSuggestions([])
+    setCalendarDeleteSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
     setAgentStreamMessages([])
@@ -1731,6 +1899,8 @@ export default function ChatPage() {
   // need to repopulate global state — just wipe the streaming preview.
   const rehydrateCards = useCallback((_msgs: Message[]) => {
     setCalendarSuggestions([])
+    setCalendarUpdateSuggestions([])
+    setCalendarDeleteSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
     setContactResults([])
@@ -1931,6 +2101,8 @@ export default function ChatPage() {
     setInputValue("")
     mentionMapRef.current.clear()
     setCalendarSuggestions([])
+    setCalendarUpdateSuggestions([])
+    setCalendarDeleteSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
     setContactResults([])
@@ -2061,6 +2233,16 @@ export default function ChatPage() {
                 streamingCardsRef.current.push(evt as { type: string; [k: string]: unknown })
                 setTaskSuggestions(prev => [...prev, evt as TaskSuggestion])
               }
+            } else if (evt.type === "calendar_update_suggest") {
+              if (chatId === activeChatIdRef.current) {
+                streamingCardsRef.current.push(evt as { type: string; [k: string]: unknown })
+                setCalendarUpdateSuggestions(prev => [...prev, evt as CalendarUpdateSuggestion])
+              }
+            } else if (evt.type === "calendar_delete_suggest") {
+              if (chatId === activeChatIdRef.current) {
+                streamingCardsRef.current.push(evt as { type: string; [k: string]: unknown })
+                setCalendarDeleteSuggestions(prev => [...prev, evt as CalendarDeleteSuggestion])
+              }
             } else if (evt.type === "artifact_created") {
               if (chatId === activeChatIdRef.current) {
                 streamingCardsRef.current.push({ type: "artifact_created", artifact_id: evt.artifact_id, filename: evt.filename, filetype: evt.filetype })
@@ -2179,6 +2361,8 @@ export default function ChatPage() {
                 setMessages((prev) => [...prev.filter((m) => m.id !== tempUser.id), tempUser, finalMsg])
                 setStreaming(null)
                 setCalendarSuggestions([])
+                setCalendarUpdateSuggestions([])
+                setCalendarDeleteSuggestions([])
                 setTaskSuggestions([])
                 setArtifactNotifications([])
                 setContactResults([])
@@ -2544,6 +2728,8 @@ export default function ChatPage() {
         <MessageArea
           allMessages={allMessages}
           calendarSuggestions={calendarSuggestions}
+          calendarUpdateSuggestions={calendarUpdateSuggestions}
+          calendarDeleteSuggestions={calendarDeleteSuggestions}
           taskSuggestions={taskSuggestions}
           artifactNotifications={artifactNotifications}
           contactResults={contactResults}
@@ -2554,6 +2740,8 @@ export default function ChatPage() {
           stravaCards={stravaCards}
           meetingCards={meetingCards}
           setCalendarSuggestions={setCalendarSuggestions}
+          setCalendarUpdateSuggestions={setCalendarUpdateSuggestions}
+          setCalendarDeleteSuggestions={setCalendarDeleteSuggestions}
           setTaskSuggestions={setTaskSuggestions}
           setArtifactNotifications={setArtifactNotifications}
           setContactResults={setContactResults}
