@@ -2857,6 +2857,16 @@ export default function ChatPage() {
                   }
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() }
                 }}
+                onPaste={(e) => {
+                  const images = Array.from(e.clipboardData.items)
+                    .filter(item => item.kind === "file" && item.type.startsWith("image/"))
+                    .map(item => item.getAsFile())
+                    .filter((f): f is File => f !== null)
+                  if (images.length > 0) {
+                    e.preventDefault()
+                    setAttachments(prev => [...prev, ...images])
+                  }
+                }}
                 className="w-full bg-transparent border-none focus:ring-0 resize-none text-sm focus:outline-none px-4 pt-3 pb-1"
                 style={{ minHeight: 44, maxHeight: 180, color: "var(--c-ink)", lineHeight: "1.5" }}
                 placeholder="Ask anything or command an agent…"
