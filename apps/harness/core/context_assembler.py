@@ -79,8 +79,8 @@ MEETINGS (Fireflies):
   and save to memory. Use when Mike explicitly asks to sync or refresh meetings from Fireflies.
 
 TASK & CALENDAR:
-• create_reminder — add a quick personal reminder to Mike's Reminders list. Use for "remind me to", "don't forget", "note to self" — frictionless items with no pipeline or priority. Distinct from create_task (which is for work action items with full tracking).
-• list_reminders — fetch Mike's pending reminders. Use when he asks what reminders he has.
+• create_reminder — add a quick personal to-do to Mike's To-Do list. Use for "remind me to", "don't forget", "note to self" — frictionless items with no pipeline or priority. Distinct from create_task (which is for work action items that go in the Projects board).
+• list_reminders — fetch Mike's pending to-dos. Use when he asks what to-dos or reminders he has.
 • create_task — create a task immediately. Use when Mike explicitly asks to add/track/remember a task, to-do, or action item.
 • propose_task — suggest a task (shows confirmation chip). Use when you detect an implied action but Mike didn't ask.
 • create_calendar_event — book an event immediately. Use when Mike explicitly asks to schedule/book something.

@@ -1,7 +1,7 @@
 export const navItems = [
   { label: "Chat", href: "/chat", icon: "MessageSquare" },
-  { label: "Tasks", href: "/tasks", icon: "CheckSquare" },
-  { label: "Reminders", href: "/reminders", icon: "Bell" },
+  { label: "Projects", href: "/tasks", icon: "CheckSquare" },
+  { label: "To-Dos", href: "/reminders", icon: "ClipboardList" },
   { label: "Meetings", href: "/meetings", icon: "Video" },
   { label: "Contacts", href: "/contacts", icon: "Users" },
   { label: "Calendar", href: "/calendar", icon: "CalendarDays" },

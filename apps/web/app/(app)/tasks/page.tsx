@@ -1118,7 +1118,7 @@ export default function TasksPage() {
     <div className="flex flex-col flex-1 overflow-hidden" style={{ backgroundColor: "var(--c-canvas)" }}>
       {/* Header */}
       <div className="px-6 py-3 border-b flex items-center justify-between shrink-0" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
-        <h1 className="text-lg font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>Tasks</h1>
+        <h1 className="text-lg font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>Projects</h1>
         <button
           onClick={() => {
             const firstCol = columns[0]

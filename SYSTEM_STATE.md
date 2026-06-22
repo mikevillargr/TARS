@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.13.1 |
+| Version | v2.13.2 |
 | Released | 2026-06-22 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -93,8 +93,8 @@ requests are excluded — vision routing owns model choice.
 | # | Component | Route | Status |
 |---|---|---|---|
 | 1 | Chat | /chat | Live |
-| 2 | Tasks | /tasks | Live |
-| 2b | Reminders | /reminders | Live — quick personal checklist, separate from Tasks; groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
+| 2 | Projects | /tasks | Live — renamed from "Tasks" |
+| 2b | To-Dos | /reminders | Live — quick personal checklist (renamed from "Reminders"); groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
 | 3 | Meetings | /meetings | Live |
 | 4 | Calendar | /calendar | Live |
 | 5 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval |
@@ -158,6 +158,16 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.13.2 — 2026-06-22
+**Rename: Tasks → Projects, Reminders → To-Dos**
+- Sidebar nav: "Tasks" label → "Projects", "Reminders" label → "To-Dos"
+- Tasks page header: "Tasks" → "Projects"
+- Reminders page header: "Reminders" → "To-Dos", Bell icon → ClipboardList, empty state updated
+- Agent tools: `create_reminder` description updated to reference "To-Do list"; `create_task` guidance references "Projects board"
+- Context assembler tool guidance updated to match new names
+- Command palette: "Go to Tasks" → "Go to Projects", "Go to Reminders" → "Go to To-Dos"
+- Web + harness, no schema change
 
 ### v2.13.1 — 2026-06-22
 **Fix: verbal email approval for Clawsses**

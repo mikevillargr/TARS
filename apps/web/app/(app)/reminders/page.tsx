@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { Plus, Trash2, Circle, CheckCircle2, Calendar, Bell } from "lucide-react"
+import { Plus, Trash2, Circle, CheckCircle2, Calendar, ClipboardList } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -351,8 +351,8 @@ export default function RemindersPage() {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--c-border)]">
         <div className="flex items-center gap-3">
-          <Bell size={16} className="text-[var(--c-ink-faint)]" />
-          <span className="tars-title">Reminders</span>
+          <ClipboardList size={16} className="text-[var(--c-ink-faint)]" />
+          <span className="tars-title">To-Dos</span>
           {pending.length > 0 && (
             <span className="tars-label text-[var(--c-ink-faint)]">{pending.length}</span>
           )}
@@ -373,8 +373,8 @@ export default function RemindersPage() {
           </div>
         ) : pending.length === 0 && done.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 gap-2">
-            <Bell size={24} className="text-[var(--c-ink-faint)]" />
-            <span className="tars-label text-[var(--c-ink-faint)]">NO REMINDERS</span>
+            <ClipboardList size={24} className="text-[var(--c-ink-faint)]" />
+            <span className="tars-label text-[var(--c-ink-faint)]">NO TO-DOS</span>
             <span className="text-xs text-[var(--c-ink-faint)] mt-1">Type above and press Enter to add one</span>
           </div>
         ) : (

@@ -1271,10 +1271,11 @@ CREATE_GOOGLE_DOC_TOOL = {
 CREATE_REMINDER_TOOL = {
     "name": "create_reminder",
     "description": (
-        "Create a quick personal reminder in Mike's Reminders list. "
+        "Create a quick personal to-do in Mike's To-Do list. "
         "Use for quick personal items: 'remind me to', 'don't forget', 'note to self'. "
-        "Distinct from create_task — reminders are frictionless checklist items with no "
-        "pipeline, priority, or connector tracking. Use create_task for work action items."
+        "Distinct from create_task — to-dos are frictionless checklist items with no "
+        "pipeline, priority, or connector tracking. Use create_task for work action items "
+        "that belong in the Projects board."
     ),
     "input_schema": {
         "type": "object",
@@ -1289,9 +1290,9 @@ CREATE_REMINDER_TOOL = {
 LIST_REMINDERS_TOOL = {
     "name": "list_reminders",
     "description": (
-        "Fetch Mike's pending reminders. Use when Mike asks 'what are my reminders?', "
-        "'what do I need to remember?', 'show my reminders', or when context suggests "
-        "you should check what he has pending."
+        "Fetch Mike's pending to-dos. Use when Mike asks 'what are my to-dos?', "
+        "'what are my reminders?', 'what do I need to do?', 'show my to-do list', "
+        "or when context suggests you should check what he has pending."
     ),
     "input_schema": {
         "type": "object",

@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.13.1 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.13.2 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -373,7 +373,7 @@ Linear, GitHub — plug in when needed
 ## 8. Application Components (11)
 
 ### Navigation Order (11 components)
-Chat, Tasks, Reminders, Meetings, Calendar, Second Brain, Agent Jobs, Artifacts, Cron Manager, Connectors, Mnemon, Settings
+Chat, Projects, To-Dos, Meetings, Calendar, Second Brain, Agent Jobs, Artifacts, Cron Manager, Connectors, Mnemon, Settings
 
 ### Component Specs
 
@@ -390,20 +390,20 @@ Chat, Tasks, Reminders, Meetings, Calendar, Second Brain, Agent Jobs, Artifacts,
 - Voice input: `useVoiceInput` hook handles microphone recording, VAD silence detection, and transcription
 - Voice mode toggle: enables TTS for all responses in the current conversation (persisted per-session)
 
-**2. Tasks**
+**2. Projects** (route: /tasks)
 - Kanban: Inbox / Todo / In Progress / Done / Snoozed
 - Cards: source badge, priority color bar, due date, connector sync indicator
 - Right panel detail: full description, source reference, activity log
 - Bulk actions, inline quick-add, filter/sort bar
 
-**2b. Reminders**
+**2b. To-Dos** (route: /reminders)
 - Quick personal checklist — no pipeline, no priority, no connectors
 - Inline quick-add at top: type and press Enter
 - Groups: Overdue / Today / Tomorrow / Upcoming / Someday / Done (collapsible)
 - Inline double-click to edit text; circle checkbox to check off (optimistic)
 - Optional due date shown as chip on each item; overdue items flagged in rose
 - Agent tools: `create_reminder` (instant, no approval gate) and `list_reminders`
-- Distinct from Tasks: use Reminders for personal "don't forget" items; Tasks for work action items with tracking
+- Distinct from Projects: use To-Dos for personal "don't forget" items; Projects for work action items with tracking
 
 **3. Meetings**
 - List with status badge: Processing / Ready / Action Required
@@ -871,15 +871,18 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.13.2 Rename: Tasks → Projects, Reminders → To-Dos. Nav labels, page headers, command
+        palette, and agent tool descriptions updated. Bell icon → ClipboardList. Web +
+        harness, no schema change.
 v2.13.1 Fix: verbal approval for email — confirm_send_email tool. send_email still shows
         draft card; if Mike verbally approves ('go ahead', 'send it', 'yes'), model calls
         confirm_send_email with same fields to execute immediately. Enables Clawsses
         verbal email-send flow. Harness-only, no schema change.
-v2.13.0 Feat: Reminders — quick personal checklist. New Reminder model (text, done, due_at),
+v2.13.0 Feat: To-Dos (was Reminders) — quick personal checklist. New Reminder model (text, done, due_at),
         CRUD at /api/reminders, two agent tools (create_reminder / list_reminders with
         create_task/create_reminder distinction in context assembler), /reminders page
         with grouped sections (Overdue/Today/Tomorrow/Upcoming/Someday/Done), inline
-        quick-add (Enter), double-click edit, optimistic check-off, Bell nav icon.
+        quick-add (Enter), double-click edit, optimistic check-off, ClipboardList nav icon.
         Harness + web. Migration: m0n1o2p3q4r5.
 v2.12.2 Fix: verbal approval path — dual-tool model for write actions. create_task +
         create_calendar_event + update_calendar_event + delete_calendar_event restored as
