@@ -63,6 +63,7 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
   const [discoverLoading, setDiscoverLoading] = useState(false)
   const [discoverError, setDiscoverError] = useState("")
   const [addingFeed, setAddingFeed] = useState<string | null>(null)
+  const [addFeedError, setAddFeedError] = useState<Record<string, string>>({})
 
   // Presets tab
   const [presets, setPresets] = useState<PresetPack[]>([])
@@ -121,15 +122,19 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
 
   async function handleAddDiscovered(result: DiscoverResult) {
     setAddingFeed(result.feed_url)
+    setAddFeedError((prev) => ({ ...prev, [result.feed_url]: "" }))
     try {
       await apiPost("/feed/sources", {
         url: result.feed_url,
         name: result.name,
+        source_type: "rss",
+        favicon_url: result.icon_url || undefined,
         category: category.trim() || undefined,
       })
       onAdded()
-    } catch {
-      // ignore individual errors
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to add feed"
+      setAddFeedError((prev) => ({ ...prev, [result.feed_url]: msg }))
     } finally {
       setAddingFeed(null)
     }
@@ -383,6 +388,9 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                             </a>
                           )}
                         </div>
+                        {addFeedError[result.feed_url] && (
+                          <p className="text-xs text-rose-400 mt-1">{addFeedError[result.feed_url]}</p>
+                        )}
                       </div>
                     </div>
                   ))}

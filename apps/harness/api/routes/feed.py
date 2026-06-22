@@ -81,6 +81,8 @@ class AddFeedRequest(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
     fetch_interval_hours: int = 4
+    source_type: Optional[str] = None  # if provided, skip re-validation
+    favicon_url: Optional[str] = None  # if provided, skip re-validation
 
 
 class UpdateFeedSourceRequest(BaseModel):
@@ -257,22 +259,33 @@ async def add_source(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require_auth),
 ):
-    from connectors.feed_reader import resolve_feed_url, preview_feed as _preview
     loop = asyncio.get_event_loop()
 
-    try:
-        info = await loop.run_in_executor(None, _preview, body.url)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    # Skip expensive preview if caller already knows the feed type (e.g. from Discover)
+    if body.source_type and body.name:
+        feed_url = body.url
+        source_type = body.source_type
+        name = body.name
+        favicon_url = body.favicon_url
+    else:
+        from connectors.feed_reader import preview_feed as _preview
+        try:
+            info = await loop.run_in_executor(None, _preview, body.url)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        feed_url = info["feed_url"]
+        source_type = info["source_type"]
+        name = body.name or info["name"]
+        favicon_url = info.get("favicon_url")
 
     source = FeedSource(
         user_id=user_id,
-        name=body.name or info["name"],
-        url=info["feed_url"],
-        original_url=body.url if body.url != info["feed_url"] else None,
-        source_type=info["source_type"],
+        name=name,
+        url=feed_url,
+        original_url=body.url if body.url != feed_url else None,
+        source_type=source_type,
         category=body.category,
-        favicon_url=info.get("favicon_url"),
+        favicon_url=favicon_url,
         fetch_interval_hours=body.fetch_interval_hours,
     )
     db.add(source)
