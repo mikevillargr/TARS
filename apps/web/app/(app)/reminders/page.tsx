@@ -241,7 +241,7 @@ export default function RemindersPage() {
 
   const load = useCallback(async () => {
     try {
-      const data = await apiGet<Reminder[]>("/reminders/?done=all")
+      const data = await apiGet<Reminder[]>("/reminders?done=all")
       setReminders(data)
     } catch {
       // ignore
@@ -263,7 +263,7 @@ export default function RemindersPage() {
     }
     setReminders((prev) => [optimistic, ...prev])
     try {
-      const created = await apiPost<Reminder>("/reminders/", { text })
+      const created = await apiPost<Reminder>("/reminders", { text })
       setReminders((prev) => prev.map((r) => r.id === optimistic.id ? created : r))
     } catch {
       setReminders((prev) => prev.filter((r) => r.id !== optimistic.id))
