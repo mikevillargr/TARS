@@ -99,15 +99,6 @@ function QuickAdd({ onAdd }: { onAdd: (text: string, due_at: string | null) => v
   return (
     <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--c-border)] group">
       <Plus size={14} className="text-[var(--c-ink-faint)] group-focus-within:text-[var(--moss)] transition-colors shrink-0" />
-      <input
-        ref={textRef}
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={handleKey}
-        placeholder="Add a reminder — press Enter"
-        className="flex-1 bg-transparent text-sm text-[var(--c-ink)] placeholder:text-[var(--c-ink-faint)] outline-none"
-      />
       <div className="relative shrink-0">
         <button
           onClick={() => dateRef.current?.showPicker?.() ?? dateRef.current?.click()}
@@ -130,6 +121,15 @@ function QuickAdd({ onAdd }: { onAdd: (text: string, due_at: string | null) => v
           tabIndex={-1}
         />
       </div>
+      <input
+        ref={textRef}
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={handleKey}
+        placeholder="Add a reminder — press Enter"
+        className="flex-1 bg-transparent text-sm text-[var(--c-ink)] placeholder:text-[var(--c-ink-faint)] outline-none"
+      />
     </div>
   )
 }
