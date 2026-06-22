@@ -871,8 +871,8 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
-v2.13.4 Feat: rolling context compaction. Conversations over 20 messages trigger a Haiku
-        summary of the oldest messages (all but last 10). Summary stored in
+v2.13.4 Feat: rolling context compaction. Conversations over 20 messages trigger a Tier 1
+        model summary of the oldest messages (all but last 10). Summary stored in
         context_snapshot.rolling_summary, cutoff timestamp in summary_cutoff_at. On load:
         only post-cutoff messages fetched (limit 30), summary injected as synthetic
         exchange at top. Context window stays flat indefinitely. Zero streaming latency

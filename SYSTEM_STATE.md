@@ -161,7 +161,7 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 
 ### v2.13.4 — 2026-06-22
 **Feat: rolling context compaction**
-- When a conversation hits 20 uncompacted messages, TARS summarises the oldest messages (all but the last 10) with Haiku and stores the result in `conversation.context_snapshot.rolling_summary`. `summary_cutoff_at` advances to the oldest kept message.
+- When a conversation hits 20 uncompacted messages, TARS summarises the oldest messages (all but the last 10) using the configured Tier 1 model and stores the result in `conversation.context_snapshot.rolling_summary`. `summary_cutoff_at` advances to the oldest kept message.
 - On next load: only messages after the cutoff are fetched (hard limit 30), and the summary is injected as a synthetic exchange at the top of history. Context window stays flat regardless of conversation length.
 - Compaction runs lazily in the background after each assistant reply — zero added latency.
 - Migration: `o2p3q4r5s6t7` adds `summary_cutoff_at` to `conversations`. Harness-only.
