@@ -45,6 +45,7 @@ class Conversation(Base):
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     context_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    summary_cutoff_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     messages: Mapped[List["Message"]] = relationship("Message", back_populates="conversation")
 

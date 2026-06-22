@@ -487,6 +487,84 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
         return None
 
 
+_COMPACT_THRESHOLD = 20   # compact when this many uncompacted messages accumulate
+_COMPACT_KEEP      = 10   # keep this many recent messages verbatim after compaction
+
+
+async def _compact_conversation(conv_id: str, db: AsyncSession) -> None:
+    """Summarise older messages into context_snapshot.rolling_summary.
+
+    When the number of messages after the current summary_cutoff_at reaches
+    _COMPACT_THRESHOLD, we summarise messages[:-_COMPACT_KEEP] with Haiku,
+    store the summary in context_snapshot, and advance summary_cutoff_at to
+    the created_at of messages[-_COMPACT_KEEP].  The kept messages remain
+    intact, so the model always gets the last _COMPACT_KEEP turns verbatim.
+    """
+    try:
+        conv_result = await db.execute(select(Conversation).where(Conversation.id == conv_id))
+        conv = conv_result.scalar_one_or_none()
+        if not conv:
+            return
+
+        q = select(Message).where(Message.conversation_id == conv_id, Message.role != "system")
+        if conv.summary_cutoff_at:
+            q = q.where(Message.created_at >= conv.summary_cutoff_at)
+        q = q.order_by(Message.created_at)
+        rows = (await db.execute(q)).scalars().all()
+
+        if len(rows) < _COMPACT_THRESHOLD:
+            return
+
+        to_compact = rows[:-_COMPACT_KEEP]
+        keep_from  = rows[-_COMPACT_KEEP]
+
+        # Build a transcript for Haiku to summarise
+        transcript_parts = []
+        existing_summary = (conv.context_snapshot or {}).get("rolling_summary", "")
+        if existing_summary:
+            transcript_parts.append(f"[Prior summary]\n{existing_summary}\n")
+        for m in to_compact:
+            snippet = str(m.content)[:600]
+            transcript_parts.append(f"{m.role.upper()}: {snippet}")
+        transcript = "\n".join(transcript_parts)
+
+        from core.config import settings as _cfg
+        import anthropic as _anth
+        _provider = _cfg.tier1_provider or "anthropic"
+        _api_key  = _cfg.zai_api_key if _provider == "zai" else _cfg.anthropic_api_key
+        _base_url = _cfg.zai_base_url if _provider == "zai" else None
+        _model    = _cfg.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        _c = _anth.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
+        resp = await _c.messages.create(
+            model=_model,
+            max_tokens=600,
+            system=(
+                "Summarise this conversation transcript into a compact factual paragraph "
+                "covering key decisions, facts established, tasks created, and important context. "
+                "Write in third person. Max 500 words. No filler."
+            ),
+            messages=[{"role": "user", "content": transcript}],
+        )
+        new_summary = resp.content[0].text.strip()
+
+        snapshot = dict(conv.context_snapshot or {})
+        snapshot["rolling_summary"] = new_summary
+
+        await db.execute(
+            sa_update(Conversation)
+            .where(Conversation.id == conv_id)
+            .values(
+                context_snapshot=snapshot,
+                summary_cutoff_at=keep_from.created_at,
+            )
+        )
+        await db.commit()
+        log.info("[compact] conversation %s compacted — %d messages → summary + %d verbatim",
+                 conv_id, len(to_compact), _COMPACT_KEEP)
+    except Exception as exc:
+        log.warning("[compact] compaction failed for %s: %s", conv_id, exc)
+
+
 async def _get_conversation(conv_id: str, user_id: str, db: AsyncSession) -> Conversation:
     result = await db.execute(
         select(Conversation).where(
@@ -760,16 +838,23 @@ async def send_message(
     db.add(user_msg)
     await db.commit()
 
-    db_result = await db.execute(
-        select(Message)
-        .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at)
-        .limit(40)
-    )
+    # ── Load history (respects rolling summary cutoff) ───────────────────────
+    _hist_q = select(Message).where(Message.conversation_id == conversation_id)
+    if conv.summary_cutoff_at:
+        _hist_q = _hist_q.where(Message.created_at >= conv.summary_cutoff_at)
+    _hist_q = _hist_q.order_by(Message.created_at).limit(30)
+    db_result = await db.execute(_hist_q)
     history = db_result.scalars().all()
     messages: List[Dict[str, Any]] = [
         {"role": m.role, "content": m.content} for m in history if m.role != "system"
     ]
+    # Prepend rolling summary if one exists
+    if conv.summary_cutoff_at and isinstance(conv.context_snapshot, dict) and conv.context_snapshot.get("rolling_summary"):
+        summary_text = conv.context_snapshot["rolling_summary"]
+        messages = [
+            {"role": "user", "content": f"[Earlier conversation summary]\n{summary_text}"},
+            {"role": "assistant", "content": "Understood. I have that context."},
+        ] + messages
 
     # ── Normalise for Anthropic API ──────────────────────────────────────────
     # Race condition: background tasks save the assistant reply asynchronously.
@@ -3015,6 +3100,9 @@ plt.close('all')
 
                 user_input = content or "[attachment]"
                 await _extract_and_save_facts(bg_db, user_id, user_input, assistant_content, client)
+
+                # Rolling compaction — runs lazily after each turn, no-ops if below threshold
+                await _compact_conversation(conversation_id, bg_db)
 
         except Exception as exc:
             log.error("background_generate failed: %s", exc)
