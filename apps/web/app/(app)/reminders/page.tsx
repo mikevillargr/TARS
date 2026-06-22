@@ -74,26 +74,33 @@ const GROUP_LABELS: Record<Group, string> = {
 
 // ─── QuickAdd ─────────────────────────────────────────────────────────────────
 
-function QuickAdd({ onAdd }: { onAdd: (text: string) => void }) {
+function QuickAdd({ onAdd }: { onAdd: (text: string, due_at: string | null) => void }) {
   const [value, setValue] = useState("")
-  const ref = useRef<HTMLInputElement>(null)
+  const [date, setDate] = useState("")
+  const textRef = useRef<HTMLInputElement>(null)
+  const dateRef = useRef<HTMLInputElement>(null)
+
+  function commit() {
+    if (!value.trim()) return
+    onAdd(value.trim(), date || null)
+    setValue("")
+    setDate("")
+  }
 
   function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && value.trim()) {
-      onAdd(value.trim())
-      setValue("")
-    }
+    if (e.key === "Enter") commit()
     if (e.key === "Escape") {
       setValue("")
-      ref.current?.blur()
+      setDate("")
+      textRef.current?.blur()
     }
   }
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--c-border)] group">
+    <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--c-border)] group">
       <Plus size={14} className="text-[var(--c-ink-faint)] group-focus-within:text-[var(--moss)] transition-colors shrink-0" />
       <input
-        ref={ref}
+        ref={textRef}
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -101,6 +108,28 @@ function QuickAdd({ onAdd }: { onAdd: (text: string) => void }) {
         placeholder="Add a reminder — press Enter"
         className="flex-1 bg-transparent text-sm text-[var(--c-ink)] placeholder:text-[var(--c-ink-faint)] outline-none"
       />
+      <div className="relative shrink-0">
+        <button
+          onClick={() => dateRef.current?.showPicker?.() ?? dateRef.current?.click()}
+          className={`flex items-center gap-1 tars-label px-2 py-1 rounded transition-colors ${
+            date
+              ? "text-[var(--moss)] bg-[var(--moss)]/10"
+              : "text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
+          }`}
+          title="Set due date"
+        >
+          <Calendar size={12} />
+          {date ? new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
+        </button>
+        <input
+          ref={dateRef}
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="absolute inset-0 opacity-0 pointer-events-none w-0"
+          tabIndex={-1}
+        />
+      </div>
     </div>
   )
 }
@@ -252,18 +281,20 @@ export default function RemindersPage() {
 
   useEffect(() => { load() }, [load])
 
-  async function handleAdd(text: string) {
+  async function handleAdd(text: string, due_at: string | null) {
+    // Convert local date string (YYYY-MM-DD) to ISO datetime at noon local time
+    const due_iso = due_at ? new Date(due_at + "T12:00:00").toISOString() : null
     const optimistic: Reminder = {
       id: `tmp-${Date.now()}`,
       text,
       done: false,
-      due_at: null,
+      due_at: due_iso,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
     setReminders((prev) => [optimistic, ...prev])
     try {
-      const created = await apiPost<Reminder>("/reminders", { text })
+      const created = await apiPost<Reminder>("/reminders", { text, due_at: due_iso })
       setReminders((prev) => prev.map((r) => r.id === optimistic.id ? created : r))
     } catch {
       setReminders((prev) => prev.filter((r) => r.id !== optimistic.id))
@@ -329,7 +360,7 @@ export default function RemindersPage() {
       </div>
 
       {/* Quick add */}
-      <QuickAdd onAdd={handleAdd} />
+      <QuickAdd onAdd={(text, due_at) => handleAdd(text, due_at)} />
 
       {/* List */}
       <div className="flex-1 overflow-y-auto">
