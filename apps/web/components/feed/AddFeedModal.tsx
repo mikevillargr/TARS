@@ -341,32 +341,21 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                   {discoverResults.map((result) => (
                     <div
                       key={result.feed_url}
-                      className="flex items-start gap-3 p-3 rounded-lg border border-[var(--c-border)] hover:border-[var(--moss)]/40 transition-colors"
+                      className="flex items-center gap-3 p-3 rounded-lg border border-[var(--c-border)] hover:border-[var(--moss)]/40 transition-colors"
                       style={{ background: "var(--c-surface)" }}
                     >
+                      {/* Icon */}
                       {result.icon_url ? (
-                        <img src={result.icon_url} alt="" className="w-6 h-6 rounded mt-0.5 shrink-0" />
+                        <img src={result.icon_url} alt="" className="w-6 h-6 rounded shrink-0" />
                       ) : (
-                        <div className="w-6 h-6 rounded bg-[var(--c-surface-raised)] shrink-0 mt-0.5 flex items-center justify-center">
+                        <div className="w-6 h-6 rounded bg-[var(--c-surface-raised)] shrink-0 flex items-center justify-center">
                           <Rss size={12} className="text-[var(--c-ink-faint)]" />
                         </div>
                       )}
+
+                      {/* Text */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-medium text-[var(--c-ink)] truncate">{result.name}</p>
-                          <button
-                            onClick={() => handleAddDiscovered(result)}
-                            disabled={addingFeed === result.feed_url}
-                            className="shrink-0 flex items-center gap-1 tars-label px-2.5 py-1 rounded-md transition-colors disabled:opacity-40"
-                            style={{ background: "var(--moss)", color: "var(--c-surface)" }}
-                          >
-                            {addingFeed === result.feed_url
-                              ? <Loader2 size={11} className="animate-spin" />
-                              : <Plus size={11} />
-                            }
-                            ADD
-                          </button>
-                        </div>
+                        <p className="text-sm font-medium text-[var(--c-ink)] truncate">{result.name}</p>
                         {result.description && (
                           <p className="text-xs text-[var(--c-ink-faint)] truncate mt-0.5">{result.description}</p>
                         )}
@@ -392,6 +381,20 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                           <p className="text-xs text-rose-400 mt-1">{addFeedError[result.feed_url]}</p>
                         )}
                       </div>
+
+                      {/* Add button — always visible, pinned to card right */}
+                      <button
+                        onClick={() => handleAddDiscovered(result)}
+                        disabled={addingFeed === result.feed_url}
+                        className="shrink-0 flex items-center gap-1.5 tars-label px-3 py-2 rounded-md transition-colors disabled:opacity-40"
+                        style={{ background: "var(--moss)", color: "var(--c-surface)" }}
+                      >
+                        {addingFeed === result.feed_url
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <Plus size={12} />
+                        }
+                        ADD
+                      </button>
                     </div>
                   ))}
                 </div>
