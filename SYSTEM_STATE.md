@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.12.1 |
+| Version | v2.12.2 |
 | Released | 2026-06-22 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -157,6 +157,16 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.12.2 — 2026-06-22
+**Fix: verbal approval path for write actions (Clawsses support)**
+- Dual-tool model: `propose_*` = proactive chip, `create_*/update_*/delete_*` = direct execution when explicitly asked
+- `create_task`: restored; executes immediately when Mike asks or verbally approves. `propose_task` kept for proactive detection only.
+- `create_calendar_event`: restored; same semantics. `propose_calendar_event` kept for proactive.
+- `update_calendar_event` / `delete_calendar_event`: removed from `_SUGGESTION_TOOLS` → execute directly when Mike explicitly asks or says "go ahead"
+- Tool descriptions tightened on all six tools with explicit trigger guidance for the model
+- Enables Clawsses (Rokid AR glasses HUD) verbal-approval flow — no chip click required
+- Harness-only, no schema change
 
 ### v2.12.1 — 2026-06-22
 **Fix: approval gates for all write actions — tasks, calendar, email**

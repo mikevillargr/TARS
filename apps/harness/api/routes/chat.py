@@ -865,7 +865,9 @@ async def send_message(
     # reliably emit raw ```python blocks on its own. Tier 1/2 also get
     # REQUEST_ESCALATION_TOOL to hand off to Tier 3 when a task exceeds them.
     tools = [
+        CREATE_TASK_TOOL,
         PROPOSE_TASK_TOOL,
+        CREATE_CALENDAR_EVENT_TOOL,
         PROPOSE_CALENDAR_EVENT_TOOL,
         UPDATE_CALENDAR_EVENT_TOOL,
         DELETE_CALENDAR_EVENT_TOOL,

@@ -55,11 +55,10 @@ class ModelTier(str, Enum):
 PROPOSE_CALENDAR_EVENT_TOOL = {
     "name": "propose_calendar_event",
     "description": (
-        "Propose adding an event to the user's Google Calendar. Use this for ALL calendar "
-        "event creation — whether the user explicitly asks ('add this to my calendar', "
-        "'schedule a meeting with X') or you detect an implied event from context. "
-        "NEVER create calendar events autonomously. Always use this tool so Mike can "
-        "confirm before anything is added. Do NOT use for vague future plans or hypotheticals."
+        "Suggest a calendar event Mike has NOT explicitly asked you to add — use ONLY "
+        "when you proactively detect an implied event from context (e.g. reading an email "
+        "and noticing a meeting date). Shows a confirmation chip. Do NOT use when Mike "
+        "directly asks to schedule something — use create_calendar_event instead."
     ),
     "input_schema": {
         "type": "object",
@@ -77,9 +76,11 @@ PROPOSE_CALENDAR_EVENT_TOOL = {
 CREATE_CALENDAR_EVENT_TOOL = {
     "name": "create_calendar_event",
     "description": (
-        "Create a Google Calendar event immediately. Use when the user explicitly asks "
-        "you to book, schedule, or add a meeting, call, or appointment. "
-        "Execute without asking for confirmation."
+        "Create a Google Calendar event immediately. Use ONLY when Mike has explicitly "
+        "asked in this message ('schedule a meeting', 'add this to my calendar', 'book X') "
+        "OR has verbally approved a prior proposal ('go ahead', 'yes', 'do it', 'go schedule it'). "
+        "Do NOT use proactively — use propose_calendar_event when you detect an implied event "
+        "Mike hasn't asked you to schedule."
     ),
     "input_schema": {
         "type": "object",
@@ -98,11 +99,11 @@ CREATE_CALENDAR_EVENT_TOOL = {
 UPDATE_CALENDAR_EVENT_TOOL = {
     "name": "update_calendar_event",
     "description": (
-        "Propose updating an existing Google Calendar event. Use when the user asks to "
-        "reschedule, rename, change the time, location, duration, attendees, or description "
-        "of an event. Pass only the fields that should change — unspecified fields are "
-        "left as-is. The event_id is shown in brackets in the calendar context, e.g. [abc12345]. "
-        "NEVER apply the update autonomously — this shows Mike a confirmation chip first."
+        "Update an existing Google Calendar event immediately. Use ONLY when Mike has "
+        "explicitly asked in this message ('reschedule', 'move it to', 'change the time') "
+        "OR has verbally approved ('go ahead', 'yes update it', 'do it'). "
+        "Pass only the fields that should change. The event_id is shown in brackets in "
+        "the calendar context, e.g. [abc12345]. Do NOT use proactively."
     ),
     "input_schema": {
         "type": "object",
@@ -122,9 +123,10 @@ UPDATE_CALENDAR_EVENT_TOOL = {
 DELETE_CALENDAR_EVENT_TOOL = {
     "name": "delete_calendar_event",
     "description": (
-        "Propose deleting a Google Calendar event. Use when the user asks to cancel, remove, "
-        "or delete a specific event. The event_id is shown in brackets in the calendar context, "
-        "e.g. [abc12345]. NEVER delete autonomously — this shows Mike a confirmation chip first."
+        "Delete a Google Calendar event immediately. Use ONLY when Mike has explicitly "
+        "asked in this message ('cancel', 'remove', 'delete') OR has verbally approved "
+        "('yes delete it', 'go ahead remove it'). The event_id is shown in brackets in "
+        "the calendar context, e.g. [abc12345]. Do NOT use proactively."
     ),
     "input_schema": {
         "type": "object",
@@ -139,7 +141,11 @@ DELETE_CALENDAR_EVENT_TOOL = {
 CREATE_TASK_TOOL = {
     "name": "create_task",
     "description": (
-        "DEPRECATED — do not use. Use propose_task instead for all task creation."
+        "Create a task immediately. Use ONLY when Mike has explicitly asked in this message "
+        "('add this as a task', 'create a to-do for', 'remind me to', 'track this') "
+        "OR has verbally approved a prior proposal ('go ahead', 'yes', 'do it', 'add it'). "
+        "Do NOT use proactively — use propose_task when you detect an implied action item "
+        "Mike hasn't asked you to track."
     ),
     "input_schema": {
         "type": "object",
@@ -156,10 +162,10 @@ CREATE_TASK_TOOL = {
 PROPOSE_TASK_TOOL = {
     "name": "propose_task",
     "description": (
-        "Propose a task for Mike to confirm. Use this for ALL task creation — whether the "
-        "user explicitly asks ('add this as a task', 'remind me to', 'create a to-do') or "
-        "you proactively detect an implied action item. NEVER create tasks autonomously. "
-        "Always use this tool so Mike can confirm before anything is added to his inbox."
+        "Suggest a task Mike has NOT explicitly asked you to create — use ONLY when you "
+        "proactively detect an implied action item from context (e.g. reading an email and "
+        "noticing a follow-up). Shows a confirmation chip. Do NOT use when Mike directly "
+        "asks to add a task — use create_task instead."
     ),
     "input_schema": {
         "type": "object",
@@ -1638,7 +1644,6 @@ class ModelClient:
         # Tools that emit a suggestion chip — user confirms before action
         _SUGGESTION_TOOLS = {
             "propose_calendar_event", "propose_task",
-            "update_calendar_event", "delete_calendar_event",
         }
 
         # Use provided client (e.g. z.ai) or fall back to the default Anthropic client
@@ -1858,7 +1863,6 @@ class ModelClient:
         """Stream via Z.ai's OpenAI-compatible endpoint (GLM-5.x and glm-5v-turbo)."""
         _SUGGESTION_TOOLS = {
             "propose_calendar_event", "propose_task",
-            "update_calendar_event", "delete_calendar_event",
         }
 
         # GLM-5.x uses a thinking phase that consumes tokens before the actual response.
