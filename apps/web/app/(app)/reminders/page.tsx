@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { Plus, Trash2, Circle, CheckCircle2, Calendar, ClipboardList } from "lucide-react"
+import { Plus, Trash2, Circle, CheckCircle2, Calendar, ClipboardList, Pencil, Check } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -127,9 +127,19 @@ function QuickAdd({ onAdd }: { onAdd: (text: string, due_at: string | null) => v
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKey}
-        placeholder="Add a reminder — press Enter"
+        placeholder="Add a to-do…"
         className="flex-1 bg-transparent text-sm text-[var(--c-ink)] placeholder:text-[var(--c-ink-faint)] outline-none"
       />
+      {value.trim() && (
+        <button
+          onClick={commit}
+          className="shrink-0 flex items-center justify-center w-6 h-6 rounded-full transition-colors"
+          style={{ background: "var(--c-moss)", color: "var(--c-surface)" }}
+          aria-label="Add to-do"
+        >
+          <Plus size={13} />
+        </button>
+      )}
     </div>
   )
 }
@@ -201,7 +211,7 @@ function ReminderRow({
         ) : (
           <span
             onDoubleClick={handleDoubleClick}
-            className={`text-sm text-[var(--c-ink)] cursor-text ${reminder.done ? "line-through" : ""}`}
+            className={`text-sm text-[var(--c-ink)] ${reminder.done ? "line-through" : ""}`}
           >
             {reminder.text}
           </span>
@@ -215,13 +225,32 @@ function ReminderRow({
         )}
       </div>
 
-      <button
-        onClick={onDelete}
-        className="shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 text-[var(--c-ink-faint)] hover:text-rose-500 transition-all"
-        aria-label="Delete reminder"
-      >
-        <Trash2 size={14} />
-      </button>
+      {editing ? (
+        <button
+          onMouseDown={(e) => { e.preventDefault(); commitEdit() }}
+          className="shrink-0 mt-0.5 text-[var(--moss)]"
+          aria-label="Save"
+        >
+          <Check size={14} />
+        </button>
+      ) : (
+        <div className="shrink-0 mt-0.5 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+          <button
+            onClick={handleDoubleClick}
+            className="text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] transition-colors"
+            aria-label="Edit"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={onDelete}
+            className="text-[var(--c-ink-faint)] hover:text-rose-500 transition-colors"
+            aria-label="Delete"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
