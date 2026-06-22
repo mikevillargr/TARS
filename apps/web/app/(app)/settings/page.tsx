@@ -378,7 +378,7 @@ export default function SettingsPage() {
   async function loadTokenReport(period: TokenPeriod = tokenPeriod) {
     setTokenLoading(true)
     try {
-      const data = await apiGet(`/analytics/tokens?period=${period}`)
+      const data = await apiGet(`/analytics/tokens?period=${period}`) as TokenReport
       setTokenReport(data)
     } catch (e) { console.error(e) } finally { setTokenLoading(false) }
   }
