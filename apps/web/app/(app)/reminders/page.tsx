@@ -360,10 +360,13 @@ export default function RemindersPage() {
       </div>
 
       {/* Quick add */}
-      <QuickAdd onAdd={(text, due_at) => handleAdd(text, due_at)} />
+      <div className="max-w-2xl w-full">
+        <QuickAdd onAdd={(text, due_at) => handleAdd(text, due_at)} />
+      </div>
 
       {/* List */}
       <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl w-full">
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <span className="tars-label text-[var(--c-ink-faint)]">LOADING…</span>
@@ -414,6 +417,7 @@ export default function RemindersPage() {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   )
