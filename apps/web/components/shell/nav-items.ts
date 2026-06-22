@@ -5,6 +5,7 @@ export const navItems = [
   { label: "Meetings", href: "/meetings", icon: "Video" },
   { label: "Contacts", href: "/contacts", icon: "Users" },
   { label: "Calendar", href: "/calendar", icon: "CalendarDays" },
+  { label: "Feed", href: "/feed", icon: "Rss" },
   { label: "Second Brain", href: "/second-brain", icon: "Brain" },
   { label: "Agent Jobs", href: "/agent-jobs", icon: "Cpu" },
   { label: "Artifacts", href: "/artifacts", icon: "Archive" },

@@ -291,6 +291,33 @@ async def _sync_garmin() -> None:
         log.info("Garmin sync complete — %s", sleep["date"])
 
 
+async def _sync_feeds() -> None:
+    """Fetch new items from all enabled feed sources. Each source self-governs by fetch_interval_hours."""
+    from db.session import AsyncSessionLocal
+    from db.models import FeedSource
+    from sqlalchemy import select
+    from datetime import timedelta
+
+    async with AsyncSessionLocal() as db:
+        sources = (await db.execute(
+            select(FeedSource).where(FeedSource.enabled.is_(True))
+        )).scalars().all()
+
+        for source in sources:
+            # Skip if not due yet
+            if source.last_fetched_at:
+                due_at = source.last_fetched_at + timedelta(hours=source.fetch_interval_hours)
+                if datetime.now(timezone.utc) < due_at:
+                    continue
+            try:
+                from api.routes.feed import _do_sync_source
+                new_count = await _do_sync_source(source, db)
+                if new_count:
+                    log.info("Feed sync: %d new item(s) from '%s'", new_count, source.name)
+            except Exception as exc:
+                log.warning("Feed sync failed for '%s': %s", source.name, exc)
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 _ONE_HOUR    = 60 * 60
@@ -405,6 +432,15 @@ def build_tasks() -> list[asyncio.Task]:
                 run_immediately=False,
             ),
             _sync_garmin,
+        ),
+        (
+            JobState(
+                name="feed_sync",
+                description="Fetch new articles from subscribed RSS/Atom/YouTube/Reddit feeds (every hour; each source governs its own interval)",
+                interval_sec=_ONE_HOUR,
+                run_immediately=False,
+            ),
+            _sync_feeds,
         ),
     ]
 

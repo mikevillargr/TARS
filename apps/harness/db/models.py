@@ -368,6 +368,51 @@ class UserDomain(Base):
 
 
 # ── Places ───────────────────────────────────────────────────────────────────
+# ── Feed Reader ──────────────────────────────────────────────────────────────
+
+class FeedSource(Base):
+    """A subscribed RSS/Atom/YouTube/Reddit feed."""
+    __tablename__ = "feed_sources"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False)           # resolved feed URL
+    original_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # what user pasted
+    source_type: Mapped[str] = mapped_column(String, default="rss")   # rss|youtube|reddit|google_news|website
+    category: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    favicon_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    fetch_interval_hours: Mapped[int] = mapped_column(Integer, default=4)
+    last_fetched_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    items: Mapped[List["FeedItem"]] = relationship("FeedItem", back_populates="source", cascade="all, delete-orphan")
+
+
+class FeedItem(Base):
+    """A single article/video/podcast episode fetched from a feed."""
+    __tablename__ = "feed_items"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    feed_source_id: Mapped[str] = mapped_column(String, ForeignKey("feed_sources.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    author: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # excerpt ≤500 chars
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # full text
+    image_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    media_type: Mapped[str] = mapped_column(String, default="article")    # article|video|podcast|link
+    media_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # embed/audio URL
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_starred: Mapped[bool] = mapped_column(Boolean, default=False)
+    knowledge_item_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("knowledge_items.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    source: Mapped["FeedSource"] = relationship("FeedSource", back_populates="items")
+
+
 class Place(Base):
     """Personal places — saved locations with coordinates and metadata."""
     __tablename__ = "places"

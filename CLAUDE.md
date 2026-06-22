@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.13.4 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.14.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -334,6 +334,33 @@ Artifact {
   size_bytes
   created_at
 }
+
+FeedSource {
+  id, user_id
+  name, url              // url = resolved feed URL
+  original_url           // what the user pasted
+  source_type            // "rss" | "youtube" | "reddit" | "google_news" | "website"
+  category               // user-defined string
+  favicon_url
+  enabled
+  fetch_interval_hours   // default 4
+  last_fetched_at, error_count, last_error
+  created_at
+}
+
+FeedItem {
+  id, feed_source_id, user_id
+  title, url, author
+  summary                // excerpt ≤500 chars
+  content                // full text
+  image_url
+  published_at, fetched_at
+  media_type             // "article" | "video" | "podcast" | "link"
+  media_url              // YouTube embed URL or podcast audio URL; null for articles/links
+  is_read, is_starred
+  knowledge_item_id      // FK to knowledge_items; set when saved to Second Brain
+  created_at
+}
 ```
 
 ---
@@ -370,10 +397,10 @@ Linear, GitHub — plug in when needed
 
 ---
 
-## 8. Application Components (11)
+## 8. Application Components (12)
 
-### Navigation Order (11 components)
-Chat, Projects, To-Dos, Meetings, Calendar, Second Brain, Agent Jobs, Artifacts, Cron Manager, Connectors, Mnemon, Settings
+### Navigation Order (12 components)
+Chat, Projects, To-Dos, Meetings, Contacts, Calendar, Feed, Second Brain, Agent Jobs, Artifacts, Cron Manager, Connectors, Mnemon, Settings
 
 ### Component Specs
 
@@ -417,6 +444,22 @@ Chat, Projects, To-Dos, Meetings, Calendar, Second Brain, Agent Jobs, Artifacts,
 - Click event: opens right panel detail with link to source view
 - Mini month picker sidebar, Today button
 - Mobile: Day view default, swipeable
+
+**4b. Feed** (route: /feed)
+- Three-panel layout: category sidebar (source list, unread counts, "+ Add Feed"), compact article list, reading pane
+- Subscribe to any URL: RSS/Atom, website (auto-discovers `<link rel="alternate">`), YouTube channel (XML feed), Reddit (/r/subreddit.rss), Google News topics
+- Four media types:
+  - `article` — sanitized prose HTML in reading pane
+  - `video` — YouTube iframe embed + description
+  - `podcast` — HTML5 `<audio controls>` player + episode notes
+  - `link` — summary excerpt + "Open link →" button
+- Unread state: left 3px moss bar on unread rows; dimmed to 60% opacity once read; clicking auto-marks read
+- Actions in reading pane: Star · Save to Brain (single-click → creates KnowledgeItem, green checkmark) · Chat with TARS · Open original
+- "Chat with TARS" flow: `POST /api/feed/items/{id}/chat` → harness creates Conversation + pre-seeded user Message with article content → frontend navigates to `/chat/{conversation_id}`
+- Add Feed modal: "Paste URL" tab (preview with 3 sample items) + "Discover" tab (Feedly search API, requires `FEEDLY_API_KEY`) + "Presets" tab (curated packs)
+- Preset packs (zero-config onboarding): ai_tech, digital_marketing, cycling, business, philippines, design
+- Rolling 90-day item cleanup; starred and saved-to-brain items kept indefinitely
+- Background hourly sync job (`feed_sync` in scheduler); per-source configurable interval (default 4h)
 
 **5. Second Brain**
 - Collections sidebar panel (named groups of items)
@@ -510,6 +553,7 @@ tars/
 │   │   │   │   ├── tasks/
 │   │   │   │   ├── meetings/
 │   │   │   │   ├── calendar/
+│   │   │   │   ├── feed/
 │   │   │   │   ├── second-brain/
 │   │   │   │   ├── agent-jobs/
 │   │   │   │   ├── artifacts/
@@ -524,6 +568,7 @@ tars/
 │   │   │   ├── tasks/
 │   │   │   ├── meetings/
 │   │   │   ├── calendar/
+│   │   │   ├── feed/
 │   │   │   ├── second-brain/
 │   │   │   ├── agent-jobs/
 │   │   │   └── ui/             # shadcn components
@@ -871,6 +916,7 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.14.0 Feat: Feed Reader — three-panel RSS/YouTube/Reddit/podcast reader at /feed. Subscribe to any URL (RSS, website auto-discovery, YouTube channel XML, Reddit .rss, Google News). Four media types: article (prose), video (YouTube embed), podcast (HTML5 audio), link. "Save to Brain" one-click → KnowledgeItem. "Chat with TARS" creates pre-seeded Conversation with article content. Feedly search API for feed discovery (GET /api/feed/discover; FEEDLY_API_KEY). Preset packs for zero-config onboarding. New DB tables: feed_sources + feed_items (rolling 90-day cleanup). Migration: p3q4r5s6t7u8. Hourly feed_sync scheduler job. feedparser==6.0.11 added. Harness + web.
 v2.13.4 Feat: rolling context compaction. Conversations over 20 messages trigger a Tier 1
         model summary of the oldest messages (all but last 10). Summary stored in
         context_snapshot.rolling_summary, cutoff timestamp in summary_cutoff_at. On load:

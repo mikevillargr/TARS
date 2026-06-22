@@ -115,6 +115,8 @@ class Settings(BaseSettings):
     tessie_api_key: str = ""
     tessie_vin: str = ""
 
+    feedly_api_key: str = ""   # from developer.feedly.com — free, for feed discovery search
+
     github_token: str = ""   # PAT for agent git push + gh pr create
 
     claude_code_path: str = "/usr/local/bin/claude"

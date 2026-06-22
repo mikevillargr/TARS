@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.13.4 |
-| Released | 2026-06-22 |
+| Version | v2.14.0 |
+| Released | 2026-06-23 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -88,7 +88,7 @@ requests are excluded — vision routing owns model choice.
 
 ---
 
-## Active Components (12)
+## Active Components (13)
 
 | # | Component | Route | Status |
 |---|---|---|---|
@@ -97,13 +97,14 @@ requests are excluded — vision routing owns model choice.
 | 2b | To-Dos | /reminders | Live — quick personal checklist (renamed from "Reminders"); groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
 | 3 | Meetings | /meetings | Live |
 | 4 | Calendar | /calendar | Live |
-| 5 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval |
-| 6 | Agent Jobs | /agent-jobs | Live |
-| 7 | Artifacts | /artifacts | Live |
-| 8 | Cron Manager | /cron | Live |
-| 9 | Connectors | /connectors | Live |
-| 10 | Mnemon | /memory | Live |
-| 11 | Settings | /settings | Live |
+| 5 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
+| 6 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval |
+| 7 | Agent Jobs | /agent-jobs | Live |
+| 8 | Artifacts | /artifacts | Live |
+| 9 | Cron Manager | /cron | Live |
+| 10 | Connectors | /connectors | Live |
+| 11 | Mnemon | /memory | Live |
+| 12 | Settings | /settings | Live |
 
 ---
 
@@ -158,6 +159,20 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.14.0 — 2026-06-23
+**Feat: Feed Reader**
+- Three-panel feed reader at `/feed` — category sidebar, compact article list, reading pane
+- Supports RSS/Atom, YouTube channels (XML feed), Reddit (/r/subreddit.rss), Google News, any website (auto-discovers `<link rel="alternate">` feed)
+- Four media types: `article` (prose), `video` (YouTube iframe embed), `podcast` (HTML5 audio player), `link` (summary + open link)
+- "Save to Brain" saves feed item directly to Second Brain (sets `knowledge_item_id`); green checkmark once saved
+- "Chat with TARS" creates a pre-seeded Conversation + Message with article content, navigates to `/chat/{id}`
+- Feed discovery via Feedly search API (`GET /api/feed/discover?q=…`; requires `FEEDLY_API_KEY`)
+- Preset category packs for zero-config onboarding (ai_tech, digital_marketing, cycling, business, philippines, design)
+- New DB tables: `feed_sources` (subscribed feeds) + `feed_items` (rolling 90-day window, starred/saved kept indefinitely)
+- Migration: `p3q4r5s6t7u8`; scheduler job `feed_sync` runs hourly
+- New env var: `FEEDLY_API_KEY` (free from developer.feedly.com — Discover tab hidden if unset)
+- `feedparser==6.0.11` added to requirements.txt
 
 ### v2.13.4 — 2026-06-22
 **Feat: rolling context compaction**
