@@ -202,9 +202,9 @@ async def _ai_process(
 
     from core.model_client import get_model_client as _get_mc_mp
     _mc_mp = _get_mc_mp()
-    _p_mp = settings.tier3_provider
+    _p_mp = settings.tier2_provider
     client = _mc_mp.zai if _p_mp == "zai" else _mc_mp.anthropic
-    _mp_model = settings.tier3_model_override or ("glm-4.7" if _p_mp == "zai" else "claude-sonnet-4-6")
+    _mp_model = settings.tier2_model_override or ("glm-4.7" if _p_mp == "zai" else "claude-haiku-4-5-20251001")
 
     if not (settings.zai_api_key if _p_mp == "zai" else settings.anthropic_api_key):
         summary = ff_overview or "Summary unavailable."
