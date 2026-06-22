@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.12.0 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.12.1 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -854,6 +854,12 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.12.1 Fix: approval gates for all write actions — tasks, calendar, email. create_task +
+        create_calendar_event removed from autonomous path; all write actions now flow
+        through proposal chips requiring explicit confirmation. update/delete calendar
+        events emit new chips (CalendarUpdateChip / CalendarDeleteChip) backed by new
+        PATCH + DELETE /api/calendar/events/{id} endpoints. send_email unchanged (already
+        gated). Tool descriptions updated across Anthropic + GLM streaming paths.
 v2.12.0 Feat: 8 chat stream enrichment features — live tool progress indicator (animated
         spinner, ephemeral SSE-only), follow-up suggestion chips (3 Haiku-generated per
         response, persist in follow_ups[]), context source citations (Mnemon + Second Brain

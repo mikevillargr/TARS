@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.12.0 |
-| Released | 2026-06-19 |
+| Version | v2.12.1 |
+| Released | 2026-06-22 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -157,6 +157,16 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.12.1 — 2026-06-22
+**Fix: approval gates for all write actions — tasks, calendar, email**
+- `create_task` removed from autonomous tools; all task creation now flows through `propose_task` chip (user clicks "Add Task" to confirm)
+- `create_calendar_event` removed; all event creation flows through `propose_calendar_event` chip ("Add to Calendar" to confirm)
+- `update_calendar_event` now emits `calendar_update_suggest` chip — shows what will change, user clicks "Confirm" to apply via new `PATCH /api/calendar/events/{id}` endpoint
+- `delete_calendar_event` now emits `calendar_delete_suggest` chip — user clicks "Delete" in red to confirm via new `DELETE /api/calendar/events/{id}` endpoint
+- `send_email` was already gated (unchanged)
+- Tool descriptions updated across both Anthropic and Z.ai/GLM streaming paths to reinforce approval-first semantics
+- New `CalendarUpdateChip` and `CalendarDeleteChip` components in chat UI; replays correctly on conversation reload via `InlineMessageCards`
 
 ### v2.12.0 — 2026-06-19
 **Feature: 8 chat stream enrichment features**
