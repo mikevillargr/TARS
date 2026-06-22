@@ -276,8 +276,13 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
               <Search size={18} />
             </button>
 
-            {/* TARS peeking — 12-col face at 3px/pixel, −8° tilt, body clips below frame */}
-            <div className="hidden sm:flex items-center" aria-hidden="true" title="TARS">
+            {/* TARS peeking — animated: gentle float + periodic eye blink */}
+            <div
+              className="hidden sm:flex items-center"
+              aria-hidden="true"
+              title="TARS"
+              style={{ animation: "tars-pixel-float 3.5s ease-in-out infinite" }}
+            >
               <svg width="36" height="30" viewBox="0 0 36 30" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
                 <g transform="rotate(-8 18 15)">
                   {/* Top cap */}
@@ -287,19 +292,23 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
                   <rect x="33" y="3" width="3" height="21" fill="var(--c-moss)"/>
                   {/* Face inner cavity */}
                   <rect x="3" y="3" width="30" height="21" fill="#0f1a15"/>
-                  {/* Raised eyebrow above left eye — quizzical character */}
+                  {/* Raised eyebrow — quizzical */}
                   <rect x="6" y="3" width="6" height="3" fill="var(--c-amber)" opacity="0.55"/>
-                  {/* Left eye 3×3 pixels */}
-                  <rect x="6" y="6" width="9" height="9" fill="var(--c-amber)"/>
-                  {/* Left eye glint — top-right corner pixel */}
-                  <rect x="12" y="6" width="3" height="3" fill="#fff8d4"/>
-                  {/* Right eye 3×3 pixels */}
-                  <rect x="21" y="6" width="9" height="9" fill="var(--c-amber)"/>
-                  {/* Right eye glint */}
-                  <rect x="27" y="6" width="3" height="3" fill="#fff8d4"/>
-                  {/* Joint — dark band at bottom of visible face */}
+                  {/* Left eye + glint (blink group — slightly leads) */}
+                  <g>
+                    <animate attributeName="opacity" values="1;1;0;1;1" keyTimes="0;0.84;0.9;0.96;1" dur="5s" repeatCount="indefinite"/>
+                    <rect x="6" y="6" width="9" height="9" fill="var(--c-amber)"/>
+                    <rect x="12" y="6" width="3" height="3" fill="#fff8d4"/>
+                  </g>
+                  {/* Right eye + glint (blink group — 0.1s lag for natural feel) */}
+                  <g>
+                    <animate attributeName="opacity" values="1;1;0;1;1" keyTimes="0;0.84;0.9;0.96;1" dur="5s" begin="0.1s" repeatCount="indefinite"/>
+                    <rect x="21" y="6" width="9" height="9" fill="var(--c-amber)"/>
+                    <rect x="27" y="6" width="3" height="3" fill="#fff8d4"/>
+                  </g>
+                  {/* Joint band */}
                   <rect x="0" y="24" width="36" height="9" fill="#0a1210"/>
-                  {/* Body (below viewBox — creates peeking effect, clipped at y=30) */}
+                  {/* Body (below viewBox — peeking effect, clipped at y=30) */}
                   <rect x="0" y="33" width="36" height="3" fill="var(--c-moss)"/>
                   <rect x="0" y="36" width="3" height="12" fill="var(--c-moss)"/>
                   <rect x="33" y="36" width="3" height="12" fill="var(--c-moss)"/>
