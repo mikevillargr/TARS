@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.13.2 |
+| Version | v2.13.3 |
 | Released | 2026-06-22 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -158,6 +158,16 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.13.3 — 2026-06-22
+**Perf: slash system prompt 60% + token analytics + real token tracking**
+- Tier 2 system prompt cut from 18k → ~5k tokens (SYSTEM_STATE.md restricted to Tier 3 only; capabilities block rewritten concisely). Tier 2 calls ~60% cheaper.
+- Real token tracking: `input_tokens` column on `messages` table (migration n1o2p3q4r5s6); `model_client.py` emits `input_tokens`/`output_tokens` in done events; `chat.py` + `prompt_cron.py` now save real values instead of hardcoded 0.
+- `get_token_report` agent tool: TARS can answer "why is my Z.ai usage high" with a full breakdown — totals, by-model, cron costs, flagged anomalies, recommendations.
+- `GET /api/analytics/tokens?period=today|7d|30d` — aggregates hourly, by-model, top conversations, cron job costs, flags (hourly spikes, large conversations, expensive cron runs), recommended actions.
+- Settings → Token Usage section: period selector, totals, model breakdown with proportional bar, cron costs, top conversations, flags with severity, recommendations.
+- Meeting transcript summarization moved from Tier 3 → Tier 2 (no frontier model needed for summarization).
+- Harness + web + DB migration.
 
 ### v2.13.2 — 2026-06-22
 **Rename: Tasks → Projects, Reminders → To-Dos**
