@@ -337,7 +337,7 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
               </div>
 
               {discoverResults.length > 0 ? (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {discoverResults.map((result) => {
                     const st = feedState[result.feed_url]
                     const isAdding = st === "adding"
@@ -346,59 +346,69 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                     return (
                       <div
                         key={result.feed_url}
-                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                          isDone
-                            ? "border-[var(--moss)]/50 bg-[var(--moss)]/5"
-                            : isError
-                            ? "border-rose-500/40 bg-rose-500/5"
-                            : "border-[var(--c-border)] hover:border-[var(--moss)]/40"
-                        }`}
-                        style={!isDone && !isError ? { background: "var(--c-surface)" } : undefined}
+                        className="rounded-lg border p-3"
+                        style={{
+                          background: isDone ? "rgba(90,122,58,0.08)" : isError ? "rgba(239,68,68,0.05)" : "var(--c-surface)",
+                          borderColor: isDone ? "rgba(90,122,58,0.4)" : isError ? "rgba(239,68,68,0.3)" : "var(--c-border)",
+                        }}
                       >
-                        {/* Icon */}
-                        {result.icon_url ? (
-                          <img src={result.icon_url} alt="" className="w-6 h-6 rounded shrink-0" />
-                        ) : (
-                          <div className="w-6 h-6 rounded bg-[var(--c-surface-raised)] shrink-0 flex items-center justify-center">
-                            <Rss size={12} className="text-[var(--c-ink-faint)]" />
-                          </div>
-                        )}
-
-                        {/* Text */}
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[var(--c-ink)] truncate">{result.name}</p>
-                          {isError ? (
-                            <p className="text-xs text-rose-400 mt-0.5">{st}</p>
-                          ) : result.description ? (
-                            <p className="text-xs text-[var(--c-ink-faint)] truncate mt-0.5">{result.description}</p>
-                          ) : null}
-                          {result.subscribers && !isError && (
-                            <span className="tars-label text-[var(--c-ink-faint)]">
-                              {result.subscribers.toLocaleString()} subscribers
-                            </span>
+                        {/* Feed info row */}
+                        <div className="flex items-start gap-2 mb-2">
+                          {result.icon_url ? (
+                            <img src={result.icon_url} alt="" className="w-5 h-5 rounded mt-0.5 shrink-0" />
+                          ) : (
+                            <div className="w-5 h-5 rounded shrink-0 mt-0.5 flex items-center justify-center" style={{ background: "var(--c-surface-raised)" }}>
+                              <Rss size={10} className="text-[var(--c-ink-faint)]" />
+                            </div>
                           )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium" style={{ color: "var(--c-ink)" }}>{result.name}</p>
+                            {isError ? (
+                              <p className="text-xs text-rose-400 mt-0.5">{st}</p>
+                            ) : result.description ? (
+                              <p className="text-xs mt-0.5 line-clamp-2" style={{ color: "var(--c-ink-faint)" }}>{result.description}</p>
+                            ) : null}
+                            {result.subscribers && !isError && (
+                              <p className="text-xs mt-0.5" style={{ fontFamily: "var(--font-mono)", color: "var(--c-ink-faint)" }}>
+                                {result.subscribers.toLocaleString()} subscribers
+                              </p>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Add button — explicit type="button" so no form submit confusion */}
+                        {/* ADD button — full-width row so it's always visible */}
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); handleAddDiscovered(result) }}
+                          onClick={() => handleAddDiscovered(result)}
                           disabled={isAdding || isDone}
-                          className="shrink-0 w-16 flex items-center justify-center gap-1.5 tars-label py-2 rounded-md transition-colors"
                           style={{
-                            background: isDone ? "var(--moss)" : isError ? "rgb(239 68 68 / 0.15)" : "var(--moss)",
-                            color: isDone ? "var(--c-surface)" : isError ? "rgb(239 68 68)" : "var(--c-surface)",
-                            opacity: isAdding ? 0.7 : 1,
+                            display: "flex",
+                            width: "100%",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "6px",
+                            padding: "6px 0",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            fontFamily: "var(--font-mono), monospace",
+                            fontWeight: 500,
+                            letterSpacing: "0.1em",
+                            textTransform: "uppercase",
+                            cursor: isAdding || isDone ? "default" : "pointer",
+                            opacity: isAdding ? 0.6 : 1,
+                            background: isDone ? "#5a7a3a" : isError ? "rgba(239,68,68,0.15)" : "#5a7a3a",
+                            color: isDone ? "#ffffff" : isError ? "#ef4444" : "#ffffff",
+                            border: "none",
                           }}
                         >
                           {isAdding ? (
-                            <Loader2 size={12} className="animate-spin" />
+                            <Loader2 size={11} className="animate-spin" />
                           ) : isDone ? (
-                            <>✓ ADDED</>
+                            "✓ ADDED"
                           ) : isError ? (
-                            <>RETRY</>
+                            "RETRY"
                           ) : (
-                            <><Plus size={12} />ADD</>
+                            <><Plus size={11} />ADD FEED</>
                           )}
                         </button>
                       </div>
