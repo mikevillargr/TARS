@@ -484,6 +484,8 @@ async def execute(job_id: str) -> str | None:
             _fire_prefix = (
                 f"[Scheduled run: {_fire_time.strftime('%A, %B %-d, %Y  %-I:%M %p')} {tz_name}]\n\n"
             )
+            cron_tokens_used = 0
+            cron_input_tokens = 0
             async for chunk in client.stream(
                 messages=[{"role": "user", "content": _fire_prefix + prompt}],
                 tier=ModelTier.TIER3,
@@ -492,8 +494,12 @@ async def execute(job_id: str) -> str | None:
                 tool_executor=_tool_executor,
                 max_tokens=4096,
             ):
-                if isinstance(chunk, dict) and chunk.get("type") == "chunk":
-                    full_response += chunk.get("text", "")
+                if isinstance(chunk, dict):
+                    if chunk.get("type") == "chunk":
+                        full_response += chunk.get("text", "")
+                    elif chunk.get("type") == "done":
+                        cron_tokens_used = chunk.get("tokens", 0)
+                        cron_input_tokens = chunk.get("input_tokens", 0)
 
     except Exception as exc:
         log.error("Prompt cron %s model call failed: %s", job_id, exc)
@@ -531,7 +537,8 @@ async def execute(job_id: str) -> str | None:
             role="assistant",
             content=full_response,
             model_used=settings.tier3_model_override or ("glm-4.7" if settings.tier3_provider == "zai" else "claude-sonnet-4-6"),
-            tokens_used=0,
+            tokens_used=cron_tokens_used,
+            input_tokens=cron_input_tokens,
         )
         db.add(assistant_msg)
         await db.flush()

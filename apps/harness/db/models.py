@@ -57,6 +57,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     model_used: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     tool_calls: Mapped[list] = mapped_column(JSON, default=list)
     tool_results: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

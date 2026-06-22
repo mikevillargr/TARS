@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X, Lock, Volume2, Play, ChevronsUpDown } from "lucide-react"
+import { Eye, EyeOff, Smartphone, MapPin, Check, Share, Loader2, Plus, Pencil, Trash2, X, Lock, Volume2, Play, ChevronsUpDown, AlertTriangle, TrendingUp } from "lucide-react"
 import { apiGet, apiPatch, apiPost, apiDelete } from "@/lib/api-client"
 import { useDomains, invalidateDomains, type Domain } from "@/hooks/useDomains"
 
@@ -360,6 +360,30 @@ export default function SettingsPage() {
     | { kind: "category"; cat: CategoryKey }
     | null
   const [sheet, setSheet] = useState<SheetTarget>(null)
+
+  // ── Token usage analytics ──────────────────────────────────────────────────
+  type TokenPeriod = "today" | "7d" | "30d"
+  type TokenReport = {
+    totals: { total_tokens: number; input_tokens: number; output_tokens: number; messages: number; period: string }
+    by_model: Array<{ model: string; total_tokens: number; input_tokens: number; output_tokens: number; calls: number; avg_per_call: number }>
+    cron_costs: Array<{ name: string; total_tokens: number; avg_per_run: number; runs: number }>
+    top_conversations: Array<{ id: string; title: string; total_tokens: number; messages: number; last_at: string }>
+    flags: Array<{ type: string; severity: string; message: string; detail: string }>
+    recommendations: string[]
+  }
+  const [tokenPeriod, setTokenPeriod] = useState<TokenPeriod>("7d")
+  const [tokenReport, setTokenReport] = useState<TokenReport | null>(null)
+  const [tokenLoading, setTokenLoading] = useState(false)
+
+  async function loadTokenReport(period: TokenPeriod = tokenPeriod) {
+    setTokenLoading(true)
+    try {
+      const data = await apiGet(`/analytics/tokens?period=${period}`)
+      setTokenReport(data)
+    } catch (e) { console.error(e) } finally { setTokenLoading(false) }
+  }
+
+  useEffect(() => { loadTokenReport("7d") }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const TIER_LABELS: Record<keyof ModelRouting, string> = {
     tier1: "Tier 1 — Fast", tier2: "Tier 2 — Workhorse", tier3: "Tier 3 — Frontier", vision: "Vision — Analysis",
@@ -1222,6 +1246,164 @@ export default function SettingsPage() {
               )
             })}
           </div>
+        </section>
+
+        {/* ── App Installation ── */}
+        {/* ── Token Usage ── */}
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+              Token Usage
+            </h2>
+            <div className="flex items-center gap-2">
+              {(["today", "7d", "30d"] as TokenPeriod[]).map(p => (
+                <button
+                  key={p}
+                  onClick={() => { setTokenPeriod(p); loadTokenReport(p) }}
+                  className="tars-label px-2 py-0.5 rounded transition-colors"
+                  style={{
+                    background: tokenPeriod === p ? "var(--c-moss)" : "transparent",
+                    color: tokenPeriod === p ? "var(--c-surface)" : "var(--c-ink-faint)",
+                    border: tokenPeriod === p ? "none" : "1px solid var(--c-border-faint)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {p}
+                </button>
+              ))}
+              <button
+                onClick={() => loadTokenReport(tokenPeriod)}
+                disabled={tokenLoading}
+                style={{ color: "var(--c-ink-faint)", cursor: "pointer", background: "none", border: "none", padding: 0, display: "flex", alignItems: "center" }}
+              >
+                {tokenLoading ? <Loader2 size={13} className="animate-spin" /> : <TrendingUp size={13} />}
+              </button>
+            </div>
+          </div>
+
+          {tokenLoading && !tokenReport && (
+            <div className="flex items-center gap-2 py-4" style={{ color: "var(--c-ink-faint)" }}>
+              <Loader2 size={14} className="animate-spin" />
+              <span className="text-xs">Loading usage data…</span>
+            </div>
+          )}
+
+          {tokenReport && (
+            <div className="flex flex-col gap-4">
+              {/* Totals row */}
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: "Total Tokens", value: tokenReport.totals.total_tokens.toLocaleString() },
+                  { label: "Input", value: tokenReport.totals.input_tokens.toLocaleString() },
+                  { label: "Messages", value: tokenReport.totals.messages.toLocaleString() },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-lg p-3 flex flex-col gap-1" style={{ background: "var(--c-surface-2)", border: "1px solid var(--c-border-faint)" }}>
+                    <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>{label}</span>
+                    <span className="text-base font-semibold font-mono" style={{ color: "var(--c-ink)" }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Flags */}
+              {tokenReport.flags.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>Flags</span>
+                  {tokenReport.flags.map((f, i) => (
+                    <div key={i} className="rounded-lg px-3 py-2.5 flex items-start gap-2.5" style={{
+                      background: f.severity === "high" ? "color-mix(in srgb, #ef4444 8%, transparent)" : "color-mix(in srgb, #f59e0b 8%, transparent)",
+                      border: `1px solid ${f.severity === "high" ? "color-mix(in srgb, #ef4444 25%, transparent)" : "color-mix(in srgb, #f59e0b 25%, transparent)"}`,
+                    }}>
+                      <AlertTriangle size={13} style={{ color: f.severity === "high" ? "#ef4444" : "#f59e0b", marginTop: 2, flexShrink: 0 }} />
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-xs font-medium" style={{ color: "var(--c-ink)" }}>{f.message}</span>
+                        <span className="text-[11px]" style={{ color: "var(--c-ink-muted)" }}>{f.detail}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Recommendations */}
+              {tokenReport.recommendations.length > 0 && tokenReport.flags.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>Recommendations</span>
+                  {tokenReport.recommendations.map((r, i) => (
+                    <div key={i} className="text-xs rounded-lg px-3 py-2" style={{ color: "var(--c-ink-muted)", background: "var(--c-surface-2)", border: "1px solid var(--c-border-faint)" }}>
+                      {r}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* By model */}
+              {tokenReport.by_model.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>By Model</span>
+                  <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
+                    {tokenReport.by_model.slice(0, 6).map((m, i) => {
+                      const maxT = tokenReport.by_model[0].total_tokens || 1
+                      const pct = Math.round((m.total_tokens / maxT) * 100)
+                      return (
+                        <div key={m.model} className="flex items-center gap-3 px-3 py-2.5 relative" style={{
+                          borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
+                          background: "var(--c-surface)",
+                        }}>
+                          <div className="absolute inset-0 left-0" style={{ width: `${pct}%`, background: "color-mix(in srgb, var(--c-moss) 6%, transparent)", pointerEvents: "none" }} />
+                          <span className="text-xs font-mono relative z-10 truncate flex-1 min-w-0" style={{ color: "var(--c-ink)" }}>{m.model}</span>
+                          <div className="flex items-center gap-3 shrink-0 relative z-10">
+                            <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>{m.calls} calls</span>
+                            <span className="text-xs font-mono font-semibold" style={{ color: "var(--c-ink)" }}>{m.total_tokens.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Cron costs */}
+              {tokenReport.cron_costs.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>Scheduled Jobs</span>
+                  <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
+                    {tokenReport.cron_costs.map((c, i) => (
+                      <div key={c.name} className="flex items-center justify-between px-3 py-2.5" style={{
+                        borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
+                        background: "var(--c-surface)",
+                      }}>
+                        <span className="text-xs" style={{ color: "var(--c-ink)" }}>{c.name}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>{c.runs} runs · {c.avg_per_run.toLocaleString()}/run</span>
+                          <span className="text-xs font-mono font-semibold" style={{ color: "var(--c-ink)" }}>{c.total_tokens.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Top conversations */}
+              {tokenReport.top_conversations.filter(c => c.total_tokens > 0).length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>Top Conversations</span>
+                  <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--c-border-faint)" }}>
+                    {tokenReport.top_conversations.filter(c => c.total_tokens > 0).slice(0, 8).map((c, i) => (
+                      <div key={c.id} className="flex items-center justify-between px-3 py-2.5" style={{
+                        borderTop: i > 0 ? "1px solid var(--c-border-faint)" : "none",
+                        background: "var(--c-surface)",
+                      }}>
+                        <span className="text-xs truncate max-w-[60%]" style={{ color: "var(--c-ink)" }}>{c.title}</span>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>{c.messages} msgs</span>
+                          <span className="text-xs font-mono font-semibold" style={{ color: "var(--c-ink)" }}>{c.total_tokens.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* ── App Installation ── */}

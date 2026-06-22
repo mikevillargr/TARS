@@ -34,6 +34,7 @@ from core.model_client import (
     READ_GOOGLE_DOC_TOOL, UPDATE_GOOGLE_DOC_TOOL,
     UPDATE_GOOGLE_SHEET_TOOL, CREATE_GOOGLE_DOC_TOOL, SEARCH_DRIVE_TOOL,
     CREATE_REMINDER_TOOL, LIST_REMINDERS_TOOL,
+    GET_TOKEN_REPORT_TOOL,
     REQUEST_ESCALATION_TOOL,
 )
 from core.context_assembler import assemble
@@ -907,6 +908,7 @@ async def send_message(
         SEARCH_DRIVE_TOOL,
         CREATE_REMINDER_TOOL,
         LIST_REMINDERS_TOOL,
+        GET_TOKEN_REPORT_TOOL,
         *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
     ]
     queue: asyncio.Queue = asyncio.Queue()
@@ -918,6 +920,7 @@ async def send_message(
         tool_results: list[dict] = []
         model_used: str = ""
         tokens_used: int = 0
+        input_tokens: int = 0
 
         try:
             # ── Phase 1: stream the model response ──────────────────────────
@@ -989,6 +992,46 @@ async def send_message(
                                 due = f" (due {r.due_at.strftime('%b %-d')})"
                             lines.append(f"• {r.text}{due}")
                         return f"{len(reminders)} pending reminder(s):\n" + "\n".join(lines)
+
+                    if name == "get_token_report":
+                        try:
+                            import httpx as _httpx
+                            period = tool_input.get("period", "7d")
+                            async with _httpx.AsyncClient() as _hc:
+                                resp = await _hc.get(
+                                    f"http://localhost:8000/api/analytics/tokens?period={period}",
+                                    cookies={"tars_token": request.cookies.get("tars_token", "")},
+                                    timeout=10,
+                                )
+                            data = resp.json()
+                        except Exception as _e:
+                            return f"Could not fetch token report: {_e}"
+                        t = data["totals"]
+                        lines = [
+                            f"## Token Usage — {period}",
+                            f"**Total**: {t['total_tokens']:,} tokens ({t['input_tokens']:,} input / {t['output_tokens']:,} output) across {t['messages']:,} messages",
+                            "",
+                        ]
+                        if data["by_model"]:
+                            lines.append("**By model:**")
+                            for m in data["by_model"][:6]:
+                                lines.append(f"  • {m['model']}: {m['total_tokens']:,} tokens ({m['calls']} calls, avg {m['avg_per_call']:,}/call)")
+                            lines.append("")
+                        if data["cron_costs"]:
+                            lines.append("**Cron jobs:**")
+                            for c in data["cron_costs"]:
+                                lines.append(f"  • {c['name']}: {c['total_tokens']:,} total, {c['avg_per_run']:,}/run ({c['runs']} runs)")
+                            lines.append("")
+                        if data["flags"]:
+                            lines.append("**Flags:**")
+                            for f in data["flags"]:
+                                lines.append(f"  • [{f['severity'].upper()}] {f['message']}")
+                            lines.append("")
+                        if data["recommendations"]:
+                            lines.append("**Recommendations:**")
+                            for r in data["recommendations"]:
+                                lines.append(f"  • {r}")
+                        return "\n".join(lines)
 
                     if name == "create_calendar_event":
                         try:
@@ -2760,6 +2803,7 @@ plt.close('all')
                     elif event["type"] == "done":
                         model_used = event.get("model", "")
                         tokens_used = event.get("tokens", 0)
+                        input_tokens = event.get("input_tokens", 0)
                     elif event["type"] == "error":
                         await queue.put(sse_event(event))
 
@@ -2801,6 +2845,7 @@ plt.close('all')
                         elif event["type"] == "done":
                             model_used = event.get("model", "") + f" (escalated from {effective_tier.value})"
                             tokens_used = event.get("tokens", 0)
+                            input_tokens = event.get("input_tokens", 0)
                         elif event["type"] == "error":
                             await queue.put(sse_event(event))
 
@@ -2937,6 +2982,7 @@ plt.close('all')
                     content=assistant_content,
                     model_used=model_used or tier.value,
                     tokens_used=tokens_used,
+                    input_tokens=input_tokens,
                     tool_results=tool_results,
                 )
                 bg_db.add(assistant_msg)

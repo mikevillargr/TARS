@@ -1301,6 +1301,28 @@ LIST_REMINDERS_TOOL = {
     },
 }
 
+GET_TOKEN_REPORT_TOOL = {
+    "name": "get_token_report",
+    "description": (
+        "Fetch a token usage report showing how many tokens TARS has consumed across models, "
+        "conversations, and cron jobs. Returns totals, hourly breakdown, by-model stats, "
+        "top-consuming conversations, cron job costs, flagged anomalies, and recommended actions. "
+        "Use when Mike asks about API costs, token usage, Z.ai spending, which models are being "
+        "used most, why usage is high, or anything about TARS's inference cost."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "period": {
+                "type": "string",
+                "enum": ["today", "7d", "30d"],
+                "description": "Time period to analyse. Default '7d'.",
+            }
+        },
+        "required": [],
+    },
+}
+
 
 # ─── Provider / model config ──────────────────────────────────────────────────
 
@@ -1757,7 +1779,8 @@ class ModelClient:
 
                     if final.stop_reason != "tool_use" or not tool_uses:
                         # Natural completion — no more tool calls needed
-                        yield {"type": "done", "model": model, "tokens": total_input + total_output}
+                        yield {"type": "done", "model": model, "tokens": total_input + total_output,
+                               "input_tokens": total_input, "output_tokens": total_output}
                         return
 
                     # Build assistant turn + execute tools → continue loop
@@ -1800,7 +1823,8 @@ class ModelClient:
                     ]
 
             # Exceeded max rounds — emit done with accumulated token count
-            yield {"type": "done", "model": model, "tokens": total_input + total_output}
+            yield {"type": "done", "model": model, "tokens": total_input + total_output,
+                   "input_tokens": total_input, "output_tokens": total_output}
 
         except Exception as e:
             yield {"type": "error", "error": str(e)}
@@ -1929,6 +1953,8 @@ class ModelClient:
         current_messages = self._to_openai_messages(messages, system)
         oai_tools = self._to_openai_tools(tools) if tools else None
         total_tokens = 0
+        total_input = 0
+        total_output = 0
 
         _think_buf = ""
         _in_think = False
@@ -1955,6 +1981,8 @@ class ModelClient:
                         # usage-only chunk that some providers emit at end
                         if hasattr(chunk, "usage") and chunk.usage:
                             total_tokens += (chunk.usage.total_tokens or 0)
+                            total_input += (getattr(chunk.usage, "prompt_tokens", 0) or 0)
+                            total_output += (getattr(chunk.usage, "completion_tokens", 0) or 0)
                         continue
 
                     choice = chunk.choices[0]
@@ -1989,7 +2017,8 @@ class ModelClient:
                         # This shouldn't happen with effective_max_tokens=8192, but guard it anyway.
                         logger.warning("OpenAI path: %s exhausted tokens during thinking (max=%d)", model, effective_max_tokens)
                         yield {"type": "chunk", "text": "*(Response truncated — the model exhausted its token budget during reasoning. Try a shorter or simpler request.)*"}
-                    yield {"type": "done", "model": model, "tokens": total_tokens}
+                    yield {"type": "done", "model": model, "tokens": total_tokens,
+                           "input_tokens": total_input, "output_tokens": total_output}
                     return
 
                 # Parse tool calls and emit suggestion events
@@ -2054,7 +2083,8 @@ class ModelClient:
 
                 current_messages = current_messages + [asst] + tool_results
 
-            yield {"type": "done", "model": model, "tokens": total_tokens}
+            yield {"type": "done", "model": model, "tokens": total_tokens,
+                   "input_tokens": total_input, "output_tokens": total_output}
 
         except Exception as e:
             logger.error("OpenAI path error (model=%s): %s", model, e)
