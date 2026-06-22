@@ -596,26 +596,36 @@ async def discover_feeds(
 ):
     from core.config import settings
     api_key = getattr(settings, "feedly_api_key", "")
-    if not api_key:
-        raise HTTPException(status_code=503, detail="Feedly API key not configured")
+
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"OAuth {api_key}"
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 "https://cloud.feedly.com/v3/search/feeds",
                 params={"query": q, "count": count, "locale": "en"},
-                headers={"Authorization": f"OAuth {api_key}"},
+                headers=headers,
             )
+            if resp.status_code == 401 and not api_key:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Feedly API key required. Get a free key at developer.feedly.com and add FEEDLY_API_KEY to .env"
+                )
             resp.raise_for_status()
             data = resp.json()
+    except HTTPException:
+        raise
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Feedly search failed: {e}")
 
     results = []
     for item in data.get("results", []):
         feed_id = item.get("feedId", "")
-        # feedId is "feed/https://..." — strip the "feed/" prefix
         feed_url = feed_id.removeprefix("feed/")
+        if not feed_url.startswith("http"):
+            continue
         results.append(DiscoverResultOut(
             feed_url=feed_url,
             name=item.get("title") or item.get("website") or feed_url,

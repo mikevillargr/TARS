@@ -61,6 +61,7 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
   const [discoverQuery, setDiscoverQuery] = useState("")
   const [discoverResults, setDiscoverResults] = useState<DiscoverResult[]>([])
   const [discoverLoading, setDiscoverLoading] = useState(false)
+  const [discoverError, setDiscoverError] = useState("")
   const [addingFeed, setAddingFeed] = useState<string | null>(null)
 
   // Presets tab
@@ -106,11 +107,13 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
   async function handleDiscover() {
     if (!discoverQuery.trim()) return
     setDiscoverLoading(true)
+    setDiscoverError("")
+    setDiscoverResults([])
     try {
       const data = await apiGet<DiscoverResult[]>(`/feed/discover?q=${encodeURIComponent(discoverQuery.trim())}`)
       setDiscoverResults(data)
-    } catch {
-      setDiscoverResults([])
+    } catch (e: unknown) {
+      setDiscoverError(e instanceof Error ? e.message : "Feed search unavailable")
     } finally {
       setDiscoverLoading(false)
     }
@@ -383,6 +386,16 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                       </div>
                     </div>
                   ))}
+                </div>
+              ) : discoverError ? (
+                <div className="p-4 rounded-lg border border-rose-500/30 bg-rose-500/5">
+                  <p className="text-sm text-rose-400">{discoverError}</p>
+                  {discoverError.includes("API key") && (
+                    <p className="text-xs text-[var(--c-ink-faint)] mt-2">
+                      Get a free key at <span className="font-mono">developer.feedly.com</span> and add{" "}
+                      <span className="font-mono">FEEDLY_API_KEY=…</span> to the harness <span className="font-mono">.env</span> file.
+                    </p>
+                  )}
                 </div>
               ) : discoverQuery && !discoverLoading ? (
                 <div className="text-center py-8">
