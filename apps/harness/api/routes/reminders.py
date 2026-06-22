@@ -40,7 +40,7 @@ class UpdateReminderRequest(BaseModel):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=List[ReminderOut])
+@router.get("", response_model=List[ReminderOut])
 async def list_reminders(
     done: Optional[str] = None,  # "true" | "false" | "all" (default: "false")
     db: AsyncSession = Depends(get_db),
@@ -58,7 +58,7 @@ async def list_reminders(
     return result.scalars().all()
 
 
-@router.post("/", response_model=ReminderOut, status_code=201)
+@router.post("", response_model=ReminderOut, status_code=201)
 async def create_reminder(
     body: CreateReminderRequest,
     db: AsyncSession = Depends(get_db),
