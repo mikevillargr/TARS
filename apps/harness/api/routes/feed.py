@@ -453,15 +453,19 @@ async def get_item(
     if not item.is_read:
         item.is_read = True
 
-    # Lazy full-article fetch: if stored content looks like a summary (under
-    # 5000 chars), fetch the original URL and cache it for future opens.
-    stored_len = len(item.content or "")
-    if item.media_type == "article" and stored_len < 5000:
+    # Full-article fetch: run trafilatura once per article (tracked by
+    # content_fetched flag). Replaces whatever the RSS feed stored —
+    # RSS excerpts can be any length, so we can't use a char threshold.
+    if item.media_type == "article" and not item.content_fetched:
         try:
+            stored_len = len(item.content or "")
             full = await asyncio.to_thread(_fetch_full_article, item.url)
-            if full and len(full) > stored_len:
-                item.content = full
-                log.info("Full article cached for %s (%d chars)", item.url, len(full))
+            if full:
+                if len(full) > stored_len:
+                    item.content = full
+                    log.info("Full article fetched for %s (%d chars)", item.url, len(full))
+                # Mark fetched regardless so we don't retry on every open
+                item.content_fetched = True
         except Exception as e:
             log.warning("Article fetch failed for %s: %s", item.url, e)
 

@@ -408,6 +408,7 @@ class FeedItem(Base):
     media_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # embed/audio URL
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     is_starred: Mapped[bool] = mapped_column(Boolean, default=False)
+    content_fetched: Mapped[bool] = mapped_column(Boolean, default=False)
     knowledge_item_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("knowledge_items.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     source: Mapped["FeedSource"] = relationship("FeedSource", back_populates="items")
