@@ -400,6 +400,38 @@ async def list_items(
     return [_enrich_item(item, source) for item, source in rows]
 
 
+def _fetch_full_article(url: str) -> Optional[str]:
+    """
+    Fetch the original article URL and extract readable content.
+    Returns an HTML string or None. Runs in a thread (blocking IO).
+    Content threshold: only replaces stored content when significantly longer.
+    """
+    try:
+        import trafilatura
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            return None
+        # Try structured HTML output first
+        content = trafilatura.extract(
+            downloaded,
+            output_format="html",
+            include_comments=False,
+            include_tables=True,
+            favor_precision=True,
+        )
+        if content and len(content) > 300:
+            return content
+        # Fallback: plain text → wrapped paragraphs
+        text = trafilatura.extract(downloaded, favor_precision=True)
+        if text:
+            paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+            if paras:
+                return "<p>" + "</p>\n<p>".join(paras) + "</p>"
+    except Exception as e:
+        log.debug("Full article fetch failed for %s: %s", url, e)
+    return None
+
+
 @router.get("/items/{item_id}", response_model=FeedItemDetailOut)
 async def get_item(
     item_id: str,
@@ -419,8 +451,19 @@ async def get_item(
     # Mark as read
     if not item.is_read:
         item.is_read = True
-        await db.commit()
 
+    # Lazy full-article fetch: if stored content is thin (RSS summary only),
+    # fetch the original URL and cache the result so subsequent opens are instant.
+    stored_len = len(item.content or "")
+    if item.media_type == "article" and stored_len < 1200:
+        try:
+            full = await asyncio.to_thread(_fetch_full_article, item.url)
+            if full and len(full) > stored_len:
+                item.content = full
+        except Exception as e:
+            log.debug("Article fetch skipped for %s: %s", item.url, e)
+
+    await db.commit()
     return _enrich_item(item, source)
 
 
