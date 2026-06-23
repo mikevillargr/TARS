@@ -126,7 +126,7 @@ def resolve_feed_url(input_url: str) -> tuple[str, str]:
         query = input_url[7:].strip()
         return f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en&gl=PH&ceid=PH:en", "google_news"
 
-    # Try to parse directly as RSS/Atom (fast path)
+    # Try to parse directly as RSS/Atom (fast path — works when user pastes a direct feed URL)
     try:
         import feedparser
         d = feedparser.parse(input_url)
@@ -135,14 +135,14 @@ def resolve_feed_url(input_url: str) -> tuple[str, str]:
     except Exception:
         pass
 
-    # Website — auto-discover feed via <link rel="alternate">
+    # Website — scrape <link rel="alternate"> then try common paths (/feed, /rss, etc.)
     feed_url = _discover_feed_from_website(input_url)
     if feed_url:
         return feed_url, "website"
 
     raise ValueError(
-        f"No RSS/Atom feed found at '{input_url}'. "
-        "Try pasting the direct feed URL instead."
+        f"No RSS/Atom feed found for '{input_url}'. "
+        "Try the direct feed URL (e.g. example.com/feed or example.com/rss.xml)."
     )
 
 
@@ -171,35 +171,62 @@ def _extract_youtube_channel_id(url: str) -> Optional[str]:
     return None
 
 
+_COMMON_FEED_PATHS = [
+    "/feed", "/feed/", "/rss", "/rss/", "/rss.xml", "/feed.xml",
+    "/atom.xml", "/atom", "/index.xml", "/blog/feed", "/blog/rss",
+    "/news/rss", "/feeds/all.atom.xml", "/feeds/posts/default",
+]
+
+
 def _discover_feed_from_website(url: str) -> Optional[str]:
-    """Scrape a website's <link rel='alternate'> to find its RSS/Atom feed."""
+    """
+    Find an RSS/Atom feed for a website URL.
+    Strategy:
+      1. Scrape <link rel="alternate"> from the homepage HTML
+      2. Try common feed path guesses on the same domain
+    """
+    import urllib.request
+    from urllib.parse import urljoin, urlparse
+
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; TARSFeedBot/1.0)"}
+
+    # ── Step 1: check <link rel="alternate"> ──────────────────────────────
     try:
-        import urllib.request
-        from urllib.parse import urljoin
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as resp:
             html_content = resp.read(100_000).decode("utf-8", errors="ignore")
             base_url = resp.url  # follow redirects
 
-        # Find <link type="application/rss+xml"> or <link type="application/atom+xml">
-        pattern = re.compile(
-            r'<link[^>]+type=["\']application/(rss|atom)\+xml["\'][^>]*href=["\']([^"\']+)["\']',
-            re.IGNORECASE,
-        )
-        matches = pattern.findall(html_content)
-        if not matches:
-            # reversed attribute order
-            pattern2 = re.compile(
-                r'<link[^>]+href=["\']([^"\']+)["\'][^>]+type=["\']application/(rss|atom)\+xml["\']',
-                re.IGNORECASE,
-            )
-            matches2 = pattern2.findall(html_content)
-            if matches2:
-                return urljoin(base_url, matches2[0][0])
-        if matches:
-            return urljoin(base_url, matches[0][1])
+        patterns = [
+            re.compile(r'<link[^>]+type=["\']application/(rss|atom)\+xml["\'][^>]*href=["\']([^"\']+)["\']', re.I),
+            re.compile(r'<link[^>]+href=["\']([^"\']+)["\'][^>]+type=["\']application/(rss|atom)\+xml["\']', re.I),
+        ]
+        for pat in patterns:
+            m = pat.search(html_content)
+            if m:
+                href = m.group(2) if pat.groups[0] in ("rss", "atom") else m.group(1)
+                # Both patterns put the href in different groups; pick the longer one
+                groups = [g for g in m.groups() if g and ("/" in g or "." in g)]
+                if groups:
+                    return urljoin(base_url, max(groups, key=len))
     except Exception as e:
-        log.debug("Feed discovery failed for %s: %s", url, e)
+        log.debug("HTML fetch failed for %s: %s", url, e)
+        base_url = url
+
+    # ── Step 2: try common feed paths ─────────────────────────────────────
+    import feedparser
+    parsed = urlparse(url)
+    root = f"{parsed.scheme}://{parsed.netloc}"
+    for path in _COMMON_FEED_PATHS:
+        candidate = root + path
+        try:
+            d = feedparser.parse(candidate)
+            if d.entries or d.feed.get("title"):
+                log.debug("Feed found at common path: %s", candidate)
+                return candidate
+        except Exception:
+            pass
+
     return None
 
 

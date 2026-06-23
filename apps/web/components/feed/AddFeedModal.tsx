@@ -1,23 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { X, Rss, Search, Plus, Loader2 } from "lucide-react"
+import { X, Rss, Search, Plus, Loader2, Check } from "lucide-react"
 import { apiPost, apiGet } from "@/lib/api-client"
-
-interface PreviewItem {
-  title: string
-  url: string
-  summary: string
-  published_at: string | null
-}
-
-interface PreviewResult {
-  name: string
-  feed_url: string
-  source_type: string
-  favicon_url: string | null
-  items: PreviewItem[]
-}
 
 interface DiscoverResult {
   feed_url: string
@@ -42,54 +27,36 @@ const SUGGESTED_CATEGORIES = [
 export default function AddFeedModal({ existingCategories, onClose, onAdded }: AddFeedModalProps) {
   const [tab, setTab] = useState<"url" | "discover">("url")
 
-  // URL tab
+  // URL tab — single-step, no separate Preview gate
   const [urlInput, setUrlInput] = useState("")
   const [category, setCategory] = useState("")
-  const [preview, setPreview] = useState<PreviewResult | null>(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewError, setPreviewError] = useState("")
-  const [addingUrl, setAddingUrl] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState("")
+  const [addDone, setAddDone] = useState(false)
 
   // Discover tab
   const [discoverQuery, setDiscoverQuery] = useState("")
   const [discoverResults, setDiscoverResults] = useState<DiscoverResult[]>([])
   const [discoverLoading, setDiscoverLoading] = useState(false)
   const [discoverError, setDiscoverError] = useState("")
-  // per-feed state: undefined = idle, "adding" = in progress, "done" = success, string = error message
   const [feedState, setFeedState] = useState<Record<string, "adding" | "done" | string>>({})
 
   const allCategories = Array.from(new Set([...existingCategories, ...SUGGESTED_CATEGORIES]))
 
-  async function handlePreview() {
-    if (!urlInput.trim()) return
-    setPreviewLoading(true)
-    setPreviewError("")
-    setPreview(null)
+  async function handleAdd() {
+    const url = urlInput.trim()
+    if (!url || adding || addDone) return
+    setAdding(true)
+    setAddError("")
     try {
-      const data = await apiPost<PreviewResult>("/feed/sources/preview", { url: urlInput.trim() })
-      setPreview(data)
-    } catch (e: unknown) {
-      setPreviewError(e instanceof Error ? e.message : "Could not read feed from that URL")
-    } finally {
-      setPreviewLoading(false)
-    }
-  }
-
-  async function handleAddUrl() {
-    if (!preview) return
-    setAddingUrl(true)
-    try {
-      await apiPost("/feed/sources", {
-        url: urlInput.trim(),
-        name: preview.name,
-        category: category.trim() || undefined,
-      })
+      await apiPost("/feed/sources", { url, category: category.trim() || undefined })
+      setAddDone(true)
       onAdded()
-      onClose()
-    } catch {
-      setPreviewError("Failed to add feed")
+      setTimeout(onClose, 800)
+    } catch (e: unknown) {
+      setAddError(e instanceof Error ? e.message : "Could not add — check the URL and try again")
     } finally {
-      setAddingUrl(false)
+      setAdding(false)
     }
   }
 
@@ -129,10 +96,10 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div
         className="relative flex flex-col w-full max-w-xl rounded-xl border border-[var(--c-border)] shadow-2xl"
-        style={{ background: "var(--c-canvas)", maxHeight: "80vh" }}
+        style={{ background: "var(--c-canvas)", maxHeight: "85vh" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--c-border)]">
@@ -166,54 +133,30 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
+
+          {/* ── URL tab ── */}
           {tab === "url" && (
             <div className="space-y-4">
+              <p className="text-xs" style={{ color: "var(--c-ink-faint)" }}>
+                Paste any URL — RSS feed, website, YouTube channel, Reddit, or Google News topic.
+                TARS auto-discovers the feed.
+              </p>
+
               <div>
                 <label className="tars-label mb-1.5 block">URL</label>
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={urlInput}
-                    onChange={(e) => { setUrlInput(e.target.value); setPreview(null) }}
-                    onKeyDown={(e) => e.key === "Enter" && handlePreview()}
-                    placeholder="RSS feed, website, YouTube channel, Reddit, Google News…"
-                    className="flex-1 px-3 py-2 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] text-sm text-[var(--c-ink)] placeholder:text-[var(--c-ink-faint)] outline-none focus:border-[var(--moss)] transition-colors"
-                  />
-                  <button
-                    onClick={handlePreview}
-                    disabled={!urlInput.trim() || previewLoading}
-                    className="px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-40"
-                    style={{ background: "var(--c-surface-raised)", color: "var(--c-ink)" }}
-                  >
-                    {previewLoading ? <Loader2 size={14} className="animate-spin" /> : "Preview"}
-                  </button>
-                </div>
-                {previewError && (
-                  <p className="mt-1.5 text-xs text-rose-500">{previewError}</p>
+                <input
+                  type="url"
+                  value={urlInput}
+                  autoFocus
+                  onChange={(e) => { setUrlInput(e.target.value); setAddError(""); setAddDone(false) }}
+                  onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                  placeholder="https://example.com  or  https://example.com/feed"
+                  className="w-full px-3 py-2.5 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] text-sm text-[var(--c-ink)] placeholder:text-[var(--c-ink-faint)] outline-none focus:border-[var(--moss)] transition-colors"
+                />
+                {addError && (
+                  <p className="mt-1.5 text-xs text-rose-500">{addError}</p>
                 )}
               </div>
-
-              {preview && (
-                <div className="rounded-lg border border-[var(--c-border)] overflow-hidden">
-                  <div className="flex items-center gap-3 px-4 py-3 bg-[var(--c-surface)]">
-                    {preview.favicon_url && (
-                      <img src={preview.favicon_url} alt="" className="w-4 h-4 rounded" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[var(--c-ink)] truncate">{preview.name}</p>
-                      <p className="tars-label text-[var(--c-ink-faint)]">{preview.source_type.toUpperCase()} · {preview.items.length} items previewed</p>
-                    </div>
-                  </div>
-                  {preview.items.slice(0, 3).map((item, i) => (
-                    <div key={i} className="px-4 py-2.5 border-t border-[var(--c-border)]">
-                      <p className="text-sm text-[var(--c-ink)] truncate">{item.title}</p>
-                      {item.summary && (
-                        <p className="text-xs text-[var(--c-ink-faint)] truncate mt-0.5">{item.summary}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
 
               <div>
                 <label className="tars-label mb-1.5 block">CATEGORY (OPTIONAL)</label>
@@ -232,6 +175,7 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                   {SUGGESTED_CATEGORIES.slice(0, 6).map((c) => (
                     <button
                       key={c}
+                      type="button"
                       onClick={() => setCategory(c)}
                       className={`tars-label px-2 py-1 rounded transition-colors ${
                         category === c
@@ -246,17 +190,39 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
               </div>
 
               <button
-                onClick={handleAddUrl}
-                disabled={!preview || addingUrl}
-                className="w-full py-2.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
-                style={{ background: "var(--moss)", color: "var(--c-surface)" }}
+                type="button"
+                onClick={handleAdd}
+                disabled={!urlInput.trim() || adding || addDone}
+                style={{
+                  display: "flex",
+                  width: "100%",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                  padding: "10px 0",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  cursor: !urlInput.trim() || adding || addDone ? "default" : "pointer",
+                  opacity: !urlInput.trim() ? 0.4 : 1,
+                  background: addDone ? "#5a7a3a" : "#5a7a3a",
+                  color: "#ffffff",
+                  border: "none",
+                  transition: "opacity 0.15s",
+                }}
               >
-                {addingUrl ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                Add Feed
+                {adding ? (
+                  <><Loader2 size={14} className="animate-spin" />Finding & adding feed…</>
+                ) : addDone ? (
+                  <><Check size={14} />Added!</>
+                ) : (
+                  <><Plus size={14} />Add Feed</>
+                )}
               </button>
             </div>
           )}
 
+          {/* ── Discover tab ── */}
           {tab === "discover" && (
             <div className="space-y-4">
               <div className="flex gap-2">
@@ -265,13 +231,15 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                   <input
                     type="text"
                     value={discoverQuery}
+                    autoFocus={tab === "discover"}
                     onChange={(e) => setDiscoverQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleDiscover()}
-                    placeholder="Search feeds — digital marketing, cycling, AI news…"
+                    placeholder="digital marketing, cycling, AI news…"
                     className="w-full pl-9 pr-3 py-2 rounded-lg border border-[var(--c-border)] bg-[var(--c-surface)] text-sm text-[var(--c-ink)] placeholder:text-[var(--c-ink-faint)] outline-none focus:border-[var(--moss)] transition-colors"
                   />
                 </div>
                 <button
+                  type="button"
                   onClick={handleDiscover}
                   disabled={!discoverQuery.trim() || discoverLoading}
                   className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40 transition-colors"
@@ -312,7 +280,6 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                           borderColor: isDone ? "rgba(90,122,58,0.4)" : isError ? "rgba(239,68,68,0.3)" : "var(--c-border)",
                         }}
                       >
-                        {/* Feed info row */}
                         <div className="flex items-start gap-2 mb-2">
                           {result.icon_url ? (
                             <img src={result.icon_url} alt="" className="w-5 h-5 rounded mt-0.5 shrink-0" />
@@ -335,25 +302,15 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                             )}
                           </div>
                         </div>
-
-                        {/* ADD button — full-width row so it's always visible */}
                         <button
                           type="button"
                           onClick={() => handleAddDiscovered(result)}
                           disabled={isAdding || isDone}
                           style={{
-                            display: "flex",
-                            width: "100%",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: "6px",
-                            padding: "6px 0",
-                            borderRadius: "6px",
-                            fontSize: "11px",
-                            fontFamily: "var(--font-mono), monospace",
-                            fontWeight: 500,
-                            letterSpacing: "0.1em",
-                            textTransform: "uppercase",
+                            display: "flex", width: "100%", alignItems: "center", justifyContent: "center",
+                            gap: "6px", padding: "6px 0", borderRadius: "6px",
+                            fontSize: "11px", fontFamily: "var(--font-mono), monospace",
+                            fontWeight: 500, letterSpacing: "0.1em", textTransform: "uppercase",
                             cursor: isAdding || isDone ? "default" : "pointer",
                             opacity: isAdding ? 0.6 : 1,
                             background: isDone ? "#5a7a3a" : isError ? "rgba(239,68,68,0.15)" : "#5a7a3a",
@@ -361,15 +318,10 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
                             border: "none",
                           }}
                         >
-                          {isAdding ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : isDone ? (
-                            "✓ ADDED"
-                          ) : isError ? (
-                            "RETRY"
-                          ) : (
-                            <><Plus size={11} />ADD FEED</>
-                          )}
+                          {isAdding ? <Loader2 size={11} className="animate-spin" />
+                            : isDone ? "✓ ADDED"
+                            : isError ? "RETRY"
+                            : <><Plus size={11} />ADD FEED</>}
                         </button>
                       </div>
                     )
@@ -378,17 +330,11 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
               ) : discoverError ? (
                 <div className="p-4 rounded-lg border border-rose-500/30 bg-rose-500/5">
                   <p className="text-sm text-rose-400">{discoverError}</p>
-                  {discoverError.includes("API key") && (
-                    <p className="text-xs text-[var(--c-ink-faint)] mt-2">
-                      Get a free key at <span className="font-mono">developer.feedly.com</span> and add{" "}
-                      <span className="font-mono">FEEDLY_API_KEY=…</span> to the harness <span className="font-mono">.env</span> file.
-                    </p>
-                  )}
                 </div>
               ) : discoverQuery && !discoverLoading ? (
                 <div className="text-center py-8">
                   <p className="tars-label text-[var(--c-ink-faint)]">NO RESULTS — TRY A DIFFERENT QUERY</p>
-                  <p className="text-xs text-[var(--c-ink-faint)] mt-1">Or add a URL manually in the "Paste URL" tab</p>
+                  <p className="text-xs text-[var(--c-ink-faint)] mt-1">Or paste the URL directly in the &quot;Paste URL&quot; tab</p>
                 </div>
               ) : !discoverQuery ? (
                 <div className="text-center py-8">
