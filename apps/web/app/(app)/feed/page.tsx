@@ -340,7 +340,7 @@ function ReadingPane({
 
         {item.content ? (
           <div
-            className="prose text-sm text-[var(--c-ink)] leading-relaxed [&_a]:text-[var(--moss)] [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_img]:rounded-lg [&_img]:max-w-full [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--moss)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--c-ink-faint)]"
+            className="prose text-sm text-[var(--c-ink)] leading-relaxed [&_p]:mb-4 [&_p]:mt-0 [&_a]:text-[var(--moss)] [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mb-3 [&_h1]:mt-6 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mb-2 [&_h2]:mt-5 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mb-2 [&_h3]:mt-4 [&_ul]:mb-4 [&_ul]:pl-5 [&_ul]:list-disc [&_ol]:mb-4 [&_ol]:pl-5 [&_ol]:list-decimal [&_li]:mb-1 [&_img]:rounded-lg [&_img]:max-w-full [&_img]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--moss)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--c-ink-faint)] [&_blockquote]:my-4 [&_pre]:bg-[var(--c-surface)] [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:mb-4 [&_pre]:overflow-x-auto [&_code]:text-xs"
             dangerouslySetInnerHTML={{ __html: item.content }}
           />
         ) : item.summary ? (
@@ -601,6 +601,11 @@ export default function FeedPage() {
   const [viewMode, setViewMode] = useState<"list" | "cards">("list")
   const [articleModalOpen, setArticleModalOpen] = useState(false)
 
+  // Resizable sidebar
+  const [sidebarWidth, setSidebarWidth] = useState(208)
+  const dragState = useRef<{ startX: number; startWidth: number } | null>(null)
+  const sidebarWidthRef = useRef(208)
+
   // Search
   const [searchQuery, setSearchQuery] = useState("")
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -653,11 +658,48 @@ export default function FeedPage() {
     }
   }, [activeCategory, activeSourceId, filter, offset, searchQuery])
 
-  // Initial load
+  // Initial load + restore prefs
   useEffect(() => {
     loadSources()
     loadCategories()
+    // Mobile: force card view
+    if (window.innerWidth < 768) {
+      setViewMode("cards")
+    }
+    // Restore sidebar width
+    const saved = localStorage.getItem("feed-sidebar-width")
+    if (saved) {
+      const w = parseInt(saved, 10)
+      if (w >= 160 && w <= 360) {
+        setSidebarWidth(w)
+        sidebarWidthRef.current = w
+      }
+    }
   }, [loadSources, loadCategories])
+
+  // Sidebar drag handlers
+  function onSidebarDragStart(e: React.MouseEvent) {
+    e.preventDefault()
+    dragState.current = { startX: e.clientX, startWidth: sidebarWidthRef.current }
+
+    function onMove(ev: MouseEvent) {
+      if (!dragState.current) return
+      const diff = ev.clientX - dragState.current.startX
+      const next = Math.min(360, Math.max(160, dragState.current.startWidth + diff))
+      sidebarWidthRef.current = next
+      setSidebarWidth(next)
+    }
+
+    function onUp() {
+      dragState.current = null
+      localStorage.setItem("feed-sidebar-width", String(sidebarWidthRef.current))
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+    }
+
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+  }
 
   // Reload items when filters change
   const filtersRef = useRef({ activeCategory, activeSourceId, filter, searchQuery })
@@ -810,8 +852,8 @@ export default function FeedPage() {
     <div className="flex h-full overflow-hidden">
       {/* ── Left Sidebar — desktop only ───────────────────────────────── */}
       <div
-        className="hidden md:flex w-52 shrink-0 flex-col border-r border-[var(--c-border)] overflow-y-auto"
-        style={{ background: "var(--c-canvas)" }}
+        className="hidden md:flex shrink-0 flex-col overflow-y-auto"
+        style={{ background: "var(--c-canvas)", width: sidebarWidth, borderRight: "1px solid var(--c-border)" }}
       >
         <div className="px-4 pt-5 pb-3 flex items-center gap-2">
           <Rss size={13} className="text-[var(--moss)]" />
@@ -984,6 +1026,15 @@ export default function FeedPage() {
             ADD FEED
           </button>
         </div>
+      </div>
+
+      {/* ── Sidebar drag handle — sits between sidebar and center ──────── */}
+      <div
+        onMouseDown={onSidebarDragStart}
+        className="hidden md:block shrink-0 cursor-col-resize select-none group relative z-10"
+        style={{ width: 5 }}
+      >
+        <div className="absolute inset-0 -mx-1.5 group-hover:bg-[var(--moss)]/20 transition-colors" />
       </div>
 
       {/* ── Center — Article List ─────────────────────────────────────── */}
