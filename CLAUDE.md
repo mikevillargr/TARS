@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.14.0 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.14.1 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,13 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.14.1 Fix: email draft revision, inline editing, sent-state persistence. send_email tool
+        now instructs model to re-call the tool for any revision (fixes missing card on revision
+        and hallucination on second turn). Server generates draft_id UUID and echoes To/Subject
+        in tool result. EmailDraftCard has pencil-toggle edit mode for all fields (To/CC/Subject/
+        Body inline inputs). POST /api/email/mark-sent persists sent:true in DB tool_results;
+        on reload card reads sent flag and shows sent state instead of reverting. Harness + web,
+        no DB migration.
 v2.14.0 Feat: Feed Reader — three-panel RSS/YouTube/Reddit/podcast reader at /feed. Subscribe to any URL (RSS, website auto-discovery, YouTube channel XML, Reddit .rss, Google News). Four media types: article (prose), video (YouTube embed), podcast (HTML5 audio), link. "Save to Brain" one-click → KnowledgeItem. "Chat with TARS" creates pre-seeded Conversation with article content. Feedly search API for feed discovery (GET /api/feed/discover; FEEDLY_API_KEY). Preset packs for zero-config onboarding. New DB tables: feed_sources + feed_items (rolling 90-day cleanup). Migration: p3q4r5s6t7u8. Hourly feed_sync scheduler job. feedparser==6.0.11 added. Harness + web.
 v2.13.4 Feat: rolling context compaction. Conversations over 20 messages trigger a Tier 1
         model summary of the oldest messages (all but last 10). Summary stored in

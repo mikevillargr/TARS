@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.14.0 |
+| Version | v2.14.1 |
 | Released | 2026-06-23 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,14 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.14.1 — 2026-06-23
+**Fix: email draft revision, inline editing, sent-state persistence**
+- `send_email` tool description now explicitly instructs the model to call the tool again for revisions instead of outputting prose — fixes both the missing card on revision and hallucination on the second turn
+- `send_email` handler generates a server-side `draft_id` UUID and echoes To/Subject in the tool result so the model retains full draft context across turns
+- `EmailDraftCard` now has a pencil-toggle edit mode — all fields (To, CC, Subject, Body) become inline inputs/textarea; Send uses the edited values
+- `POST /api/email/mark-sent` endpoint persists `sent: true` onto the matching `tool_results` entry in the DB; called automatically after a successful send from the card
+- On conversation reload, `InlineMessageCards` passes `messageId` and reads the `sent` flag from stored `tool_results` so the card renders in the sent state instead of reverting to the unsent draft
 
 ### v2.14.0 — 2026-06-23
 **Feat: Feed Reader**
