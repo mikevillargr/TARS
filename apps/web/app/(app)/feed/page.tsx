@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   Rss, Star, Play, Headphones, ExternalLink, Brain, MessageSquare,
   RefreshCw, Plus, ChevronDown, ChevronRight, Loader2, Check, ArrowLeft, Trash2,
-  Pencil, LayoutList, LayoutGrid, X as XIcon,
+  Pencil, LayoutList, LayoutGrid, X as XIcon, Search,
 } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import AddFeedModal from "@/components/feed/AddFeedModal"
@@ -403,6 +403,175 @@ function ReadingPane({
   )
 }
 
+// ─── Article modal (card view) ───────────────────────────────────────────────
+
+function ArticleModal({
+  item,
+  loading,
+  onClose,
+  onStar,
+  onSaveToSecondBrain,
+  onChatWithTars,
+}: {
+  item: FeedItemDetail | null
+  loading: boolean
+  onClose: () => void
+  onStar: () => void
+  onSaveToSecondBrain: () => void
+  onChatWithTars: () => void
+}) {
+  // Close on Escape
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative flex flex-col w-full max-w-3xl rounded-xl border border-[var(--c-border)] shadow-2xl overflow-hidden"
+        style={{ background: "var(--c-canvas)", maxHeight: "90vh" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] hover:bg-[var(--c-surface)] transition-colors"
+        >
+          <XIcon size={15} />
+        </button>
+
+        {loading || !item ? (
+          <div className="flex items-center justify-center h-64">
+            <Loader2 size={20} className="animate-spin text-[var(--c-ink-faint)]" />
+          </div>
+        ) : (
+          <div className="flex flex-col h-full overflow-hidden" style={{ maxHeight: "90vh" }}>
+            {/* Header */}
+            <div className="px-6 pt-6 pb-4 border-b border-[var(--c-border)] pr-12">
+              <h1 className="text-xl font-semibold text-[var(--c-ink)] leading-snug mb-2">
+                {item.title}
+              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                {item.source_favicon && (
+                  <img src={item.source_favicon} alt="" className="w-4 h-4 rounded" />
+                )}
+                <span className="tars-label text-[var(--c-ink-faint)]">{item.source_name}</span>
+                {item.author && (
+                  <>
+                    <span className="tars-label text-[var(--c-ink-faint)]">·</span>
+                    <span className="tars-label text-[var(--c-ink-faint)]">{item.author}</span>
+                  </>
+                )}
+                {item.published_at && (
+                  <>
+                    <span className="tars-label text-[var(--c-ink-faint)]">·</span>
+                    <span className="tars-label text-[var(--c-ink-faint)]">{relativeTime(item.published_at)}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {item.media_type === "video" && item.media_url && (
+                <div className="relative mb-5 rounded-lg overflow-hidden" style={{ paddingTop: "56.25%" }}>
+                  <iframe
+                    src={item.media_url}
+                    className="absolute inset-0 w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              )}
+              {item.media_type === "podcast" && item.media_url && (
+                <div className="mb-5 p-4 rounded-lg border border-[var(--c-border)]" style={{ background: "var(--c-surface)" }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Headphones size={14} className="text-purple-400" />
+                    <span className="tars-label text-purple-400">PODCAST</span>
+                  </div>
+                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                  <audio controls src={item.media_url} className="w-full" />
+                </div>
+              )}
+              {item.media_type === "link" && (
+                <div className="mb-5 p-5 rounded-lg border border-[var(--c-border)] flex items-center gap-4" style={{ background: "var(--c-surface)" }}>
+                  <ExternalLink size={16} className="text-[var(--c-ink-faint)] shrink-0" />
+                  <div>
+                    <p className="text-sm text-[var(--c-ink-faint)] mb-2">{item.summary || "No preview available."}</p>
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="tars-label text-[var(--moss)] hover:underline">OPEN LINK →</a>
+                  </div>
+                </div>
+              )}
+              {item.image_url && item.media_type === "article" && (
+                <img src={item.image_url} alt="" className="w-full rounded-lg mb-5 object-cover max-h-64" />
+              )}
+              {item.content ? (
+                <div
+                  className="prose text-sm text-[var(--c-ink)] leading-relaxed [&_a]:text-[var(--moss)] [&_h1]:text-lg [&_h2]:text-base [&_h3]:text-sm [&_img]:rounded-lg [&_img]:max-w-full [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--moss)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--c-ink-faint)]"
+                  dangerouslySetInnerHTML={{ __html: item.content }}
+                />
+              ) : item.summary ? (
+                <p className="text-sm text-[var(--c-ink)] leading-relaxed">{item.summary}</p>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-sm text-[var(--c-ink-faint)]">No content cached — open the original to read.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Action bar */}
+            <div className="px-6 py-3 border-t border-[var(--c-border)] flex items-center gap-2 flex-wrap">
+              <button
+                onClick={onStar}
+                className={`flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md transition-colors ${
+                  item.is_starred
+                    ? "bg-amber-400/15 text-amber-500"
+                    : "hover:bg-[var(--c-surface)] text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
+                }`}
+              >
+                <Star size={12} className={item.is_starred ? "fill-amber-400" : ""} />
+                {item.is_starred ? "STARRED" : "STAR"}
+              </button>
+              <button
+                onClick={onSaveToSecondBrain}
+                className={`flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md transition-colors ${
+                  item.knowledge_item_id
+                    ? "bg-[var(--moss)]/15 text-[var(--moss)]"
+                    : "hover:bg-[var(--c-surface)] text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
+                }`}
+              >
+                {item.knowledge_item_id ? <Check size={12} /> : <Brain size={12} />}
+                {item.knowledge_item_id ? "SAVED" : "SAVE TO BRAIN"}
+              </button>
+              <button
+                onClick={onChatWithTars}
+                className="flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md hover:bg-[var(--c-surface)] text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] transition-colors"
+              >
+                <MessageSquare size={12} />
+                CHAT WITH TARS
+              </button>
+              <a
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md hover:bg-[var(--c-surface)] text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] transition-colors"
+              >
+                <ExternalLink size={12} />
+                OPEN ORIGINAL
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function FeedPage() {
@@ -430,6 +599,11 @@ export default function FeedPage() {
   const [syncingSource, setSyncingSource] = useState<string | null>(null)
   const [mobilePanel, setMobilePanel] = useState<"list" | "reading">("list")
   const [viewMode, setViewMode] = useState<"list" | "cards">("list")
+  const [articleModalOpen, setArticleModalOpen] = useState(false)
+
+  // Search
+  const [searchQuery, setSearchQuery] = useState("")
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Edit feed
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null)
@@ -451,15 +625,17 @@ export default function FeedPage() {
     } catch { /* ignore */ }
   }, [])
 
-  const loadItems = useCallback(async (reset = false) => {
+  const loadItems = useCallback(async (reset = false, searchOverride?: string) => {
     setLoadingItems(true)
     const currentOffset = reset ? 0 : offset
+    const q = searchOverride !== undefined ? searchOverride : searchQuery
     try {
       const params = new URLSearchParams()
       if (activeCategory) params.set("category", activeCategory)
       if (activeSourceId) params.set("source_id", activeSourceId)
       if (filter === "unread") params.set("unread_only", "true")
       if (filter === "starred") params.set("starred", "true")
+      if (q.trim()) params.set("search", q.trim())
       params.set("limit", String(LIMIT))
       params.set("offset", String(currentOffset))
 
@@ -475,7 +651,7 @@ export default function FeedPage() {
     } catch { /* ignore */ } finally {
       setLoadingItems(false)
     }
-  }, [activeCategory, activeSourceId, filter, offset])
+  }, [activeCategory, activeSourceId, filter, offset, searchQuery])
 
   // Initial load
   useEffect(() => {
@@ -484,16 +660,22 @@ export default function FeedPage() {
   }, [loadSources, loadCategories])
 
   // Reload items when filters change
-  const filtersRef = useRef({ activeCategory, activeSourceId, filter })
+  const filtersRef = useRef({ activeCategory, activeSourceId, filter, searchQuery })
   useEffect(() => {
-    filtersRef.current = { activeCategory, activeSourceId, filter }
+    filtersRef.current = { activeCategory, activeSourceId, filter, searchQuery }
     loadItems(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategory, activeSourceId, filter])
+  }, [activeCategory, activeSourceId, filter, searchQuery])
 
-  async function handleSelectItem(item: FeedItem) {
-    if (selectedItem?.id === item.id) return
+  async function handleSelectItem(item: FeedItem, forceModal = false) {
+    if (selectedItem?.id === item.id && !forceModal) {
+      if (viewMode === "cards") setArticleModalOpen(true)
+      return
+    }
     setLoadingDetail(true)
+    if (viewMode === "cards" || forceModal) {
+      setArticleModalOpen(true)
+    }
     // Optimistic mark read
     if (!item.is_read) {
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, is_read: true } : i))
@@ -502,7 +684,7 @@ export default function FeedPage() {
     try {
       const detail = await apiGet<FeedItemDetail>(`/feed/items/${item.id}`)
       setSelectedItem(detail)
-      setMobilePanel("reading")
+      if (viewMode !== "cards" && !forceModal) setMobilePanel("reading")
     } catch { /* ignore */ } finally {
       setLoadingDetail(false)
     }
@@ -603,6 +785,12 @@ export default function FeedPage() {
     loadSources()
     loadCategories()
     loadItems(true)
+  }
+
+  function handleSearchChange(value: string) {
+    setSearchQuery(value)
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    // loadItems fires via the useEffect that watches searchQuery
   }
 
   // Group sources by category for sidebar
@@ -800,7 +988,11 @@ export default function FeedPage() {
 
       {/* ── Center — Article List ─────────────────────────────────────── */}
       <div
-        className={`${mobilePanel === "reading" ? "hidden md:flex" : "flex"} flex-col border-r border-[var(--c-border)] overflow-hidden w-full md:w-80 md:shrink-0 md:flex-none`}
+        className={`${mobilePanel === "reading" ? "hidden md:flex" : "flex"} flex-col overflow-hidden ${
+          viewMode === "cards"
+            ? "flex-1 min-w-0"
+            : "border-r border-[var(--c-border)] w-full md:w-80 md:shrink-0 md:flex-none"
+        }`}
         style={{ background: "var(--c-canvas)" }}
       >
         {/* Mobile filter bar — replaces sidebar on small screens */}
@@ -844,14 +1036,25 @@ export default function FeedPage() {
 
         {/* Toolbar */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--c-border)]">
-          <span className="tars-label text-[var(--c-ink-faint)] flex-1 truncate">
-            {activeCategory
-              ? activeCategory.toUpperCase()
-              : activeSourceId
-              ? sources.find((s) => s.id === activeSourceId)?.name.toUpperCase()
-              : filter.toUpperCase()
-            }
-          </span>
+          {/* Search input */}
+          <div className="relative flex-1 min-w-0">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--c-ink-faint)] pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search…"
+              className="w-full pl-7 pr-7 py-1.5 rounded-md border border-[var(--c-border)] bg-[var(--c-surface)] text-xs text-[var(--c-ink)] placeholder:text-[var(--c-ink-faint)] outline-none focus:border-[var(--moss)] transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => handleSearchChange("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
+              >
+                <XIcon size={11} />
+              </button>
+            )}
+          </div>
           <button
             onClick={handleMarkAllRead}
             className="tars-label text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] transition-colors px-2 py-1 rounded"
@@ -964,9 +1167,9 @@ export default function FeedPage() {
         </div>
       </div>
 
-      {/* ── Right — Reading Pane ──────────────────────────────────────── */}
+      {/* ── Right — Reading Pane (list view only) ────────────────────── */}
       <div
-        className={`${mobilePanel === "list" ? "hidden md:flex" : "flex"} flex-col flex-1 min-w-0 overflow-hidden`}
+        className={`${viewMode === "cards" ? "hidden" : mobilePanel === "list" ? "hidden md:flex" : "flex"} flex-col flex-1 min-w-0 overflow-hidden`}
         style={{ background: "var(--c-canvas)" }}
       >
         {/* Mobile back button */}
@@ -999,6 +1202,18 @@ export default function FeedPage() {
           existingCategories={existingCategories}
           onClose={() => setShowAddModal(false)}
           onAdded={handleFeedAdded}
+        />
+      )}
+
+      {/* ── Article Modal (card view) ─────────────────────────────────── */}
+      {articleModalOpen && (
+        <ArticleModal
+          item={selectedItem}
+          loading={loadingDetail}
+          onClose={() => setArticleModalOpen(false)}
+          onStar={() => selectedItem && handleStar(selectedItem.id)}
+          onSaveToSecondBrain={handleSaveToSecondBrain}
+          onChatWithTars={handleChatWithTars}
         />
       )}
     </div>
