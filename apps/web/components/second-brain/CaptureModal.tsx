@@ -405,9 +405,13 @@ export function CaptureModal({ open, onClose, onSaved, defaultTab = "document", 
           style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}
         >
           {/* Status messages */}
-          {(ingestError || (tab === "file" && ingesting)) && (
+          {(ingestError || ingesting) && (
             <p className="text-xs mb-2" style={{ color: ingestError ? "var(--c-rose)" : "var(--c-ink-faint)" }}>
-              {ingestError || "Processing file — this may take a moment…"}
+              {ingestError || (
+                tab === "url" ? "Fetching and processing URL — this may take a moment…" :
+                tab === "file" ? "Processing file — this may take a moment…" :
+                "Saving…"
+              )}
             </p>
           )}
           {/* Buttons — row on sm+, full-width stacked on mobile */}

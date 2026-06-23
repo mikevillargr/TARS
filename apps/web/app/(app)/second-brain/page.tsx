@@ -600,7 +600,15 @@ export default function SecondBrainPage() {
       <CaptureModal
         open={showCapture}
         onClose={() => setShowCapture(false)}
-        onSaved={(item) => setItems(prev => [{ ...item, starred: false, properties: {} }, ...prev])}
+        onSaved={(item) => {
+          const newItem = { ...item, starred: false, properties: {} } as KnowledgeItem
+          setItems(prev => [newItem, ...prev])
+          // Reset domain/tag filters if the new item would be hidden by the current filter
+          if (selectedDomain !== "All" && selectedDomain !== "Starred" && newItem.domain !== selectedDomain) {
+            setSelectedDomain("All")
+          }
+          if (selectedTag) setSelectedTag("")
+        }}
         initialTitle={captureInitialTitle}
       />
     </div>

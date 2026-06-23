@@ -400,6 +400,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
         open={captureOpen}
         onClose={() => setCaptureOpen(false)}
         defaultTab="file"
+        onSaved={() => router.push('/second-brain')}
       />
 
       {/* Global Command Palette */}
