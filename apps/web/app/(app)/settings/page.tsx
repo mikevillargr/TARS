@@ -210,6 +210,11 @@ export default function SettingsPage() {
   const [showIOSInstructions, setShowIOSInstructions] = useState(false)
   const [installDone, setInstallDone]       = useState(false)
 
+  // Feed refresh interval
+  const [feedRefreshHours, setFeedRefreshHours] = useState<number>(24)
+  const [feedRefreshSaving, setFeedRefreshSaving] = useState(false)
+  const [feedRefreshSaved, setFeedRefreshSaved] = useState(false)
+
   // Voice / TTS
   const [ttsVoice, setTtsVoice]   = useState<string>("af_bella")
   const [ttsSpeed, setTtsSpeed]   = useState<number>(1.0)
@@ -243,6 +248,10 @@ export default function SettingsPage() {
     apiGet<ApiKeys>("/settings/api-keys")
       .then(d => setMaskedKeys(d))
       .catch(console.error)
+
+    apiGet<{ hours: number }>("/feed/refresh-interval")
+      .then(d => setFeedRefreshHours(d.hours))
+      .catch(() => {/* no sources yet, use default */})
 
     apiGet<{ voices: string[] }>("/tts/voices")
       .then(d => setVoiceList(d.voices))
@@ -606,6 +615,18 @@ export default function SettingsPage() {
   function autoDetect() {
     const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
     if (detected) saveTimezone(detected)
+  }
+
+  async function saveFeedRefresh(hours: number) {
+    setFeedRefreshHours(hours)
+    setFeedRefreshSaving(true)
+    try {
+      await apiPatch("/feed/refresh-interval", { hours })
+      setFeedRefreshSaved(true)
+      setTimeout(() => setFeedRefreshSaved(false), 2000)
+    } catch (e) { console.error(e) } finally {
+      setFeedRefreshSaving(false)
+    }
   }
 
   async function addDomain() {
@@ -1168,6 +1189,38 @@ export default function SettingsPage() {
           <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
             New items are auto-classified into a domain. System domains can be renamed but not deleted. Deleting a custom domain reassigns its items to <em>general</em>.
           </p>
+        </section>
+
+        {/* ── Feed ── */}
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+          <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
+            Feed
+          </h2>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold" style={{ color: "var(--c-ink)" }}>Refresh interval</div>
+              <div className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>How often each feed checks for new content</div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <select
+                value={feedRefreshHours}
+                onChange={(e) => saveFeedRefresh(Number(e.target.value))}
+                disabled={feedRefreshSaving}
+                className="text-xs px-2 py-1.5 rounded-lg border outline-none transition-colors disabled:opacity-50"
+                style={{ background: "var(--c-surface)", borderColor: "var(--c-border)", color: "var(--c-ink)", fontFamily: "var(--font-mono)" }}
+              >
+                <option value={6}>Every 6 hours</option>
+                <option value={12}>Every 12 hours</option>
+                <option value={24}>Once a day</option>
+                <option value={48}>Every 2 days</option>
+                <option value={72}>Every 3 days</option>
+                <option value={168}>Once a week</option>
+              </select>
+              {feedRefreshSaved && (
+                <span className="text-[11px] font-mono" style={{ color: "var(--c-moss)" }}>SAVED</span>
+              )}
+            </div>
+          </div>
         </section>
 
         {/* ── API Keys ── */}

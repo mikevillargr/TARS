@@ -80,7 +80,7 @@ class AddFeedRequest(BaseModel):
     url: str
     name: Optional[str] = None
     category: Optional[str] = None
-    fetch_interval_hours: int = 4
+    fetch_interval_hours: int = 24
     source_type: Optional[str] = None  # if provided, skip re-validation
     favicon_url: Optional[str] = None  # if provided, skip re-validation
 
@@ -723,3 +723,41 @@ async def enable_preset(
 
     background_tasks.add_task(_sync_all_new)
     return {"added": added, "total": len(added)}
+
+
+# ── Feed refresh interval ──────────────────────────────────────────────────────
+
+class FeedRefreshIntervalOut(BaseModel):
+    hours: int
+
+class UpdateFeedRefreshIntervalRequest(BaseModel):
+    hours: int
+
+
+@router.get("/refresh-interval", response_model=FeedRefreshIntervalOut)
+async def get_refresh_interval(
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_auth),
+):
+    result = await db.execute(
+        select(FeedSource.fetch_interval_hours)
+        .where(FeedSource.user_id == user_id)
+        .limit(1)
+    )
+    val = result.scalar_one_or_none()
+    return {"hours": val if val is not None else 24}
+
+
+@router.patch("/refresh-interval", response_model=FeedRefreshIntervalOut)
+async def update_refresh_interval(
+    body: UpdateFeedRefreshIntervalRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_auth),
+):
+    await db.execute(
+        sa_update(FeedSource)
+        .where(FeedSource.user_id == user_id)
+        .values(fetch_interval_hours=body.hours)
+    )
+    await db.commit()
+    return {"hours": body.hours}

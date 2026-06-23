@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { X, Rss, Search, Plus, ExternalLink, Loader2, ChevronRight } from "lucide-react"
+import { useState } from "react"
+import { X, Rss, Search, Plus, Loader2 } from "lucide-react"
 import { apiPost, apiGet } from "@/lib/api-client"
 
 interface PreviewItem {
@@ -28,13 +28,6 @@ interface DiscoverResult {
   website_url: string | null
 }
 
-interface PresetPack {
-  id: string
-  label: string
-  icon: string
-  feeds: { name: string; url: string }[]
-}
-
 interface AddFeedModalProps {
   existingCategories: string[]
   onClose: () => void
@@ -47,7 +40,7 @@ const SUGGESTED_CATEGORIES = [
 ]
 
 export default function AddFeedModal({ existingCategories, onClose, onAdded }: AddFeedModalProps) {
-  const [tab, setTab] = useState<"url" | "discover" | "presets">("url")
+  const [tab, setTab] = useState<"url" | "discover">("url")
 
   // URL tab
   const [urlInput, setUrlInput] = useState("")
@@ -64,11 +57,6 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
   const [discoverError, setDiscoverError] = useState("")
   // per-feed state: undefined = idle, "adding" = in progress, "done" = success, string = error message
   const [feedState, setFeedState] = useState<Record<string, "adding" | "done" | string>>({})
-
-  // Presets tab
-  const [presets, setPresets] = useState<PresetPack[]>([])
-  const [presetsLoaded, setPresetsLoaded] = useState(false)
-  const [enablingPack, setEnablingPack] = useState<string | null>(null)
 
   const allCategories = Array.from(new Set([...existingCategories, ...SUGGESTED_CATEGORIES]))
 
@@ -140,34 +128,6 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
     }
   }
 
-  const loadPresets = useCallback(async () => {
-    if (presetsLoaded) return
-    try {
-      const data = await apiGet<PresetPack[]>("/feed/presets")
-      setPresets(data)
-      setPresetsLoaded(true)
-    } catch {
-      setPresetsLoaded(true)
-    }
-  }, [presetsLoaded])
-
-  async function handleEnablePack(packId: string) {
-    setEnablingPack(packId)
-    try {
-      await apiPost(`/feed/presets/${packId}/enable`, {})
-      onAdded()
-    } catch {
-      // ignore
-    } finally {
-      setEnablingPack(null)
-    }
-  }
-
-  function handleTabChange(t: "url" | "discover" | "presets") {
-    setTab(t)
-    if (t === "presets") loadPresets()
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div
@@ -190,17 +150,17 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
 
         {/* Tabs */}
         <div className="flex border-b border-[var(--c-border)] px-5">
-          {(["url", "discover", "presets"] as const).map((t) => (
+          {(["url", "discover"] as const).map((t) => (
             <button
               key={t}
-              onClick={() => handleTabChange(t)}
+              onClick={() => setTab(t)}
               className={`tars-label px-3 py-2.5 border-b-2 transition-colors ${
                 tab === t
                   ? "border-[var(--moss)] text-[var(--moss)]"
                   : "border-transparent text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
               }`}
             >
-              {t === "url" ? "PASTE URL" : t === "discover" ? "DISCOVER" : "PRESETS"}
+              {t === "url" ? "PASTE URL" : "DISCOVER"}
             </button>
           ))}
         </div>
@@ -440,46 +400,6 @@ export default function AddFeedModal({ existingCategories, onClose, onAdded }: A
             </div>
           )}
 
-          {tab === "presets" && (
-            <div className="space-y-3">
-              <p className="text-xs text-[var(--c-ink-faint)]">
-                Add a curated pack of industry feeds with one click.
-              </p>
-              {!presetsLoaded ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 size={16} className="animate-spin text-[var(--c-ink-faint)]" />
-                </div>
-              ) : presets.length === 0 ? (
-                <p className="tars-label text-[var(--c-ink-faint)] text-center py-8">NO PRESETS AVAILABLE</p>
-              ) : (
-                presets.map((pack) => (
-                  <div
-                    key={pack.id}
-                    className="flex items-center gap-4 p-4 rounded-lg border border-[var(--c-border)]"
-                    style={{ background: "var(--c-surface)" }}
-                  >
-                    <span className="text-2xl shrink-0">{pack.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-[var(--c-ink)]">{pack.label}</p>
-                      <p className="tars-label text-[var(--c-ink-faint)]">{pack.feeds.length} FEEDS</p>
-                    </div>
-                    <button
-                      onClick={() => handleEnablePack(pack.id)}
-                      disabled={enablingPack === pack.id}
-                      className="flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md transition-colors disabled:opacity-40"
-                      style={{ background: "var(--moss)", color: "var(--c-surface)" }}
-                    >
-                      {enablingPack === pack.id
-                        ? <Loader2 size={11} className="animate-spin" />
-                        : <ChevronRight size={11} />
-                      }
-                      ADD ALL
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>

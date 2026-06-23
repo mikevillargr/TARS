@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
   Rss, Star, Play, Headphones, ExternalLink, Brain, MessageSquare,
-  RefreshCw, Plus, ChevronDown, ChevronRight, Loader2, Check,
+  RefreshCw, Plus, ChevronDown, ChevronRight, Loader2, Check, ArrowLeft,
 } from "lucide-react"
 import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
 import AddFeedModal from "@/components/feed/AddFeedModal"
@@ -340,6 +340,8 @@ export default function FeedPage() {
   // UI
   const [showAddModal, setShowAddModal] = useState(false)
   const [syncingSource, setSyncingSource] = useState<string | null>(null)
+  // Mobile: which panel is visible ("list" | "reading")
+  const [mobilePanel, setMobilePanel] = useState<"list" | "reading">("list")
 
   const loadCategories = useCallback(async () => {
     try {
@@ -406,6 +408,7 @@ export default function FeedPage() {
     try {
       const detail = await apiGet<FeedItemDetail>(`/feed/items/${item.id}`)
       setSelectedItem(detail)
+      setMobilePanel("reading")
     } catch { /* ignore */ } finally {
       setLoadingDetail(false)
     }
@@ -490,9 +493,9 @@ export default function FeedPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* ── Left Sidebar ─────────────────────────────────────────────── */}
+      {/* ── Left Sidebar — desktop only ───────────────────────────────── */}
       <div
-        className="w-52 shrink-0 flex flex-col border-r border-[var(--c-border)] overflow-y-auto"
+        className="hidden md:flex w-52 shrink-0 flex-col border-r border-[var(--c-border)] overflow-y-auto"
         style={{ background: "var(--c-canvas)" }}
       >
         <div className="px-4 pt-5 pb-3 flex items-center gap-2">
@@ -605,9 +608,48 @@ export default function FeedPage() {
 
       {/* ── Center — Article List ─────────────────────────────────────── */}
       <div
-        className="w-80 shrink-0 flex flex-col border-r border-[var(--c-border)] overflow-hidden"
+        className={`${mobilePanel === "reading" ? "hidden md:flex" : "flex"} flex-col border-r border-[var(--c-border)] overflow-hidden w-full md:w-80 md:shrink-0 md:flex-none`}
         style={{ background: "var(--c-canvas)" }}
       >
+        {/* Mobile filter bar — replaces sidebar on small screens */}
+        <div className="flex md:hidden overflow-x-auto gap-1 px-3 py-2 border-b border-[var(--c-border)] shrink-0" style={{ scrollbarWidth: "none" }}>
+          {(["unread", "all", "starred"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => { setFilter(f); setActiveCategory(null); setActiveSourceId(null) }}
+              className={`shrink-0 tars-label px-2.5 py-1 rounded-full transition-colors ${
+                filter === f && !activeCategory && !activeSourceId
+                  ? "text-[var(--c-surface)]"
+                  : "text-[var(--c-ink-faint)]"
+              }`}
+              style={filter === f && !activeCategory && !activeSourceId ? { background: "var(--moss)" } : { background: "var(--c-surface)" }}
+            >
+              {f === "unread" ? `UNREAD${totalUnread > 0 ? ` · ${totalUnread}` : ""}` : f === "all" ? "ALL" : "STARRED"}
+            </button>
+          ))}
+          {existingCategories.map((cat) => {
+            const catUnread = categories.find((c) => c.category === cat)?.unread_count ?? 0
+            const isActive = activeCategory === cat
+            return (
+              <button
+                key={cat}
+                onClick={() => { setActiveCategory(cat); setActiveSourceId(null) }}
+                className="shrink-0 tars-label px-2.5 py-1 rounded-full transition-colors"
+                style={isActive ? { background: "var(--moss)", color: "var(--c-surface)" } : { background: "var(--c-surface)", color: "var(--c-ink-faint)" }}
+              >
+                {cat.toUpperCase()}{catUnread > 0 ? ` · ${catUnread}` : ""}
+              </button>
+            )
+          })}
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="shrink-0 flex items-center gap-1 tars-label px-2.5 py-1 rounded-full transition-colors"
+            style={{ background: "var(--c-surface)", color: "var(--c-ink-faint)" }}
+          >
+            <Plus size={10} />ADD
+          </button>
+        </div>
+
         {/* Toolbar */}
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--c-border)]">
           <span className="tars-label text-[var(--c-ink-faint)] flex-1 truncate">
@@ -689,9 +731,22 @@ export default function FeedPage() {
       </div>
 
       {/* ── Right — Reading Pane ──────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 overflow-hidden" style={{ background: "var(--c-canvas)" }}>
+      <div
+        className={`${mobilePanel === "list" ? "hidden md:flex" : "flex"} flex-col flex-1 min-w-0 overflow-hidden`}
+        style={{ background: "var(--c-canvas)" }}
+      >
+        {/* Mobile back button */}
+        <div className="flex md:hidden items-center gap-2 px-4 py-2.5 border-b border-[var(--c-border)] shrink-0">
+          <button
+            onClick={() => setMobilePanel("list")}
+            className="flex items-center gap-1.5 tars-label text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] transition-colors"
+          >
+            <ArrowLeft size={13} />
+            BACK
+          </button>
+        </div>
         {loadingDetail ? (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center flex-1">
             <Loader2 size={18} className="animate-spin text-[var(--c-ink-faint)]" />
           </div>
         ) : (
