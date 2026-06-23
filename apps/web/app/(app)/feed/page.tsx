@@ -104,6 +104,7 @@ function ArticleRow({
         style={{ background: !item.is_read ? "var(--moss)" : "transparent" }}
       />
 
+      {/* Text content */}
       <div className="flex-1 min-w-0 px-3 py-3">
         <div className="flex items-center gap-1.5 mb-1">
           {item.source_favicon && (
@@ -130,14 +131,21 @@ function ArticleRow({
           {item.title}
         </p>
         {item.summary && (
-          <p className="text-xs text-[var(--c-ink-faint)] line-clamp-1 mt-0.5">{item.summary}</p>
+          <p className="text-xs text-[var(--c-ink-faint)] line-clamp-1 mt-0.5 md:hidden">{item.summary}</p>
         )}
       </div>
 
-      {/* Star on hover */}
+      {/* Thumbnail — mobile only, right side (Apple News style) */}
+      {item.image_url && (
+        <div className="md:hidden shrink-0 self-center mr-3 w-[68px] h-[68px] rounded-lg overflow-hidden bg-[var(--c-surface)]">
+          <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+        </div>
+      )}
+
+      {/* Star on hover — desktop */}
       <button
         onClick={(e) => { e.stopPropagation(); onStar() }}
-        className={`shrink-0 self-center pr-3 opacity-0 group-hover:opacity-100 transition-all ${
+        className={`hidden md:flex shrink-0 self-center pr-3 opacity-0 group-hover:opacity-100 transition-all ${
           item.is_starred ? "!opacity-100" : ""
         }`}
         aria-label="Star"
@@ -147,6 +155,17 @@ function ArticleRow({
           className={item.is_starred ? "fill-amber-400 text-amber-400" : "text-[var(--c-ink-faint)]"}
         />
       </button>
+
+      {/* Star — always visible on mobile if starred */}
+      {item.is_starred && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onStar() }}
+          className="md:hidden shrink-0 self-center pr-2"
+          aria-label="Star"
+        >
+          <Star size={12} className="fill-amber-400 text-amber-400" />
+        </button>
+      )}
     </button>
   )
 }
@@ -605,6 +624,7 @@ export default function FeedPage() {
   const [sidebarWidth, setSidebarWidth] = useState(208)
   const dragState = useRef<{ startX: number; startWidth: number } | null>(null)
   const sidebarWidthRef = useRef(208)
+  const isMobileRef = useRef(false)
 
   // Search
   const [searchQuery, setSearchQuery] = useState("")
@@ -662,8 +682,9 @@ export default function FeedPage() {
   useEffect(() => {
     loadSources()
     loadCategories()
-    // Mobile: force card view
-    if (window.innerWidth < 768) {
+    // Mobile: force card view, track for modal behaviour
+    isMobileRef.current = window.innerWidth < 768
+    if (isMobileRef.current) {
       setViewMode("cards")
     }
     // Restore sidebar width
@@ -710,14 +731,13 @@ export default function FeedPage() {
   }, [activeCategory, activeSourceId, filter, searchQuery])
 
   async function handleSelectItem(item: FeedItem, forceModal = false) {
+    const useModal = viewMode === "cards" || isMobileRef.current || forceModal
     if (selectedItem?.id === item.id && !forceModal) {
-      if (viewMode === "cards") setArticleModalOpen(true)
+      if (useModal) setArticleModalOpen(true)
       return
     }
     setLoadingDetail(true)
-    if (viewMode === "cards" || forceModal) {
-      setArticleModalOpen(true)
-    }
+    if (useModal) setArticleModalOpen(true)
     // Optimistic mark read
     if (!item.is_read) {
       setItems((prev) => prev.map((i) => i.id === item.id ? { ...i, is_read: true } : i))
@@ -726,7 +746,7 @@ export default function FeedPage() {
     try {
       const detail = await apiGet<FeedItemDetail>(`/feed/items/${item.id}`)
       setSelectedItem(detail)
-      if (viewMode !== "cards" && !forceModal) setMobilePanel("reading")
+      if (!useModal) setMobilePanel("reading")
     } catch { /* ignore */ } finally {
       setLoadingDetail(false)
     }
@@ -1123,8 +1143,8 @@ export default function FeedPage() {
               <RefreshCw size={12} className={syncingSource === activeSourceId ? "animate-spin" : ""} />
             </button>
           )}
-          {/* View toggle */}
-          <div className="flex items-center rounded border border-[var(--c-border)] overflow-hidden">
+          {/* View toggle — desktop only */}
+          <div className="hidden md:flex items-center rounded border border-[var(--c-border)] overflow-hidden">
             <button
               onClick={() => setViewMode("list")}
               className={`p-1.5 transition-colors ${viewMode === "list" ? "text-[var(--moss)]" : "text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"}`}
@@ -1172,7 +1192,7 @@ export default function FeedPage() {
             </div>
           ) : viewMode === "cards" ? (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {items.map((item) => (
                   <ArticleCard
                     key={item.id}
