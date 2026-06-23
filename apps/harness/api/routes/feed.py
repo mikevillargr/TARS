@@ -142,6 +142,7 @@ def _enrich_item(item: FeedItem, source: FeedSource) -> dict:
         "url": item.url,
         "author": item.author,
         "summary": item.summary,
+        "content": item.content,
         "image_url": item.image_url,
         "published_at": item.published_at,
         "media_type": item.media_type,
