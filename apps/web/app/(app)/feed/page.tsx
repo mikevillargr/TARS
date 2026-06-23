@@ -4,9 +4,9 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
   Rss, Star, Play, Headphones, ExternalLink, Brain, MessageSquare,
-  RefreshCw, Plus, ChevronDown, ChevronRight, Loader2, Check, ArrowLeft,
+  RefreshCw, Plus, ChevronDown, ChevronRight, Loader2, Check, ArrowLeft, Trash2,
 } from "lucide-react"
-import { apiGet, apiPost, apiPatch } from "@/lib/api-client"
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import AddFeedModal from "@/components/feed/AddFeedModal"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -460,6 +460,17 @@ export default function FeedPage() {
     }
   }
 
+  async function handleDeleteSource(sourceId: string) {
+    try {
+      await apiDelete(`/feed/sources/${sourceId}`)
+      if (activeSourceId === sourceId) { setActiveSourceId(null) }
+      if (selectedItem?.feed_source_id === sourceId) { setSelectedItem(null) }
+      await loadSources()
+      await loadCategories()
+      await loadItems(true)
+    } catch { /* ignore */ }
+  }
+
   async function handleMarkAllRead() {
     const params: Record<string, string> = {}
     if (activeCategory) params.category = activeCategory
@@ -570,24 +581,32 @@ export default function FeedPage() {
                   </button>
 
                   {(isExpanded || catSources.length === 1) && catSources.map((src) => (
-                    <button
-                      key={src.id}
-                      onClick={() => { setActiveSourceId(src.id); setActiveCategory(null) }}
-                      className={`w-full text-left pl-7 pr-3 py-1 flex items-center gap-1.5 tars-label transition-colors ${
-                        activeSourceId === src.id
-                          ? "text-[var(--moss)]"
-                          : "text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
-                      }`}
-                    >
-                      {src.favicon_url
-                        ? <img src={src.favicon_url} alt="" className="w-3 h-3 rounded shrink-0" />
-                        : <Rss size={10} className="shrink-0" />
-                      }
-                      <span className="flex-1 truncate">{src.name}</span>
-                      {src.unread_count > 0 && (
-                        <span className="shrink-0">{src.unread_count}</span>
-                      )}
-                    </button>
+                    <div key={src.id} className="group flex items-center pl-7 pr-1">
+                      <button
+                        onClick={() => { setActiveSourceId(src.id); setActiveCategory(null) }}
+                        className={`flex-1 min-w-0 text-left py-1 flex items-center gap-1.5 tars-label transition-colors ${
+                          activeSourceId === src.id
+                            ? "text-[var(--moss)]"
+                            : "text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
+                        }`}
+                      >
+                        {src.favicon_url
+                          ? <img src={src.favicon_url} alt="" className="w-3 h-3 rounded shrink-0" />
+                          : <Rss size={10} className="shrink-0" />
+                        }
+                        <span className="flex-1 truncate">{src.name}</span>
+                        {src.unread_count > 0 && (
+                          <span className="shrink-0 mr-1">{src.unread_count}</span>
+                        )}
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSource(src.id) }}
+                        className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-[var(--c-ink-faint)] hover:text-rose-400"
+                        title={`Remove ${src.name}`}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )

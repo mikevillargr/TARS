@@ -417,12 +417,12 @@ def _fetch_full_article(url: str) -> Optional[str]:
             output_format="html",
             include_comments=False,
             include_tables=True,
-            favor_precision=True,
+            favor_recall=True,
         )
         if content and len(content) > 300:
             return content
         # Fallback: plain text → wrapped paragraphs
-        text = trafilatura.extract(downloaded, favor_precision=True)
+        text = trafilatura.extract(downloaded, favor_recall=True)
         if text:
             paras = [p.strip() for p in text.split("\n\n") if p.strip()]
             if paras:
@@ -452,16 +452,17 @@ async def get_item(
     if not item.is_read:
         item.is_read = True
 
-    # Lazy full-article fetch: if stored content is thin (RSS summary only),
-    # fetch the original URL and cache the result so subsequent opens are instant.
+    # Lazy full-article fetch: if stored content looks like a summary (under
+    # 5000 chars), fetch the original URL and cache it for future opens.
     stored_len = len(item.content or "")
-    if item.media_type == "article" and stored_len < 1200:
+    if item.media_type == "article" and stored_len < 5000:
         try:
             full = await asyncio.to_thread(_fetch_full_article, item.url)
             if full and len(full) > stored_len:
                 item.content = full
+                log.info("Full article cached for %s (%d chars)", item.url, len(full))
         except Exception as e:
-            log.debug("Article fetch skipped for %s: %s", item.url, e)
+            log.warning("Article fetch failed for %s: %s", item.url, e)
 
     await db.commit()
     return _enrich_item(item, source)
