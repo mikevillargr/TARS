@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import {
   Rss, Star, Play, Headphones, ExternalLink, Brain, MessageSquare,
   RefreshCw, Plus, ChevronDown, ChevronRight, Loader2, Check, ArrowLeft, Trash2,
+  Pencil, LayoutList, LayoutGrid, X as XIcon,
 } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import AddFeedModal from "@/components/feed/AddFeedModal"
@@ -143,6 +144,93 @@ function ArticleRow({
       >
         <Star
           size={13}
+          className={item.is_starred ? "fill-amber-400 text-amber-400" : "text-[var(--c-ink-faint)]"}
+        />
+      </button>
+    </button>
+  )
+}
+
+// ─── Article card (grid view) ────────────────────────────────────────────────
+
+function ArticleCard({
+  item,
+  selected,
+  onClick,
+  onStar,
+}: {
+  item: FeedItem
+  selected: boolean
+  onClick: () => void
+  onStar: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative group w-full text-left flex flex-col rounded-lg border overflow-hidden transition-colors ${
+        selected ? "border-[var(--moss)]/60" : "border-[var(--c-border)] hover:border-[var(--c-ink-faint)]"
+      }`}
+      style={{ background: selected ? "var(--c-surface)" : "var(--c-canvas)" }}
+    >
+      {/* Unread dot */}
+      {!item.is_read && (
+        <div
+          className="absolute top-2 left-2 w-2 h-2 rounded-full z-10"
+          style={{ background: "var(--moss)" }}
+        />
+      )}
+
+      {/* Thumbnail */}
+      <div className="w-full aspect-video bg-[var(--c-surface)] overflow-hidden shrink-0 flex items-center justify-center">
+        {item.image_url ? (
+          <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className="flex flex-col items-center gap-1 opacity-30">
+            {item.source_favicon
+              ? <img src={item.source_favicon} alt="" className="w-6 h-6 rounded" />
+              : <Rss size={18} />
+            }
+          </div>
+        )}
+        {item.media_type !== "article" && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="rounded-full p-2" style={{ background: "rgba(0,0,0,0.45)" }}>
+              <MediaTypeIcon type={item.media_type} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 flex flex-col p-3 gap-1.5 min-w-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {item.source_favicon && (
+            <img src={item.source_favicon} alt="" className="w-3 h-3 rounded shrink-0" />
+          )}
+          <span className="tars-label text-[var(--c-ink-faint)] truncate flex-1">{item.source_name}</span>
+          {item.published_at && (
+            <span className="tars-label text-[var(--c-ink-faint)] shrink-0">{relativeTime(item.published_at)}</span>
+          )}
+        </div>
+        <p className={`text-sm leading-snug line-clamp-2 ${item.is_read ? "text-[var(--c-ink-faint)]" : "text-[var(--c-ink)] font-medium"}`}>
+          {item.title}
+        </p>
+        {item.summary && (
+          <p className="text-xs text-[var(--c-ink-faint)] line-clamp-2 mt-0.5">{item.summary}</p>
+        )}
+      </div>
+
+      {/* Star on hover */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onStar() }}
+        className={`absolute bottom-2 right-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-all ${
+          item.is_starred ? "!opacity-100" : ""
+        }`}
+        style={{ background: "var(--c-surface)" }}
+        aria-label="Star"
+      >
+        <Star
+          size={11}
           className={item.is_starred ? "fill-amber-400 text-amber-400" : "text-[var(--c-ink-faint)]"}
         />
       </button>
@@ -340,8 +428,14 @@ export default function FeedPage() {
   // UI
   const [showAddModal, setShowAddModal] = useState(false)
   const [syncingSource, setSyncingSource] = useState<string | null>(null)
-  // Mobile: which panel is visible ("list" | "reading")
   const [mobilePanel, setMobilePanel] = useState<"list" | "reading">("list")
+  const [viewMode, setViewMode] = useState<"list" | "cards">("list")
+
+  // Edit feed
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editCategory, setEditCategory] = useState("")
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const loadCategories = useCallback(async () => {
     try {
@@ -457,6 +551,28 @@ export default function FeedPage() {
       await loadCategories()
     } catch { /* ignore */ } finally {
       setSyncingSource(null)
+    }
+  }
+
+  function startEditSource(src: FeedSource) {
+    setEditingSourceId(src.id)
+    setEditName(src.name)
+    setEditCategory(src.category ?? "")
+  }
+
+  async function handleSaveEdit(sourceId: string) {
+    if (savingEdit) return
+    setSavingEdit(true)
+    try {
+      await apiPatch(`/feed/sources/${sourceId}`, {
+        name: editName.trim() || undefined,
+        category: editCategory.trim() || null,
+      })
+      await loadSources()
+      await loadCategories()
+      setEditingSourceId(null)
+    } catch { /* ignore */ } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -581,31 +697,88 @@ export default function FeedPage() {
                   </button>
 
                   {(isExpanded || catSources.length === 1) && catSources.map((src) => (
-                    <div key={src.id} className="group flex items-center pl-7 pr-1">
-                      <button
-                        onClick={() => { setActiveSourceId(src.id); setActiveCategory(null) }}
-                        className={`flex-1 min-w-0 text-left py-1 flex items-center gap-1.5 tars-label transition-colors ${
-                          activeSourceId === src.id
-                            ? "text-[var(--moss)]"
-                            : "text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
-                        }`}
-                      >
-                        {src.favicon_url
-                          ? <img src={src.favicon_url} alt="" className="w-3 h-3 rounded shrink-0" />
-                          : <Rss size={10} className="shrink-0" />
-                        }
-                        <span className="flex-1 truncate">{src.name}</span>
-                        {src.unread_count > 0 && (
-                          <span className="shrink-0 mr-1">{src.unread_count}</span>
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteSource(src.id) }}
-                        className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-[var(--c-ink-faint)] hover:text-rose-400"
-                        title={`Remove ${src.name}`}
-                      >
-                        <Trash2 size={11} />
-                      </button>
+                    <div key={src.id}>
+                      {editingSourceId === src.id ? (
+                        /* Inline edit form */
+                        <div className="pl-7 pr-2 py-2 space-y-1.5">
+                          <input
+                            autoFocus
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveEdit(src.id)
+                              if (e.key === "Escape") setEditingSourceId(null)
+                            }}
+                            className="w-full px-2 py-1 rounded border border-[var(--c-border)] bg-[var(--c-surface)] text-xs text-[var(--c-ink)] outline-none focus:border-[var(--moss)]"
+                            placeholder="Feed name"
+                          />
+                          <input
+                            value={editCategory}
+                            onChange={(e) => setEditCategory(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveEdit(src.id)
+                              if (e.key === "Escape") setEditingSourceId(null)
+                            }}
+                            list="sidebar-category-suggestions"
+                            className="w-full px-2 py-1 rounded border border-[var(--c-border)] bg-[var(--c-surface)] text-xs text-[var(--c-ink)] outline-none focus:border-[var(--moss)]"
+                            placeholder="Category (optional)"
+                          />
+                          <datalist id="sidebar-category-suggestions">
+                            {existingCategories.map((c) => <option key={c} value={c} />)}
+                          </datalist>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleSaveEdit(src.id)}
+                              disabled={savingEdit}
+                              className="flex-1 tars-label px-2 py-1 rounded text-center transition-colors"
+                              style={{ background: "var(--moss)", color: "#fff" }}
+                            >
+                              {savingEdit ? "…" : "SAVE"}
+                            </button>
+                            <button
+                              onClick={() => setEditingSourceId(null)}
+                              className="tars-label px-2 py-1 rounded transition-colors text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
+                              style={{ background: "var(--c-surface)" }}
+                            >
+                              <XIcon size={11} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="group flex items-center pl-7 pr-1">
+                          <button
+                            onClick={() => { setActiveSourceId(src.id); setActiveCategory(null) }}
+                            className={`flex-1 min-w-0 text-left py-1 flex items-center gap-1.5 tars-label transition-colors ${
+                              activeSourceId === src.id
+                                ? "text-[var(--moss)]"
+                                : "text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
+                            }`}
+                          >
+                            {src.favicon_url
+                              ? <img src={src.favicon_url} alt="" className="w-3 h-3 rounded shrink-0" />
+                              : <Rss size={10} className="shrink-0" />
+                            }
+                            <span className="flex-1 truncate">{src.name}</span>
+                            {src.unread_count > 0 && (
+                              <span className="shrink-0 mr-1">{src.unread_count}</span>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); startEditSource(src) }}
+                            className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
+                            title="Edit feed"
+                          >
+                            <Pencil size={10} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteSource(src.id) }}
+                            className="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-[var(--c-ink-faint)] hover:text-rose-400"
+                            title={`Remove ${src.name}`}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -696,10 +869,29 @@ export default function FeedPage() {
               <RefreshCw size={12} className={syncingSource === activeSourceId ? "animate-spin" : ""} />
             </button>
           )}
+          {/* View toggle */}
+          <div className="flex items-center rounded border border-[var(--c-border)] overflow-hidden">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 transition-colors ${viewMode === "list" ? "text-[var(--moss)]" : "text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"}`}
+              style={viewMode === "list" ? { background: "var(--c-surface)" } : {}}
+              title="List view"
+            >
+              <LayoutList size={13} />
+            </button>
+            <button
+              onClick={() => setViewMode("cards")}
+              className={`p-1.5 transition-colors ${viewMode === "cards" ? "text-[var(--moss)]" : "text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"}`}
+              style={viewMode === "cards" ? { background: "var(--c-surface)" } : {}}
+              title="Card view"
+            >
+              <LayoutGrid size={13} />
+            </button>
+          </div>
         </div>
 
         {/* Items */}
-        <div className="flex-1 overflow-y-auto divide-y divide-[var(--c-border)]">
+        <div className={`flex-1 overflow-y-auto ${viewMode === "list" ? "divide-y divide-[var(--c-border)]" : "p-3"}`}>
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
               <Rss size={24} className="text-[var(--c-ink-faint)]" />
@@ -724,6 +916,29 @@ export default function FeedPage() {
             <div className="flex flex-col items-center justify-center h-32 gap-2">
               <p className="tars-label text-[var(--c-ink-faint)]">ALL CAUGHT UP</p>
             </div>
+          ) : viewMode === "cards" ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {items.map((item) => (
+                  <ArticleCard
+                    key={item.id}
+                    item={item}
+                    selected={selectedItem?.id === item.id}
+                    onClick={() => handleSelectItem(item)}
+                    onStar={() => handleStar(item.id)}
+                  />
+                ))}
+              </div>
+              {hasMore && (
+                <button
+                  onClick={() => loadItems(false)}
+                  disabled={loadingItems}
+                  className="w-full py-3 mt-3 tars-label text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] transition-colors text-center"
+                >
+                  {loadingItems ? <Loader2 size={12} className="animate-spin mx-auto" /> : "LOAD MORE"}
+                </button>
+              )}
+            </>
           ) : (
             <>
               {items.map((item) => (
