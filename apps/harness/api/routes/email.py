@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import require_auth
 from db.session import get_db
-from db.models import Connector
+from db.models import Connector, Message, Conversation
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -76,3 +76,46 @@ async def confirm_send(
     except Exception as exc:
         log.warning("confirm_send failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+class MarkSentRequest(BaseModel):
+    message_id: str
+    draft_id: str
+
+
+@router.post("/mark-sent")
+async def mark_sent(
+    req: MarkSentRequest,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark an email_draft tool_result as sent so it renders correctly on reload."""
+    result = await db.execute(
+        select(Message)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(Message.id == req.message_id, Conversation.user_id == user_id)
+    )
+    msg = result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    updated = False
+    new_results = []
+    for entry in (msg.tool_results or []):
+        if entry.get("type") == "email_draft" and entry.get("draft_id") == req.draft_id:
+            new_results.append({**entry, "sent": True})
+            updated = True
+        else:
+            new_results.append(entry)
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Draft not found in message")
+
+    from sqlalchemy import update
+    await db.execute(
+        update(Message)
+        .where(Message.id == req.message_id)
+        .values(tool_results=new_results)
+    )
+    await db.commit()
+    return {"ok": True}

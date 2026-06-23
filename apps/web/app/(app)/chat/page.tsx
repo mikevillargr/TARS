@@ -10,7 +10,7 @@ import {
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
   Mail, Phone, PhoneCall, BriefcaseBusiness, MessageSquare, Search, UserPlus,
   Copy, Check, ZoomIn, Brain, FileSpreadsheet, FileCode,
-  Volume2, VolumeX, AudioLines,
+  Volume2, VolumeX, AudioLines, Pencil,
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from "@/lib/api-client"
@@ -399,24 +399,42 @@ function CalendarDeleteChip({ suggestion, onDismiss }: { suggestion: CalendarDel
 }
 
 // ─── Email draft approval card ───────────────────────────────────
-function EmailDraftCard({ draft, onDismiss }: { draft: EmailDraft; onDismiss: () => void }) {
-  const [sending, setSending] = useState(false)
-  const [sent, setSent]       = useState(false)
-  const [error, setError]     = useState<string | null>(null)
+function EmailDraftCard({
+  draft,
+  onDismiss,
+  messageId,
+  initialSent = false,
+}: {
+  draft: EmailDraft
+  onDismiss: () => void
+  messageId?: string
+  initialSent?: boolean
+}) {
+  const [sending, setSending]   = useState(false)
+  const [sent, setSent]         = useState(initialSent)
+  const [error, setError]       = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [editing, setEditing]   = useState(false)
+  const [editTo, setEditTo]         = useState(draft.to)
+  const [editCc, setEditCc]         = useState(draft.cc ?? "")
+  const [editSubject, setEditSubject] = useState(draft.subject)
+  const [editBody, setEditBody]     = useState(draft.body)
 
   async function confirmSend() {
     setSending(true)
     setError(null)
     try {
       await apiPost("/email/confirm-send", {
-        to:        draft.to,
-        subject:   draft.subject,
-        body:      draft.body,
-        cc:        draft.cc ?? null,
+        to:        editTo,
+        subject:   editSubject,
+        body:      editBody,
+        cc:        editCc || null,
         thread_id: draft.thread_id ?? null,
       })
       setSent(true)
+      if (messageId && draft.draft_id) {
+        apiPost("/email/mark-sent", { message_id: messageId, draft_id: draft.draft_id }).catch(() => {})
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Send failed")
     } finally {
@@ -428,15 +446,15 @@ function EmailDraftCard({ draft, onDismiss }: { draft: EmailDraft; onDismiss: ()
     return (
       <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-lg" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
         <Mail size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
-        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Email sent to {draft.to}</span>
+        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Email sent to {editTo}</span>
         <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
       </div>
     )
   }
 
-  const bodyPreview = draft.body.length > 160 && !expanded
-    ? draft.body.slice(0, 160).trimEnd() + "…"
-    : draft.body
+  const bodyPreview = editBody.length > 160 && !expanded
+    ? editBody.slice(0, 160).trimEnd() + "…"
+    : editBody
 
   return (
     <div className="rounded-xl max-w-lg overflow-hidden" style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-canvas)" }}>
@@ -444,37 +462,84 @@ function EmailDraftCard({ draft, onDismiss }: { draft: EmailDraft; onDismiss: ()
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--c-border-faint)", backgroundColor: "var(--c-surface)" }}>
         <Mail size={12} style={{ color: "var(--c-amber)", flexShrink: 0 }} />
         <span className="text-xs font-semibold" style={{ color: "var(--c-amber)" }}>Draft — waiting for approval</span>
-        <button onClick={onDismiss} className="ml-auto" style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            onClick={() => setEditing(e => !e)}
+            title={editing ? "Done editing" : "Edit draft"}
+            style={{ color: editing ? "var(--c-moss)" : "var(--c-ink-faint)" }}
+          >
+            <Pencil size={11} />
+          </button>
+          <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+        </div>
       </div>
 
       {/* Fields */}
       <div className="px-3 py-2.5 space-y-1.5 text-xs" style={{ color: "var(--c-ink)" }}>
-        <div className="flex gap-2">
-          <span className="w-12 shrink-0 font-medium" style={{ color: "var(--c-ink-faint)" }}>To</span>
-          <span className="break-all">{draft.to}</span>
+        <div className="flex gap-2 items-start">
+          <span className="w-12 shrink-0 font-medium pt-0.5" style={{ color: "var(--c-ink-faint)" }}>To</span>
+          {editing ? (
+            <input
+              value={editTo}
+              onChange={e => setEditTo(e.target.value)}
+              className="flex-1 min-w-0 rounded px-1.5 py-0.5 text-xs"
+              style={{ background: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink)", outline: "none" }}
+            />
+          ) : (
+            <span className="break-all">{editTo}</span>
+          )}
         </div>
-        {draft.cc && (
-          <div className="flex gap-2">
-            <span className="w-12 shrink-0 font-medium" style={{ color: "var(--c-ink-faint)" }}>CC</span>
-            <span className="break-all">{draft.cc}</span>
-          </div>
-        )}
-        <div className="flex gap-2">
-          <span className="w-12 shrink-0 font-medium" style={{ color: "var(--c-ink-faint)" }}>Subject</span>
-          <span className="font-medium">{draft.subject}</span>
+        <div className="flex gap-2 items-start">
+          <span className="w-12 shrink-0 font-medium pt-0.5" style={{ color: "var(--c-ink-faint)" }}>CC</span>
+          {editing ? (
+            <input
+              value={editCc}
+              onChange={e => setEditCc(e.target.value)}
+              placeholder="optional"
+              className="flex-1 min-w-0 rounded px-1.5 py-0.5 text-xs"
+              style={{ background: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink)", outline: "none" }}
+            />
+          ) : (
+            editCc ? <span className="break-all">{editCc}</span> : <span style={{ color: "var(--c-ink-faint)" }}>—</span>
+          )}
         </div>
-        <div className="flex gap-2">
-          <span className="w-12 shrink-0 font-medium" style={{ color: "var(--c-ink-faint)" }}>Body</span>
+        <div className="flex gap-2 items-start">
+          <span className="w-12 shrink-0 font-medium pt-0.5" style={{ color: "var(--c-ink-faint)" }}>Subject</span>
+          {editing ? (
+            <input
+              value={editSubject}
+              onChange={e => setEditSubject(e.target.value)}
+              className="flex-1 min-w-0 rounded px-1.5 py-0.5 text-xs font-medium"
+              style={{ background: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink)", outline: "none" }}
+            />
+          ) : (
+            <span className="font-medium">{editSubject}</span>
+          )}
+        </div>
+        <div className="flex gap-2 items-start">
+          <span className="w-12 shrink-0 font-medium pt-0.5" style={{ color: "var(--c-ink-faint)" }}>Body</span>
           <div className="flex-1 min-w-0">
-            <p className="whitespace-pre-wrap leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>{bodyPreview}</p>
-            {draft.body.length > 160 && (
-              <button
-                onClick={() => setExpanded(e => !e)}
-                className="text-[10px] mt-1"
-                style={{ color: "var(--c-moss)" }}
-              >
-                {expanded ? "Show less" : "Show full body"}
-              </button>
+            {editing ? (
+              <textarea
+                value={editBody}
+                onChange={e => setEditBody(e.target.value)}
+                rows={8}
+                className="w-full rounded px-1.5 py-1 text-xs leading-relaxed resize-y"
+                style={{ background: "var(--c-surface-2)", border: "1px solid var(--c-border)", color: "var(--c-ink)", outline: "none" }}
+              />
+            ) : (
+              <>
+                <p className="whitespace-pre-wrap leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>{bodyPreview}</p>
+                {editBody.length > 160 && (
+                  <button
+                    onClick={() => setExpanded(e => !e)}
+                    className="text-[10px] mt-1"
+                    style={{ color: "var(--c-moss)" }}
+                  >
+                    {expanded ? "Show less" : "Show full body"}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1112,14 +1177,22 @@ function InlineMessageCards({
         }
         if (evt.type === "email_draft") {
           const draft: EmailDraft = {
-            draft_id:  key,
+            draft_id:  (e.draft_id as string | undefined) ?? key,
             to:        e.to as string,
             subject:   e.subject as string,
             body:      e.body as string,
             cc:        e.cc as string | undefined,
             thread_id: e.thread_id as string | undefined,
           }
-          return <EmailDraftCard key={key} draft={draft} onDismiss={() => dismiss(key)} />
+          return (
+            <EmailDraftCard
+              key={key}
+              draft={draft}
+              onDismiss={() => dismiss(key)}
+              messageId={msgId}
+              initialSent={!!(e.sent)}
+            />
+          )
         }
         if (evt.type === "email_thread_card") {
           return <EmailThreadCard key={key} thread={e as unknown as EmailThread} onDismiss={() => dismiss(key)} onAsk={onAsk} />
@@ -2286,7 +2359,7 @@ export default function ChatPage() {
             } else if (evt.type === "email_draft") {
               if (chatId === activeChatIdRef.current) {
                 const draft: EmailDraft = {
-                  draft_id:  `draft-${Date.now()}-${Math.random()}`,
+                  draft_id:  (evt.draft_id as string | undefined) ?? `draft-${Date.now()}-${Math.random()}`,
                   to:        evt.to as string,
                   subject:   evt.subject as string,
                   body:      evt.body as string,

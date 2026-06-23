@@ -1819,15 +1819,24 @@ async def send_message(
                     if name == "send_email":
                         # Never send automatically — always surface a draft card for
                         # explicit approval. The actual send happens via POST /api/email/confirm-send.
+                        import uuid as _uuid
+                        _draft_id = str(_uuid.uuid4())
+                        _to = tool_input.get("to", "")
+                        _subject = tool_input.get("subject", "")
                         await _emit_card({
                             "type": "email_draft",
-                            "to": tool_input.get("to", ""),
-                            "subject": tool_input.get("subject", ""),
+                            "draft_id": _draft_id,
+                            "to": _to,
+                            "subject": _subject,
                             "body": tool_input.get("body", ""),
                             "cc": tool_input.get("cc"),
                             "thread_id": tool_input.get("thread_id"),
                         })
-                        return "Draft prepared. Showing it to Mike for approval before sending."
+                        return (
+                            f"Draft prepared (draft_id={_draft_id}) — To: {_to}, "
+                            f"Subject: {_subject}. Showing to Mike for approval. "
+                            "If Mike asks to revise, call send_email again with the updated content."
+                        )
 
                     if name == "confirm_send_email":
                         try:

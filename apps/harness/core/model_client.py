@@ -242,6 +242,9 @@ SEND_EMAIL_TOOL = {
         "approves ('go ahead', 'send it', 'yes'), call confirm_send_email with the same "
         "fields to actually send. Do NOT describe what you're about to send in your text "
         "reply; just call this tool and let the draft card speak for itself. "
+        "IMPORTANT: If Mike asks to revise, shorten, rewrite, or change the draft in any "
+        "way, call send_email again with the fully updated content — do NOT output the "
+        "revised text as prose. Every revision must produce a new draft card. "
         "For replies to an existing thread, supply the thread_id shown as [thread_id] in "
         "the Gmail context."
     ),
