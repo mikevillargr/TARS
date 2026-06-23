@@ -106,7 +106,21 @@ export function AppSidebar() {
                       <Icon
                         className={`size-4 shrink-0 ${isActive ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/50"}`}
                       />
-                      <span>{item.label}</span>
+                      <span className="flex-1">{item.label}</span>
+                      {"shortcut" in item && item.shortcut && (
+                        <kbd
+                          className="hidden lg:inline-flex items-center gap-px text-[9px] px-1 py-0.5 rounded font-mono shrink-0 leading-none"
+                          style={{
+                            backgroundColor: isActive ? "rgba(0,0,0,0.15)" : "var(--sidebar-accent)",
+                            border: "1px solid",
+                            borderColor: isActive ? "rgba(0,0,0,0.2)" : "var(--sidebar-border)",
+                            color: isActive ? "var(--sidebar-accent-foreground)" : "var(--sidebar-foreground)",
+                            opacity: isActive ? 0.8 : 0.45,
+                          }}
+                        >
+                          ⌘{item.shortcut}
+                        </kbd>
+                      )}
                     </SidebarMenuButton>
                     {/* Dot outside the overflow-hidden button */}
                     {item.label === "Chat" && hasUnread && !onChat && (

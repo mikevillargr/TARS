@@ -2,7 +2,7 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Plus, Search, MessageSquare, CheckSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, Bell, BellOff } from "lucide-react"
+import { Plus, Search, MessageSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, Bell, BellOff, ClipboardList } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -52,10 +52,10 @@ function BottomTabBar() {
   const onChat = pathname.startsWith("/chat")
 
   const tabs = [
-    { label: "Chat",        href: "/chat",         Icon: MessageSquare },
-    { label: "Tasks",       href: "/tasks",        Icon: CheckSquare },
-    { label: "Calendar",    href: "/calendar",     Icon: CalendarDays },
-    { label: "Brain",       href: "/second-brain", Icon: Brain },
+    { label: "Chat",     href: "/chat",         Icon: MessageSquare },
+    { label: "To-Dos",   href: "/reminders",    Icon: ClipboardList },
+    { label: "Calendar", href: "/calendar",     Icon: CalendarDays },
+    { label: "Brain",    href: "/second-brain", Icon: Brain },
   ]
 
   return (
@@ -227,6 +227,28 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
   }, [])
+
+  // Global Cmd/Ctrl+1-4 nav shortcuts
+  useEffect(() => {
+    const NAV_KEYS: Record<string, string> = {
+      "1": "/chat",
+      "2": "/reminders",
+      "3": "/calendar",
+      "4": "/second-brain",
+    }
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return
+      const dest = NAV_KEYS[e.key]
+      if (!dest) return
+      // Don't intercept if user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return
+      e.preventDefault()
+      router.push(dest)
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [router])
 
   return (
     <>
