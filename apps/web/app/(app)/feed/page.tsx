@@ -264,11 +264,13 @@ function ReadingPane({
   onStar,
   onSaveToSecondBrain,
   onChatWithTars,
+  savingToBrain,
 }: {
   item: FeedItemDetail | null
   onStar: () => void
   onSaveToSecondBrain: () => void
   onChatWithTars: () => void
+  savingToBrain?: boolean
 }) {
   if (!item) {
     return (
@@ -387,17 +389,22 @@ function ReadingPane({
 
         <button
           onClick={onSaveToSecondBrain}
-          className={`flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md transition-colors ${
+          disabled={!!item.knowledge_item_id || savingToBrain}
+          className={`flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md transition-colors disabled:cursor-default ${
             item.knowledge_item_id
               ? "bg-[var(--moss)]/15 text-[var(--moss)]"
+              : savingToBrain
+              ? "text-[var(--c-ink-faint)]"
               : "hover:bg-[var(--c-surface)] text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
           }`}
         >
           {item.knowledge_item_id
             ? <Check size={12} />
+            : savingToBrain
+            ? <Loader2 size={12} className="animate-spin" />
             : <Brain size={12} />
           }
-          {item.knowledge_item_id ? "SAVED" : "SAVE TO BRAIN"}
+          {item.knowledge_item_id ? "SAVED" : savingToBrain ? "SAVING…" : "SAVE TO BRAIN"}
         </button>
 
         <button
@@ -431,6 +438,7 @@ function ArticleModal({
   onStar,
   onSaveToSecondBrain,
   onChatWithTars,
+  savingToBrain,
 }: {
   item: FeedItemDetail | null
   loading: boolean
@@ -438,6 +446,7 @@ function ArticleModal({
   onStar: () => void
   onSaveToSecondBrain: () => void
   onChatWithTars: () => void
+  savingToBrain?: boolean
 }) {
   // Close on Escape
   useEffect(() => {
@@ -558,14 +567,22 @@ function ArticleModal({
               </button>
               <button
                 onClick={onSaveToSecondBrain}
-                className={`flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md transition-colors ${
+                disabled={!!item.knowledge_item_id || savingToBrain}
+                className={`flex items-center gap-1.5 tars-label px-3 py-1.5 rounded-md transition-colors disabled:cursor-default ${
                   item.knowledge_item_id
                     ? "bg-[var(--moss)]/15 text-[var(--moss)]"
+                    : savingToBrain
+                    ? "text-[var(--c-ink-faint)]"
                     : "hover:bg-[var(--c-surface)] text-[var(--c-ink-faint)] hover:text-[var(--c-ink)]"
                 }`}
               >
-                {item.knowledge_item_id ? <Check size={12} /> : <Brain size={12} />}
-                {item.knowledge_item_id ? "SAVED" : "SAVE TO BRAIN"}
+                {item.knowledge_item_id
+                  ? <Check size={12} />
+                  : savingToBrain
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <Brain size={12} />
+                }
+                {item.knowledge_item_id ? "SAVED" : savingToBrain ? "SAVING…" : "SAVE TO BRAIN"}
               </button>
               <button
                 onClick={onChatWithTars}
@@ -603,6 +620,7 @@ export default function FeedPage() {
   const [selectedItem, setSelectedItem] = useState<FeedItemDetail | null>(null)
   const [loadingItems, setLoadingItems] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [savingToBrain, setSavingToBrain] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [offset, setOffset] = useState(0)
   const LIMIT = 50
@@ -768,12 +786,17 @@ export default function FeedPage() {
   }
 
   async function handleSaveToSecondBrain() {
-    if (!selectedItem || selectedItem.knowledge_item_id) return
+    if (!selectedItem || selectedItem.knowledge_item_id || savingToBrain) return
+    setSavingToBrain(true)
     try {
-      await apiPost(`/feed/items/${selectedItem.id}/save`, {})
-      setSelectedItem((prev) => prev ? { ...prev, knowledge_item_id: "saved" } : prev)
-      setItems((prev) => prev.map((i) => i.id === selectedItem.id ? { ...i, knowledge_item_id: "saved" } : i))
-    } catch { /* ignore */ }
+      const result = await apiPost<{ knowledge_item_id: string }>(`/feed/items/${selectedItem.id}/save`, {})
+      setSelectedItem((prev) => prev ? { ...prev, knowledge_item_id: result.knowledge_item_id } : prev)
+      setItems((prev) => prev.map((i) => i.id === selectedItem.id ? { ...i, knowledge_item_id: result.knowledge_item_id } : i))
+    } catch {
+      /* silent — button reverts automatically since setSavingToBrain(false) runs */
+    } finally {
+      setSavingToBrain(false)
+    }
   }
 
   async function handleChatWithTars() {
@@ -1263,6 +1286,7 @@ export default function FeedPage() {
             onStar={() => selectedItem && handleStar(selectedItem.id)}
             onSaveToSecondBrain={handleSaveToSecondBrain}
             onChatWithTars={handleChatWithTars}
+            savingToBrain={savingToBrain}
           />
         )}
       </div>
@@ -1285,6 +1309,7 @@ export default function FeedPage() {
           onStar={() => selectedItem && handleStar(selectedItem.id)}
           onSaveToSecondBrain={handleSaveToSecondBrain}
           onChatWithTars={handleChatWithTars}
+          savingToBrain={savingToBrain}
         />
       )}
     </div>
