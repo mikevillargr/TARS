@@ -79,7 +79,6 @@ async def confirm_send(
 
 
 class MarkSentRequest(BaseModel):
-    message_id: str
     draft_id: str
 
 
@@ -89,33 +88,40 @@ async def mark_sent(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark an email_draft tool_result as sent so it renders correctly on reload."""
-    result = await db.execute(
-        select(Message)
-        .join(Conversation, Message.conversation_id == Conversation.id)
-        .where(Message.id == req.message_id, Conversation.user_id == user_id)
-    )
-    msg = result.scalar_one_or_none()
-    if not msg:
-        raise HTTPException(status_code=404, detail="Message not found")
-
-    updated = False
-    new_results = []
-    for entry in (msg.tool_results or []):
-        if entry.get("type") == "email_draft" and entry.get("draft_id") == req.draft_id:
-            new_results.append({**entry, "sent": True})
-            updated = True
-        else:
-            new_results.append(entry)
-
-    if not updated:
-        raise HTTPException(status_code=404, detail="Draft not found in message")
-
-    from sqlalchemy import update
+    """Mark an email_draft tool_result as sent so it renders correctly on reload.
+    Queries by draft_id via JSONB — no message_id needed (the frontend ID is
+    a fake browser value and won't match the DB primary key).
+    """
+    from sqlalchemy import text
     await db.execute(
-        update(Message)
-        .where(Message.id == req.message_id)
-        .values(tool_results=new_results)
+        text("""
+            UPDATE messages
+            SET tool_results = (
+                SELECT jsonb_agg(
+                    CASE
+                        WHEN elem->>'draft_id' = :draft_id
+                             AND elem->>'type' = 'email_draft'
+                        THEN elem || '{"sent": true}'::jsonb
+                        ELSE elem
+                    END
+                )
+                FROM jsonb_array_elements(tool_results) elem
+            )
+            WHERE id IN (
+                SELECT m.id
+                FROM messages m
+                JOIN conversations c ON m.conversation_id = c.id
+                WHERE c.user_id = :user_id
+                  AND m.tool_results IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements(m.tool_results) elem
+                      WHERE elem->>'draft_id' = :draft_id
+                        AND elem->>'type' = 'email_draft'
+                  )
+            )
+        """),
+        {"draft_id": req.draft_id, "user_id": user_id},
     )
     await db.commit()
     return {"ok": True}

@@ -432,8 +432,8 @@ function EmailDraftCard({
         thread_id: draft.thread_id ?? null,
       })
       setSent(true)
-      if (messageId && draft.draft_id) {
-        apiPost("/email/mark-sent", { message_id: messageId, draft_id: draft.draft_id }).catch(() => {})
+      if (draft.draft_id) {
+        apiPost("/email/mark-sent", { draft_id: draft.draft_id }).catch(() => {})
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Send failed")
