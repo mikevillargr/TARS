@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import rehypeRaw from "rehype-raw"
+import rehypeSanitize from "rehype-sanitize"
 import {
   ChevronLeft, X, Pencil, Check, Copy, ExternalLink, Trash2,
   MessageSquare, Loader2, Tag, Layers, ChevronDown, ChevronUp,
@@ -639,6 +641,7 @@ export function ItemDetailModal({
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw, rehypeSanitize]}
               components={{
                 p: ({ children }) => <p className="mb-2 last:mb-0 text-sm leading-relaxed">{children}</p>,
                 h1: ({ children }) => <h1 className="text-base font-semibold mb-1 mt-2">{children}</h1>,
@@ -717,12 +720,12 @@ export function ItemDetailModal({
 
   const footerActions = (
     <div
-      className="shrink-0 border-t flex items-center gap-2 px-4 py-3"
+      className="shrink-0 border-t flex items-center gap-2 px-4 py-3 overflow-x-auto"
       style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}
     >
       <button
         onClick={() => { if (item) router.push(`/chat?load=${item.id}`) }}
-        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium"
+        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium whitespace-nowrap shrink-0"
         style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
       >
         <MessageSquare size={13} />
@@ -730,7 +733,7 @@ export function ItemDetailModal({
       </button>
       <button
         onClick={copyContent}
-        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg"
+        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg whitespace-nowrap shrink-0"
         style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
       >
         {copied ? <Check size={12} style={{ color: "var(--c-moss)" }} /> : <Copy size={12} />}
@@ -739,7 +742,7 @@ export function ItemDetailModal({
       <button
         onClick={handleAddToTask}
         disabled={addingTask}
-        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-colors"
+        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0"
         style={{
           backgroundColor: taskAdded ? "var(--c-moss-soft)" : "var(--c-canvas)",
           color: taskAdded ? "var(--c-moss)" : "var(--c-ink-muted)",
@@ -754,7 +757,7 @@ export function ItemDetailModal({
           href={item.url}
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg"
+          className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg whitespace-nowrap shrink-0"
           style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
         >
           <ExternalLink size={12} />
@@ -762,12 +765,12 @@ export function ItemDetailModal({
         </a>
       )}
       {isDocument && (
-        <span className="text-[10px] ml-1" style={{ color: "var(--c-ink-faint)" }}>
+        <span className="text-[10px] ml-1 whitespace-nowrap shrink-0" style={{ color: "var(--c-ink-faint)" }}>
           {wordCount} {wordCount === 1 ? "word" : "words"}
         </span>
       )}
       <div className="flex-1" />
-      <button onClick={deleteItem} className="p-2 rounded-md" style={{ color: "var(--c-ink-faint)" }} title="Delete">
+      <button onClick={deleteItem} className="p-2 rounded-md shrink-0" style={{ color: "var(--c-ink-faint)" }} title="Delete">
         <Trash2 size={15} />
       </button>
     </div>
