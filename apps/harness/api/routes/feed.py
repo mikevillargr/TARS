@@ -593,13 +593,15 @@ async def open_in_chat(
     item, source = row
 
     pub_str = item.published_at.strftime("%B %d, %Y") if item.published_at else "unknown date"
-    body_text = item.content or item.summary or item.title
+    summary_excerpt = (item.summary or "")[:500].strip()
 
     opening_message = (
-        f"I'm reading an article and want to discuss it:\n\n"
+        f"I want to discuss this article:\n\n"
         f"**{item.title}**\n"
-        f"Source: {source.name} · {pub_str}\n\n"
-        f"---\n{body_text}"
+        f"Source: {source.name} · {pub_str}\n"
+        + (f"URL: {item.url}\n" if item.url else "")
+        + (f"\n{summary_excerpt}" if summary_excerpt else "")
+        + f"\n\nFeed item ID: `{item.id}` — use get_feed_item if you need the full text."
     )
 
     conv = Conversation(user_id=user_id, title=item.title[:80])

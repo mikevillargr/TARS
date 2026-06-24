@@ -131,6 +131,7 @@ export default function MeetingsPage() {
   const [loading, setLoading]     = useState(true)
   const [syncing, setSyncing]     = useState(false)
   const [creatingTask, setCreatingTask] = useState<string | null>(null)
+  const [openingChat, setOpeningChat] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -186,6 +187,20 @@ export default function MeetingsPage() {
       console.error(err)
     } finally {
       setCreatingTask(null)
+    }
+  }
+
+  async function handleChatWithTars() {
+    if (!selected || openingChat) return
+    setOpeningChat(true)
+    try {
+      const { conversation_id } = await apiPost<{ conversation_id: string }>(
+        `/meetings/${selected.id}/chat`,
+        {}
+      )
+      router.push(`/chat/${conversation_id}`)
+    } catch { /* ignore */ } finally {
+      setOpeningChat(false)
     }
   }
 
@@ -317,6 +332,17 @@ export default function MeetingsPage() {
                     </div>
                   )}
                 </div>
+                <button
+                  onClick={handleChatWithTars}
+                  disabled={openingChat || isProcessing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium shrink-0 transition-colors disabled:opacity-50"
+                  style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "var(--c-ink)"; e.currentTarget.style.borderColor = "var(--c-border-strong)" }}
+                  onMouseLeave={e => { e.currentTarget.style.color = "var(--c-ink-muted)"; e.currentTarget.style.borderColor = "var(--c-border)" }}
+                >
+                  {openingChat ? <Loader2 size={12} className="animate-spin" /> : <MessageSquare size={12} />}
+                  Chat
+                </button>
               </div>
 
               <div className="flex gap-1 mt-5 -mb-5 border-b" style={{ borderColor: "var(--c-border-faint)" }}>

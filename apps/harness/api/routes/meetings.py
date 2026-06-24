@@ -8,7 +8,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import require_auth
-from db.models import Meeting, MeetingActionItem, Task
+from db.models import Meeting, MeetingActionItem, Task, Conversation, Message
 from db.session import get_db
 from jobs.meeting_processor import process_meeting
 
@@ -203,3 +203,34 @@ async def sync_from_fireflies(
 
     background_tasks.add_task(_sync)
     return {"queued": True}
+
+
+@router.post("/{meeting_id}/chat")
+async def open_in_chat(
+    meeting_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_auth),
+):
+    """Create a chat conversation referencing this meeting by ID (no transcript dumped)."""
+    result = await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id, Meeting.user_id == user_id)
+    )
+    meeting = result.scalar_one_or_none()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    date_str = meeting.started_at.strftime("%B %-d, %Y") if meeting.started_at else ""
+    opening_message = (
+        f"Let's discuss the \"{meeting.title}\" meeting"
+        + (f" from {date_str}" if date_str else "")
+        + f". Meeting ID: `{meeting.id}`"
+    )
+
+    conv = Conversation(user_id=user_id, title=meeting.title[:80])
+    db.add(conv)
+    await db.flush()
+
+    db.add(Message(conversation_id=conv.id, role="user", content=opening_message))
+    await db.commit()
+
+    return {"conversation_id": conv.id}

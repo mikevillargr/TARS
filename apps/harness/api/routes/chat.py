@@ -35,6 +35,7 @@ from core.model_client import (
     UPDATE_GOOGLE_SHEET_TOOL, CREATE_GOOGLE_DOC_TOOL, SEARCH_DRIVE_TOOL,
     CREATE_REMINDER_TOOL, LIST_REMINDERS_TOOL,
     GET_TOKEN_REPORT_TOOL,
+    GET_FEED_ITEM_TOOL,
     REQUEST_ESCALATION_TOOL,
 )
 from core.context_assembler import assemble
@@ -994,6 +995,7 @@ async def send_message(
         CREATE_REMINDER_TOOL,
         LIST_REMINDERS_TOOL,
         GET_TOKEN_REPORT_TOOL,
+        GET_FEED_ITEM_TOOL,
         *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
     ]
     queue: asyncio.Queue = asyncio.Queue()
@@ -1981,6 +1983,40 @@ async def send_message(
                         except Exception as exc:
                             log.warning("read_meeting tool failed: %s", exc)
                             return f"Failed to read meeting: {exc}"
+
+                    if name == "get_feed_item":
+                        await _emit_progress("get_feed_item", "Fetching article content…")
+                        try:
+                            from db.models import FeedItem, FeedSource
+                            _fi_result = await bg_db.execute(
+                                select(FeedItem, FeedSource)
+                                .join(FeedSource, FeedItem.feed_source_id == FeedSource.id)
+                                .where(
+                                    FeedItem.id == tool_input["item_id"],
+                                    FeedItem.user_id == user_id,
+                                )
+                            )
+                            _fi_row = _fi_result.first()
+                            if not _fi_row:
+                                return "Feed item not found."
+                            _fi, _fs = _fi_row
+                            pub_str = _fi.published_at.strftime("%B %-d, %Y") if _fi.published_at else "unknown date"
+                            parts = [
+                                f"# {_fi.title}",
+                                f"Source: {_fs.name} · {pub_str}",
+                            ]
+                            if _fi.url:
+                                parts.append(f"URL: {_fi.url}")
+                            full = _fi.content or _fi.summary or ""
+                            if full:
+                                if len(full) > 30000:
+                                    full = full[:30000] + "\n\n[... content truncated ...]"
+                                parts.append(f"\n{full}")
+                            await _emit_progress("get_feed_item", f"Loaded: {_fi.title[:40]}", done=True)
+                            return "\n".join(parts)
+                        except Exception as exc:
+                            log.warning("get_feed_item tool failed: %s", exc)
+                            return f"Failed to fetch feed item: {exc}"
 
                     if name == "web_search":
                         await _emit_progress("web_search", "Searching the web…")

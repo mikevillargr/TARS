@@ -1304,6 +1304,26 @@ LIST_REMINDERS_TOOL = {
     },
 }
 
+GET_FEED_ITEM_TOOL = {
+    "name": "get_feed_item",
+    "description": (
+        "Fetch the full content of a feed item (article, video, podcast) by its ID. "
+        "Use when Mike opens a feed item in chat and asks questions that require the full text, "
+        "or when a feed item ID is referenced in the conversation. Returns title, source, "
+        "published date, URL, and complete content."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "item_id": {
+                "type": "string",
+                "description": "The feed item ID, provided in the opening message when a feed item is shared.",
+            },
+        },
+        "required": ["item_id"],
+    },
+}
+
 GET_TOKEN_REPORT_TOOL = {
     "name": "get_token_report",
     "description": (
