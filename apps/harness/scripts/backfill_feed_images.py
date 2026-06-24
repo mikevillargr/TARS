@@ -32,7 +32,7 @@ async def main(limit: int, dry_run: bool) -> None:
                 FeedItem.image_url.is_(None),
                 FeedItem.media_type == "article",
             )
-            .order_by(FeedItem.created_at.desc())
+            .order_by(FeedItem.published_at.desc().nullslast())
             .limit(limit)
         )).all()
 
