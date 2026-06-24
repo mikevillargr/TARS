@@ -1748,9 +1748,14 @@ class ModelClient:
                 else:
                     system_param = system
 
+                # GLM models on Z.ai's Anthropic-compatible API use heavy thinking
+                # (<think>…</think>) that consumes tokens before the visible reply.
+                # Boost the budget so the actual response isn't crowded out.
+                effective_max_tokens = max(max_tokens, 8192) if _is_zai else max_tokens
+
                 kwargs: Dict[str, Any] = dict(
                     model=model,
-                    max_tokens=max_tokens,
+                    max_tokens=effective_max_tokens,
                     system=system_param,
                     messages=current_messages,
                 )

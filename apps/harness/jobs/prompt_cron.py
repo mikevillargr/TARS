@@ -486,6 +486,7 @@ async def execute(job_id: str) -> str | None:
             )
             cron_tokens_used = 0
             cron_input_tokens = 0
+            thinking_response = ""  # fallback if visible text is empty
             async for chunk in client.stream(
                 messages=[{"role": "user", "content": _fire_prefix + prompt}],
                 tier=ModelTier.TIER3,
@@ -497,6 +498,10 @@ async def execute(job_id: str) -> str | None:
                 if isinstance(chunk, dict):
                     if chunk.get("type") == "chunk":
                         full_response += chunk.get("text", "")
+                    elif chunk.get("type") == "thinking":
+                        thinking_response += chunk.get("text", "")
+                    elif chunk.get("type") == "error":
+                        log.error("Prompt cron %s stream error: %s", job_id, chunk.get("error"))
                     elif chunk.get("type") == "done":
                         cron_tokens_used = chunk.get("tokens", 0)
                         cron_input_tokens = chunk.get("input_tokens", 0)
@@ -515,7 +520,17 @@ async def execute(job_id: str) -> str | None:
         return None
 
     if not full_response.strip():
-        full_response = "(No response generated)"
+        if thinking_response.strip():
+            # Model put entire response in thinking block (token budget exhausted by thinking).
+            # Salvage the thinking content so the cron isn't silently empty.
+            full_response = thinking_response.strip()
+            log.warning(
+                "Prompt cron %s: visible response was empty — saved thinking content (%d chars). "
+                "Consider increasing max_tokens or switching to a model with lower thinking overhead.",
+                job_id, len(full_response),
+            )
+        else:
+            full_response = "(No response generated)"
 
     # ── Save as a new conversation ─────────────────────────────────────────────
     now_local = datetime.now(pytz.timezone(tz_name))
