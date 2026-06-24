@@ -283,18 +283,52 @@ def _extract_image_from_html(html_content: str) -> Optional[str]:
     """Return the first meaningful <img src> found in HTML content."""
     if not html_content:
         return None
-    # Match src in <img> tags; handle single/double quotes and various attribute orderings
     for m in re.finditer(r'<img[^>]+src=["\']([^"\'>\s]+)["\']', html_content, re.I):
         src = html.unescape(m.group(1))
-        if src.startswith("data:"):
+        if src.startswith("data:") or len(src) < 10:
             continue
         if _SKIP_IMAGE_PATTERNS.search(src):
             continue
-        # Skip very short URLs that are likely icons/spacers
-        if len(src) < 10:
-            continue
         return src
     return None
+
+
+def fetch_og_image(article_url: str, timeout: int = 5) -> Optional[str]:
+    """
+    Fetch og:image or twitter:image from the article's <head>.
+    Reads only the first 50KB to avoid downloading the full page.
+    Returns an absolute image URL or None.
+    """
+    try:
+        import urllib.request
+        from urllib.parse import urljoin
+        req = urllib.request.Request(
+            article_url,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; TARSFeedBot/1.0)"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            # Read just enough to cover the <head> section
+            chunk = resp.read(50_000).decode("utf-8", errors="ignore")
+            base_url = resp.url
+
+        # og:image (preferred — sized for link previews)
+        for pattern in (
+            r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+            r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image["\']',
+        ):
+            m = re.search(pattern, chunk, re.I)
+            if m:
+                src = html.unescape(m.group(1).strip())
+                if src and not src.startswith("data:") and len(src) > 10:
+                    return urljoin(base_url, src)
+
+        # Fallback: first meaningful <img> in the page
+        return _extract_image_from_html(chunk)
+    except Exception as e:
+        log.debug("og:image fetch failed for %s: %s", article_url, e)
+        return None
 
 
 def _parse_date(entry: dict) -> Optional[datetime]:
@@ -365,6 +399,8 @@ def fetch_feed(feed_url: str, source_type: str = "rss", since: Optional[datetime
                     break
         if not image_url:
             image_url = _extract_image_from_html(content)
+        if not image_url and media_type == "article" and url:
+            image_url = fetch_og_image(url)
 
         media_type, media_url = _detect_media_type(entry, source_type)
 
