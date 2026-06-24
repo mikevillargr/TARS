@@ -91,6 +91,7 @@ function ArticleRow({
   onClick: () => void
   onStar: () => void
 }) {
+  const [thumbError, setThumbError] = useState(false)
   return (
     <button
       onClick={onClick}
@@ -136,9 +137,9 @@ function ArticleRow({
       </div>
 
       {/* Thumbnail — mobile only, right side (Apple News style) */}
-      {item.image_url && (
+      {item.image_url && !thumbError && (
         <div className="md:hidden shrink-0 self-center mr-3 w-[68px] h-[68px] rounded-lg overflow-hidden bg-[var(--c-surface)]">
-          <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+          <img src={item.image_url} alt="" className="w-full h-full object-cover" onError={() => setThumbError(true)} />
         </div>
       )}
 
@@ -183,6 +184,7 @@ function ArticleCard({
   onClick: () => void
   onStar: () => void
 }) {
+  const [imgError, setImgError] = useState(false)
   return (
     <button
       onClick={onClick}
@@ -201,8 +203,8 @@ function ArticleCard({
 
       {/* Thumbnail */}
       <div className="w-full aspect-video bg-[var(--c-surface)] overflow-hidden shrink-0 flex items-center justify-center">
-        {item.image_url ? (
-          <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+        {item.image_url && !imgError ? (
+          <img src={item.image_url} alt="" className="w-full h-full object-cover" onError={() => setImgError(true)} />
         ) : (
           <div className="flex flex-col items-center gap-1 opacity-30">
             {item.source_favicon
@@ -356,6 +358,7 @@ function ReadingPane({
             src={item.image_url}
             alt=""
             className="w-full rounded-lg mb-5 object-cover max-h-64"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none" }}
           />
         )}
 
