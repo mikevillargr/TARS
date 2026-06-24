@@ -548,6 +548,27 @@ html, body, #__next, main {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Second Brain — rendered HTML content from RSS/URL saves */
+.sb-html-content { overflow-wrap: anywhere; word-break: break-word; }
+.sb-html-content p  { margin-bottom: 0.5rem; line-height: 1.65; }
+.sb-html-content p:last-child { margin-bottom: 0; }
+.sb-html-content h1 { font-size: 1rem;   font-weight: 600; margin: 0.75rem 0 0.25rem; }
+.sb-html-content h2 { font-size: 0.875rem; font-weight: 600; margin: 0.75rem 0 0.25rem; }
+.sb-html-content h3 { font-size: 0.875rem; font-weight: 500; margin: 0.5rem 0 0.25rem; }
+.sb-html-content ul { list-style: disc;   padding-left: 1rem; margin-bottom: 0.5rem; }
+.sb-html-content ol { list-style: decimal; padding-left: 1rem; margin-bottom: 0.5rem; }
+.sb-html-content li { margin-bottom: 0.125rem; line-height: 1.55; }
+.sb-html-content a  { color: var(--c-moss); text-decoration: underline; }
+.sb-html-content a:hover { opacity: 0.8; }
+.sb-html-content strong, .sb-html-content b { font-weight: 600; }
+.sb-html-content blockquote { border-left: 2px solid var(--c-border); padding-left: 0.75rem; font-style: italic; color: var(--c-ink-muted); margin: 0.5rem 0; }
+.sb-html-content pre  { background: var(--c-surface-2); border-radius: 0.375rem; padding: 0.5rem; overflow-x: auto; font-size: 0.75rem; margin: 0.5rem 0; }
+.sb-html-content code { background: var(--c-surface-2); color: var(--c-amber); border-radius: 0.25rem; padding: 0.1em 0.3em; font-size: 0.75rem; }
+.sb-html-content pre code { background: none; color: inherit; padding: 0; }
+.sb-html-content img  { max-width: 100%; height: auto; border-radius: 0.375rem; margin: 0.5rem 0; }
+.sb-html-content figure { margin: 0.5rem 0; }
+.sb-html-content figcaption { font-size: 0.7rem; color: var(--c-ink-faint); margin-top: 0.25rem; }
+
 @keyframes slideUpFade {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
