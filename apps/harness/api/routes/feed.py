@@ -464,10 +464,21 @@ async def get_item(
                 if len(full) > stored_len:
                     item.content = full
                     log.info("Full article fetched for %s (%d chars)", item.url, len(full))
+                # Backfill image_url from full HTML if still missing
+                if not item.image_url:
+                    from connectors.feed_reader import _extract_image_from_html
+                    item.image_url = _extract_image_from_html(full)
                 # Mark fetched regardless so we don't retry on every open
                 item.content_fetched = True
         except Exception as e:
             log.warning("Article fetch failed for %s: %s", item.url, e)
+
+    # For already-fetched articles that still have no image, try extracting from stored content
+    if not item.image_url and item.content:
+        from connectors.feed_reader import _extract_image_from_html
+        extracted = _extract_image_from_html(item.content)
+        if extracted:
+            item.image_url = extracted
 
     await db.commit()
     return _enrich_item(item, source)

@@ -274,6 +274,29 @@ def _clean_html(text: str) -> str:
     return text
 
 
+_SKIP_IMAGE_PATTERNS = re.compile(
+    r"(1x1|pixel|tracker|beacon|spacer|blank|transparent|stat\.|analytics|logo\.gif)",
+    re.I,
+)
+
+def _extract_image_from_html(html_content: str) -> Optional[str]:
+    """Return the first meaningful <img src> found in HTML content."""
+    if not html_content:
+        return None
+    # Match src in <img> tags; handle single/double quotes and various attribute orderings
+    for m in re.finditer(r'<img[^>]+src=["\']([^"\'>\s]+)["\']', html_content, re.I):
+        src = html.unescape(m.group(1))
+        if src.startswith("data:"):
+            continue
+        if _SKIP_IMAGE_PATTERNS.search(src):
+            continue
+        # Skip very short URLs that are likely icons/spacers
+        if len(src) < 10:
+            continue
+        return src
+    return None
+
+
 def _parse_date(entry: dict) -> Optional[datetime]:
     """Parse published/updated date from feedparser entry."""
     import time
@@ -323,7 +346,7 @@ def fetch_feed(feed_url: str, source_type: str = "rss", since: Optional[datetime
 
         clean_summary = _clean_html(raw_summary or raw_content)[:500]
 
-        # Image: look in media_content or enclosures
+        # Image: media_content → enclosures → media_thumbnail → first <img> in HTML content
         image_url = None
         for mc in entry.get("media_content", []):
             if mc.get("medium") == "image" or (mc.get("type", "").startswith("image")):
@@ -334,6 +357,14 @@ def fetch_feed(feed_url: str, source_type: str = "rss", since: Optional[datetime
                 if enc.get("type", "").startswith("image"):
                     image_url = enc.get("href") or enc.get("url")
                     break
+        if not image_url:
+            for thumb in entry.get("media_thumbnail", []):
+                url_val = thumb.get("url")
+                if url_val:
+                    image_url = url_val
+                    break
+        if not image_url:
+            image_url = _extract_image_from_html(content)
 
         media_type, media_url = _detect_media_type(entry, source_type)
 
