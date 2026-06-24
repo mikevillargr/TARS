@@ -4,8 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import rehypeRaw from "rehype-raw"
-import rehypeSanitize from "rehype-sanitize"
+import parse, { domToReact, type HTMLReactParserOptions, Element } from "html-react-parser"
 import {
   ChevronLeft, X, Pencil, Check, Copy, ExternalLink, Trash2,
   MessageSquare, Loader2, Tag, Layers, ChevronDown, ChevronUp,
@@ -115,6 +114,38 @@ export function ItemDetailModal({
   const confirm                       = useConfirm()
 
   const isDocument = item?.type === "document" || item?.type === "note" || item?.type === "voice"
+
+  const looksLikeHtml = (str: string) => /^\s*<[a-z]/i.test(str)
+
+  const htmlParseOptions: HTMLReactParserOptions = {
+    replace(node) {
+      if (!(node instanceof Element)) return
+      const { name, children } = node
+      const cls = "className" in node.attribs ? node.attribs.className : undefined
+      const child = <>{domToReact(children as any, htmlParseOptions)}</>
+      if (name === "img") {
+        const { src, alt } = node.attribs
+        if (!src) return <></>
+        return <img src={src} alt={alt ?? ""} className="max-w-full rounded my-2" style={{ maxHeight: 400, objectFit: "cover" }} />
+      }
+      if (name === "h1") return <h1 className="text-base font-semibold mb-1 mt-3">{child}</h1>
+      if (name === "h2") return <h2 className="text-sm font-semibold mb-1 mt-3">{child}</h2>
+      if (name === "h3") return <h3 className="text-sm font-medium mb-1 mt-2">{child}</h3>
+      if (name === "p")  return <p className="mb-2 last:mb-0 text-sm leading-relaxed">{child}</p>
+      if (name === "ul") return <ul className="pl-4 space-y-0.5 mb-2 list-disc">{child}</ul>
+      if (name === "ol") return <ol className="pl-4 space-y-0.5 mb-2 list-decimal">{child}</ol>
+      if (name === "li") return <li className="text-sm leading-relaxed">{child}</li>
+      if (name === "a")  return <a href={node.attribs.href} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--c-moss)" }}>{child}</a>
+      if (name === "strong" || name === "b") return <strong className="font-semibold">{child}</strong>
+      if (name === "em" || name === "i") return <em>{child}</em>
+      if (name === "blockquote") return <blockquote className="pl-3 border-l-2 italic text-sm my-2" style={{ borderColor: "var(--c-border)", color: "var(--c-ink-muted)" }}>{child}</blockquote>
+      if (name === "pre") return <pre className="text-xs p-2 rounded overflow-x-auto my-2" style={{ backgroundColor: "var(--c-surface-2)", whiteSpace: "pre-wrap" }}>{child}</pre>
+      if (name === "code") return <code className="text-xs px-1 py-0.5 rounded" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)" }}>{child}</code>
+      if (name === "figure" || name === "figcaption") return <div className="my-2">{child}</div>
+      // strip script/style/iframe completely
+      if (name === "script" || name === "style" || name === "iframe" || name === "object") return <></>
+    },
+  }
 
   // Refs that always hold the latest values — lets saveDocument be a stable useCallback
   const saveValuesRef  = useRef({ item, editTitle, editNote, editTags, editDomain, editProps, docMarkdown })
@@ -639,31 +670,36 @@ export function ItemDetailModal({
             className="text-sm leading-relaxed rounded-lg p-4 overflow-hidden"
             style={{ backgroundColor: "var(--c-canvas)", border: "1px solid var(--c-border-faint)", color: "var(--c-ink)" }}
           >
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeRaw, rehypeSanitize]}
-              components={{
-                p: ({ children }) => <p className="mb-2 last:mb-0 text-sm leading-relaxed">{children}</p>,
-                h1: ({ children }) => <h1 className="text-base font-semibold mb-1 mt-2">{children}</h1>,
-                h2: ({ children }) => <h2 className="text-sm font-semibold mb-1 mt-2">{children}</h2>,
-                h3: ({ children }) => <h3 className="text-sm font-medium mb-1 mt-1">{children}</h3>,
-                ul: ({ children }) => <ul className="pl-4 space-y-0.5 mb-2">{children}</ul>,
-                ol: ({ children }) => <ol className="pl-4 space-y-0.5 mb-2 list-decimal">{children}</ol>,
-                li: ({ children }) => <li className="text-sm leading-relaxed">{children}</li>,
-                pre: ({ children }) => <>{children}</>,
-                code: ({ children, className }) => {
-                  const isBlock = !!className
-                  return isBlock
-                    ? <pre className="text-xs p-2 rounded overflow-x-auto my-2" style={{ backgroundColor: "#1a1a1a", color: "#e2e2e2", whiteSpace: "pre-wrap" }}><code>{children}</code></pre>
-                    : <code className="text-xs px-1 py-0.5 rounded" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)" }}>{children}</code>
-                },
-                a: ({ href, children }) => (
-                  <a href={href} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--c-moss)" }}>{children}</a>
-                ),
-              }}
-            >
-              {shownContent}
-            </ReactMarkdown>
+            {looksLikeHtml(shownContent) ? (
+              <div className="text-sm leading-relaxed space-y-1">
+                {parse(shownContent, htmlParseOptions)}
+              </div>
+            ) : (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  p: ({ children }) => <p className="mb-2 last:mb-0 text-sm leading-relaxed">{children}</p>,
+                  h1: ({ children }) => <h1 className="text-base font-semibold mb-1 mt-2">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-sm font-semibold mb-1 mt-2">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-sm font-medium mb-1 mt-1">{children}</h3>,
+                  ul: ({ children }) => <ul className="pl-4 space-y-0.5 mb-2">{children}</ul>,
+                  ol: ({ children }) => <ol className="pl-4 space-y-0.5 mb-2 list-decimal">{children}</ol>,
+                  li: ({ children }) => <li className="text-sm leading-relaxed">{children}</li>,
+                  pre: ({ children }) => <>{children}</>,
+                  code: ({ children, className }) => {
+                    const isBlock = !!className
+                    return isBlock
+                      ? <pre className="text-xs p-2 rounded overflow-x-auto my-2" style={{ backgroundColor: "#1a1a1a", color: "#e2e2e2", whiteSpace: "pre-wrap" }}><code>{children}</code></pre>
+                      : <code className="text-xs px-1 py-0.5 rounded" style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)" }}>{children}</code>
+                  },
+                  a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--c-moss)" }}>{children}</a>
+                  ),
+                }}
+              >
+                {shownContent}
+              </ReactMarkdown>
+            )}
           </div>
           {isLong && (
             <button
