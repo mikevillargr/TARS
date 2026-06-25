@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.15.5 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.15.6 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,13 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.6 Fix: Google Doc export is rich text, not raw markdown. gdoc path called create_doc
+        (Docs API insertText) so markdown rendered literally (## , **). Now builds the same
+        DOCX as the download and uploads to Drive with conversion to a native Google Doc
+        (mimeType application/vnd.google-apps.document) via new create_doc_from_docx
+        (MediaIoBaseUpload; workspace connector has full auth/drive scope). DOCX builder shared
+        across docx+gdoc; inline bold/italic/code now also parsed inside list items (add_inline
+        helper). Verified: no literal ##/** in the resulting Doc. Harness-only, no schema change.
 v2.15.5 Fix: Second Brain export REAL root cause — found by headless-browser reproduction.
         Two bugs in ItemDetailModal export dropdown: (1) DropdownMenuLabel = base-ui
         Menu.GroupLabel throws Base UI error #31 (MenuGroupContext missing) when not inside

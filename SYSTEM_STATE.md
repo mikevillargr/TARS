@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.5 |
+| Version | v2.15.6 |
 | Released | 2026-06-25 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,13 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.6 — 2026-06-25
+**Fix: Google Doc export is rich text, not raw markdown**
+- The gdoc export called `create_doc` which inserts `clean_content` as plain text via the Docs API, so markdown showed literally (`## Heading`, `**bold**`)
+- Now the gdoc path builds the same DOCX as the download and uploads it to Drive with conversion to a native Google Doc (`mimeType application/vnd.google-apps.document`), preserving headings, bold/italic, and lists. New `GoogleWorkspaceClient.create_doc_from_docx` (uses `MediaIoBaseUpload`; the workspace connector already holds the full `auth/drive` scope). DOCX builder is now shared between the docx and gdoc paths
+- Also fixed: bold/italic/code inside bullet and numbered list items was left as literal markdown because the inline parser only ran on normal paragraphs — extracted an `add_inline()` helper applied to list items too (improves both DOCX and gdoc)
+- Verified by exporting and reading the Doc back: no literal `##` or `**` remain
 
 ### v2.15.5 — 2026-06-25
 **Fix: Second Brain export actually works (the real root cause, found by reproduction)**
