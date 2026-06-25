@@ -370,9 +370,17 @@ export function ItemDetailModal({
         setExporting(null)
       }
     } else {
-      // DOCX / PDF: navigate directly — cookie auth passes automatically,
-      // no fetch needed, avoids Safari/WKWebView gesture-context loss on blob URLs
-      window.location.href = `/api/proxy/second-brain/items/${item.id}/export?format=${format}`
+      // DOCX / PDF: hidden anchor click — cookie auth sent automatically (same origin),
+      // download attribute prevents navigation, no await so gesture context is preserved
+      const url = `/api/proxy/second-brain/items/${item.id}/export?format=${format}`
+      const ext = format === "pdf" ? "pdf" : "docx"
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${(item.source_title ?? "export").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "export"}.${ext}`
+      a.style.display = "none"
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
     }
   }
 
