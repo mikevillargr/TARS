@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.0 |
+| Version | v2.15.1 |
 | Released | 2026-06-25 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,11 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.1 — 2026-06-25
+**Fix: Second Brain export download in Safari/PWA**
+- `window.location.href` was navigating the PWA app shell to the binary export URL, causing Safari/WKWebView to show "This page couldn't load" instead of triggering a download
+- Changed to hidden `<a download>` click: synchronous (no await, gesture context preserved), `download` attribute prevents navigation, httpOnly auth cookie sent automatically (same origin)
 
 ### v2.15.0 — 2026-06-25
 **Fix: email sent-state persistence + Second Brain export**
