@@ -16,7 +16,7 @@ import re
 from typing import Optional, Tuple
 
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 from connectors.google_oauth import credentials_from_auth
 
@@ -228,6 +228,31 @@ class GoogleWorkspaceClient:
                 documentId=doc_id,
                 body={"requests": [{"insertText": {"location": {"index": 1}, "text": body_text}}]},
             ).execute()
+        return {
+            "file_id": doc_id,
+            "title": title,
+            "url": f"https://docs.google.com/document/d/{doc_id}/edit",
+        }
+
+    def create_doc_from_docx(self, title: str, docx_bytes: bytes) -> dict:
+        """Create a native Google Doc from DOCX bytes.
+
+        Uploading a .docx with target mimeType application/vnd.google-apps.document
+        makes Drive convert it to a real Google Doc, preserving rich formatting
+        (headings, bold/italic, lists). Used so markdown content exports as rich
+        text instead of literal markdown characters.
+        """
+        media = MediaIoBaseUpload(
+            io.BytesIO(docx_bytes),
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            resumable=False,
+        )
+        created = self.drive.files().create(
+            body={"name": title, "mimeType": "application/vnd.google-apps.document"},
+            media_body=media,
+            fields="id",
+        ).execute()
+        doc_id = created["id"]
         return {
             "file_id": doc_id,
             "title": title,

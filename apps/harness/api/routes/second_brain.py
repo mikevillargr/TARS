@@ -472,75 +472,77 @@ async def export_item(
     # Strip [[id|type|label]] mention markers → plain labels
     content = re.sub(r'\[\[[^\]|]+\|[^\]|]+\|([^\]]+)\]\]', r'@\1', content)
 
-    if format == "docx":
+    # Shared DOCX builder — used by the docx download and by the Google Doc export
+    # (uploaded to Drive with conversion so the Doc is rich text, not literal markdown).
+    def build_docx() -> bytes:
         from docx import Document
         from docx.shared import Pt, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-        def build_docx() -> bytes:
-            doc = Document()
+        doc = Document()
 
-            # Document title
-            title_para = doc.add_heading(title, level=0)
-            title_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        # Document title
+        title_para = doc.add_heading(title, level=0)
+        title_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-            # Personal note as italic block if present
-            if item.personal_note:
-                note_para = doc.add_paragraph()
-                note_run = note_para.add_run(f"Note: {item.personal_note}")
-                note_run.italic = True
-                note_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-                doc.add_paragraph()
+        # Personal note as italic block if present
+        if item.personal_note:
+            note_para = doc.add_paragraph()
+            note_run = note_para.add_run(f"Note: {item.personal_note}")
+            note_run.italic = True
+            note_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+            doc.add_paragraph()
 
-            # Parse markdown line-by-line into docx
-            lines = content.split("\n")
-            i = 0
-            while i < len(lines):
-                line = lines[i]
-                # Headings
-                if line.startswith("### "):
-                    doc.add_heading(line[4:], level=3)
-                elif line.startswith("## "):
-                    doc.add_heading(line[3:], level=2)
-                elif line.startswith("# "):
-                    doc.add_heading(line[2:], level=1)
-                # Unordered list items
-                elif re.match(r'^[-*+] ', line):
-                    doc.add_paragraph(line[2:], style="List Bullet")
-                # Ordered list items
-                elif re.match(r'^\d+\. ', line):
-                    doc.add_paragraph(re.sub(r'^\d+\. ', '', line), style="List Number")
-                # Horizontal rule
-                elif line.strip() in ("---", "***", "___"):
-                    doc.add_paragraph("─" * 40)
-                # Blank line
-                elif line.strip() == "":
-                    pass
-                else:
-                    # Normal paragraph — handle inline **bold** and _italic_
-                    para = doc.add_paragraph()
-                    # Simple inline parser: **bold**, *italic*, `code`
-                    parts = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)', line)
-                    for part in parts:
-                        if part.startswith("**") and part.endswith("**"):
-                            run = para.add_run(part[2:-2])
-                            run.bold = True
-                        elif part.startswith("*") and part.endswith("*"):
-                            run = para.add_run(part[1:-1])
-                            run.italic = True
-                        elif part.startswith("`") and part.endswith("`"):
-                            run = para.add_run(part[1:-1])
-                            run.font.name = "Courier New"
-                            run.font.size = Pt(10)
-                        else:
-                            para.add_run(part)
-                i += 1
+        # Parse markdown line-by-line into docx
+        lines = content.split("\n")
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            # Headings
+            if line.startswith("### "):
+                doc.add_heading(line[4:], level=3)
+            elif line.startswith("## "):
+                doc.add_heading(line[3:], level=2)
+            elif line.startswith("# "):
+                doc.add_heading(line[2:], level=1)
+            # Unordered list items
+            elif re.match(r'^[-*+] ', line):
+                doc.add_paragraph(line[2:], style="List Bullet")
+            # Ordered list items
+            elif re.match(r'^\d+\. ', line):
+                doc.add_paragraph(re.sub(r'^\d+\. ', '', line), style="List Number")
+            # Horizontal rule
+            elif line.strip() in ("---", "***", "___"):
+                doc.add_paragraph("─" * 40)
+            # Blank line
+            elif line.strip() == "":
+                pass
+            else:
+                # Normal paragraph — handle inline **bold** and _italic_
+                para = doc.add_paragraph()
+                # Simple inline parser: **bold**, *italic*, `code`
+                parts = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)', line)
+                for part in parts:
+                    if part.startswith("**") and part.endswith("**"):
+                        run = para.add_run(part[2:-2])
+                        run.bold = True
+                    elif part.startswith("*") and part.endswith("*"):
+                        run = para.add_run(part[1:-1])
+                        run.italic = True
+                    elif part.startswith("`") and part.endswith("`"):
+                        run = para.add_run(part[1:-1])
+                        run.font.name = "Courier New"
+                        run.font.size = Pt(10)
+                    else:
+                        para.add_run(part)
+            i += 1
 
-            buf = io.BytesIO()
-            doc.save(buf)
-            buf.seek(0)
-            return buf.read()
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        return buf.read()
 
+    if format == "docx":
         loop = asyncio.get_running_loop()
         docx_bytes = await loop.run_in_executor(None, build_docx)
         safe_name = re.sub(r'[^\w\s-]', '', title)[:60].strip().replace(' ', '_') or 'export'
@@ -647,9 +649,14 @@ async def export_item(
                 detail="Google Workspace is not connected. Connect it in Connectors first.",
             )
 
-        import asyncio as _aio
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, client.create_doc, title, content)
+        # Build the same DOCX as the download path, then upload to Drive with
+        # conversion so the Google Doc is rich text (headings, bold, lists) rather
+        # than literal markdown characters.
+        docx_bytes = await loop.run_in_executor(None, build_docx)
+        result = await loop.run_in_executor(
+            None, client.create_doc_from_docx, title, docx_bytes
+        )
         return JSONResponse({"url": result["url"], "title": result["title"]})
 
     else:
