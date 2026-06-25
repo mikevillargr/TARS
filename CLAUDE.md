@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.15.3 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.15.4 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,15 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.4 Fix: ChunkLoadError after deploy — TRUE root cause of the Second Brain export
+        failure. Cached app shells referenced lazy chunk filenames that each rebuild
+        deleted from .next/static; using the export modal dynamic-imported a now-404 chunk
+        → ChunkLoadError → "This page couldn't load", with NO export request reaching the
+        server (so every prior server-side fix was invisible). deploy.sh now archives the
+        prior build's static assets and folds them back into each build (.next-static-archive,
+        14-day retention) so stale shells stop 404ing; ServiceWorkerRegister self-heals via a
+        one-shot guarded reload on ChunkLoadError. Shells cached before this deploy must clear
+        site data once. Web/deploy-only, no schema change.
 v2.15.3 Fix: service-worker kill switch — stale-code root cause. A prior caching SW
         (apps/web/public/sw.js) left browsers/PWAs serving old JS bundles, so deploys
         were invisible to the client and the v2.15.0–2 export fixes never reached the

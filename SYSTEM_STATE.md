@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.3 |
+| Version | v2.15.4 |
 | Released | 2026-06-25 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,14 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.4 — 2026-06-25
+**Fix: ChunkLoadError after deploy (true root cause of the export failure)**
+- Confirmed via Nginx logs: browsers held a cached app shell referencing lazy chunk filenames (`14b7j-rsytbbz.js` etc.) that each rebuild deleted from `.next/static`. Opening/using the Second Brain export modal triggered a dynamic import of a now-404 chunk → ChunkLoadError, rendered as "This page couldn't load". No export request ever reached the server because the code chunk itself never loaded — which is why every prior server-side fix was invisible to the client
+- `infrastructure/scripts/deploy.sh` now archives the previous build's `.next/static` assets and folds them back into each fresh build (`.next-static-archive`, 14-day retention). Hashed filenames make the merge collision-safe, so old chunks keep resolving and stale shells no longer 404
+- `ServiceWorkerRegister` self-heals: on a ChunkLoadError it forces a single sessionStorage-guarded `location.reload()` to pull a fresh shell instead of dead-ending
+- Note: a shell cached *before* this deploy still points at already-deleted chunks; affected clients must clear site data once (DevTools → Application → Clear site data), after which they're permanently protected
+- Nginx caching is correct: `/_next/static/` is `immutable` (hashed), HTML documents are `no-cache`
 
 ### v2.15.3 — 2026-06-25
 **Fix: service-worker kill switch (stale-code root cause)**
