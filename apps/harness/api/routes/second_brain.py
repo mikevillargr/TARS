@@ -481,6 +481,23 @@ async def export_item(
 
         doc = Document()
 
+        # Render inline markdown (**bold**, *italic*, `code`) into runs on a paragraph.
+        def add_inline(para, text):
+            parts = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)', text)
+            for part in parts:
+                if not part:
+                    continue
+                if part.startswith("**") and part.endswith("**"):
+                    para.add_run(part[2:-2]).bold = True
+                elif part.startswith("*") and part.endswith("*"):
+                    para.add_run(part[1:-1]).italic = True
+                elif part.startswith("`") and part.endswith("`"):
+                    run = para.add_run(part[1:-1])
+                    run.font.name = "Courier New"
+                    run.font.size = Pt(10)
+                else:
+                    para.add_run(part)
+
         # Document title
         title_para = doc.add_heading(title, level=0)
         title_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -505,12 +522,12 @@ async def export_item(
                 doc.add_heading(line[3:], level=2)
             elif line.startswith("# "):
                 doc.add_heading(line[2:], level=1)
-            # Unordered list items
+            # Unordered list items — inline-parsed
             elif re.match(r'^[-*+] ', line):
-                doc.add_paragraph(line[2:], style="List Bullet")
-            # Ordered list items
+                add_inline(doc.add_paragraph(style="List Bullet"), line[2:])
+            # Ordered list items — inline-parsed
             elif re.match(r'^\d+\. ', line):
-                doc.add_paragraph(re.sub(r'^\d+\. ', '', line), style="List Number")
+                add_inline(doc.add_paragraph(style="List Number"), re.sub(r'^\d+\. ', '', line))
             # Horizontal rule
             elif line.strip() in ("---", "***", "___"):
                 doc.add_paragraph("─" * 40)
@@ -518,23 +535,8 @@ async def export_item(
             elif line.strip() == "":
                 pass
             else:
-                # Normal paragraph — handle inline **bold** and _italic_
-                para = doc.add_paragraph()
-                # Simple inline parser: **bold**, *italic*, `code`
-                parts = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)', line)
-                for part in parts:
-                    if part.startswith("**") and part.endswith("**"):
-                        run = para.add_run(part[2:-2])
-                        run.bold = True
-                    elif part.startswith("*") and part.endswith("*"):
-                        run = para.add_run(part[1:-1])
-                        run.italic = True
-                    elif part.startswith("`") and part.endswith("`"):
-                        run = para.add_run(part[1:-1])
-                        run.font.name = "Courier New"
-                        run.font.size = Pt(10)
-                    else:
-                        para.add_run(part)
+                # Normal paragraph — inline **bold**, *italic*, `code`
+                add_inline(doc.add_paragraph(), line)
             i += 1
 
         buf = io.BytesIO()
