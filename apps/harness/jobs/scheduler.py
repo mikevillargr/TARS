@@ -438,7 +438,7 @@ def build_tasks() -> list[asyncio.Task]:
                 name="feed_sync",
                 description="Fetch new articles from subscribed RSS/Atom/YouTube/Reddit feeds (every hour; each source governs its own interval)",
                 interval_sec=_ONE_HOUR,
-                run_immediately=False,
+                run_immediately=True,
             ),
             _sync_feeds,
         ),

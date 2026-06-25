@@ -656,6 +656,7 @@ export default function FeedPage() {
   const [editName, setEditName] = useState("")
   const [editCategory, setEditCategory] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
+  const [syncingAll, setSyncingAll] = useState(false)
 
   const loadCategories = useCallback(async () => {
     try {
@@ -821,6 +822,20 @@ export default function FeedPage() {
       await loadCategories()
     } catch { /* ignore */ } finally {
       setSyncingSource(null)
+    }
+  }
+
+  async function handleSyncAll() {
+    setSyncingAll(true)
+    try {
+      await apiPost("/cron/connector-jobs/feed_sync/run", {})
+      // Give the background job a moment to start fetching, then reload
+      await new Promise((r) => setTimeout(r, 2000))
+      await loadItems(true)
+      await loadSources()
+      await loadCategories()
+    } catch { /* ignore */ } finally {
+      setSyncingAll(false)
     }
   }
 
@@ -1159,16 +1174,17 @@ export default function FeedPage() {
           >
             MARK READ
           </button>
-          {activeSourceId && (
-            <button
-              onClick={() => handleSync(activeSourceId)}
-              disabled={syncingSource === activeSourceId}
-              className="p-1.5 rounded text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] transition-colors"
-              title="Sync feed"
-            >
-              <RefreshCw size={12} className={syncingSource === activeSourceId ? "animate-spin" : ""} />
-            </button>
-          )}
+          <button
+            onClick={() => activeSourceId ? handleSync(activeSourceId) : handleSyncAll()}
+            disabled={activeSourceId ? syncingSource === activeSourceId : syncingAll}
+            className="p-1.5 rounded text-[var(--c-ink-faint)] hover:text-[var(--c-ink)] transition-colors disabled:opacity-50"
+            title={activeSourceId ? "Sync this feed" : "Refresh all feeds"}
+          >
+            <RefreshCw
+              size={12}
+              className={(activeSourceId ? syncingSource === activeSourceId : syncingAll) ? "animate-spin" : ""}
+            />
+          </button>
           {/* View toggle — desktop only */}
           <div className="hidden md:flex items-center rounded border border-[var(--c-border)] overflow-hidden">
             <button

@@ -62,6 +62,7 @@ async def trigger_connector_job(
     JOB_FNS = {
         "fireflies_sync":     _sched._sync_fireflies,
         "google_people_sync": _sched._sync_google_people,
+        "feed_sync":          _sched._sync_feeds,
     }
     fn = JOB_FNS.get(job_name)
     if not fn:
