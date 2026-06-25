@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { apiGet, apiPost, apiDelete } from "@/lib/api-client"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 interface Conversation {
   id: string
@@ -25,6 +26,7 @@ export function ConversationList({
   const params = useParams()
   const activeId = params?.id as string | undefined
 
+  const confirm = useConfirm()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
@@ -49,6 +51,14 @@ export function ConversationList({
 
   async function handleDelete(e: React.MouseEvent, id: string) {
     e.stopPropagation()
+    const conv = conversations.find((c) => c.id === id)
+    const ok = await confirm({
+      title: "Delete conversation?",
+      description: `"${conv?.title ?? "This conversation"}" will be permanently deleted.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     await apiDelete(`/chat/conversations/${id}`)
     setConversations((prev) => prev.filter((c) => c.id !== id))
     if (activeId === id) {

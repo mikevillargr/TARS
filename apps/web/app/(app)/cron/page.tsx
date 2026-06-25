@@ -7,6 +7,7 @@ import {
   Plus, Trash2, Pencil, RefreshCw, ChevronDown,
 } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -461,6 +462,7 @@ function PromptJobCard({
 
 export default function CronPage() {
   const router = useRouter()
+  const confirm = useConfirm()
   const [tab, setTab] = useState<"connector" | "prompt">("connector")
   const [connectorJobs, setConnectorJobs] = useState<ConnectorJob[]>([])
   const [connectorLoading, setConnectorLoading] = useState(true)
@@ -509,6 +511,14 @@ export default function CronPage() {
   }
 
   async function deletePrompt(id: string) {
+    const job = promptJobs.find((j) => j.id === id)
+    const ok = await confirm({
+      title: "Delete scheduled job?",
+      description: `"${job?.name ?? "This job"}" will be permanently deleted.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     await apiDelete(`/cron/prompt-jobs/${id}`); loadPrompt()
   }
 

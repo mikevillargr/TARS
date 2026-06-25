@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { Plus, Trash2, Circle, CheckCircle2, Calendar, ClipboardList, Pencil, Check } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -293,6 +294,7 @@ function GroupSection({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RemindersPage() {
+  const confirm = useConfirm()
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [loading, setLoading] = useState(true)
   const [showDone, setShowDone] = useState(false)
@@ -343,6 +345,14 @@ export default function RemindersPage() {
   }
 
   async function handleDelete(id: string) {
+    const reminder = reminders.find((r) => r.id === id)
+    const ok = await confirm({
+      title: "Delete to-do?",
+      description: `"${reminder?.text ?? "This item"}" will be permanently deleted.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    })
+    if (!ok) return
     setReminders((prev) => prev.filter((r) => r.id !== id))
     try {
       await apiDelete(`/reminders/${id}`)

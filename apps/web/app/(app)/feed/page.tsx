@@ -8,6 +8,7 @@ import {
   Pencil, LayoutList, LayoutGrid, X as XIcon, Search,
 } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
+import { useConfirm } from "@/components/ui/confirm-dialog"
 import AddFeedModal from "@/components/feed/AddFeedModal"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -665,6 +666,7 @@ export default function FeedPage() {
   const [editCategory, setEditCategory] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
   const [syncingAll, setSyncingAll] = useState(false)
+  const confirm = useConfirm()
 
   // Session restore — scroll + selected item
   const itemsListRef = useRef<HTMLDivElement>(null)
@@ -909,6 +911,14 @@ export default function FeedPage() {
   }
 
   async function handleDeleteSource(sourceId: string) {
+    const src = sources.find((s) => s.id === sourceId)
+    const ok = await confirm({
+      title: "Remove feed?",
+      description: `"${src?.name ?? "This feed"}" and all its articles will be permanently deleted.`,
+      confirmLabel: "Remove",
+      tone: "danger",
+    })
+    if (!ok) return
     try {
       await apiDelete(`/feed/sources/${sourceId}`)
       if (activeSourceId === sourceId) { setActiveSourceId(null) }
