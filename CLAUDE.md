@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.15.4 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.15.5 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,8 +916,17 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
-v2.15.4 Fix: ChunkLoadError after deploy — TRUE root cause of the Second Brain export
-        failure. Cached app shells referenced lazy chunk filenames that each rebuild
+v2.15.5 Fix: Second Brain export REAL root cause — found by headless-browser reproduction.
+        Two bugs in ItemDetailModal export dropdown: (1) DropdownMenuLabel = base-ui
+        Menu.GroupLabel throws Base UI error #31 (MenuGroupContext missing) when not inside
+        a Menu.Group → opening the dropdown crashed the React tree into Next's global-error
+        ("This page couldn't load"), no request sent; fixed by wrapping in DropdownMenuGroup.
+        (2) Items used onSelect, but base-ui Menu.Item activates via onClick (onSelect is the
+        text-selection event, never fires on click) → handler never ran; switched to onClick.
+        Verified end-to-end (request fires + .docx downloads). v2.15.0–4 were robustness
+        improvements, not the cause. Web-only, no schema change.
+v2.15.4 Fix: ChunkLoadError after deploy — real robustness fix, NOT the export root cause
+        (see v2.15.5). Cached app shells referenced lazy chunk filenames that each rebuild
         deleted from .next/static; using the export modal dynamic-imported a now-404 chunk
         → ChunkLoadError → "This page couldn't load", with NO export request reaching the
         server (so every prior server-side fix was invisible). deploy.sh now archives the

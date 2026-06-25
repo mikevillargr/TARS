@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.4 |
+| Version | v2.15.5 |
 | Released | 2026-06-25 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -160,8 +160,16 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 
 ## Version History
 
+### v2.15.5 — 2026-06-25
+**Fix: Second Brain export actually works (the real root cause, found by reproduction)**
+- Reproduced the export "This page couldn't load" in a headless browser against production and captured the actual error: **two bugs in the export dropdown**, both in `components/second-brain/ItemDetailModal.tsx`:
+  1. `DropdownMenuLabel` ("Export as") maps to base-ui's `Menu.GroupLabel`, which **throws Base UI error #31** ("MenuGroupContext missing") when not rendered inside a `Menu.Group`. The label sat bare inside the menu content, so opening the dropdown crashed the React tree into Next's `global-error` boundary → the "This page couldn't load" screen, and no export request was ever made. Fixed by wrapping the menu in `DropdownMenuGroup`
+  2. The menu items used `onSelect`, but base-ui `Menu.Item` activates via `onClick` (it has no `onSelect`; React's `onSelect` is the text-selection event and never fires on click). So even after the crash fix the handler never ran. Switched all three items to `onClick`
+- Verified end-to-end: dropdown opens, `GET /export?format=docx` fires, the `.docx` downloads, no global-error
+- The earlier v2.15.0–v2.15.4 work (blob download, IPv4 proxy, SW kill switch, chunk preservation, self-heal) were real robustness improvements but were not the cause of this failure
+
 ### v2.15.4 — 2026-06-25
-**Fix: ChunkLoadError after deploy (true root cause of the export failure)**
+**Fix: ChunkLoadError after deploy (real robustness fix; NOT the export root cause — see v2.15.5)**
 - Confirmed via Nginx logs: browsers held a cached app shell referencing lazy chunk filenames (`14b7j-rsytbbz.js` etc.) that each rebuild deleted from `.next/static`. Opening/using the Second Brain export modal triggered a dynamic import of a now-404 chunk → ChunkLoadError, rendered as "This page couldn't load". No export request ever reached the server because the code chunk itself never loaded — which is why every prior server-side fix was invisible to the client
 - `infrastructure/scripts/deploy.sh` now archives the previous build's `.next/static` assets and folds them back into each fresh build (`.next-static-archive`, 14-day retention). Hashed filenames make the merge collision-safe, so old chunks keep resolving and stale shells no longer 404
 - `ServiceWorkerRegister` self-heals: on a ChunkLoadError it forces a single sessionStorage-guarded `location.reload()` to pull a fresh shell instead of dead-ending
