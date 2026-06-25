@@ -14,6 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu"
@@ -808,31 +809,35 @@ export function ItemDetailModal({
         ) : "Export"}
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" sideOffset={6} className="min-w-[170px]">
-        <DropdownMenuLabel>Export as</DropdownMenuLabel>
-        <DropdownMenuItem
-          disabled={!!exporting}
-          onSelect={() => handleExport("docx")}
-          className="flex items-center gap-2 text-xs cursor-pointer"
-        >
-          <FileDown size={13} />
-          <span>Word Document (.docx)</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={!!exporting}
-          onSelect={() => handleExport("pdf")}
-          className="flex items-center gap-2 text-xs cursor-pointer"
-        >
-          <FileDown size={13} />
-          <span>PDF (.pdf)</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={!!exporting}
-          onSelect={() => handleExport("gdoc")}
-          className="flex items-center gap-2 text-xs cursor-pointer"
-        >
-          <FilePlus size={13} />
-          <span>Google Doc</span>
-        </DropdownMenuItem>
+        {/* GroupLabel (DropdownMenuLabel) MUST be inside a Group or base-ui throws
+            error #31 (MenuGroupContext missing) and crashes the tree. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Export as</DropdownMenuLabel>
+          <DropdownMenuItem
+            disabled={!!exporting}
+            onSelect={() => handleExport("docx")}
+            className="flex items-center gap-2 text-xs cursor-pointer"
+          >
+            <FileDown size={13} />
+            <span>Word Document (.docx)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!!exporting}
+            onSelect={() => handleExport("pdf")}
+            className="flex items-center gap-2 text-xs cursor-pointer"
+          >
+            <FileDown size={13} />
+            <span>PDF (.pdf)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!!exporting}
+            onSelect={() => handleExport("gdoc")}
+            className="flex items-center gap-2 text-xs cursor-pointer"
+          >
+            <FilePlus size={13} />
+            <span>Google Doc</span>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )
