@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.15.1 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.15.2 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,13 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.2 Fix: Next.js proxy ECONNREFUSED — the real Second Brain export bug. Proxy +
+        login routes fetched harness at http://localhost:8000; Node 18+ resolves localhost
+        to ::1 (IPv6) + 127.0.0.1, harness binds IPv4-only 0.0.0.0:8000 → IPv6 refused →
+        AggregateError/ECONNREFUSED; standalone build can't render /500.html → blank "This
+        page couldn't load". Both routes now force IPv4 via .replace("//localhost",
+        "//127.0.0.1"). Export handler also rewritten to blob-download (no navigation) and
+        surface real errors. Web-only, no schema change.
 v2.15.1 Fix: Second Brain export download in Safari/PWA — window.location.href was
         navigating the PWA app shell causing "This page couldn't load"; changed to
         hidden <a download> click (synchronous, no navigation, same-origin cookie auth

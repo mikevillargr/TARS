@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.1 |
+| Version | v2.15.2 |
 | Released | 2026-06-25 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,13 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.2 — 2026-06-25
+**Fix: Next.js proxy ECONNREFUSED (the real Second Brain export bug)**
+- Root cause of the export "This page couldn't load" error: the Next.js proxy (`app/api/proxy/[...path]/route.ts`) and login route fetched the harness at `http://localhost:8000`. Node 18+ resolves `localhost` to both `::1` (IPv6) and `127.0.0.1` (IPv4); the harness binds `0.0.0.0:8000` (IPv4 only), so the IPv6 attempt is refused and undici surfaces an `AggregateError: ECONNREFUSED`. The standalone build then can't render its own `/500.html`, so the browser shows a blank "This page couldn't load"
+- Both routes now force IPv4: `(process.env.HARNESS_URL ?? "http://127.0.0.1:8000").replace("//localhost", "//127.0.0.1")`
+- Export handler rewritten to download DOCX/PDF as a blob (never navigates the page) and surface the real harness error in a red strip on failure instead of failing silently
+- Verified: export ran 4/4 clean through the full public stack (Nginx → proxy → harness)
 
 ### v2.15.1 — 2026-06-25
 **Fix: Second Brain export download in Safari/PWA**
