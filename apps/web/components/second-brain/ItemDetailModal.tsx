@@ -348,40 +348,31 @@ export function ItemDetailModal({
 
   async function handleExport(format: "docx" | "pdf" | "gdoc") {
     if (!item || exporting) return
-    setExporting(format)
     setExportError(null)
-    try {
-      const res = await fetch(`/api/proxy/second-brain/items/${item.id}/export?format=${format}`, {
-        method: "POST",
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: "Export failed" }))
-        setExportError(err.detail ?? "Export failed")
-        setTimeout(() => setExportError(null), 4000)
-        return
-      }
-      if (format === "gdoc") {
+
+    if (format === "gdoc") {
+      // Google Doc returns JSON with a URL — still needs fetch
+      setExporting("gdoc")
+      try {
+        const res = await fetch(`/api/proxy/second-brain/items/${item.id}/export?format=gdoc`)
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: "Export failed" }))
+          setExportError(err.detail ?? "Could not create Google Doc")
+          setTimeout(() => setExportError(null), 4000)
+          return
+        }
         const data = await res.json() as { url: string }
         window.open(data.url, "_blank", "noreferrer")
-      } else {
-        const blob = await res.blob()
-        const ext = format === "docx" ? "docx" : "pdf"
-        const filename = `${(item.source_title ?? "export").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "export"}.${ext}`
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        URL.revokeObjectURL(url)
+      } catch {
+        setExportError("Export failed — check your connection")
+        setTimeout(() => setExportError(null), 4000)
+      } finally {
+        setExporting(null)
       }
-    } catch (err) {
-      console.error(err)
-      setExportError("Export failed — check your connection")
-      setTimeout(() => setExportError(null), 4000)
-    } finally {
-      setExporting(null)
+    } else {
+      // DOCX / PDF: navigate directly — cookie auth passes automatically,
+      // no fetch needed, avoids Safari/WKWebView gesture-context loss on blob URLs
+      window.location.href = `/api/proxy/second-brain/items/${item.id}/export?format=${format}`
     }
   }
 

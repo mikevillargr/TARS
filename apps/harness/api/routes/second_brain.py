@@ -446,7 +446,7 @@ async def delete_item(
         raise HTTPException(status_code=404, detail="Item not found")
 
 
-@router.post("/items/{item_id}/export")
+@router.get("/items/{item_id}/export")
 async def export_item(
     item_id: str,
     format: str,
@@ -541,7 +541,7 @@ async def export_item(
             buf.seek(0)
             return buf.read()
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         docx_bytes = await loop.run_in_executor(None, build_docx)
         safe_name = re.sub(r'[^\w\s-]', '', title)[:60].strip().replace(' ', '_') or 'export'
         return StreamingResponse(
@@ -615,7 +615,8 @@ async def export_item(
                     story.append(Paragraph(f"• {inline_md(line[2:])}", bullet_style))
                 elif _re.match(r'^\d+\. ', line):
                     num = _re.match(r'^(\d+)\. ', line).group(1)
-                    story.append(Paragraph(f"{num}. {inline_md(_re.sub(r'^\d+\. ', '', line))}", bullet_style))
+                    line_text = _re.sub(r'^\d+\. ', '', line)
+                    story.append(Paragraph(f"{num}. {inline_md(line_text)}", bullet_style))
                 elif line.strip() in ("---", "***", "___"):
                     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc"), spaceAfter=4))
                 elif line.strip() == "":
@@ -627,7 +628,7 @@ async def export_item(
             buf.seek(0)
             return buf.read()
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         pdf_bytes = await loop.run_in_executor(None, build_pdf)
         safe_name = re.sub(r'[^\w\s-]', '', title)[:60].strip().replace(' ', '_') or 'export'
         return StreamingResponse(
@@ -647,7 +648,7 @@ async def export_item(
             )
 
         import asyncio as _aio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, client.create_doc, title, content)
         return JSONResponse({"url": result["url"], "title": result["title"]})
 
