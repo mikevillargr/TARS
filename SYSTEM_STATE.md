@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.14.1 |
-| Released | 2026-06-23 |
+| Version | v2.15.0 |
+| Released | 2026-06-25 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -98,7 +98,7 @@ requests are excluded — vision routing owns model choice.
 | 3 | Meetings | /meetings | Live |
 | 4 | Calendar | /calendar | Live |
 | 5 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
-| 6 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval |
+| 6 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval; **export** to DOCX, PDF, or Google Doc via item detail modal |
 | 7 | Agent Jobs | /agent-jobs | Live |
 | 8 | Artifacts | /artifacts | Live |
 | 9 | Cron Manager | /cron | Live |
@@ -159,6 +159,12 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.0 — 2026-06-25
+**Fix: email sent-state persistence + Second Brain export**
+- `POST /api/email/mark-sent` SQL now casts `tool_results::jsonb` explicitly — `tool_results` column is `JSON` type so PostgreSQL was silently rejecting the `jsonb_array_elements` call; the `.catch(() => {})` on the frontend ate the error, leaving every card in the unsent state on reload
+- Sent card replaced from a dismissible pill to a full receipt card — shows To, CC (if set), Subject, and an expandable body so you can review what was sent; matches the draft card layout with moss "Sent" header
+- Second Brain items can now be exported from the item detail modal: **DOCX** (download), **PDF** (download), **Google Doc** (opens in new tab via Google Drive API); `POST /api/second-brain/items/{id}/export?format=docx|pdf|gdoc`; markdown is faithfully converted to native doc structure (headings, lists, inline bold/italic, personal note as italic block)
 
 ### v2.14.1 — 2026-06-23
 **Fix: email draft revision, inline editing, sent-state persistence**

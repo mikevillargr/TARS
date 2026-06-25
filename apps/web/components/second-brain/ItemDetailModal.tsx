@@ -8,8 +8,15 @@ import {
   ChevronLeft, X, Pencil, Check, Copy, ExternalLink, Trash2,
   MessageSquare, Loader2, Tag, Layers, ChevronDown, ChevronUp,
   Link as LinkIcon, FileText, Mic, File, BookOpen, ListTodo, Star,
-  Sparkles, ArrowUpRight,
+  Sparkles, ArrowUpRight, Download, FileDown, FilePlus,
 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { apiGet, apiPatch, apiDelete } from "@/lib/api-client"
 import { useDomains } from "@/hooks/useDomains"
@@ -106,6 +113,8 @@ export function ItemDetailModal({
   const [copied, setCopied]           = useState(false)
   const [addingTask, setAddingTask]   = useState(false)
   const [taskAdded, setTaskAdded]     = useState(false)
+  const [exporting, setExporting]     = useState<"docx" | "pdf" | "gdoc" | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
   const lastSavedContent              = useRef("")
   const lastSavedTitle                = useRef("")
   const [showFull, setShowFull]       = useState(false)
@@ -334,6 +343,45 @@ export function ItemDetailModal({
       console.error(err)
     } finally {
       setAddingTask(false)
+    }
+  }
+
+  async function handleExport(format: "docx" | "pdf" | "gdoc") {
+    if (!item || exporting) return
+    setExporting(format)
+    setExportError(null)
+    try {
+      const res = await fetch(`/api/proxy/second-brain/items/${item.id}/export?format=${format}`, {
+        method: "POST",
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Export failed" }))
+        setExportError(err.detail ?? "Export failed")
+        setTimeout(() => setExportError(null), 4000)
+        return
+      }
+      if (format === "gdoc") {
+        const data = await res.json() as { url: string }
+        window.open(data.url, "_blank", "noreferrer")
+      } else {
+        const blob = await res.blob()
+        const ext = format === "docx" ? "docx" : "pdf"
+        const filename = `${(item.source_title ?? "export").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "export"}.${ext}`
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+      }
+    } catch (err) {
+      console.error(err)
+      setExportError("Export failed — check your connection")
+      setTimeout(() => setExportError(null), 4000)
+    } finally {
+      setExporting(null)
     }
   }
 
@@ -732,61 +780,122 @@ export function ItemDetailModal({
     </div>
   )
 
-  const footerActions = (
-    <div
-      className="shrink-0 border-t flex items-center gap-2 px-4 py-3 overflow-x-auto"
-      style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}
-    >
-      <button
-        onClick={() => { if (item) router.push(`/chat?load=${item.id}`) }}
-        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium whitespace-nowrap shrink-0"
-        style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
-      >
-        <MessageSquare size={13} />
-        Chat
-      </button>
-      <button
-        onClick={copyContent}
-        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg whitespace-nowrap shrink-0"
-        style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
-      >
-        {copied ? <Check size={12} style={{ color: "var(--c-moss)" }} /> : <Copy size={12} />}
-        {copied ? "Copied" : "Copy"}
-      </button>
-      <button
-        onClick={handleAddToTask}
-        disabled={addingTask}
-        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0"
+  const exportMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg whitespace-nowrap shrink-0 transition-colors"
         style={{
-          backgroundColor: taskAdded ? "var(--c-moss-soft)" : "var(--c-canvas)",
-          color: taskAdded ? "var(--c-moss)" : "var(--c-ink-muted)",
-          border: `1px solid ${taskAdded ? "color-mix(in srgb, var(--c-moss) 30%, transparent)" : "var(--c-border)"}`,
+          backgroundColor: "var(--c-canvas)",
+          color: exporting ? "var(--c-moss)" : "var(--c-ink-muted)",
+          border: "1px solid var(--c-border)",
+          cursor: exporting ? "default" : "pointer",
+          opacity: exporting ? 0.7 : 1,
         }}
+        title="Export"
+        disabled={!!exporting}
       >
-        {addingTask ? <Loader2 size={12} className="animate-spin" /> : taskAdded ? <Check size={12} /> : <ListTodo size={12} />}
-        {taskAdded ? "Added!" : "Task"}
-      </button>
-      {item?.url && !item.url.startsWith("fireflies://") && (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noreferrer"
+        {exporting ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <Download size={12} />
+        )}
+        {exporting ? (
+          exporting === "gdoc" ? "Creating…" : "Exporting…"
+        ) : "Export"}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" sideOffset={6} className="min-w-[170px]">
+        <DropdownMenuLabel>Export as</DropdownMenuLabel>
+        <DropdownMenuItem
+          disabled={!!exporting}
+          onSelect={() => handleExport("docx")}
+          className="flex items-center gap-2 text-xs cursor-pointer"
+        >
+          <FileDown size={13} />
+          <span>Word Document (.docx)</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={!!exporting}
+          onSelect={() => handleExport("pdf")}
+          className="flex items-center gap-2 text-xs cursor-pointer"
+        >
+          <FileDown size={13} />
+          <span>PDF (.pdf)</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={!!exporting}
+          onSelect={() => handleExport("gdoc")}
+          className="flex items-center gap-2 text-xs cursor-pointer"
+        >
+          <FilePlus size={13} />
+          <span>Google Doc</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
+  const footerActions = (
+    <div className="shrink-0 border-t flex flex-col" style={{ borderColor: "var(--c-border)", background: "var(--c-surface)" }}>
+      {exportError && (
+        <div
+          className="px-4 py-2 text-[11px] font-mono"
+          style={{ color: "var(--c-rose, #e05252)", borderBottom: "1px solid var(--c-border-faint)" }}
+        >
+          {exportError}
+        </div>
+      )}
+      <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
+        <button
+          onClick={() => { if (item) router.push(`/chat?load=${item.id}`) }}
+          className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium whitespace-nowrap shrink-0"
+          style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
+        >
+          <MessageSquare size={13} />
+          Chat
+        </button>
+        <button
+          onClick={copyContent}
           className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg whitespace-nowrap shrink-0"
           style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
         >
-          <ExternalLink size={12} />
-          Open
-        </a>
-      )}
-      {isDocument && (
-        <span className="text-[10px] ml-1 whitespace-nowrap shrink-0" style={{ color: "var(--c-ink-faint)" }}>
-          {wordCount} {wordCount === 1 ? "word" : "words"}
-        </span>
-      )}
-      <div className="flex-1" />
-      <button onClick={deleteItem} className="p-2 rounded-md shrink-0" style={{ color: "var(--c-ink-faint)" }} title="Delete">
-        <Trash2 size={15} />
-      </button>
+          {copied ? <Check size={12} style={{ color: "var(--c-moss)" }} /> : <Copy size={12} />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+        <button
+          onClick={handleAddToTask}
+          disabled={addingTask}
+          className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg transition-colors whitespace-nowrap shrink-0"
+          style={{
+            backgroundColor: taskAdded ? "var(--c-moss-soft)" : "var(--c-canvas)",
+            color: taskAdded ? "var(--c-moss)" : "var(--c-ink-muted)",
+            border: `1px solid ${taskAdded ? "color-mix(in srgb, var(--c-moss) 30%, transparent)" : "var(--c-border)"}`,
+          }}
+        >
+          {addingTask ? <Loader2 size={12} className="animate-spin" /> : taskAdded ? <Check size={12} /> : <ListTodo size={12} />}
+          {taskAdded ? "Added!" : "Task"}
+        </button>
+        {exportMenu}
+        {item?.url && !item.url.startsWith("fireflies://") && (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg whitespace-nowrap shrink-0"
+            style={{ backgroundColor: "var(--c-canvas)", color: "var(--c-ink-muted)", border: "1px solid var(--c-border)" }}
+          >
+            <ExternalLink size={12} />
+            Open
+          </a>
+        )}
+        {isDocument && (
+          <span className="text-[10px] ml-1 whitespace-nowrap shrink-0" style={{ color: "var(--c-ink-faint)" }}>
+            {wordCount} {wordCount === 1 ? "word" : "words"}
+          </span>
+        )}
+        <div className="flex-1" />
+        <button onClick={deleteItem} className="p-2 rounded-md shrink-0" style={{ color: "var(--c-ink-faint)" }} title="Delete">
+          <Trash2 size={15} />
+        </button>
+      </div>
     </div>
   )
 

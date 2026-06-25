@@ -444,10 +444,39 @@ function EmailDraftCard({
 
   if (sent) {
     return (
-      <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs max-w-lg" style={{ backgroundColor: "var(--c-moss-soft)", border: "1px solid color-mix(in srgb, var(--c-moss) 25%, transparent)" }}>
-        <Mail size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
-        <span className="flex-1 font-medium" style={{ color: "var(--c-moss)" }}>Email sent to {editTo}</span>
-        <button onClick={onDismiss} style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+      <div className="rounded-xl max-w-lg overflow-hidden" style={{ border: "1px solid color-mix(in srgb, var(--c-moss) 30%, transparent)", backgroundColor: "var(--c-canvas)" }}>
+        <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid color-mix(in srgb, var(--c-moss) 20%, transparent)", backgroundColor: "var(--c-moss-soft)" }}>
+          <Mail size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
+          <span className="text-xs font-semibold" style={{ color: "var(--c-moss)" }}>Sent</span>
+          <button onClick={onDismiss} className="ml-auto" style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
+        </div>
+        <div className="px-3 py-2.5 space-y-1.5 text-xs" style={{ color: "var(--c-ink)" }}>
+          <div className="flex gap-2 items-start">
+            <span className="w-12 shrink-0 font-medium pt-0.5" style={{ color: "var(--c-ink-faint)" }}>To</span>
+            <span className="break-all">{editTo}</span>
+          </div>
+          {editCc && (
+            <div className="flex gap-2 items-start">
+              <span className="w-12 shrink-0 font-medium pt-0.5" style={{ color: "var(--c-ink-faint)" }}>CC</span>
+              <span className="break-all">{editCc}</span>
+            </div>
+          )}
+          <div className="flex gap-2 items-start">
+            <span className="w-12 shrink-0 font-medium pt-0.5" style={{ color: "var(--c-ink-faint)" }}>Subject</span>
+            <span className="font-medium">{editSubject}</span>
+          </div>
+          <div className="flex gap-2 items-start pt-1" style={{ borderTop: "1px solid var(--c-border-faint)" }}>
+            <span className="w-12 shrink-0 font-medium pt-0.5" style={{ color: "var(--c-ink-faint)" }}>Body</span>
+            <span className="whitespace-pre-wrap leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
+              {expanded ? editBody : (editBody.length > 200 ? editBody.slice(0, 200).trimEnd() + "…" : editBody)}
+            </span>
+          </div>
+          {editBody.length > 200 && (
+            <button onClick={() => setExpanded(e => !e)} className="text-xs ml-14" style={{ color: "var(--c-moss)" }}>
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          )}
+        </div>
       </div>
     )
   }

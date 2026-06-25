@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.14.1 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.15.0 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,15 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.0 Fix: email sent-state persistence + Second Brain export. (1) mark-sent SQL cast fix:
+        tool_results column is JSON not JSONB; jsonb_array_elements was silently failing
+        (error swallowed by .catch), leaving every email card in unsent state on reload.
+        Added ::jsonb casts throughout the UPDATE query. (2) Sent card now shows full email
+        receipt (To/CC/Subject/expandable Body) instead of a dismissible pill so you can
+        review what was sent. (3) Second Brain items can be exported as DOCX, PDF, or Google
+        Doc from the item detail modal (Download button → dropdown); POST /api/second-brain/
+        items/{id}/export?format=docx|pdf|gdoc; markdown faithfully converted to native
+        heading/list/inline structure. Harness + web, no DB migration.
 v2.14.1 Fix: email draft revision, inline editing, sent-state persistence. send_email tool
         now instructs model to re-call the tool for any revision (fixes missing card on revision
         and hallucination on second turn). Server generates draft_id UUID and echoes To/Subject

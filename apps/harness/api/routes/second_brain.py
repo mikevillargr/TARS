@@ -446,6 +446,215 @@ async def delete_item(
         raise HTTPException(status_code=404, detail="Item not found")
 
 
+@router.post("/items/{item_id}/export")
+async def export_item(
+    item_id: str,
+    format: str,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Export a Second Brain item as DOCX, PDF, or Google Doc.
+    format: "docx" | "pdf" | "gdoc"
+    """
+    from fastapi.responses import StreamingResponse, JSONResponse
+    import io
+    import asyncio
+    import re
+
+    item = await second_brain.get_item(db, item_id, user_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    content = item.clean_content or item.summary or ""
+    title = item.source_title or "Untitled"
+
+    # Strip [[id|type|label]] mention markers → plain labels
+    content = re.sub(r'\[\[[^\]|]+\|[^\]|]+\|([^\]]+)\]\]', r'@\1', content)
+
+    if format == "docx":
+        from docx import Document
+        from docx.shared import Pt, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        def build_docx() -> bytes:
+            doc = Document()
+
+            # Document title
+            title_para = doc.add_heading(title, level=0)
+            title_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+            # Personal note as italic block if present
+            if item.personal_note:
+                note_para = doc.add_paragraph()
+                note_run = note_para.add_run(f"Note: {item.personal_note}")
+                note_run.italic = True
+                note_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+                doc.add_paragraph()
+
+            # Parse markdown line-by-line into docx
+            lines = content.split("\n")
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                # Headings
+                if line.startswith("### "):
+                    doc.add_heading(line[4:], level=3)
+                elif line.startswith("## "):
+                    doc.add_heading(line[3:], level=2)
+                elif line.startswith("# "):
+                    doc.add_heading(line[2:], level=1)
+                # Unordered list items
+                elif re.match(r'^[-*+] ', line):
+                    doc.add_paragraph(line[2:], style="List Bullet")
+                # Ordered list items
+                elif re.match(r'^\d+\. ', line):
+                    doc.add_paragraph(re.sub(r'^\d+\. ', '', line), style="List Number")
+                # Horizontal rule
+                elif line.strip() in ("---", "***", "___"):
+                    doc.add_paragraph("─" * 40)
+                # Blank line
+                elif line.strip() == "":
+                    pass
+                else:
+                    # Normal paragraph — handle inline **bold** and _italic_
+                    para = doc.add_paragraph()
+                    # Simple inline parser: **bold**, *italic*, `code`
+                    parts = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)', line)
+                    for part in parts:
+                        if part.startswith("**") and part.endswith("**"):
+                            run = para.add_run(part[2:-2])
+                            run.bold = True
+                        elif part.startswith("*") and part.endswith("*"):
+                            run = para.add_run(part[1:-1])
+                            run.italic = True
+                        elif part.startswith("`") and part.endswith("`"):
+                            run = para.add_run(part[1:-1])
+                            run.font.name = "Courier New"
+                            run.font.size = Pt(10)
+                        else:
+                            para.add_run(part)
+                i += 1
+
+            buf = io.BytesIO()
+            doc.save(buf)
+            buf.seek(0)
+            return buf.read()
+
+        loop = asyncio.get_event_loop()
+        docx_bytes = await loop.run_in_executor(None, build_docx)
+        safe_name = re.sub(r'[^\w\s-]', '', title)[:60].strip().replace(' ', '_') or 'export'
+        return StreamingResponse(
+            io.BytesIO(docx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}.docx"'},
+        )
+
+    elif format == "pdf":
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import mm
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+        from reportlab.lib.enums import TA_LEFT
+        import re as _re
+
+        def build_pdf() -> bytes:
+            buf = io.BytesIO()
+            doc_pdf = SimpleDocTemplate(
+                buf,
+                pagesize=A4,
+                leftMargin=25 * mm,
+                rightMargin=25 * mm,
+                topMargin=25 * mm,
+                bottomMargin=25 * mm,
+            )
+            styles = getSampleStyleSheet()
+
+            title_style = ParagraphStyle(
+                "TARSTitle",
+                parent=styles["Heading1"],
+                fontSize=20,
+                leading=26,
+                spaceAfter=6,
+                textColor=colors.HexColor("#1a1a1a"),
+            )
+            h1_style = ParagraphStyle("TARSH1", parent=styles["Heading1"], fontSize=16, leading=20, spaceAfter=4, spaceBefore=10)
+            h2_style = ParagraphStyle("TARSH2", parent=styles["Heading2"], fontSize=13, leading=17, spaceAfter=3, spaceBefore=8)
+            h3_style = ParagraphStyle("TARSH3", parent=styles["Heading3"], fontSize=11, leading=15, spaceAfter=2, spaceBefore=6)
+            body_style = ParagraphStyle("TARSBody", parent=styles["Normal"], fontSize=10, leading=14, spaceAfter=4)
+            note_style = ParagraphStyle("TARSNote", parent=styles["Normal"], fontSize=9, leading=13, textColor=colors.HexColor("#666666"), fontName="Helvetica-Oblique")
+            bullet_style = ParagraphStyle("TARSBullet", parent=styles["Normal"], fontSize=10, leading=14, leftIndent=12, spaceAfter=2, bulletIndent=0)
+            code_style = ParagraphStyle("TARSCode", parent=styles["Code"], fontSize=9, leading=12, backColor=colors.HexColor("#f4f4f4"))
+
+            def inline_md(text):
+                """Convert inline **bold** and *italic* to reportlab markup."""
+                text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                text = _re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+                text = _re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+                text = _re.sub(r'`(.+?)`', r'<font name="Courier">\1</font>', text)
+                return text
+
+            story = []
+            story.append(Paragraph(title, title_style))
+            story.append(Spacer(1, 4 * mm))
+
+            if item.personal_note:
+                story.append(Paragraph(f"Note: {item.personal_note}", note_style))
+                story.append(Spacer(1, 3 * mm))
+
+            lines = content.split("\n")
+            for line in lines:
+                if line.startswith("### "):
+                    story.append(Paragraph(inline_md(line[4:]), h3_style))
+                elif line.startswith("## "):
+                    story.append(Paragraph(inline_md(line[3:]), h2_style))
+                elif line.startswith("# "):
+                    story.append(Paragraph(inline_md(line[2:]), h1_style))
+                elif _re.match(r'^[-*+] ', line):
+                    story.append(Paragraph(f"• {inline_md(line[2:])}", bullet_style))
+                elif _re.match(r'^\d+\. ', line):
+                    num = _re.match(r'^(\d+)\. ', line).group(1)
+                    story.append(Paragraph(f"{num}. {inline_md(_re.sub(r'^\d+\. ', '', line))}", bullet_style))
+                elif line.strip() in ("---", "***", "___"):
+                    story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc"), spaceAfter=4))
+                elif line.strip() == "":
+                    story.append(Spacer(1, 3 * mm))
+                else:
+                    story.append(Paragraph(inline_md(line), body_style))
+
+            doc_pdf.build(story)
+            buf.seek(0)
+            return buf.read()
+
+        loop = asyncio.get_event_loop()
+        pdf_bytes = await loop.run_in_executor(None, build_pdf)
+        safe_name = re.sub(r'[^\w\s-]', '', title)[:60].strip().replace(' ', '_') or 'export'
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}.pdf"'},
+        )
+
+    elif format == "gdoc":
+        from memory.second_brain import load_workspace_client
+
+        client = await load_workspace_client(db)
+        if client is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Google Workspace is not connected. Connect it in Connectors first.",
+            )
+
+        import asyncio as _aio
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, client.create_doc, title, content)
+        return JSONResponse({"url": result["url"], "title": result["title"]})
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown format: {format}. Use docx, pdf, or gdoc.")
+
+
 @router.post("/items/{item_id}/properties/auto", response_model=KnowledgeItemDetailOut)
 async def auto_populate_properties(
     item_id: str,

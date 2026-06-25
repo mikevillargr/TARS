@@ -92,6 +92,8 @@ async def mark_sent(
     Queries by draft_id via JSONB — no message_id needed (the frontend ID is
     a fake browser value and won't match the DB primary key).
     """
+    # tool_results is stored as JSON (not JSONB) — explicit ::jsonb casts required
+    # for jsonb_array_elements and the || merge operator.
     from sqlalchemy import text
     await db.execute(
         text("""
@@ -104,8 +106,8 @@ async def mark_sent(
                         THEN elem || '{"sent": true}'::jsonb
                         ELSE elem
                     END
-                )
-                FROM jsonb_array_elements(tool_results) elem
+                )::json
+                FROM jsonb_array_elements(tool_results::jsonb) elem
             )
             WHERE id IN (
                 SELECT m.id
@@ -115,7 +117,7 @@ async def mark_sent(
                   AND m.tool_results IS NOT NULL
                   AND EXISTS (
                       SELECT 1
-                      FROM jsonb_array_elements(m.tool_results) elem
+                      FROM jsonb_array_elements(m.tool_results::jsonb) elem
                       WHERE elem->>'draft_id' = :draft_id
                         AND elem->>'type' = 'email_draft'
                   )
