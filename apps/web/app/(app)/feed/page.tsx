@@ -628,16 +628,24 @@ export default function FeedPage() {
   const [offset, setOffset] = useState(0)
   const LIMIT = 50
 
-  // Filters
-  const [activeCategory, setActiveCategory] = useState<string | null>(null)
-  const [activeSourceId, setActiveSourceId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<"unread" | "starred" | "all">("unread")
+  // Filters — initialised from sessionStorage so navigating away and back restores position
+  const [activeCategory, setActiveCategory] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("feed-category") } catch { return null }
+  })
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(() => {
+    try { return sessionStorage.getItem("feed-source-id") } catch { return null }
+  })
+  const [filter, setFilter] = useState<"unread" | "starred" | "all">(() => {
+    try { return (sessionStorage.getItem("feed-filter") as "unread" | "starred" | "all") ?? "unread" } catch { return "unread" }
+  })
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
 
   // UI
   const [showAddModal, setShowAddModal] = useState(false)
   const [syncingSource, setSyncingSource] = useState<string | null>(null)
-  const [mobilePanel, setMobilePanel] = useState<"list" | "reading">("list")
+  const [mobilePanel, setMobilePanel] = useState<"list" | "reading">(() => {
+    try { return (sessionStorage.getItem("feed-panel") as "list" | "reading") ?? "list" } catch { return "list" }
+  })
   const [viewMode, setViewMode] = useState<"list" | "cards">("list")
   const [articleModalOpen, setArticleModalOpen] = useState(false)
 
@@ -657,6 +665,19 @@ export default function FeedPage() {
   const [editCategory, setEditCategory] = useState("")
   const [savingEdit, setSavingEdit] = useState(false)
   const [syncingAll, setSyncingAll] = useState(false)
+
+  // Session restore — scroll + selected item
+  const itemsListRef = useRef<HTMLDivElement>(null)
+  const scrollSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didRestoreRef = useRef(false)
+
+  function handleItemsScroll(e: React.UIEvent<HTMLDivElement>) {
+    const top = e.currentTarget.scrollTop
+    if (scrollSaveRef.current) clearTimeout(scrollSaveRef.current)
+    scrollSaveRef.current = setTimeout(() => {
+      try { sessionStorage.setItem("feed-scroll", String(top)) } catch { /* ignore */ }
+    }, 200)
+  }
 
   const loadCategories = useCallback(async () => {
     try {
@@ -743,6 +764,32 @@ export default function FeedPage() {
     document.addEventListener("mousemove", onMove)
     document.addEventListener("mouseup", onUp)
   }
+
+  // Persist filter state to sessionStorage
+  useEffect(() => { try { sessionStorage.setItem("feed-filter", filter) } catch { /* ignore */ } }, [filter])
+  useEffect(() => { try { activeCategory ? sessionStorage.setItem("feed-category", activeCategory) : sessionStorage.removeItem("feed-category") } catch { /* ignore */ } }, [activeCategory])
+  useEffect(() => { try { activeSourceId ? sessionStorage.setItem("feed-source-id", activeSourceId) : sessionStorage.removeItem("feed-source-id") } catch { /* ignore */ } }, [activeSourceId])
+  useEffect(() => { try { sessionStorage.setItem("feed-panel", mobilePanel) } catch { /* ignore */ } }, [mobilePanel])
+  useEffect(() => { try { selectedItem ? sessionStorage.setItem("feed-selected-id", selectedItem.id) : sessionStorage.removeItem("feed-selected-id") } catch { /* ignore */ } }, [selectedItem])
+
+  // After initial items load: restore scroll position + re-fetch selected item
+  useEffect(() => {
+    if (didRestoreRef.current || items.length === 0) return
+    didRestoreRef.current = true
+
+    const savedScroll = (() => { try { return sessionStorage.getItem("feed-scroll") } catch { return null } })()
+    if (savedScroll && itemsListRef.current) {
+      const top = parseInt(savedScroll, 10)
+      requestAnimationFrame(() => { if (itemsListRef.current) itemsListRef.current.scrollTop = top })
+    }
+
+    const savedId = (() => { try { return sessionStorage.getItem("feed-selected-id") } catch { return null } })()
+    if (savedId) {
+      apiGet<FeedItemDetail>(`/feed/items/${savedId}`)
+        .then((detail) => setSelectedItem(detail))
+        .catch(() => { /* item may be gone */ })
+    }
+  }, [items])
 
   // Reload items when filters change
   const filtersRef = useRef({ activeCategory, activeSourceId, filter, searchQuery })
@@ -1207,7 +1254,7 @@ export default function FeedPage() {
         </div>
 
         {/* Items */}
-        <div className={`flex-1 overflow-y-auto ${viewMode === "list" ? "divide-y divide-[var(--c-border)]" : "p-3"}`}>
+        <div ref={itemsListRef} onScroll={handleItemsScroll} className={`flex-1 overflow-y-auto ${viewMode === "list" ? "divide-y divide-[var(--c-border)]" : "p-3"}`}>
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
               <Rss size={24} className="text-[var(--c-ink-faint)]" />
