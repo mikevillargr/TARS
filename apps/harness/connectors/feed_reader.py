@@ -399,10 +399,11 @@ def fetch_feed(feed_url: str, source_type: str = "rss", since: Optional[datetime
                     break
         if not image_url:
             image_url = _extract_image_from_html(content)
-        if not image_url and media_type == "article" and url:
-            image_url = fetch_og_image(url)
 
         media_type, media_url = _detect_media_type(entry, source_type)
+
+        if not image_url and media_type == "article" and url:
+            image_url = fetch_og_image(url)
 
         items.append({
             "title": title,
