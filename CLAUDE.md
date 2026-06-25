@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.15.2 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.15.3 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,13 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.3 Fix: service-worker kill switch — stale-code root cause. A prior caching SW
+        (apps/web/public/sw.js) left browsers/PWAs serving old JS bundles, so deploys
+        were invisible to the client and the v2.15.0–2 export fixes never reached the
+        browser ("This page couldn't load", no request hitting the server). sw.js is now
+        a kill switch (purge caches + registration.unregister() + force-reload all
+        clients); ServiceWorkerRegister unregisters existing workers + clears caches
+        instead of registering (no re-register loop). Web-only, no schema change.
 v2.15.2 Fix: Next.js proxy ECONNREFUSED — the real Second Brain export bug. Proxy +
         login routes fetched harness at http://localhost:8000; Node 18+ resolves localhost
         to ::1 (IPv6) + 127.0.0.1, harness binds IPv4-only 0.0.0.0:8000 → IPv6 refused →

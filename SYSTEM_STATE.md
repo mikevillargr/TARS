@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.2 |
+| Version | v2.15.3 |
 | Released | 2026-06-25 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,13 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.3 — 2026-06-25
+**Fix: service-worker kill switch (stale-code root cause)**
+- A previously-shipped caching service worker (`apps/web/public/sw.js`) left browsers/PWAs serving old JS bundles. Net effect: code deploys were invisible to the client — the Second Brain export fixes (v2.15.0–v2.15.2) never actually reached the browser, so the export click ran stale code and produced "This page couldn't load" with no request ever reaching the server. The earlier no-op worker purged caches but never unregistered, so the old registration kept controlling the page
+- `sw.js` is now a kill switch: purges all caches, calls `registration.unregister()`, and force-reloads every open client via `clients.navigate(client.url)`
+- `ServiceWorkerRegister` no longer registers a worker — it unregisters any existing registrations and clears caches on load, preventing a re-register loop
+- Nginx serves `/sw.js` directly from `apps/web/public/` with `Cache-Control: no-cache`, so the kill switch propagates on the next navigation
 
 ### v2.15.2 — 2026-06-25
 **Fix: Next.js proxy ECONNREFUSED (the real Second Brain export bug)**
