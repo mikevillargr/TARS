@@ -815,7 +815,7 @@ export function ItemDetailModal({
           <DropdownMenuLabel>Export as</DropdownMenuLabel>
           <DropdownMenuItem
             disabled={!!exporting}
-            onSelect={() => handleExport("docx")}
+            onClick={() => handleExport("docx")}
             className="flex items-center gap-2 text-xs cursor-pointer"
           >
             <FileDown size={13} />
@@ -823,7 +823,7 @@ export function ItemDetailModal({
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={!!exporting}
-            onSelect={() => handleExport("pdf")}
+            onClick={() => handleExport("pdf")}
             className="flex items-center gap-2 text-xs cursor-pointer"
           >
             <FileDown size={13} />
@@ -831,7 +831,7 @@ export function ItemDetailModal({
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={!!exporting}
-            onSelect={() => handleExport("gdoc")}
+            onClick={() => handleExport("gdoc")}
             className="flex items-center gap-2 text-xs cursor-pointer"
           >
             <FilePlus size={13} />
