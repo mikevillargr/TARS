@@ -457,7 +457,7 @@ async def export_item(
     Export a Second Brain item as DOCX, PDF, or Google Doc.
     format: "docx" | "pdf" | "gdoc"
     """
-    from fastapi.responses import StreamingResponse, JSONResponse
+    from fastapi.responses import Response, JSONResponse
     import io
     import asyncio
     import re
@@ -544,8 +544,8 @@ async def export_item(
         loop = asyncio.get_running_loop()
         docx_bytes = await loop.run_in_executor(None, build_docx)
         safe_name = re.sub(r'[^\w\s-]', '', title)[:60].strip().replace(' ', '_') or 'export'
-        return StreamingResponse(
-            io.BytesIO(docx_bytes),
+        return Response(
+            content=docx_bytes,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={"Content-Disposition": f'attachment; filename="{safe_name}.docx"'},
         )
@@ -631,8 +631,8 @@ async def export_item(
         loop = asyncio.get_running_loop()
         pdf_bytes = await loop.run_in_executor(None, build_pdf)
         safe_name = re.sub(r'[^\w\s-]', '', title)[:60].strip().replace(' ', '_') or 'export'
-        return StreamingResponse(
-            io.BytesIO(pdf_bytes),
+        return Response(
+            content=pdf_bytes,
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{safe_name}.pdf"'},
         )
