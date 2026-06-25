@@ -349,38 +349,43 @@ export function ItemDetailModal({
   async function handleExport(format: "docx" | "pdf" | "gdoc") {
     if (!item || exporting) return
     setExportError(null)
+    setExporting(format)
 
-    if (format === "gdoc") {
-      // Google Doc returns JSON with a URL — still needs fetch
-      setExporting("gdoc")
-      try {
-        const res = await fetch(`/api/proxy/second-brain/items/${item.id}/export?format=gdoc`)
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ detail: "Export failed" }))
-          setExportError(err.detail ?? "Could not create Google Doc")
-          setTimeout(() => setExportError(null), 4000)
-          return
-        }
+    try {
+      const res = await fetch(`/api/proxy/second-brain/items/${item.id}/export?format=${format}`)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: `Export failed (${res.status})` }))
+        setExportError(err.detail ?? "Export failed")
+        setTimeout(() => setExportError(null), 5000)
+        return
+      }
+
+      if (format === "gdoc") {
+        // Google Doc — JSON with a Drive URL; open in a new tab
         const data = await res.json() as { url: string }
         window.open(data.url, "_blank", "noreferrer")
-      } catch {
-        setExportError("Export failed — check your connection")
-        setTimeout(() => setExportError(null), 4000)
-      } finally {
-        setExporting(null)
+        return
       }
-    } else {
-      // DOCX / PDF: hidden anchor click — cookie auth sent automatically (same origin),
-      // download attribute prevents navigation, no await so gesture context is preserved
-      const url = `/api/proxy/second-brain/items/${item.id}/export?format=${format}`
+
+      // DOCX / PDF — pull the file as a blob and download it. Never navigates the
+      // page (so a PWA/standalone window can't error out), and surfaces real errors.
+      const blob = await res.blob()
       const ext = format === "pdf" ? "pdf" : "docx"
+      const safeName = (item.source_title ?? "export").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "export"
+      const objUrl = URL.createObjectURL(blob)
       const a = document.createElement("a")
-      a.href = url
-      a.download = `${(item.source_title ?? "export").replace(/[^\w\s-]/g, "").trim().slice(0, 60) || "export"}.${ext}`
+      a.href = objUrl
+      a.download = `${safeName}.${ext}`
       a.style.display = "none"
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(objUrl), 2000)
+    } catch {
+      setExportError("Export failed — check your connection")
+      setTimeout(() => setExportError(null), 5000)
+    } finally {
+      setExporting(null)
     }
   }
 
