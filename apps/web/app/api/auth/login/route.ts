@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
-const HARNESS_URL = process.env.HARNESS_URL ?? "http://localhost:8000"
+// Force IPv4 — see api/proxy/[...path]/route.ts for the localhost dual-stack rationale.
+const HARNESS_URL = (process.env.HARNESS_URL ?? "http://127.0.0.1:8000").replace("//localhost", "//127.0.0.1")
 
 export async function POST(request: Request) {
   const body = await request.json()

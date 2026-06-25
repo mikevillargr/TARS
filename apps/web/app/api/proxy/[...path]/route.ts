@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
-const HARNESS_URL = process.env.HARNESS_URL ?? "http://localhost:8000"
+// Force IPv4 — Node 18+ resolves "localhost" to both ::1 and 127.0.0.1, but the
+// harness only listens on 0.0.0.0:8000 (IPv4), so the IPv6 attempt is refused and
+// undici surfaces it as an AggregateError/ECONNREFUSED ("This page couldn't load").
+const HARNESS_URL = (process.env.HARNESS_URL ?? "http://127.0.0.1:8000").replace("//localhost", "//127.0.0.1")
 
 async function proxy(request: Request, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params
