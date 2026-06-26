@@ -2543,16 +2543,68 @@ export default function ChatPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputValue, busy, handleSend])
 
-  // Visibility recovery: when the user returns to this tab (mobile background →
-  // foreground, alt-tab, etc.) reload messages for the active conversation so
-  // any response that completed while we were away appears immediately.
+  // Visibility recovery: when the user returns from background (mobile app switch,
+  // alt-tab, etc.) recover any response that completed while we were away.
+  // Must handle the busy=true case: iOS kills the stream connection while JS is
+  // suspended, so the fetch error and visibilitychange fire in a race — if the
+  // guard requires !busy we miss the reload and the Network Error sticks.
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && activeChatId && !busy) {
-        apiGet<{ messages: Message[] }>(`/chat/conversations/${activeChatId}/messages`)
-          .then(data => setMessages(data.messages ?? []))
-          .catch(() => {/* silent — user is offline or session expired */})
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible" || !activeChatId) return
+
+      // If a stream was in flight when we were backgrounded, it's dead now.
+      // Abort the zombie fetch and clear streaming UI before reloading.
+      if (busy) {
+        abortControllerRef.current?.abort()
+        if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null }
+        streamPollingRef.current = false
+        setStreaming(null)
+        setBusy(false)
       }
+
+      // Reload messages — picks up any response the server completed while away
+      try {
+        const data = await apiGet<{ id: string; title: string | null; messages: Message[] }>(
+          `/chat/conversations/${activeChatId}`
+        )
+        if (activeChatId !== activeChatIdRef.current) return
+        const msgs = data.messages ?? []
+        setMessages(msgs)
+        rehydrateCards(msgs)
+
+        // If server is still generating (last msg is still from user), start recovery poll
+        const lastMsg = msgs[msgs.length - 1]
+        const isRecent = lastMsg &&
+          (Date.now() - new Date(lastMsg.created_at).getTime()) < 10 * 60 * 1000
+        if (lastMsg?.role === "user" && isRecent) {
+          setBusy(true)
+          setStreaming({ role: "assistant", content: "", streaming: true })
+          let attempts = 0
+          pollTimerRef.current = setInterval(async () => {
+            attempts++
+            if (activeChatId !== activeChatIdRef.current || attempts > 60) {
+              clearInterval(pollTimerRef.current!)
+              if (activeChatId === activeChatIdRef.current) { setStreaming(null); setBusy(false) }
+              return
+            }
+            try {
+              const fresh = await apiGet<{ id: string; title: string | null; messages: Message[] }>(
+                `/chat/conversations/${activeChatId}`
+              )
+              const freshLast = fresh.messages[fresh.messages.length - 1]
+              if (freshLast?.role === "assistant") {
+                clearInterval(pollTimerRef.current!)
+                if (activeChatId === activeChatIdRef.current) {
+                  setMessages(fresh.messages)
+                  rehydrateCards(fresh.messages)
+                  setStreaming(null)
+                  setBusy(false)
+                }
+              }
+            } catch { /* keep polling */ }
+          }, 2000)
+        }
+      } catch { /* silent — user is offline or session expired */ }
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
