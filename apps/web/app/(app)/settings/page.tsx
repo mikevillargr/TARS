@@ -1495,21 +1495,21 @@ export default function SettingsPage() {
                       ? "Add to Home Screen for a full-screen native experience."
                       : "Add to home screen for offline access and push notifications."}
                   </div>
+                  {(installable || isIOS) && (
+                    <button
+                      onClick={handleInstall}
+                      className="btn-primary flex items-center gap-1.5 mt-3"
+                      style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
+                    >
+                      {isIOS ? <><Share size={13} /> Add to Home Screen</> : "Install"}
+                    </button>
+                  )}
+                  {!installable && !isIOS && (
+                    <span className="text-xs mt-2 block" style={{ color: "var(--c-ink-faint)" }}>
+                      Open in Chrome to install
+                    </span>
+                  )}
                 </div>
-                {(installable || isIOS) && (
-                  <button
-                    onClick={handleInstall}
-                    className="btn-primary shrink-0 flex items-center gap-1.5"
-                    style={{ padding: "0.375rem 0.875rem", fontSize: "0.8125rem" }}
-                  >
-                    {isIOS ? <><Share size={13} /> Share</> : "Install"}
-                  </button>
-                )}
-                {!installable && !isIOS && (
-                  <span className="text-xs shrink-0" style={{ color: "var(--c-ink-faint)" }}>
-                    Open in Chrome or Safari
-                  </span>
-                )}
               </div>
 
               {/* iOS step-by-step instructions */}
