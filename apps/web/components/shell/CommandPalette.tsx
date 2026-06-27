@@ -46,7 +46,6 @@ const NAV_SHORTCUTS = [
   { id: "nav-calendar",    title: "Go to Calendar",     href: "/calendar",     icon: CalendarDays },
   { id: "nav-meetings",    title: "Go to Meetings",     href: "/meetings",     icon: Video },
   { id: "nav-artifacts",   title: "Go to Artifacts",    href: "/artifacts",    icon: FileText },
-  { id: "nav-agent-jobs",  title: "Go to Agent Jobs",   href: "/agent-jobs",   icon: Zap },
 ]
 
 // ── Icon helpers ─────────────────────────────────────────────────────────────

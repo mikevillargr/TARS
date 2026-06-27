@@ -14,7 +14,6 @@ import {
 } from "lucide-react"
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from "@/lib/api-client"
-import AgentStatusChip from "@/components/agent-jobs/AgentStatusChip"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { ThinkingBlock } from "@/components/chat/message-thread"
@@ -91,15 +90,6 @@ interface StreamingMsg {
   streaming: true
   thinking?: string
   thinkingDone?: boolean
-}
-
-interface AgentStreamMessage {
-  id: string
-  role: "agent_stream"
-  job_id: string
-  agent_type: string
-  instruction: string
-  created_at: string
 }
 
 interface TaskSuggestion {
@@ -1478,35 +1468,11 @@ function AskLoader({ onAsk }: { onAsk: (q: string) => void }) {
   return null
 }
 
-// ─── Agent stream bubble — ephemeral ticker, removed from thread when job ends
-function AgentStreamBubble({
-  msg,
-  onComplete,
-  onSubJobSpawned,
-}: {
-  msg: AgentStreamMessage
-  onComplete: () => void
-  onSubJobSpawned: (subJobId: string, agentType: string) => void
-}) {
-  // No avatar, no bubble — just the ticker. Reads as system chrome, not chat.
-  return (
-    <div className="flex justify-center my-1">
-      <AgentStatusChip
-        jobId={msg.job_id}
-        agentType={msg.agent_type}
-        onComplete={onComplete}
-        onFail={onComplete}
-        onSubJobSpawned={onSubJobSpawned}
-      />
-    </div>
-  )
-}
-
 // ─── Message area ────────────────────────────────────────────────
 // memo: allMessages is stable during typing (useMemo on [messages,streaming]),
 // so this entire section is skipped on every keystroke → no O(n) reconcile cost.
 interface MessageAreaProps {
-  allMessages: (Message | StreamingMsg | AgentStreamMessage)[]
+  allMessages: (Message | StreamingMsg)[]
   calendarSuggestions: CalendarSuggestion[]
   calendarUpdateSuggestions: CalendarUpdateSuggestion[]
   calendarDeleteSuggestions: CalendarDeleteSuggestion[]
@@ -1530,7 +1496,6 @@ interface MessageAreaProps {
   setEmailThreadCards: React.Dispatch<React.SetStateAction<EmailThread[]>>
   setStravaCards: React.Dispatch<React.SetStateAction<StravaActivity[]>>
   setMeetingCards: React.Dispatch<React.SetStateAction<MeetingCardData[]>>
-  setAgentStreamMessages: React.Dispatch<React.SetStateAction<AgentStreamMessage[]>>
   onAsk: (q: string) => void
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
@@ -1561,7 +1526,6 @@ const MessageArea = memo(function MessageArea({
   setEmailThreadCards,
   setStravaCards,
   setMeetingCards,
-  setAgentStreamMessages,
   onAsk,
   quoteIndex,
   messagesEndRef,
@@ -1582,29 +1546,7 @@ const MessageArea = memo(function MessageArea({
         </div>
       ) : allMessages.map((msg, i) => (
         <React.Fragment key={"id" in msg ? msg.id : `stream-${i}`}>
-          {msg.role === "agent_stream"
-            ? <AgentStreamBubble
-                msg={msg as AgentStreamMessage}
-                onComplete={() => {
-                  const id = (msg as AgentStreamMessage).job_id
-                  setAgentStreamMessages(prev => prev.filter(m => m.job_id !== id))
-                }}
-                onSubJobSpawned={(subJobId, agentType) => {
-                  setAgentStreamMessages(prev => {
-                    // Dedupe — sub_job_started can replay from the ring buffer on reconnect
-                    if (prev.some(m => m.job_id === subJobId)) return prev
-                    return [...prev, {
-                      id: subJobId,
-                      role: "agent_stream" as const,
-                      job_id: subJobId,
-                      agent_type: agentType,
-                      instruction: "",
-                      created_at: new Date().toISOString(),
-                    }]
-                  })
-                }}
-              />
-            : (
+          {(
               <>
                 <MessageBubble msg={msg as Message | StreamingMsg} onAsk={onAsk} />
                 {/* Inline cards anchored to this saved assistant message */}
@@ -1763,7 +1705,6 @@ export default function ChatPage() {
   const [calendarDeleteSuggestions, setCalendarDeleteSuggestions] = useState<CalendarDeleteSuggestion[]>([])
   const [taskSuggestions, setTaskSuggestions]             = useState<TaskSuggestion[]>([])
   const [artifactNotifications, setArtifactNotifications] = useState<ArtifactNotification[]>([])
-  const [agentStreamMessages, setAgentStreamMessages]     = useState<AgentStreamMessage[]>([])
   const [contactResults, setContactResults]               = useState<ContactResultSet[]>([])
   const [placeResults, setPlaceResults]                   = useState<PlaceResultSet[]>([])
   const [emailDrafts, setEmailDrafts]                     = useState<EmailDraft[]>([])
@@ -1936,7 +1877,6 @@ export default function ChatPage() {
     setCalendarDeleteSuggestions([])
     setTaskSuggestions([])
     setArtifactNotifications([])
-    setAgentStreamMessages([])
     setContactResults([])
     setPlaceResults([])
     // Clear unread badge when switching to a conversation
@@ -2398,17 +2338,6 @@ export default function ChatPage() {
                 streamingCardsRef.current.push({ type: "email_draft", ...draft })
                 setEmailDrafts(prev => [...prev, draft])
               }
-            } else if (evt.type === "agent_job_created") {
-              if (chatId === activeChatIdRef.current) {
-                setAgentStreamMessages(prev => [...prev, {
-                  id: evt.job_id as string,
-                  role: "agent_stream" as const,
-                  job_id: evt.job_id as string,
-                  agent_type: evt.agent_type as string,
-                  instruction: evt.instruction as string,
-                  created_at: new Date().toISOString(),
-                }])
-              }
             } else if (evt.type === "tool_progress") {
               if (chatId === activeChatIdRef.current) {
                 const prog: ToolProgress = { tool: evt.tool as string, status: evt.status as string, done: evt.done as boolean ?? false }
@@ -2619,11 +2548,11 @@ export default function ChatPage() {
 
   const allMessages = useMemo(
     () => {
-      const base: (Message | StreamingMsg | AgentStreamMessage)[] = [...messages, ...agentStreamMessages]
+      const base: (Message | StreamingMsg)[] = [...messages]
       if (streaming) base.push(streaming)
       return base
     },
-    [messages, streaming, agentStreamMessages],
+    [messages, streaming],
   )
 
   return (
@@ -2904,7 +2833,6 @@ export default function ChatPage() {
           setEmailThreadCards={setEmailThreadCards}
           setStravaCards={setStravaCards}
           setMeetingCards={setMeetingCards}
-          setAgentStreamMessages={setAgentStreamMessages}
           onAsk={handleAsk}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}

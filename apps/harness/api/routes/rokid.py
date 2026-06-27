@@ -465,7 +465,7 @@ _CONFIRMABLE_CARDS = {"email_draft", "calendar_suggest", "task_suggest"}
 # Cards summarized inline on the HUD (no interaction; heavy payloads stripped).
 _DISPLAY_CARDS = {
     "contact_card", "place_card", "artifact_created",
-    "chart_image", "search_images", "agent_job_created",
+    "chart_image", "search_images",
 }
 
 
@@ -484,8 +484,6 @@ def _card_summary(event: dict) -> str:
             return f"[Chart: {event.get('title') or 'generated'} — view in TARS app]"
         if t == "search_images":
             return f"[Images found for '{event.get('query', '')}' — view in TARS app]"
-        if t == "agent_job_created":
-            return f"[Agent job started: {(event.get('instruction') or '')[:60]}]"
     except Exception:
         pass
     return ""

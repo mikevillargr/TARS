@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import auth, health, chat, tasks, meetings, calendar
-from api.routes import second_brain, agent_jobs, artifacts
+from api.routes import second_brain, artifacts
 from api.routes import links as links_route
 from api.routes import cron, connectors, memory, contacts
 from api.routes import settings as settings_route
@@ -112,49 +112,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.warning("Embedding model preload failed: %s", e)
 
-    # On restart: re-queue interrupted root jobs, mark orphaned children as failed.
-    try:
-        from db.session import AsyncSessionLocal
-        from db.models import AgentJob
-        from agents import job_manager
-        from sqlalchemy import select, update
-
-        async with AsyncSessionLocal() as db:
-            # Find all interrupted jobs
-            stale = (await db.execute(
-                select(AgentJob).where(AgentJob.status.in_(["running", "awaiting_approval"]))
-            )).scalars().all()
-
-            requeued = 0
-            for job in stale:
-                if job.parent_job_id is None:
-                    # Root job — re-queue it so it runs again
-                    job.status = "pending"
-                    job.output = None
-                    job.started_at = None
-                    job.completed_at = None
-                    requeued += 1
-                else:
-                    # Child job — mark failed, parent will be re-run
-                    job.status = "failed"
-                    job.output = "Harness restarted — parent job will re-run."
-
-            await db.commit()
-            log.info("Restart cleanup: %d root jobs re-queued, %d child jobs failed",
-                     requeued, len(stale) - requeued)
-
-        # Start all re-queued root jobs
-        async with AsyncSessionLocal() as db:
-            pending = (await db.execute(
-                select(AgentJob).where(AgentJob.status == "pending")
-            )).scalars().all()
-            for job in pending:
-                await job_manager.start_job(job.id, AsyncSessionLocal)
-                log.info("Re-queued job %s (%s) started", job.id[:8], job.agent_type)
-
-    except Exception as e:
-        log.warning("Stale job cleanup/re-queue failed: %s", e)
-
     # Start Ollama keepalive — warms model on startup, recovers backoff after restarts
     keepalive_task = asyncio.create_task(_ollama_keepalive())
 
@@ -163,39 +120,6 @@ async def lifespan(app: FastAPI):
     cron_tasks = build_tasks()
 
     yield
-
-    # ── Shutdown: mark in-flight agent jobs as pending so they resume on restart
-    # Without this, asyncio kills running tasks on SIGTERM, the CancelledError
-    # handler stamps them "cancelled", and the re-queue logic that only picks
-    # up "running"/"awaiting_approval" misses them — leaving the user with a
-    # job that never completes and no PR/deploy.
-    try:
-        from agents import job_manager as _jm
-        active_ids = list(_jm._tasks.keys())
-        if active_ids:
-            log.info("Shutdown: %d active agent task(s) — marking pending for re-queue on next start", len(active_ids))
-            from db.session import AsyncSessionLocal
-            from db.models import AgentJob
-            from sqlalchemy import update
-            async with AsyncSessionLocal() as db:
-                await db.execute(
-                    update(AgentJob)
-                    .where(AgentJob.id.in_(active_ids))
-                    .values(
-                        status="pending",
-                        started_at=None,
-                        output=None,
-                        completed_at=None,
-                    )
-                )
-                await db.commit()
-            # Tell job_manager: subsequent CancelledError handlers in _run_job
-            # should NOT override the "pending" status we just set.
-            _jm._shutdown_requested = True
-            # Give a short window for any in-flight DB writes to finish
-            await asyncio.sleep(2)
-    except Exception as exc:
-        log.warning("Shutdown agent re-queue failed: %s", exc)
 
     keepalive_task.cancel()
     for t in cron_tasks:
@@ -230,7 +154,6 @@ app.include_router(tasks.router, prefix="/api/tasks")
 app.include_router(meetings.router, prefix="/api/meetings")
 app.include_router(calendar.router, prefix="/api/calendar")
 app.include_router(second_brain.router, prefix="/api/second-brain")
-app.include_router(agent_jobs.router, prefix="/api/agent-jobs")
 app.include_router(artifacts.router, prefix="/api/artifacts")
 app.include_router(cron.router, prefix="/api/cron")
 app.include_router(connectors.router, prefix="/api/connectors")

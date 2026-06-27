@@ -7,7 +7,6 @@ export const navItems = [
   { label: "Meetings",     href: "/meetings",     icon: "Video" },
   { label: "Contacts",     href: "/contacts",     icon: "Users" },
   { label: "Feed",         href: "/feed",         icon: "Rss" },
-  { label: "Agent Jobs",   href: "/agent-jobs",   icon: "Cpu" },
   { label: "Artifacts",    href: "/artifacts",    icon: "Archive" },
   { label: "Cron Manager", href: "/cron",         icon: "Clock" },
   { label: "Connectors",   href: "/connectors",   icon: "Plug" },

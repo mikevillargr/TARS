@@ -10,7 +10,6 @@ import {
   Video,
   CheckSquare,
   Clock as ClockIcon,
-  Cpu,
   X,
   ArrowRight,
   Loader2,
@@ -21,7 +20,7 @@ import { MentionTextarea } from "@/components/ui/MentionTextarea"
 import { stripToLabels } from "@/lib/mentions"
 
 type ViewMode = "month" | "week" | "day"
-type EventType = "gcal" | "gcal_personal" | "meeting" | "task" | "cron" | "agent"
+type EventType = "gcal" | "gcal_personal" | "meeting" | "task" | "cron"
 
 interface CalendarEventOut {
   id: string
@@ -52,7 +51,6 @@ const TYPE_STYLES: Record<EventType, { dot: string; bg: string; text: string; bo
   meeting: { dot: "bg-moss",       bg: "bg-moss-soft",   text: "text-moss",      borderColor: "var(--c-moss)",      icon: Video,        label: "Meeting"  },
   task:    { dot: "bg-amber",      bg: "bg-amber-soft",  text: "text-amber",     borderColor: "var(--c-amber)",     icon: CheckSquare,  label: "Task"     },
   cron:    { dot: "bg-ink-muted",  bg: "bg-surface-2",   text: "text-ink",       borderColor: "var(--c-ink-muted)", icon: ClockIcon,    label: "Cron Job" },
-  agent:   { dot: "bg-rose",       bg: "bg-rose-soft",   text: "text-rose",      borderColor: "var(--c-rose)",      icon: Cpu,          label: "Agent Job"},
 }
 
 const TODAY = new Date()
@@ -415,7 +413,6 @@ function EventDetail({ event, onClose }: { event: CalendarEvent; onClose: () => 
     meeting: "/meetings",
     task: "/tasks",
     cron: "/cron",
-    agent: "/agent-jobs",
   }
 
   return (
