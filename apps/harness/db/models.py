@@ -159,8 +159,8 @@ class AgentJob(Base):
     __tablename__ = "agent_jobs"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    # agent_type: evolutionarist | frontend | backend | sa | release
-    agent_type: Mapped[str] = mapped_column(String, default="evolutionarist")
+    # agent_type: frontend | backend | sa | release
+    agent_type: Mapped[str] = mapped_column(String, default="backend")
     # kept for backwards compat with old stub rows
     type: Mapped[str] = mapped_column(String, nullable=False, default="agent")
     instruction: Mapped[str] = mapped_column(Text, nullable=False)

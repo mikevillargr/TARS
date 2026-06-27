@@ -110,7 +110,7 @@ from agents.job_manager import DEFAULT_MODELS
 
 
 def test_default_models_keys():
-    assert set(DEFAULT_MODELS.keys()) == {"evolutionarist", "frontend", "backend", "sa", "release"}
+    assert set(DEFAULT_MODELS.keys()) == {"frontend", "backend", "sa", "release"}
 
 
 def test_frontend_backend_use_sonnet():
@@ -129,7 +129,7 @@ from api.routes.agent_jobs import CreateJobRequest
 
 def test_create_request_defaults():
     req = CreateJobRequest(instruction="do something")
-    assert req.agent_type == "evolutionarist"
+    assert req.agent_type == "backend"
     assert req.branch if hasattr(req, "branch") else True  # branch validated server-side
 
 

@@ -2420,44 +2420,6 @@ async def send_message(
                             log.warning("get_saved_places tool failed: %s", exc)
                             return f"Failed to retrieve saved places: {exc}"
 
-                    if name == "create_agent_job":
-                        await _emit_progress("create_agent_job", "Launching agent…")
-                        try:
-                            from db.models import AgentJob
-                            agent_type = tool_input.get("agent_type", "evolutionarist")
-                            instruction = tool_input.get("instruction", "")
-                            from core.config import settings as _settings
-                            job = AgentJob(
-                                user_id=user_id,
-                                agent_type=agent_type,
-                                type="agent",
-                                instruction=instruction,
-                                repo_path=_settings.tars_repo_path,
-                                branch="dev",
-                                status="pending",
-                                conversation_id=conversation_id,
-                            )
-                            bg_db.add(job)
-                            await bg_db.commit()
-                            await bg_db.refresh(job)
-                            # Start the agent in background
-                            from agents.job_manager import start_job as _start_job
-                            from db.session import AsyncSessionLocal as _ASL
-                            import asyncio as _asyncio
-                            _asyncio.create_task(_start_job(job.id, _ASL))
-                            # Emit card event so frontend can show a link to the job
-                            await _emit_card({
-                                "type": "agent_job_created",
-                                "job_id": job.id,
-                                "agent_type": agent_type,
-                                "instruction": instruction,
-                            })
-                            job_url = f"{_settings.tars_app_url}/agent-jobs"
-                            return f"Agent job created (ID: {job.id}, type: {agent_type}). View the live stream at: {job_url}"
-                        except Exception as exc:
-                            log.warning("create_agent_job tool failed: %s", exc)
-                            return f"Failed to create agent job: {exc}"
-
                     if name in ("get_strava_activities", "get_strava_activity", "get_strava_stats", "get_strava_zones"):
                         _strava_label = {"get_strava_activities": "Fetching rides…", "get_strava_activity": "Fetching activity…", "get_strava_stats": "Fetching stats…", "get_strava_zones": "Fetching training zones…"}.get(name, "Fetching Strava data…")
                         await _emit_progress(name, _strava_label)

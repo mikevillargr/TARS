@@ -2,10 +2,6 @@
 JobManager — spawns agent jobs, manages lifecycle, broadcasts events,
 and maintains a ring buffer for reconnecting subscribers.
 
-Evolutionarist (orchestrator):
-  Uses the Anthropic SDK with a spawn_agent tool. On tool call it creates
-  a child AgentJob row and starts the appropriate sub-agent executor.
-
 Sub-agents (frontend / backend / sa):
   Use claude-code-sdk via agents.executor.run().
 
@@ -18,8 +14,6 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Callable, Optional, Any
 
-import anthropic
-
 from core.config import settings
 
 log = logging.getLogger(__name__)
@@ -27,67 +21,10 @@ log = logging.getLogger(__name__)
 TARS_REPO = settings.tars_repo_path
 
 DEFAULT_MODELS: dict[str, str] = {
-    "evolutionarist": "claude-sonnet-4-6",
-    "frontend":       "claude-sonnet-4-6",
-    "backend":        "claude-sonnet-4-6",
-    "sa":             "claude-opus-4-5",
-    "release":        "claude-sonnet-4-6",
-}
-
-EVOLUTIONARIST_SYSTEM = f"""\
-You are Evolutionarist, the TARS orchestration agent. You work on the codebase \
-at {TARS_REPO} on the main branch.
-
-Your job: take the user's request and get it shipped to production by spawning \
-the right implementation agents. ONE Evolutionarist run = ONE shipped change.
-
-Specialists you can spawn:
-- frontend: edits files under apps/web/** (UI, Next.js pages, components, CSS)
-- backend:  edits files under apps/harness/** (FastAPI routes, DB models, services)
-- sa: INVESTIGATES ONLY — produces a written report, does NOT edit code
-
-CRITICAL RULES — these are how shipping actually works:
-
-1. Default plan: spawn 1 frontend and/or 1 backend agent with a SPECIFIC instruction.
-   These are the ONLY agents that produce PRs. Without a PR, nothing deploys.
-
-2. Use `sa` ONLY when the task is genuinely unclear and you need an investigation
-   report before you can write a precise FE/BE instruction. NEVER spawn more than
-   ONE SA per Evolutionarist run. If you find yourself wanting a second SA, you
-   are stalling — pick FE or BE and give them everything you know.
-
-3. Do not split simple tasks into multiple FE/BE sub-tasks. One agent per layer
-   that needs changes. Give each agent the FULL context (read AGENTS.md if you
-   need a refresher on the codebase layout).
-
-4. After all sub-agents complete you MUST stop with a one-sentence summary of what
-   was changed (no questions, no follow-ups). The harness then auto-tags + deploys.
-
-5. Never spawn FE if the task is purely backend, and vice versa. If you can't tell,
-   spawn ONE sa first — but then COMMIT to spawning the implementation agents based
-   on its report.
-
-Repo path: {TARS_REPO}. Branch: feature branches off main — the harness handles git.
-"""
-
-SPAWN_AGENT_TOOL: dict = {
-    "name": "spawn_agent",
-    "description": "Spawn a specialist sub-agent to execute a scoped task on the TARS codebase.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "agent_type": {
-                "type": "string",
-                "enum": ["frontend", "backend", "sa"],
-                "description": "Specialist type to spawn",
-            },
-            "instruction": {
-                "type": "string",
-                "description": "Precise, scoped task instruction for the sub-agent",
-            },
-        },
-        "required": ["agent_type", "instruction"],
-    },
+    "frontend": "claude-sonnet-4-6",
+    "backend":  "claude-sonnet-4-6",
+    "sa":       "claude-opus-4-5",
+    "release":  "claude-sonnet-4-6",
 }
 
 # ── In-memory state ────────────────────────────────────────────────────────────
@@ -181,9 +118,7 @@ async def _run_job(job_id: str, db_session_factory: Any) -> None:
         model = model_cfg.get(agent_type) or DEFAULT_MODELS.get(agent_type, "claude-sonnet-4-6")
 
     try:
-        if agent_type == "evolutionarist":
-            await _run_evolutionarist(job_id, instruction, model, db_session_factory)
-        elif agent_type == "release":
+        if agent_type == "release":
             await _run_release(job_id, instruction, db_session_factory)
         else:
             await _run_subagent(job_id, instruction, model, agent_type, db_session_factory)
@@ -321,59 +256,6 @@ async def _run_subagent(
                     row.completed_at = datetime.now(timezone.utc)
                     await db.commit()
 
-            # SA agents: if this is a root SA job (no parent), auto-escalate to Evolutionarist
-            # so findings get implemented and deployed — not just reported.
-            # AWAIT (not fire-and-forget) so the lifecycle is tied to this task
-            # and survives pm2 reloads via the re-queue logic in main.py.
-            if agent_type == "sa":
-                async with db_session_factory() as db:
-                    from sqlalchemy import select
-                    from db.models import AgentJob
-                    row = (await db.execute(select(AgentJob).where(AgentJob.id == job_id))).scalar_one_or_none()
-                    should_escalate = row and row.parent_job_id is None and summary
-
-                if should_escalate:
-                    escalation_instruction = (
-                        f"An SA agent investigated this task and produced findings. "
-                        f"Now implement every fix described in the findings.\n\n"
-                        f"Original task: {instruction[:300]}\n\n"
-                        f"SA findings:\n{summary[:2000]}\n\n"
-                        f"Spawn frontend and/or backend agents to implement the changes. "
-                        f"After they finish, the harness will tag and deploy automatically."
-                    )
-                    evo_job_id = await _create_sub_job(
-                        parent_job_id=job_id,
-                        agent_type="evolutionarist",
-                        instruction=escalation_instruction,
-                        db_session_factory=db_session_factory,
-                    )
-                    # Tell SA's chip: a new agent just spun up → render its own chip
-                    await broadcast(job_id, {
-                        "type": "sub_job_started",
-                        "sub_job_id": evo_job_id,
-                        "agent_type": "evolutionarist",
-                        "instruction": "Implementing fixes from SA findings",
-                    })
-                    # AWAIT the escalation — keeps it tied to this task's lifecycle
-                    try:
-                        await _run_evolutionarist(
-                            evo_job_id, escalation_instruction,
-                            DEFAULT_MODELS["evolutionarist"], db_session_factory,
-                        )
-                        # Mark the spawned Evolutionarist as completed
-                        async with db_session_factory() as db:
-                            from sqlalchemy import select
-                            from db.models import AgentJob
-                            evo_row = (await db.execute(select(AgentJob).where(AgentJob.id == evo_job_id))).scalar_one_or_none()
-                            if evo_row and evo_row.status not in ("failed", "cancelled"):
-                                evo_row.status = "completed"
-                                evo_row.completed_at = datetime.now(timezone.utc)
-                                await db.commit()
-                    except Exception:
-                        log.exception("SA escalation failed for job %s", job_id)
-                    await broadcast(job_id, event)
-                    return
-
             # Notify the originating chat conversation
             pr_url = event.get("pr_url")
             first_line = summary.split("\n")[0].strip()[:300] if summary else "Done"
@@ -389,190 +271,6 @@ async def _run_subagent(
 
         if event["type"] in ("approval_rejected", "error"):
             return
-
-
-async def _run_evolutionarist(
-    job_id: str,
-    instruction: str,
-    model: str,
-    db_session_factory: Any,
-) -> None:
-    """
-    Run the Evolutionarist orchestrator using the Anthropic SDK.
-    On spawn_agent tool call, create + start a sub-job.
-    """
-    # Inject memory context into system prompt
-    system_prompt = EVOLUTIONARIST_SYSTEM
-    try:
-        async with db_session_factory() as _mem_db:
-            from sqlalchemy import select as _sel
-            from db.models import AgentJob as _AgentJob
-            _job = (await _mem_db.execute(_sel(_AgentJob).where(_AgentJob.id == job_id))).scalar_one_or_none()
-            if _job:
-                from memory import mnemon as _mnemon
-                memory_context = await _mnemon.search(_mem_db, _job.user_id, instruction, limit=20)
-                if memory_context:
-                    context_str = "\n".join([m.content for m in memory_context])
-                    system_prompt = f"Relevant memory context:\n{context_str}\n\n{system_prompt}"
-    except Exception:
-        pass  # Memory injection is non-blocking
-
-    # Use the tier3 provider (Anthropic or Z.ai) — respects Settings page config
-    from core.model_client import get_model_client as _get_mc
-    _mc = _get_mc()
-    _provider = settings.tier3_provider
-    client = _mc.zai if _provider == "zai" else _mc.anthropic
-    # Resolve model: use tier3 override, else provider default
-    if not model or model == "claude-sonnet-4-6":
-        model = settings.tier3_model_override or ("glm-4.7" if _provider == "zai" else "claude-sonnet-4-6")
-
-    messages = [{"role": "user", "content": instruction}]
-
-    await broadcast(job_id, {"type": "text_chunk", "text": "Analyzing task…\n"})
-
-    completed_sub_jobs: list[dict] = []
-
-    while True:
-        response = await client.messages.create(
-            model=model,
-            max_tokens=2048,
-            system=system_prompt,
-            tools=[SPAWN_AGENT_TOOL],  # type: ignore[arg-type]
-            messages=messages,
-        )
-
-        for block in response.content:
-            if hasattr(block, "text") and block.text:
-                await broadcast(job_id, {"type": "text_chunk", "text": block.text})
-
-        # No tool call — done. Post ONE final message to chat.
-        if response.stop_reason != "tool_use":
-            final_text = " ".join(
-                b.text for b in response.content if hasattr(b, "text") and b.text
-            ).strip()
-
-            prs = [j["pr_url"] for j in completed_sub_jobs if j.get("pr_url")]
-
-            if completed_sub_jobs:
-                new_version = await _auto_patch_release(job_id, db_session_factory)
-                # Build a clean single TARS message — summary + version + PRs
-                parts = [final_text[:600]] if final_text else []
-                if new_version:
-                    parts.append(f"Deployed as {new_version}.")
-                if prs:
-                    parts.append("PR" + ("s" if len(prs) > 1 else "") + ": " + ", ".join(prs))
-                await _notify_chat(job_id, " ".join(parts) or "Done.", db_session_factory)
-            else:
-                await _notify_chat(
-                    job_id,
-                    final_text[:600] or "Done — no code changes needed.",
-                    db_session_factory,
-                )
-
-            await broadcast(job_id, {
-                "type": "completed",
-                "summary": final_text[:500] or "Done.",
-                "pr_url": prs[0] if prs else None,
-            })
-            return
-
-        # Process spawn_agent tool calls — no chat noise, chip handles live feedback
-        tool_results = []
-        for block in response.content:
-            if getattr(block, "type", None) != "tool_use" or block.name != "spawn_agent":
-                continue
-
-            sub_type = block.input.get("agent_type", "backend")
-            sub_instruction = block.input.get("instruction", "")
-
-            await broadcast(job_id, {
-                "type": "text_chunk",
-                "text": f"→ {sub_type} agent\n",
-            })
-
-            sub_job_id = await _create_sub_job(
-                parent_job_id=job_id,
-                agent_type=sub_type,
-                instruction=sub_instruction,
-                db_session_factory=db_session_factory,
-            )
-
-            # Tell the parent's chip a new agent just started → spawn its own chip in chat
-            await broadcast(job_id, {
-                "type": "sub_job_started",
-                "sub_job_id": sub_job_id,
-                "agent_type": sub_type,
-                "instruction": sub_instruction[:140],
-            })
-
-            sub_model = DEFAULT_MODELS.get(sub_type, "claude-sonnet-4-6")
-            from agents import approval as _approval, executor as _executor
-            gate = _approval.get_or_create(sub_job_id)
-
-            sub_result = "Sub-agent completed."
-            pr_url: Optional[str] = None
-
-            async for event in _executor.run(
-                job_id=sub_job_id,
-                instruction=sub_instruction,
-                model=sub_model,
-                approval_gate=gate,
-            ):
-                await broadcast(sub_job_id, event)
-                await broadcast(job_id, {**event, "sub_job_id": sub_job_id, "sub_agent_type": sub_type})
-
-                if event["type"] == "completed":
-                    sub_result = event.get("summary", "Sub-agent completed.")
-                    pr_url = event.get("pr_url")
-                    async with db_session_factory() as db:
-                        from sqlalchemy import select
-                        from db.models import AgentJob
-                        row = (await db.execute(select(AgentJob).where(AgentJob.id == sub_job_id))).scalar_one_or_none()
-                        if row:
-                            if pr_url: row.pr_url = pr_url
-                            if event.get("branch"): row.branch = event["branch"]
-                            row.output = sub_result
-                            row.status = "completed"
-                            row.completed_at = datetime.now(timezone.utc)
-                            await db.commit()
-                    completed_sub_jobs.append({"type": sub_type, "pr_url": pr_url, "summary": sub_result})
-
-            _approval.cleanup(sub_job_id)
-            _approval.cleanup_question(sub_job_id)
-            tool_results.append({"type": "tool_result", "tool_use_id": block.id, "content": sub_result})
-
-        messages.append({"role": "assistant", "content": response.content})  # type: ignore[arg-type]
-        messages.append({"role": "user", "content": tool_results})
-
-
-async def _create_sub_job(
-    *,
-    parent_job_id: str,
-    agent_type: str,
-    instruction: str,
-    db_session_factory: Any,
-) -> str:
-    from db.models import AgentJob
-    async with db_session_factory() as db:
-        from sqlalchemy import select
-        parent = (await db.execute(select(AgentJob).where(AgentJob.id == parent_job_id))).scalar_one()
-        sub = AgentJob(
-            user_id=parent.user_id,
-            agent_type=agent_type,
-            type="agent",
-            instruction=instruction,
-            repo_path=TARS_REPO,
-            branch="main",
-            conversation_id=parent.conversation_id,  # inherit so sub-jobs notify same chat
-            parent_job_id=parent_job_id,
-            status="running",
-            started_at=datetime.now(timezone.utc),
-            model_config_json=parent.model_config_json or {},
-        )
-        db.add(sub)
-        await db.commit()
-        await db.refresh(sub)
-        return sub.id
 
 
 async def _auto_patch_release(job_id: str, db_session_factory: Any) -> Optional[str]:

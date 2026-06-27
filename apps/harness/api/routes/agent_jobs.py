@@ -31,7 +31,7 @@ TARS_REPO = "/Users/mike/Documents/TARS"
 
 class CreateJobRequest(BaseModel):
     instruction: str
-    agent_type: str = "evolutionarist"
+    agent_type: str = "backend"
     conversation_id: Optional[str] = None
     model_config_json: Optional[dict] = None
     # branch is always "dev" for Phase 1 — any other value is rejected
@@ -96,7 +96,7 @@ async def create_agent_job(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    valid_types = {"evolutionarist", "frontend", "backend", "sa", "release"}
+    valid_types = {"frontend", "backend", "sa", "release"}
     if body.agent_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"agent_type must be one of {sorted(valid_types)}")
 

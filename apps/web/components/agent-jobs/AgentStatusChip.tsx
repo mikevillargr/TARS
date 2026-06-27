@@ -123,10 +123,9 @@ export default function AgentStatusChip({
   }, [jobId])
 
   const typeLabel =
-    agentType === "evolutionarist" ? "Orchestrating" :
-    agentType === "sa"             ? "Researching" :
-    agentType === "frontend"       ? "Frontend" :
-    agentType === "backend"        ? "Backend" :
+    agentType === "sa"       ? "Researching" :
+    agentType === "frontend" ? "Frontend" :
+    agentType === "backend"  ? "Backend" :
     "Agent"
 
   return (

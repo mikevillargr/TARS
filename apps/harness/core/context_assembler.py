@@ -114,9 +114,6 @@ TESLA (via Tessie — full real-time control):
 • get_tesla_sessions — data_type: "drives", "charges", or "battery_health".
 Always call get_tesla_status before state-dependent commands. No confirmation needed for direct commands.
 
-AGENT JOBS:
-• create_agent_job — spawn a coding agent on the TARS codebase. agent_type: "evolutionarist" (default), "frontend", "backend", "sa", "release". Use for "add/fix/improve/evolve TARS" or "deploy/release". Share job URL: https://tarsmv.duckdns.org/agent-jobs?id={job_id}
-
 ESCALATION:
 • request_escalation(reason) — call BEFORE generating any response when task needs a more capable tier. Harness re-runs at next tier automatically.
 

@@ -71,7 +71,6 @@ function StatusBadge({ status }: { status: string }) {
 
 function agentTypeLabel(t: string): string {
   const map: Record<string, string> = {
-    evolutionarist: "Evolutionarist",
     frontend: "Front-End",
     backend: "Back-End",
     sa: "Solutions Architect",
@@ -87,7 +86,6 @@ function formatCreated(iso: string) {
 }
 
 const AGENT_TYPES = [
-  { value: "evolutionarist", label: "Evolutionarist (auto-route)" },
   { value: "frontend", label: "Front-End Agent" },
   { value: "backend", label: "Back-End Agent" },
   { value: "sa", label: "Solutions Architect" },
@@ -114,7 +112,7 @@ function AgentJobsPageInner() {
   const [loading, setLoading] = useState(true)
   const [showNewJob, setShowNewJob] = useState(false)
   const [newInstruction, setNewInstruction] = useState("")
-  const [newType, setNewType] = useState("evolutionarist")
+  const [newType, setNewType] = useState("backend")
   const [creating, setCreating] = useState(false)
   const [needsAttention, setNeedsAttention] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>("all")
@@ -190,7 +188,7 @@ function AgentJobsPageInner() {
         setSelected(job)
         setShowNewJob(false)
         setNewInstruction("")
-        setNewType("evolutionarist")
+        setNewType("backend")
       }
     } finally {
       setCreating(false)

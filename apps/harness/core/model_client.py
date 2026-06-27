@@ -806,31 +806,6 @@ GET_SAVED_PLACES_TOOL = {
 }
 
 
-CREATE_AGENT_JOB_TOOL = {
-    "name": "create_agent_job",
-    "description": (
-        "Spawn a TARS coding agent to build, fix, or improve something in the TARS codebase. "
-        "Use when Mike asks to add a feature, fix a bug, refactor code, or evolve TARS. "
-        "Also use agent_type='release' when Mike explicitly says 'release' or 'deploy to production'. "
-        "The agent works autonomously on the dev branch and creates a PR when done. "
-        "Returns a job ID — always include the Agent Jobs link so Mike can watch the live stream."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "instruction": {
-                "type": "string",
-                "description": "Clear, specific task for the agent. Be precise about what to build/fix.",
-            },
-            "agent_type": {
-                "type": "string",
-                "enum": ["evolutionarist", "frontend", "backend", "sa", "release"],
-                "description": "Agent type. Default 'evolutionarist' — it auto-routes to FE/BE/SA as needed.",
-            },
-        },
-        "required": ["instruction"],
-    },
-}
 
 
 GET_STRAVA_ACTIVITIES_TOOL = {
