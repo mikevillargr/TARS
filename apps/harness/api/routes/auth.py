@@ -29,7 +29,7 @@ async def login(body: LoginRequest):
     if not settings.tars_password_hash or not verify_password(body.password, settings.tars_password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    token = create_token(body.username)
+    token = create_token(settings.tars_username)
     return LoginResponse(token=token)
 
 
