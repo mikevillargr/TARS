@@ -3080,7 +3080,7 @@ plt.close('all')
                 await bg_db.refresh(assistant_msg)  # re-load after commit so .id/.created_at are accessible
 
                 # Notify any connected WebSocket clients (sidebar dot, toast)
-                from agents.notifications import publish as _notif_publish
+                from core.notifications import publish as _notif_publish
                 preview = (assistant_content or "").strip()[:120]
                 msg_id = str(assistant_msg.id)
                 msg_ts = assistant_msg.created_at.isoformat() if assistant_msg.created_at else ""

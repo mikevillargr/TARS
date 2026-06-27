@@ -15,7 +15,7 @@ import logging
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
-from agents import notifications as _notif
+from core import notifications as _notif
 from core.auth import verify_ws_token
 
 log = logging.getLogger(__name__)

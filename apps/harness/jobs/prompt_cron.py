@@ -167,7 +167,7 @@ async def execute(job_id: str) -> str | None:
         CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
     )
     from core.context_assembler import assemble
-    from agents.notifications import publish as _notify
+    from core.notifications import publish as _notify
 
     # ── Load job ──────────────────────────────────────────────────────────────
     async with AsyncSessionLocal() as db:
