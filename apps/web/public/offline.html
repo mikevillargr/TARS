@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TARS — Offline</title>
+  <style>
+    :root { color-scheme: light dark; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      background: #f6f3ec; color: #2b2a26;
+      font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, monospace;
+      text-align: center; padding: 24px;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #14130f; color: #e9e4d8; }
+    }
+    .wrap { max-width: 360px; }
+    .label {
+      font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: #6b8f5a; margin-bottom: 12px;
+    }
+    h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 8px; }
+    p { font-size: 13px; line-height: 1.5; opacity: 0.7; margin: 0 0 20px; }
+    button {
+      font: inherit; font-size: 12px; letter-spacing: 0.04em;
+      padding: 8px 18px; border-radius: 8px; cursor: pointer;
+      background: #6b8f5a; color: #fff; border: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="label">TARS · Standby</div>
+    <h1>You're offline</h1>
+    <p>No network connection. TARS will reconnect as soon as you're back online.</p>
+    <button onclick="location.reload()">Retry</button>
+  </div>
+</body>
+</html>

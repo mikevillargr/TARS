@@ -4,10 +4,11 @@ import { useEffect } from "react"
 
 // Global client housekeeping:
 //
-// 1. Service worker: an earlier caching worker left users stuck on stale JS
-//    bundles, so we now do the opposite — unregister any existing worker and
-//    purge all caches on load, and never register a new one. Together with the
-//    kill-switch in public/sw.js this fully clears the stale state.
+// 1. Service worker: register the minimal worker in public/sw.js. It has a fetch
+//    handler (required for desktop Chrome/Edge to fire `beforeinstallprompt`, i.e.
+//    to make the PWA installable) but NEVER caches app code — so it cannot recreate
+//    the stale-bundle problem the old caching worker caused. The worker itself
+//    purges any leftover caches from previous versions on activate.
 //
 // 2. ChunkLoadError self-heal: if a deploy removed a lazy chunk that a cached
 //    app shell still references, the dynamic import 404s and React renders
@@ -17,14 +18,7 @@ import { useEffect } from "react"
 export function ServiceWorkerRegister() {
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations()
-        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
-        .catch(() => {})
-    }
-    if ("caches" in window) {
-      caches.keys()
-        .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-        .catch(() => {})
+      navigator.serviceWorker.register("/sw.js").catch(() => {})
     }
 
     const RELOAD_KEY = "tars_chunk_reload"

@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.15.6 (post-sessions 1–9+, live on production)
+> Last updated: June 2026 — v2.15.7 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,16 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.7 Fix: PWA installable again on desktop. The v2.15.3 SW kill switch fixed the stale-bundle
+        saga but also removed the registered service worker WITH A FETCH HANDLER that desktop
+        Chrome/Edge require to fire beforeinstallprompt — so the Settings Install button never
+        appeared (iOS unaffected; Add to Home Screen needs no SW). New public/sw.js is minimal:
+        has a fetch handler (installable) but NEVER caches app code (JS/CSS/API pass through to
+        network → deploys never masked, no stale-bundle regression); purges old caches on activate;
+        only caches a tiny public/offline.html for offline navigations (network-first).
+        ServiceWorkerRegister now registers /sw.js instead of unregistering everything (chunk-error
+        self-heal unchanged). Settings fallback copy updated. Verified locally: SW activated +
+        controlling, fetch handler present, offline.html 200, no errors. Web-only, no schema change.
 v2.15.6 Fix: Google Doc export is rich text, not raw markdown. gdoc path called create_doc
         (Docs API insertText) so markdown rendered literally (## , **). Now builds the same
         DOCX as the download and uploads to Drive with conversion to a native Google Doc

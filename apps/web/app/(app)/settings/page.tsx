@@ -1506,7 +1506,7 @@ export default function SettingsPage() {
                   )}
                   {!installable && !isIOS && (
                     <span className="text-xs mt-2 block" style={{ color: "var(--c-ink-faint)" }}>
-                      Open in Chrome to install
+                      Use Chrome or Edge and refresh once — the Install button appears when the browser is ready.
                     </span>
                   )}
                 </div>

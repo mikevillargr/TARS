@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.6 |
-| Released | 2026-06-25 |
+| Version | v2.15.7 |
+| Released | 2026-06-30 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -159,6 +159,15 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.7 — 2026-06-30
+**Fix: PWA installable again on desktop (Chrome/Edge)**
+- Desktop Chrome/Edge only fire `beforeinstallprompt` (which is what reveals the **Install** button in Settings) when the site has a registered service worker **with a fetch handler**. The v2.15.3 kill switch (`public/sw.js`) unregistered the worker and `ServiceWorkerRegister` stopped registering one — fixing the stale-bundle saga but also killing desktop installability. iOS was unaffected because Safari "Add to Home Screen" needs no service worker, which is why only that path kept working
+- New `public/sw.js`: a minimal worker that exists and has a fetch handler (so the app is installable) but **never caches app code** — JS/CSS/API pass straight through to the network, so deploys are never masked (no regression of the v2.15.x stale-bundle bug). It also purges any leftover caches from previous worker versions on activate. The only cached asset is a tiny `public/offline.html`, served solely when a navigation fails offline (network-first)
+- `ServiceWorkerRegister.tsx` now registers `/sw.js` instead of unregistering everything; the ChunkLoadError self-heal reload is unchanged
+- Settings install fallback copy updated: "Use Chrome or Edge and refresh once — the Install button appears when the browser is ready" (the prompt becomes available after the worker takes control, which can need one refresh on first load)
+- Verified locally: `/sw.js` serves 200 with a fetch handler, the worker reaches `activated` and controls the page, `/offline.html` serves 200, no console errors
+- Web-only, no schema change
 
 ### v2.15.6 — 2026-06-25
 **Fix: Google Doc export is rich text, not raw markdown**
