@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.7 |
-| Released | 2026-06-30 |
+| Version | v2.15.8 |
+| Released | 2026-07-01 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -159,6 +159,14 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.8 — 2026-07-01
+**Fix: PWA install button still missing on desktop — beforeinstallprompt captured too late**
+- v2.15.7 restored the service worker (Chrome's install precondition) but the button still didn't appear. Root cause: the `beforeinstallprompt` listener lived only inside the Settings page's `useEffect`. Chrome fires that event **once, early, right after load, on whatever page the user landed on** (usually `/chat`, not `/settings`) — so by the time Settings mounted, the event had already fired and would never fire again. `installable` stayed false and the fallback text showed
+- Fix: capture the event **globally and as early as possible**. A blocking `<head>` script in `app/layout.tsx` (runs before React hydrates) calls `preventDefault()`, stashes the event on `window.__tarsInstallPrompt`, and dispatches a `tars-installable` custom event (plus a `tars-installed` event on `appinstalled`)
+- Settings `useEffect` now adopts `window.__tarsInstallPrompt` on mount (already-fired case) and also listens for `tars-installable` (fires-after-mount case) and `tars-installed`, so the Install button appears regardless of which page the event fired on
+- Verified locally: the head script installs the global capture, a synthetic `beforeinstallprompt` is stashed and re-broadcast via `tars-installable`
+- Web-only, no schema change
 
 ### v2.15.7 — 2026-06-30
 **Fix: PWA installable again on desktop (Chrome/Edge)**

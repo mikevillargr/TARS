@@ -281,13 +281,34 @@ export default function SettingsPage() {
     const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream
     setIsIOS(ios)
 
+    // Chrome fires beforeinstallprompt once, early, on whatever page loaded
+    // first — usually not this one. A head script (see app/layout.tsx) captures
+    // it globally into window.__tarsInstallPrompt; pick it up here whether it
+    // already fired before mount or fires later.
+    type W = Window & { __tarsInstallPrompt?: BeforeInstallPromptEvent | null }
+    const adopt = () => {
+      const stashed = (window as W).__tarsInstallPrompt
+      if (stashed) {
+        installPromptRef.current = stashed
+        setInstallable(true)
+      }
+    }
+    adopt() // already-fired case
+
     const handler = (e: Event) => {
       e.preventDefault()
       installPromptRef.current = e as BeforeInstallPromptEvent
       setInstallable(true)
     }
+    const onInstalled = () => { setIsInstalled(true); setInstallable(false) }
     window.addEventListener("beforeinstallprompt", handler)
-    return () => window.removeEventListener("beforeinstallprompt", handler)
+    window.addEventListener("tars-installable", adopt)     // fired-after-mount case
+    window.addEventListener("tars-installed", onInstalled)
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler)
+      window.removeEventListener("tars-installable", adopt)
+      window.removeEventListener("tars-installed", onInstalled)
+    }
   }, [])
 
   async function handleInstall() {

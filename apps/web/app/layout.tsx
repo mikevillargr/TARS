@@ -54,6 +54,11 @@ export default function RootLayout({
       {/* Blocking script: applies .dark class before any render to prevent flash */}
       <head>
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var m=localStorage.getItem('tars-theme');var dark=m==='dark'||(m!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',dark);}catch(e){}})();` }} />
+        {/* Capture beforeinstallprompt as early as possible. Chrome fires it once,
+            shortly after load, on whatever page the user landed on — usually not
+            /settings. Stash it globally so the Settings Install button can use it
+            no matter where the event fired. */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){window.__tarsInstallPrompt=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__tarsInstallPrompt=e;window.dispatchEvent(new Event('tars-installable'));});window.addEventListener('appinstalled',function(){window.__tarsInstallPrompt=null;window.dispatchEvent(new Event('tars-installed'));});})();` }} />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ServiceWorkerRegister />

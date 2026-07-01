@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: June 2026 — v2.15.7 (post-sessions 1–9+, live on production)
+> Last updated: July 2026 — v2.15.8 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,16 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.8 Fix: PWA install button still missing on desktop — beforeinstallprompt captured too late.
+        v2.15.7 restored the SW (Chrome's precondition) but the button still didn't show. Cause:
+        the beforeinstallprompt listener lived only in the Settings page useEffect, but Chrome
+        fires that event ONCE, early, right after load, on whatever page the user landed on (usually
+        /chat) — so it fired before Settings ever mounted and never fired again. Fix: a blocking
+        <head> script in app/layout.tsx (runs before hydration) preventDefaults + stashes the event
+        on window.__tarsInstallPrompt and dispatches a tars-installable event (+ tars-installed on
+        appinstalled). Settings now adopts the stashed prompt on mount and listens for the custom
+        events, so the Install button appears no matter which page the event fired on. Verified
+        locally. Web-only, no schema change.
 v2.15.7 Fix: PWA installable again on desktop. The v2.15.3 SW kill switch fixed the stale-bundle
         saga but also removed the registered service worker WITH A FETCH HANDLER that desktop
         Chrome/Edge require to fire beforeinstallprompt — so the Settings Install button never
