@@ -162,10 +162,11 @@ CREATE_TASK_TOOL = {
 PROPOSE_TASK_TOOL = {
     "name": "propose_task",
     "description": (
-        "Suggest a task Mike has NOT explicitly asked you to create — use ONLY when you "
-        "proactively detect an implied action item from context (e.g. reading an email and "
-        "noticing a follow-up). Shows a confirmation chip. Do NOT use when Mike directly "
-        "asks to add a task — use create_task instead."
+        "Show a task suggestion chip. Use ONLY when Mike explicitly asks you to surface "
+        "action items ('what should I follow up on?', 'any tasks from this?'). "
+        "Do NOT call this speculatively while reading emails, meetings, or content — "
+        "Mike will ask if he wants suggestions. Do NOT use when Mike directly asks to "
+        "add a task — use create_task instead."
     ),
     "input_schema": {
         "type": "object",

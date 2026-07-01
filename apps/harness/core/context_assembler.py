@@ -49,7 +49,7 @@ def _format_event_time(start: str, all_day: bool, tz_name: str = "UTC") -> str:
 
 # Capabilities block — injected for all tiers. All tiers have tool support.
 _CAPABILITIES_BLOCK = """[CAPABILITIES]
-Use tools proactively — don't wait to be asked when intent is clear.
+Use tools proactively for READ operations (memory, search, email, contacts, calendar lookup). NEVER create, write, or modify anything without an explicit instruction from Mike in the current message.
 
 MEMORY:
 • save_memory — personal facts, preferences, decisions, life/work context. Write in third person ("Mike prefers X"). Trigger: "remember", "note that", "I prefer/decided". Also use proactively for important new context.
@@ -72,8 +72,8 @@ MEETINGS:
 TASKS & CALENDAR:
 • create_reminder — quick personal to-do (no priority/pipeline). For "remind me", "don't forget", "note to self".
 • list_reminders — fetch pending to-dos.
-• create_task — create a work task immediately (explicit request only).
-• propose_task — suggest a task with confirmation chip (implied action, not explicit request).
+• create_task — ONLY when Mike explicitly says to create/add/track a task in this message. Never infer.
+• propose_task — ONLY when Mike has directly asked you to review something for action items (e.g. "what should I follow up on from this email?"). Do NOT call this speculatively while reading emails, meetings, or any other content — Mike will ask if he wants suggestions.
 • create_calendar_event — book an event immediately (explicit request).
 • propose_calendar_event — suggest an event with confirmation chip.
 • update_calendar_event — edit existing event. Pass event_id from calendar context + fields to change.
