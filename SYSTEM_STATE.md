@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.9 |
+| Version | v2.15.10 |
 | Released | 2026-07-01 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,14 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.10 — 2026-07-01
+**Fix: contact enqueue crash + removed the phantom second user (root cause of v2.15.9)**
+- `pending_contacts.enqueue_pending` used `scalar_one_or_none()` on the "already a known contact?" lookup keyed by `primary_email`. Multiple distinct Google contacts can legitimately share one email (e.g. 40 test cards under `rein@growth-rocket.com`), so it raised `MultipleResultsFound` ("Multiple rows were found when one or none was required") and aborted the enqueue. Switched both the Contact and PendingContact existence checks to `.scalars().first()`
+- Note: contacts were **not** row-duplicated — all 3070 have distinct `google_resource_name`; the 58 shared-email groups are real, distinct Google cards, not sync dupes
+- Removed the phantom `mike.villar@gmail.com` User row (the root cause behind v2.15.9's meeting duplication). Reassigned its useful data to canonical `mike` (1 novel pending contact, 5 meeting-recall memories, 1 conversation), deleted its redundant data (21 already-known pending contacts, 1 duplicate meeting memory, 6 default user_domains), then deleted the User row. DB now has exactly one user; `select(User).limit(1)` can only resolve `mike`
+- Hardened `scheduler._sync_fireflies` to resolve the user deterministically via `settings.tars_username` instead of `select(User).limit(1)`, so a stray future User row can't misroute meeting ingestion
+- Harness-only, no schema change
 
 ### v2.15.9 — 2026-07-01
 **Fix: Fireflies meetings synced without summaries or action items**

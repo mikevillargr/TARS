@@ -144,8 +144,16 @@ async def _sync_fireflies() -> None:
     from jobs.meeting_processor import ingest_from_webhook, process_meeting
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(User).limit(1))
-        user   = result.scalar_one_or_none()
+        # Resolve the canonical user deterministically (prefer the configured
+        # TARS_USERNAME) rather than select(User).limit(1), whose ordering is
+        # unstable — a stray extra User row would otherwise cause meetings to be
+        # ingested under the wrong owner and vanish from the UI.
+        result = await db.execute(
+            select(User).where(User.id == settings.tars_username)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            user = (await db.execute(select(User).limit(1))).scalar_one_or_none()
         if not user:
             return
 

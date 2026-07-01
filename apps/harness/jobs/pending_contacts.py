@@ -63,14 +63,17 @@ async def enqueue_pending(
         return False
     email = detected_email.strip().lower()
 
-    # Skip if already a known contact
+    # Skip if already a known contact. Use .first() (not scalar_one_or_none):
+    # multiple distinct Google contacts can legitimately share an email address
+    # (e.g. several cards under the same work address), and scalar_one_or_none
+    # would raise MultipleResultsFound and abort the whole enqueue.
     existing = await db.execute(
         select(Contact.id).where(
             Contact.user_id == user_id,
             Contact.primary_email == email,
         )
     )
-    if existing.scalar_one_or_none():
+    if existing.scalars().first():
         return False
 
     # Skip if already pending (the partial unique index would also enforce this,
@@ -82,7 +85,7 @@ async def enqueue_pending(
             PendingContact.status == "pending",
         )
     )
-    if pend_existing.scalar_one_or_none():
+    if pend_existing.scalars().first():
         return False
 
     db.add(PendingContact(

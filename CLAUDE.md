@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: July 2026 — v2.15.9 (post-sessions 1–9+, live on production)
+> Last updated: July 2026 — v2.15.10 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,17 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.10 Fix: contact enqueue crash + removed the phantom second user (v2.15.9 root cause).
+        (1) pending_contacts.enqueue_pending used scalar_one_or_none() on the "already a known
+        contact?" lookup by primary_email; multiple distinct Google contacts can share one email
+        (40 test cards on rein@growth-rocket.com), so it raised MultipleResultsFound and aborted
+        the enqueue. Switched both Contact + PendingContact existence checks to .scalars().first().
+        Contacts were NOT row-duplicated (all 3070 have distinct google_resource_name; the 58
+        shared-email groups are real distinct Google cards). (2) Deleted the phantom
+        mike.villar@gmail.com User row: reassigned useful data to mike (1 pending contact, 5 meeting
+        memories, 1 conversation), deleted redundant (21 pending, 1 dup memory, 6 default domains),
+        then the user. DB now has one user. (3) Hardened scheduler._sync_fireflies to resolve the
+        user via settings.tars_username, not select(User).limit(1). Harness-only, no schema change.
 v2.15.9 Fix: Fireflies meetings synced without summaries/action items. Two compounding bugs.
         (1) A phantom second User row (mike.villar@gmail.com next to canonical mike) defeated
         dedup: the sync loop and webhook both resolve user via select(User).limit(1) and could
