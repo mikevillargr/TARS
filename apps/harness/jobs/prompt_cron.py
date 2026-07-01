@@ -157,11 +157,11 @@ async def execute(job_id: str) -> str | None:
     Returns the new conversation ID on success, None on failure.
     """
     from db.session import AsyncSessionLocal
-    from db.models import CronJob, Conversation, Message, User, Task
+    from db.models import CronJob, Conversation, Message, User
     from sqlalchemy import select
     from core.model_client import (
         get_model_client, ModelTier,
-        CREATE_TASK_TOOL, SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
+        SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL, LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
         CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
@@ -207,7 +207,6 @@ async def execute(job_id: str) -> str | None:
     client = get_model_client()
 
     tools = [
-        CREATE_TASK_TOOL,
         SAVE_MEMORY_TOOL,
         SAVE_TO_SECOND_BRAIN_TOOL,
         READ_EMAIL_TOOL,
@@ -227,19 +226,6 @@ async def execute(job_id: str) -> str | None:
     try:
         async with AsyncSessionLocal() as tool_db:
             async def _tool_executor(name: str, tool_input: dict) -> str:
-                if name == "create_task":
-                    task = Task(
-                        user_id=user_id,
-                        title=tool_input["title"],
-                        description=tool_input.get("description"),
-                        priority=tool_input.get("priority", "normal"),
-                        status="inbox",
-                        source="cron",
-                    )
-                    tool_db.add(task)
-                    await tool_db.commit()
-                    return f"Task created: '{tool_input['title']}'"
-
                 if name == "save_memory":
                     try:
                         from memory import mnemon
