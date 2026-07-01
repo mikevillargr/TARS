@@ -1235,11 +1235,12 @@ Rules (enforced in `apps/web/app/globals.css`):
 - **Ambient light (since v2.15.11)** — a whisper-quiet atmospheric wash gives the interface
   depth without decoration. Three token-driven primitives in `globals.css` (`@layer
   components`), all built from `--c-*` tokens via `color-mix` so light/dark inherit
-  automatically: `.tars-ambient` (app-wide canvas wash — soft moss glow top-left ~7% + faint
-  amber bottom-right ~5%, applied to the `(app)/layout.tsx` content wrapper); `.tars-ambient-chat`
-  (chat surface — `--c-surface` dominant + faint moss radial at top ~5%); `.tars-boot-glow`
-  (centred moss radial ~12% behind the chat STANDBY wordmark). Keep any additions here in the
-  5–12% range — this is depth, not a gradient feature.
+  automatically: `.tars-ambient` (app-wide canvas wash — soft moss glow top-left ~13% + faint
+  amber bottom-right ~10%, applied to the `(app)/layout.tsx` content wrapper); `.tars-ambient-chat`
+  (chat surface — `--c-surface` dominant + faint moss radial at top ~10%); `.tars-boot-glow`
+  (centred moss radial ~20% behind the chat STANDBY wordmark). Keep any additions here in the
+  ~10–20% range — visible depth, but never a loud gradient feature (7/5% read as invisible in
+  light mode, so this was tuned up from the initial whisper pass).
 - Signature touches: mono "TARS" wordmark + sublabel, topbar Agent-Active pill, chat
   "STANDBY" boot empty state, bracketed-mono model chips, login as the authorization moment.
 
