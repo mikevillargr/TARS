@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: July 2026 — v2.15.10 (post-sessions 1–9+, live on production)
+> Last updated: July 2026 — v2.15.11 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -1232,6 +1232,14 @@ Rules (enforced in `apps/web/app/globals.css`):
 - **Accent = signal.** Moss is the only accent (active nav, eyebrow prompt, focus ring,
   primary action, live indicator). Amber/rose are status-only. Badges are mono + uppercase.
 - **Depth by surface, not shadow** — hairline borders + the canvas→surface→surface-2 stack.
+- **Ambient light (since v2.15.11)** — a whisper-quiet atmospheric wash gives the interface
+  depth without decoration. Three token-driven primitives in `globals.css` (`@layer
+  components`), all built from `--c-*` tokens via `color-mix` so light/dark inherit
+  automatically: `.tars-ambient` (app-wide canvas wash — soft moss glow top-left ~7% + faint
+  amber bottom-right ~5%, applied to the `(app)/layout.tsx` content wrapper); `.tars-ambient-chat`
+  (chat surface — `--c-surface` dominant + faint moss radial at top ~5%); `.tars-boot-glow`
+  (centred moss radial ~12% behind the chat STANDBY wordmark). Keep any additions here in the
+  5–12% range — this is depth, not a gradient feature.
 - Signature touches: mono "TARS" wordmark + sublabel, topbar Agent-Active pill, chat
   "STANDBY" boot empty state, bracketed-mono model chips, login as the authorization moment.
 

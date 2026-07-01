@@ -232,6 +232,41 @@
     color: var(--c-ink);
   }
 
+  /* ── Ambient light ─────────────────────────────────────────────────────
+     Whisper-quiet atmospheric wash so the app reads with depth instead of a
+     flat fill. Built entirely from existing tokens via color-mix, so light
+     and dark inherit automatically (no separate .dark rules needed).
+     Decorative only — never place text directly against these expecting the
+     tint to carry contrast. */
+
+  /* App-wide canvas wash — a soft moss glow from the top-left and a faint
+     amber warmth toward the bottom-right, over the base canvas. */
+  .tars-ambient {
+    background-color: var(--c-canvas);
+    background-image:
+      radial-gradient(120% 80% at 15% 0%,
+        color-mix(in srgb, var(--c-moss) 7%, transparent) 0%, transparent 55%),
+      radial-gradient(100% 70% at 100% 100%,
+        color-mix(in srgb, var(--c-amber) 5%, transparent) 0%, transparent 50%);
+  }
+
+  /* Chat surface — keeps --c-surface dominant (message bubbles sit here, so
+     contrast matters most) with just a faint moss radial at the top for depth. */
+  .tars-ambient-chat {
+    background-color: var(--c-surface);
+    background-image:
+      radial-gradient(90% 55% at 50% 0%,
+        color-mix(in srgb, var(--c-moss) 5%, transparent) 0%, transparent 60%);
+  }
+
+  /* Chat empty "STANDBY" state — a centred, slightly stronger moss glow for a
+     "powering on" boot feel behind the wordmark. */
+  .tars-boot-glow {
+    background-image:
+      radial-gradient(60% 45% at 50% 42%,
+        color-mix(in srgb, var(--c-moss) 12%, transparent) 0%, transparent 70%);
+  }
+
   .card {
     background-color: #fbfaf6;
     border: 1px solid #d8d2c4;

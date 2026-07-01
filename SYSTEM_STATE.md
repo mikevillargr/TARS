@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.10 |
+| Version | v2.15.11 |
 | Released | 2026-07-01 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,17 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.11 — 2026-07-01
+**Feat: ambient gradient wash — aesthetic depth for the app canvas + chat "boot glow"**
+- The app read as flat: every view sat on a solid `--c-canvas` / `--c-surface` fill and the chat empty state was a bare wordmark on plain surface. Added a whisper-quiet atmospheric wash so the interface has depth without fighting the minimal "Instrument" design language
+- Direction grounded in Refero research: Perplexity ("Digital Parchment, Subtle Authority") set the restraint; Dimension ("deep-space command center") set the ambient full-bleed technique
+- Three new token-driven CSS primitives in `apps/web/app/globals.css` (`@layer components`), all built from existing `--c-*` tokens via `color-mix`, so light/dark inherit automatically with no separate `.dark` rules:
+  - `.tars-ambient` — app-wide canvas wash: soft moss radial (top-left, 7%) + faint amber warmth (bottom-right, 5%) over `--c-canvas`. Applied to the `(app)/layout.tsx` content wrapper, so every view gains subtle depth in the gutters between cards
+  - `.tars-ambient-chat` — chat surface: `--c-surface` dominant (message bubbles live here) + a faint moss radial at top (5%). Replaces the chat wrapper's solid `backgroundColor` in `chat/page.tsx`
+  - `.tars-boot-glow` — a centred moss radial (12%) behind the chat empty "STANDBY" wordmark for a "powering on" feel
+- Decorative layers only — never affect text contrast or interaction. Verified in-browser in both light and dark themes (whisper-subtle in light, atmospheric in dark; text contrast intact; no console errors)
+- Web-only, no schema change
 
 ### v2.15.10 — 2026-07-01
 **Fix: contact enqueue crash + removed the phantom second user (root cause of v2.15.9)**

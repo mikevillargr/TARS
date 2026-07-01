@@ -386,7 +386,7 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
         {/* Page content — safe-area-aware bottom padding so content clears the tab bar + home indicator */}
         {/* min-w-0 + overflow-x-hidden enforce a hard horizontal boundary for every (app) page */}
-        <div className="flex-1 min-w-0 overflow-hidden flex flex-col pb-safe-tab lg:pb-0" style={{ maxWidth: "100%" }}>{children}</div>
+        <div className="tars-ambient flex-1 min-w-0 overflow-hidden flex flex-col pb-safe-tab lg:pb-0" style={{ maxWidth: "100%" }}>{children}</div>
       </main>
 
       {/* Bottom tab bar — sits outside <main> so it overlays correctly */}

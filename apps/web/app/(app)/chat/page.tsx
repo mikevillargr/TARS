@@ -1538,7 +1538,7 @@ const MessageArea = memo(function MessageArea({
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-24 md:p-6 md:pb-28 space-y-6">
       {allMessages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
+        <div className="tars-boot-glow flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
           <p className="text-2xl tracking-[0.3em] pl-[0.3em]" style={{ fontFamily: "var(--font-mono), monospace", color: "var(--c-ink)" }}>TARS</p>
           <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
             &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
@@ -2747,7 +2747,7 @@ export default function ChatPage() {
 
       {/* ── Chat area ─────────────────────────────────────────── */}
       {/* min-w-0 prevents code blocks / long messages from pushing this flex item wider than viewport */}
-      <div className="flex-1 flex flex-col relative min-w-0 overflow-hidden" style={{ backgroundColor: "var(--c-surface)" }}>
+      <div className="tars-ambient-chat flex-1 flex flex-col relative min-w-0 overflow-hidden">
         {/* Chat toolbar */}
         <div
           className="h-11 border-b px-3 flex items-center justify-between gap-2 z-20 shrink-0 overflow-hidden"
