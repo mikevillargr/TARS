@@ -84,11 +84,18 @@ async def process_meeting(
         await db.commit()
         log.info("Meeting %s processed: %d action items", meeting_id, len(action_items))
 
-        # Feed into RAG stores so TARS can recall and search meeting content
-        await _save_to_rag(db, user_id, meeting, action_items)
-
-        # Auto-detect new people from attendees → pending review queue
-        await _enqueue_attendee_contacts(db, user_id, meeting)
+        # Post-commit side effects — the summary is already saved, so a failure
+        # here must NOT flip the meeting back to "error". Guard independently.
+        try:
+            # Feed into RAG stores so TARS can recall and search meeting content
+            await _save_to_rag(db, user_id, meeting, action_items)
+            # Auto-detect new people from attendees → pending review queue
+            await _enqueue_attendee_contacts(db, user_id, meeting)
+        except Exception as post_exc:
+            log.warning(
+                "Post-processing (RAG/contacts) failed for meeting %s: %s",
+                meeting_id, post_exc,
+            )
         return True
 
     except Exception as exc:
@@ -191,12 +198,21 @@ Extract two things and return valid JSON only, no commentary:
 
 Be specific and concrete. If no action items, return an empty array."""
 
-    resp = await client.messages.create(
-        model=_mp_model,
-        max_tokens=2048,
-        system=system,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        resp = await client.messages.create(
+            model=_mp_model,
+            max_tokens=2048,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception as exc:
+        # A transient AI failure (rate limit, timeout, etc.) must never wipe the
+        # meeting. Fireflies already returned a usable overview + action items;
+        # fall back to those instead of losing the summary entirely.
+        log.warning(
+            "AI meeting processing failed (%s); falling back to Fireflies summary", exc
+        )
+        return (ff_overview or "Summary unavailable."), _parse_ff_action_items(ff_action_items)
 
     raw = resp.content[0].text.strip()
 
@@ -268,14 +284,14 @@ async def ingest_from_webhook(
     if not settings.fireflies_api_key:
         return None
 
-    # Avoid duplicate ingestion
+    # Avoid duplicate ingestion. Dedup on connector_ref ALONE (not scoped to
+    # user_id): the sync loop and the webhook can resolve different User rows,
+    # and a per-user check let the same transcript be ingested once per user.
+    # Use .first() so pre-existing duplicates don't raise MultipleResultsFound.
     existing = await db.execute(
-        select(Meeting).where(
-            Meeting.connector_ref == transcript_id,
-            Meeting.user_id == user_id,
-        )
+        select(Meeting).where(Meeting.connector_ref == transcript_id)
     )
-    if existing.scalar_one_or_none():
+    if existing.scalars().first():
         log.info("Meeting with connector_ref %s already exists, skipping", transcript_id)
         return None
 

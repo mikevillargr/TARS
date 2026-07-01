@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: July 2026 — v2.15.8 (post-sessions 1–9+, live on production)
+> Last updated: July 2026 — v2.15.9 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,20 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.9 Fix: Fireflies meetings synced without summaries/action items. Two compounding bugs.
+        (1) A phantom second User row (mike.villar@gmail.com next to canonical mike) defeated
+        dedup: the sync loop and webhook both resolve user via select(User).limit(1) and could
+        pick different rows, and the duplicate check was scoped to connector_ref+user_id, so the
+        same transcript got ingested once per user (~24 dup meetings from a Jun-27 re-ingest).
+        (2) A transient Z.ai 429 (rate_limit_error 1302) in _ai_process threw → process_meeting's
+        handler set status=error with NO summary, discarding the good Fireflies overview+action
+        items already fetched; the UI (logged in as mike) showed his empty error copies while the
+        good copies sat under the unseen second user. Fix (jobs/meeting_processor.py): _ai_process
+        catches AI failures and falls back to Fireflies overview + parsed action items; post-commit
+        RAG/contacts steps guarded so they can't flip a saved meeting back to error; dedup keys on
+        connector_ref ALONE (.first()). One-time prod cleanup: 94→70 meetings (kept the copy with
+        summary+actions, deleted 24 empty error/processing twins, reassigned 5 to mike, reprocessed
+        the rest). Harness-only, no schema change.
 v2.15.8 Fix: PWA install button still missing on desktop — beforeinstallprompt captured too late.
         v2.15.7 restored the SW (Chrome's precondition) but the button still didn't show. Cause:
         the beforeinstallprompt listener lived only in the Settings page useEffect, but Chrome

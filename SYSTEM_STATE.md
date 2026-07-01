@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.8 |
+| Version | v2.15.9 |
 | Released | 2026-07-01 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -159,6 +159,14 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.9 — 2026-07-01
+**Fix: Fireflies meetings synced without summaries or action items**
+- Root cause 1 — a phantom second `User` row (`mike.villar@gmail.com` alongside canonical `mike`, both "Mike Villar") defeated meeting dedup. The Fireflies sync loop and the webhook both resolve the user via `select(User).limit(1)` and could land on different rows; the duplicate check was scoped to `connector_ref + user_id`, so the same transcript got ingested once per user. When the second user appeared (~Jun 27) the sync re-ingested every recent transcript under it → 24 duplicate meetings
+- Root cause 2 — a transient Z.ai `429` (`rate_limit_error` code 1302) in `_ai_process` threw, and `process_meeting`'s outer handler set `status=error` with **no summary**, discarding the perfectly good Fireflies `overview` + `action_items` already fetched. The UI logs in as `mike` and showed his empty `error` copies while the good copies sat under the unseen second user
+- Fix (`jobs/meeting_processor.py`): `_ai_process` now catches AI failures and **falls back to the Fireflies overview + parsed action items** instead of losing the meeting; post-commit RAG/contact side effects are guarded so they can't flip a saved meeting back to `error`; dedup now keys on `connector_ref` **alone** (with `.first()`) so the multi-user accident can no longer create duplicates
+- Data cleanup (one-time, production): deduped 94 → 70 meetings — kept the copy with summary + action items per transcript, deleted 24 empty `error`/`processing` twins, reassigned 5 good copies to `mike`. Reprocessed the remaining summary-less meetings
+- Harness-only, no schema change
 
 ### v2.15.8 — 2026-07-01
 **Fix: PWA install button still missing on desktop — beforeinstallprompt captured too late**
