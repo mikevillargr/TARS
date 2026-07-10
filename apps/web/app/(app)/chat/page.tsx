@@ -1898,7 +1898,7 @@ export default function ChatPage() {
       if (notif.type !== "new_message") return
       const isActive = notif.conversation_id === activeChatIdRef.current
       if (isActive) {
-        apiGet<{ messages: Message[] }>(`/chat/conversations/${notif.conversation_id}/messages`)
+        apiGet<{ messages: Message[] }>(`/chat/conversations/${notif.conversation_id}`)
           .then(data => {
             setMessages(data.messages ?? [])
             setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
