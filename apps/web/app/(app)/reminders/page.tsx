@@ -160,6 +160,7 @@ function ReminderRow({
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(reminder.text)
+  const [localDone, setLocalDone] = useState(reminder.done)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const isDue = reminder.due_at ? isDatePast(new Date(reminder.due_at)) : false
@@ -188,22 +189,28 @@ function ReminderRow({
   const [rippling, setRippling] = useState(false)
 
   function handleToggle() {
-    if (!reminder.done) {
+    if (!localDone) {
+      // Show done state immediately (stays in current section), ripple plays,
+      // then parent onToggle fires after animation completes (item remounts in Done section)
+      setLocalDone(true)
       setRippling(true)
-      setTimeout(() => setRippling(false), 500)
+      setTimeout(() => setRippling(false), 520)
+      setTimeout(() => onToggle(), 540)
+    } else {
+      setLocalDone(false)
+      onToggle()
     }
-    onToggle()
   }
 
   return (
-    <div className={`group flex items-start gap-3 px-4 py-2.5 hover:bg-[var(--c-surface)] transition-colors ${reminder.done ? "opacity-40" : ""}`}>
+    <div className={`group flex items-start gap-3 px-4 py-2.5 hover:bg-[var(--c-surface)] transition-colors ${localDone ? "opacity-40" : ""}`}>
       <button
         onClick={handleToggle}
         className="mt-0.5 shrink-0 relative text-[var(--c-ink-faint)] hover:text-[var(--moss)] transition-colors"
         style={{ overflow: "visible" }}
-        aria-label={reminder.done ? "Mark incomplete" : "Mark done"}
+        aria-label={localDone ? "Mark incomplete" : "Mark done"}
       >
-        {reminder.done
+        {localDone
           ? <CheckCircle2 size={16} className="text-[var(--moss)]" />
           : <Circle size={16} />
         }
@@ -234,13 +241,13 @@ function ReminderRow({
         ) : (
           <span
             onDoubleClick={handleDoubleClick}
-            className={`text-sm text-[var(--c-ink)] ${reminder.done ? "line-through" : ""}`}
+            className={`text-sm text-[var(--c-ink)] ${localDone ? "line-through" : ""}`}
           >
             {reminder.text}
           </span>
         )}
 
-        {reminder.due_at && !reminder.done && (
+        {reminder.due_at && !localDone && (
           <div className={`flex items-center gap-1 mt-0.5 tars-label ${isDue ? "text-rose-500" : "text-[var(--c-ink-faint)]"}`}>
             <Calendar size={10} />
             {formatDue(reminder.due_at)}
