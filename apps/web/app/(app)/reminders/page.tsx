@@ -211,11 +211,10 @@ function ReminderRow({
           <span
             className="pointer-events-none absolute rounded-full"
             style={{
-              width: 32, height: 32,
+              width: 28, height: 28,
               top: "50%", left: "50%",
-              translate: "-50% -50%",
               border: "2px solid var(--c-moss)",
-              animation: "tars-ripple 500ms ease-out forwards",
+              animation: "tars-ripple 520ms ease-out forwards",
             }}
           />
         )}

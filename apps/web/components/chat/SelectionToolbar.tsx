@@ -256,6 +256,7 @@ function CalendarForm({
   return createPortal(
     <div
       ref={ref}
+      data-selection-toolbar
       onMouseDown={(e) => e.preventDefault()}
       style={{
         position:  "fixed",
@@ -411,6 +412,7 @@ function Toolbar({
       {/* Pill */}
       <div
         ref={ref}
+        data-selection-toolbar
         onMouseDown={(e) => e.preventDefault()}
         style={{
           position:  "fixed",

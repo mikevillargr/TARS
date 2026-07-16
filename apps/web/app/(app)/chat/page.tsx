@@ -1566,7 +1566,7 @@ const MessageArea = memo(function MessageArea({
               aria-hidden="true"
               style={{
                 color: "var(--c-moss)",
-                animation: "tars-terminal-cursor 1s step-end 400ms infinite",
+                animation: "tars-terminal-cursor 1s step-end infinite",
                 letterSpacing: "0.05em",
               }}
             >_</span>
@@ -3125,8 +3125,10 @@ export default function ChatPage() {
                   <button
                     onClick={() => handleSend()}
                     disabled={!inputValue.trim() && attachments.length === 0}
-                    className="p-2 rounded-xl disabled:opacity-30 transition-[opacity,transform] duration-150 hover:opacity-85 active:scale-[0.88] active:duration-75"
+                    className="tars-send-btn p-2 rounded-xl disabled:opacity-30"
                     style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
                   >
                     <Send size={14} />
                   </button>
