@@ -114,18 +114,18 @@ function SvgRenderer({ code }: { code: string }) {
   const aspectRatio = svgHeight / svgWidth
 
   return (
-    <div className="my-3 rounded-xl overflow-hidden" style={{ border: "1px solid #2a2a2a" }}>
+    <div className="my-3 rounded-xl overflow-hidden" style={{ border: "1px solid var(--c-border)" }}>
       {/* Header */}
       <div
-        className="flex items-center justify-between px-3 py-1.5"
-        style={{ backgroundColor: "#1e1e1e" }}
+        className="flex items-center justify-between px-3 py-1.5 border-b"
+        style={{ backgroundColor: "var(--c-surface-raised)", borderColor: "var(--c-border-faint)" }}
       >
-        <span className="text-[11px] font-mono" style={{ color: "#888" }}>svg</span>
+        <span className="tars-label">svg</span>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowSource(!showSource)}
             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
-            style={{ color: showSource ? "#a78bfa" : "#888" }}
+            style={{ color: showSource ? "var(--c-amber)" : "var(--c-ink-faint)" }}
             title={showSource ? "Show rendered" : "Show source"}
           >
             {showSource ? <Image size={10} /> : <Code2 size={10} />}
@@ -134,7 +134,7 @@ function SvgRenderer({ code }: { code: string }) {
           <button
             onClick={copy}
             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
-            style={{ color: copied ? "#4ade80" : "#888" }}
+            style={{ color: copied ? "var(--c-moss)" : "var(--c-ink-faint)" }}
           >
             <span
               key={copied ? "chk" : "cpy"}
@@ -217,13 +217,13 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
   }, [code, language])
 
   return (
-    <div className="my-3 rounded-xl max-w-full" style={{ border: "1px solid #2a2a2a", overflow: "hidden" }}>
+    <div className="my-3 rounded-xl max-w-full" style={{ border: "1px solid var(--c-border)", overflow: "hidden" }}>
       {/* Header bar */}
       <div
-        className="flex items-center justify-between px-3 py-1.5"
-        style={{ backgroundColor: "#1e1e1e" }}
+        className="flex items-center justify-between px-3 py-1.5 border-b"
+        style={{ backgroundColor: "var(--c-surface-raised)", borderColor: "var(--c-border-faint)" }}
       >
-        <span className="text-[11px] font-mono" style={{ color: "#888" }}>
+        <span className="tars-label">
           {language || "code"}
         </span>
         <div className="flex items-center gap-2">
@@ -232,7 +232,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
             disabled={saving || saved}
             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
             style={{
-              color: saved ? "#4ade80" : "#888",
+              color: saved ? "var(--c-moss)" : "var(--c-ink-faint)",
               backgroundColor: "transparent",
             }}
           >
@@ -242,7 +242,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
           <button
             onClick={copy}
             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
-            style={{ color: copied ? "#4ade80" : "#888" }}
+            style={{ color: copied ? "var(--c-moss)" : "var(--c-ink-faint)" }}
           >
             <span
               key={copied ? "chk" : "cpy"}
@@ -405,20 +405,20 @@ export function MessageContent({ content }: { content: string }) {
             <h2 className="text-base font-semibold mt-3 mb-1.5 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-base md:text-sm font-semibold mt-2 mb-1 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h3>
+            <h3 className="text-base font-semibold mt-2 mb-1 first:mt-0" style={{ color: "var(--c-ink)" }}>{children}</h3>
           ),
 
           // Paragraphs
           p: ({ children }) => (
-            <p className="text-base md:text-sm leading-relaxed mb-2 last:mb-0">{children}</p>
+            <p className="text-base leading-relaxed mb-2 last:mb-0">{children}</p>
           ),
 
           // Lists
           ul: ({ children }) => (
-            <ul className="text-base md:text-sm space-y-1 my-2 pl-4 list-none">{children}</ul>
+            <ul className="text-base space-y-1 my-2 pl-4 list-none">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="text-base md:text-sm space-y-1 my-2 pl-4 list-decimal">{children}</ol>
+            <ol className="text-base space-y-1 my-2 pl-4 list-decimal">{children}</ol>
           ),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           li: ({ children, ordered }: { children?: React.ReactNode; ordered?: boolean; [key: string]: any }) => (
@@ -453,7 +453,7 @@ export function MessageContent({ content }: { content: string }) {
           // Blockquote
           blockquote: ({ children }) => (
             <blockquote
-              className="my-2 px-3 py-2 rounded-md text-base md:text-sm italic"
+              className="my-2 px-3 py-2 rounded-md text-base italic"
               style={{
                 border: "1px solid color-mix(in srgb, var(--c-border) 80%, transparent)",
                 backgroundColor: "color-mix(in srgb, var(--c-surface-2) 50%, transparent)",

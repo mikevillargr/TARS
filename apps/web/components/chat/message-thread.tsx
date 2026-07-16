@@ -222,10 +222,7 @@ export function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
               animation: "tars-think-pulse 1.2s ease-in-out infinite",
             }}
           />
-          <span
-            className="font-mono text-[10px] tracking-[0.12em] uppercase font-medium"
-            style={{ color: "var(--c-moss)" }}
-          >
+          <span className="tars-label tars-label--moss">
             reasoning
           </span>
         </div>
@@ -235,7 +232,7 @@ export function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
           style={{ maxHeight: 112, scrollbarWidth: "none" }}
         >
           <p
-            className="font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap"
+            className="font-mono text-xs leading-relaxed whitespace-pre-wrap"
             style={{ color: "var(--c-ink-faint)" }}
           >
             {text}
@@ -256,13 +253,8 @@ export function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
     <div className="mb-2.5">
       <button
         onClick={() => setExpanded((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 transition-colors"
+        className="tars-label inline-flex items-center gap-1.5 rounded px-2 py-0.5 transition-colors"
         style={{
-          fontFamily: "var(--font-mono, monospace)",
-          fontSize: 10,
-          letterSpacing: "0.10em",
-          textTransform: "uppercase",
-          color: "var(--c-ink-faint)",
           border: "0.5px solid var(--c-border-faint)",
           background: "var(--c-surface)",
         }}
@@ -486,7 +478,7 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
           <div className="mt-2 flex items-center gap-2">
             <ModelBadge model={msg.model_used} />
             {msg.tokens_used ? (
-              <span className="text-[10px] text-muted-foreground font-mono">
+              <span className="tars-label tars-label--muted">
                 {msg.tokens_used} tok
               </span>
             ) : null}

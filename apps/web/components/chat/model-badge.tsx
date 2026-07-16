@@ -19,7 +19,7 @@ export function ModelBadge({ model }: { model: string }) {
   const meta = MODEL_LABELS[model] ?? { label: model, tier: "work" as const }
   return (
     <span
-      className="inline-flex items-center gap-1 font-mono text-[0.625rem] uppercase tracking-[0.1em] leading-none whitespace-nowrap"
+      className="inline-flex items-center gap-1 font-mono text-[0.6875rem] uppercase tracking-[0.1em] leading-none whitespace-nowrap"
       style={{ color: TIER_COLOR[meta.tier] }}
     >
       <span style={{ opacity: 0.5 }}>[</span>
