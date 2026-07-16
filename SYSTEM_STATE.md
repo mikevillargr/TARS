@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.11 |
-| Released | 2026-07-01 |
+| Version | v2.15.12 |
+| Released | 2026-07-16 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -159,6 +159,18 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.15.12 — 2026-07-16
+**Fix + Enhance: typeset pass — WCAG contrast, code block chrome, prose sizing, label consistency**
+- `--c-ink-faint` in light mode darkened #948a7b → #7a7062 (now passes WCAG AA 4.5:1 on surface; was 3.0:1 — affected all `.tars-label` text in light mode)
+- Code/SVG block headers now use CSS tokens (`--c-surface-raised`, `--c-border`, `--c-ink-faint`, `--c-moss`) instead of hardcoded dark hex — adapts correctly in both light and dark themes
+- Chat prose promoted from 14px on desktop to 16px at all viewport sizes (p, h3, ul, ol, blockquote were `text-base md:text-sm`; h3 also collapsed to same visual weight as body — now stays distinct)
+- ThinkingBlock "REASONING" label and toggle button converted to `.tars-label` (mono, 11px, uppercase, tracked — was ad-hoc inline styles at 10px)
+- ThinkingBlock reasoning text: 11.5px (off-scale) → `text-xs` (12px)
+- Token count `{n} tok` display: ad-hoc `text-[10px] + shadcn text-muted-foreground + font-mono` → `.tars-label.tars-label--muted`
+- ModelBadge: 10px (0.625rem) → 11px (0.6875rem) — now matches `.tars-label` standard
+- ProseMirror (Second Brain editor) h1/h2 fallback: `serif` → `sans-serif` (Lora was removed in v2.7.0; serif fallback was a stray reference)
+- Web-only, no schema change.
 
 ### v2.15.11 — 2026-07-01
 **Feat: ambient gradient wash — aesthetic depth for the app canvas + chat "boot glow"**

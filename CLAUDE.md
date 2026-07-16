@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: July 2026 — v2.15.11 (post-sessions 1–9+, live on production)
+> Last updated: July 2026 — v2.15.12 (post-sessions 1–9+, live on production)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -916,6 +916,14 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.15.12 Fix + Enhance: typeset pass — WCAG contrast, code block chrome, prose sizing, label
+        consistency. `--c-ink-faint` in light mode #948a7b → #7a7062 (WCAG AA 4.5:1, was 3.0:1;
+        all .tars-label text in light mode was too faint). Code/SVG block headers: hardcoded
+        #1e1e1e/#888 → CSS tokens (surface-raised/border/ink-faint/moss) — adapts in light + dark.
+        Chat prose promoted from 14px on desktop to 16px at all sizes (p/h3/ul/ol/blockquote).
+        ThinkingBlock "REASONING" label + toggle → .tars-label (was 10px ad-hoc inline). Token
+        count display → .tars-label.tars-label--muted. ModelBadge 10px → 11px (.tars-label std).
+        ProseMirror h1/h2 fallback: serif → sans-serif (Lora removed v2.7.0). Web-only, no schema.
 v2.15.10 Fix: contact enqueue crash + removed the phantom second user (v2.15.9 root cause).
         (1) pending_contacts.enqueue_pending used scalar_one_or_none() on the "already a known
         contact?" lookup by primary_email; multiple distinct Google contacts can share one email
