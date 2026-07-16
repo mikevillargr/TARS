@@ -828,12 +828,20 @@ function CopyChip({ value, label }: { value: string; label: string }) {
       setTimeout(() => setCopied(false), 2000)
     } catch { /* clipboard blocked — silently ignore */ }
   }
+  const cls = "inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors"
+  const style = copied
+    ? { backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }
+    : { backgroundColor: "var(--c-surface-2)", color: "var(--c-ink-muted)" }
   return (
-    <ContactActionChip
-      icon={copied ? Check : Copy}
-      label={copied ? "Copied" : label}
-      onClick={handleCopy}
-    />
+    <button onClick={handleCopy} className={cls} style={style}>
+      <span
+        key={copied ? "check" : "copy"}
+        style={{ display: "inline-flex", animation: copied ? "tars-confirm-pop 220ms cubic-bezier(0.25,1,0.5,1) both" : undefined }}
+      >
+        {copied ? <Check size={10} /> : <Copy size={10} />}
+      </span>
+      {copied ? "Copied" : label}
+    </button>
   )
 }
 
@@ -1547,7 +1555,7 @@ const MessageArea = memo(function MessageArea({
       {allMessages.length === 0 ? (
         <div className="tars-boot-glow flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
           <p
-            className="text-2xl tracking-[0.3em] pl-[0.3em]"
+            className="text-2xl tracking-[0.3em] pl-[0.3em] flex items-baseline gap-[0.1em]"
             style={{
               fontFamily: "var(--font-mono), monospace",
               color: "var(--c-ink)",
@@ -1555,6 +1563,14 @@ const MessageArea = memo(function MessageArea({
             }}
           >
             TARS
+            <span
+              aria-hidden="true"
+              style={{
+                color: "var(--c-moss)",
+                animation: "tars-terminal-cursor 1.1s step-end 900ms infinite",
+                letterSpacing: 0,
+              }}
+            >_</span>
           </p>
           <p
             className="text-sm italic max-w-sm leading-relaxed"
@@ -3113,7 +3129,9 @@ export default function ChatPage() {
                     className="p-2 rounded-xl transition-opacity disabled:opacity-30"
                     style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
                     onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-                    onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.transition = "transform 180ms cubic-bezier(0.25,1,0.5,1)" }}
+                    onMouseDown={e => { e.currentTarget.style.transform = "scale(0.91)"; e.currentTarget.style.transition = "transform 80ms ease-out" }}
+                    onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.transition = "transform 180ms cubic-bezier(0.25,1,0.5,1)" }}
                   >
                     <Send size={14} />
                   </button>

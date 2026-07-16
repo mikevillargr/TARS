@@ -644,6 +644,32 @@ html, body, #__next, main {
   50%       { transform: translateY(-2px); }
 }
 
+/* To-Do completion ripple — ring expands outward and fades */
+@keyframes tars-ripple {
+  0%   { transform: scale(0.5); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* Copy / action confirmation — scale burst when check lands */
+@keyframes tars-confirm-pop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  60%  { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Send button press — quick compress then spring back */
+@keyframes tars-send-press {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(0.88); }
+  100% { transform: scale(1); }
+}
+
+/* STANDBY terminal cursor — underscore blink */
+@keyframes tars-terminal-cursor {
+  0%, 48%   { opacity: 1; }
+  52%, 100% { opacity: 0; }
+}
+
 /* ── prefers-reduced-motion: collapse all durations, keep state changes ── */
 @media (prefers-reduced-motion: reduce) {
   *,

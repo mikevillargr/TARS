@@ -185,17 +185,36 @@ function ReminderRow({
     setEditing(false)
   }
 
+  const [rippling, setRippling] = useState(false)
+
+  function handleToggle() {
+    if (!reminder.done) {
+      setRippling(true)
+      setTimeout(() => setRippling(false), 500)
+    }
+    onToggle()
+  }
+
   return (
     <div className={`group flex items-start gap-3 px-4 py-2.5 hover:bg-[var(--c-surface)] transition-colors ${reminder.done ? "opacity-40" : ""}`}>
       <button
-        onClick={onToggle}
-        className="mt-0.5 shrink-0 text-[var(--c-ink-faint)] hover:text-[var(--moss)] transition-colors"
+        onClick={handleToggle}
+        className="mt-0.5 shrink-0 relative text-[var(--c-ink-faint)] hover:text-[var(--moss)] transition-colors"
         aria-label={reminder.done ? "Mark incomplete" : "Mark done"}
       >
         {reminder.done
           ? <CheckCircle2 size={16} className="text-[var(--moss)]" />
           : <Circle size={16} />
         }
+        {rippling && (
+          <span
+            className="pointer-events-none absolute inset-0 rounded-full"
+            style={{
+              border: "1.5px solid var(--c-moss)",
+              animation: "tars-ripple 480ms cubic-bezier(0.25, 1, 0.5, 1) forwards",
+            }}
+          />
+        )}
       </button>
 
       <div className="flex-1 min-w-0">
