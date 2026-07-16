@@ -1328,3 +1328,19 @@ No hardware or SDK credentials needed. Set `debugMode = true` in HudActivity (au
 ---
 
 *This document is the single source of truth for the TARS project. Paste into Claude Code at the start of every build session.*
+
+---
+
+## 17. Design Context
+
+Design system files live in `apps/web/`. Read these before any UI work:
+
+- **[`apps/web/PRODUCT.md`](apps/web/PRODUCT.md)** — register (product), platform (web), users, purpose, positioning, brand personality, anti-references, design principles, accessibility (WCAG 2.1 AA)
+- **[`apps/web/DESIGN.md`](apps/web/DESIGN.md)** — full visual spec: color tokens (warm parchment/moss/amber palette), typography (Inter prose + JetBrains Mono instrument layer), components, layout, motion
+
+**Key principles agents must know:**
+- "Instrument" design language (v2.7.0+): JetBrains Mono is the machine voice; Inter is human prose. Never swap them.
+- Moss (`--c-moss`) is the sole accent. Amber/rose are status-only. No decorative color.
+- Depth by surface stack (canvas → surface → surface-2), never by shadow or glassmorphism.
+- Anti-reference: must NOT look like generic AI chat (ChatGPT/Claude.ai) or mainstream SaaS.
+- Ambient light: `.tars-ambient`, `.tars-ambient-chat`, `.tars-boot-glow` — atmospheric washes at full strength.

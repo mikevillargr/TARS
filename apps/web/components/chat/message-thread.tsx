@@ -208,8 +208,11 @@ export function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
   if (!done) {
     return (
       <div
-        className="mb-2.5 rounded-r-md"
-        style={{ borderLeft: "2px solid var(--c-moss)", backgroundColor: "color-mix(in srgb, var(--c-moss) 6%, transparent)" }}
+        className="mb-2.5 rounded-md"
+        style={{
+          border: "1px solid color-mix(in srgb, var(--c-moss) 28%, transparent)",
+          backgroundColor: "color-mix(in srgb, var(--c-moss) 6%, transparent)",
+        }}
       >
         <div className="px-3 pt-2 pb-0.5 flex items-center gap-2">
           <span
@@ -404,7 +407,10 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
     : ("tool_results" in msg ? (msg.tool_results ?? []) : [])
 
   return (
-    <div className={cn("flex flex-col min-w-0 gap-1", isUser ? "items-end" : "items-start")}>
+    <div
+      className={cn("flex flex-col min-w-0 gap-1", isUser ? "items-end" : "items-start")}
+      style={{ animation: "tars-msg-in 220ms var(--ease-out-quart) both" }}
+    >
       {/* Speaker + time eyebrow — instrument log marker (prose stays Inter) */}
       <div className={cn("flex items-center gap-2 px-1", isUser ? "flex-row-reverse" : "flex-row")}>
         <span className={cn("tars-label", isUser ? "tars-label--muted" : "tars-label--moss")}>
@@ -488,7 +494,13 @@ function MessageBubble({ msg }: { msg: Message | StreamingMessage }) {
         )}
 
         {isStreaming && (
-          <span className="inline-block w-1.5 h-3.5 bg-foreground/40 ml-0.5 animate-pulse rounded-sm" />
+          <span
+            className="inline-block w-[2px] h-[14px] ml-1 align-[-3px] rounded-sm"
+            style={{
+              backgroundColor: "var(--c-moss)",
+              animation: "tars-stream-cursor 0.9s step-end infinite",
+            }}
+          />
         )}
       </div>
     </div>

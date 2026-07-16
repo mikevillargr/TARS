@@ -1247,7 +1247,10 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
 
   return (
     <>
-    <div className={`group flex gap-3 min-w-0 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}>
+    <div
+      className={`group flex gap-3 min-w-0 max-w-3xl mx-auto ${isUser ? "flex-row-reverse" : ""}`}
+      style={{ animation: "tars-msg-in 220ms var(--ease-out-quart) both" }}
+    >
       <div
         className="w-8 h-8 rounded-full shrink-0 overflow-hidden"
         style={isUser
@@ -1349,11 +1352,13 @@ const MessageBubble = memo(function MessageBubble({ msg, onAsk }: { msg: Message
           )}
           <MessageContent content={msg.content} />
           {"streaming" in msg && (
-            <span className="inline-flex items-center gap-0.5 ml-1 align-middle">
-              <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: "rgba(45,90,79,0.55)", animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: "rgba(45,90,79,0.55)", animationDelay: "160ms" }} />
-              <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ backgroundColor: "rgba(45,90,79,0.55)", animationDelay: "320ms" }} />
-            </span>
+            <span
+              className="inline-block w-[2px] h-[14px] ml-1 align-[-3px] rounded-sm"
+              style={{
+                backgroundColor: "var(--c-moss)",
+                animation: "tars-stream-cursor 0.9s step-end infinite",
+              }}
+            />
           )}
         </div>
 
@@ -1499,6 +1504,7 @@ interface MessageAreaProps {
   onAsk: (q: string) => void
   quoteIndex: number
   messagesEndRef: React.RefObject<HTMLDivElement | null>
+  newResponseTopRef: React.RefObject<HTMLDivElement | null>
 }
 
 const MessageArea = memo(function MessageArea({
@@ -1529,6 +1535,7 @@ const MessageArea = memo(function MessageArea({
   onAsk,
   quoteIndex,
   messagesEndRef,
+  newResponseTopRef,
 }: MessageAreaProps) {
   const hasCards = calendarSuggestions.length > 0 || calendarUpdateSuggestions.length > 0 || calendarDeleteSuggestions.length > 0 || taskSuggestions.length > 0
     || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
@@ -1539,8 +1546,23 @@ const MessageArea = memo(function MessageArea({
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-24 md:p-6 md:pb-28 space-y-6">
       {allMessages.length === 0 ? (
         <div className="tars-boot-glow flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
-          <p className="text-2xl tracking-[0.3em] pl-[0.3em]" style={{ fontFamily: "var(--font-mono), monospace", color: "var(--c-ink)" }}>TARS</p>
-          <p className="text-sm italic max-w-sm leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
+          <p
+            className="text-2xl tracking-[0.3em] pl-[0.3em]"
+            style={{
+              fontFamily: "var(--font-mono), monospace",
+              color: "var(--c-ink)",
+              animation: "slideUpFade 500ms var(--ease-out-expo) 80ms both",
+            }}
+          >
+            TARS
+          </p>
+          <p
+            className="text-sm italic max-w-sm leading-relaxed"
+            style={{
+              color: "var(--c-ink-muted)",
+              animation: "slideUpFade 500ms var(--ease-out-expo) 220ms both",
+            }}
+          >
             &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
           </p>
         </div>
@@ -1548,6 +1570,9 @@ const MessageArea = memo(function MessageArea({
         <React.Fragment key={"id" in msg ? msg.id : `stream-${i}`}>
           {(
               <>
+                {i === allMessages.length - 1 && msg.role === "assistant" && !("streaming" in msg) && (
+                  <div ref={newResponseTopRef} style={{ height: 0, overflow: "hidden" }} />
+                )}
                 <MessageBubble msg={msg as Message | StreamingMsg} onAsk={onAsk} />
                 {/* Inline cards anchored to this saved assistant message */}
                 {"tool_results" in msg &&
@@ -1735,6 +1760,7 @@ export default function ChatPage() {
   const voiceModeRef = useRef(voiceMode)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const messagesEndRef                              = useRef<HTMLDivElement>(null)
+  const newResponseTopRef                           = useRef<HTMLDivElement>(null)
   const fileInputRef                                = useRef<HTMLInputElement>(null)
   const cameraInputRef                              = useRef<HTMLInputElement>(null)
 
@@ -1901,7 +1927,7 @@ export default function ChatPage() {
         apiGet<{ messages: Message[] }>(`/chat/conversations/${notif.conversation_id}`)
           .then(data => {
             setMessages(data.messages ?? [])
-            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50)
+            // messages effect handles scroll-to-top-of-response
           })
           .catch(() => {})
       } else {
@@ -1918,10 +1944,23 @@ export default function ChatPage() {
     return unsub
   }, [subscribeNotif])
 
-  // Scroll to bottom on new messages
+  // During streaming: track the cursor at the bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, streaming?.content])
+    if (streaming) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [streaming?.content])
+
+  // On message commit: scroll to top of new assistant response so the user reads from the start;
+  // for user messages or conversation loads, scroll to bottom as before
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1]
+    if (lastMsg?.role === "assistant") {
+      newResponseTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [messages])
 
 
   // Load conversation list and auto-select the most recent one
@@ -2836,6 +2875,7 @@ export default function ChatPage() {
           onAsk={handleAsk}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
+          newResponseTopRef={newResponseTopRef}
         />
 
         {/* ── Floating input ─────────────────────────────────────── */}
@@ -2881,6 +2921,7 @@ export default function ChatPage() {
                     backgroundColor: "color-mix(in srgb, var(--c-amber) 15%, transparent)",
                     color: "var(--c-amber)",
                     border: "1px solid color-mix(in srgb, var(--c-amber) 30%, transparent)",
+                    animation: "tars-pill-in 220ms var(--ease-out-quart) both",
                   }}
                 >
                   <AudioLines size={12} className="animate-pulse" />

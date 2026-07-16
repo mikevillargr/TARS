@@ -443,8 +443,12 @@ export function MessageContent({ content }: { content: string }) {
           // Blockquote
           blockquote: ({ children }) => (
             <blockquote
-              className="my-2 pl-3 py-1 text-base md:text-sm italic"
-              style={{ borderLeft: "3px solid var(--c-moss)", color: "var(--c-ink-muted)" }}
+              className="my-2 px-3 py-2 rounded-md text-base md:text-sm italic"
+              style={{
+                border: "1px solid color-mix(in srgb, var(--c-border) 80%, transparent)",
+                backgroundColor: "color-mix(in srgb, var(--c-surface-2) 50%, transparent)",
+                color: "var(--c-ink-muted)",
+              }}
             >
               {children}
             </blockquote>

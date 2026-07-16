@@ -17,23 +17,16 @@ export function FollowUpChips({
         <button
           key={i}
           onClick={() => onAsk(s)}
-          className="group flex items-center justify-between gap-2 text-left px-3 py-2 rounded-lg transition-all"
+          className="follow-up-chip flex items-center justify-between gap-2 text-left px-3 py-2 rounded-lg"
           style={{
             background: "var(--c-surface)",
             border: "1px solid var(--c-border-faint)",
             fontSize: "12px",
             color: "var(--c-ink-muted)",
             cursor: "pointer",
-          }}
-          onMouseEnter={e => {
-            const el = e.currentTarget
-            el.style.borderColor = "color-mix(in srgb, var(--c-moss) 40%, transparent)"
-            el.style.color = "var(--c-ink)"
-          }}
-          onMouseLeave={e => {
-            const el = e.currentTarget
-            el.style.borderColor = "var(--c-border-faint)"
-            el.style.color = "var(--c-ink-muted)"
+            transition: "border-color 150ms, color 150ms",
+            animation: "tars-chip-in 240ms var(--ease-out-quart) both",
+            animationDelay: `${i * 55}ms`,
           }}
         >
           <span>{s}</span>

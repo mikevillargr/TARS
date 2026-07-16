@@ -306,23 +306,12 @@ function ReplyChips({ options, onSend }: { options: ReplyOption[]; onSend: (text
         <button
           key={opt.label}
           onClick={() => { setSent(opt.label); onSend(opt.label) }}
-          className="inline-flex items-center text-xs px-3 py-1.5 rounded-xl transition-colors"
+          className="reply-chip inline-flex items-center text-xs px-3 py-1.5 rounded-xl"
           style={{
             backgroundColor: "var(--c-canvas)",
             color: "var(--c-ink-muted)",
             border: "1px solid var(--c-border)",
-          }}
-          onMouseEnter={(e) => {
-            const el = e.currentTarget
-            el.style.backgroundColor = "var(--c-surface-2)"
-            el.style.color = "var(--c-ink)"
-            el.style.borderColor = "var(--c-moss)"
-          }}
-          onMouseLeave={(e) => {
-            const el = e.currentTarget
-            el.style.backgroundColor = "var(--c-canvas)"
-            el.style.color = "var(--c-ink-muted)"
-            el.style.borderColor = "var(--c-border)"
+            transition: "background-color 150ms, color 150ms, border-color 150ms",
           }}
         >
           {opt.label}

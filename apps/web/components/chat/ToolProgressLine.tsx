@@ -73,6 +73,7 @@ export function ToolProgressLine({ progress }: { progress: ToolProgress }) {
         fontSize: "10px",
         color: "var(--c-ink-faint)",
         letterSpacing: "0.06em",
+        animation: "tars-progress-in 200ms var(--ease-out-quart) both",
       }}
     >
       <span style={{ color: progress.done ? "var(--c-moss)" : "var(--c-ink-faint)" }}>
