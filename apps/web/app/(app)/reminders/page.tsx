@@ -200,6 +200,7 @@ function ReminderRow({
       <button
         onClick={handleToggle}
         className="mt-0.5 shrink-0 relative text-[var(--c-ink-faint)] hover:text-[var(--moss)] transition-colors"
+        style={{ overflow: "visible" }}
         aria-label={reminder.done ? "Mark incomplete" : "Mark done"}
       >
         {reminder.done
@@ -208,10 +209,13 @@ function ReminderRow({
         }
         {rippling && (
           <span
-            className="pointer-events-none absolute inset-0 rounded-full"
+            className="pointer-events-none absolute rounded-full"
             style={{
-              border: "1.5px solid var(--c-moss)",
-              animation: "tars-ripple 480ms cubic-bezier(0.25, 1, 0.5, 1) forwards",
+              width: 32, height: 32,
+              top: "50%", left: "50%",
+              translate: "-50% -50%",
+              border: "2px solid var(--c-moss)",
+              animation: "tars-ripple 500ms ease-out forwards",
             }}
           />
         )}

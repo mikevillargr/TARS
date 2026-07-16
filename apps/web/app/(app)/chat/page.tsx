@@ -1555,20 +1555,19 @@ const MessageArea = memo(function MessageArea({
       {allMessages.length === 0 ? (
         <div className="tars-boot-glow flex flex-col items-center justify-center h-full gap-3 px-6 text-center" style={{ color: "var(--c-ink-faint)" }}>
           <p
-            className="text-2xl tracking-[0.3em] pl-[0.3em] flex items-baseline gap-[0.1em]"
+            className="text-2xl tracking-[0.3em] pl-[0.3em]"
             style={{
               fontFamily: "var(--font-mono), monospace",
               color: "var(--c-ink)",
               animation: "slideUpFade 500ms var(--ease-out-expo) 80ms both",
             }}
           >
-            TARS
-            <span
+            TARS<span
               aria-hidden="true"
               style={{
                 color: "var(--c-moss)",
-                animation: "tars-terminal-cursor 1.1s step-end 900ms infinite",
-                letterSpacing: 0,
+                animation: "tars-terminal-cursor 1s step-end 400ms infinite",
+                letterSpacing: "0.05em",
               }}
             >_</span>
           </p>
@@ -3126,12 +3125,8 @@ export default function ChatPage() {
                   <button
                     onClick={() => handleSend()}
                     disabled={!inputValue.trim() && attachments.length === 0}
-                    className="p-2 rounded-xl transition-opacity disabled:opacity-30"
+                    className="p-2 rounded-xl disabled:opacity-30 transition-[opacity,transform] duration-150 hover:opacity-85 active:scale-[0.88] active:duration-75"
                     style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-                    onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.transition = "transform 180ms cubic-bezier(0.25,1,0.5,1)" }}
-                    onMouseDown={e => { e.currentTarget.style.transform = "scale(0.91)"; e.currentTarget.style.transition = "transform 80ms ease-out" }}
-                    onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.transition = "transform 180ms cubic-bezier(0.25,1,0.5,1)" }}
                   >
                     <Send size={14} />
                   </button>

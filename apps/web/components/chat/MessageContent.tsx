@@ -136,7 +136,12 @@ function SvgRenderer({ code }: { code: string }) {
             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
             style={{ color: copied ? "#4ade80" : "#888" }}
           >
-            {copied ? <Check size={10} /> : <Copy size={10} />}
+            <span
+              key={copied ? "chk" : "cpy"}
+              style={{ display: "inline-flex", animation: copied ? "tars-confirm-pop 200ms cubic-bezier(0.25,1,0.5,1) both" : undefined }}
+            >
+              {copied ? <Check size={10} /> : <Copy size={10} />}
+            </span>
             {copied ? "Copied" : "Copy"}
           </button>
         </div>
@@ -239,7 +244,12 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
             className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition-colors"
             style={{ color: copied ? "#4ade80" : "#888" }}
           >
-            {copied ? <Check size={10} /> : <Copy size={10} />}
+            <span
+              key={copied ? "chk" : "cpy"}
+              style={{ display: "inline-flex", animation: copied ? "tars-confirm-pop 200ms cubic-bezier(0.25,1,0.5,1) both" : undefined }}
+            >
+              {copied ? <Check size={10} /> : <Copy size={10} />}
+            </span>
             {copied ? "Copied" : "Copy"}
           </button>
         </div>
