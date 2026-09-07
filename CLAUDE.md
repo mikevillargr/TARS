@@ -11,16 +11,20 @@
 **This document is the single source of truth for every Claude Code agent session.**
 Every agent reads it on start. If it drifts from reality, agents make wrong decisions.
 
-### After EVERY change that ships to production, BOTH docs must be updated in the same commit:
+### After EVERY change that ships to production, ALL THREE docs must be updated in the same commit:
 This is not tied to formal `git tag` releases. The working model is "always push to live" —
 so any deploy that adds, removes, or changes a feature, component, schema, connector, or
-process **must** update both docs before/with the deploy. Bump the patch version even for
+process **must** update all three below before/with the deploy. Bump the patch version even for
 small user-facing features so TARS's self-knowledge stays accurate.
 
 1. Update the relevant sections in **CLAUDE.md** (see list below)
 2. Update **SYSTEM_STATE.md** (see below)
-3. Commit (may be part of the feature commit, or a `docs:` commit)
-4. Push to main + deploy
+3. Add a new file to **`docs/changelog/vX.Y.Z.md`** with the same content as the SYSTEM_STATE.md
+   entry (see `docs/changelog/README.md`) — this is what gets compiled into GitHub release notes
+   when a formal release happens; skipping it means the eventual release notes are just a bare
+   PR title with no rationale
+4. Commit (may be part of the feature commit, or a `docs:` commit)
+5. Push to main + deploy
 
 ### SYSTEM_STATE.md — mandatory on every production change
 `SYSTEM_STATE.md` at the repo root is the live architecture file injected into TARS's own
@@ -841,31 +845,30 @@ When Mike says "release" or "deploy to production":
    MINOR: new features, backward compatible
    PATCH: bug fixes only
 
-2. Claude Code generates full release notes covering:
-   - What changed
-   - New features
-   - Bug fixes
-   - Breaking changes if any
-   - Migration steps if needed
+2. Claude Code compiles release notes from docs/changelog/vX.Y.Z.md — concatenate every
+   changelog file between the previous tag and this one, in ascending version order.
+   Do NOT rely on `gh release create --generate-notes` alone — it only pulls PR titles and
+   drops the "why" that docs/changelog/ exists to capture. If a version in range is missing
+   its docs/changelog/ file, backfill it from the matching SYSTEM_STATE.md Version History
+   entry before compiling.
 
 3. Mike reviews and approves release notes
 
-4. Claude Code executes:
-   git checkout main
-   git merge dev
-   git tag -a v1.0.0 -m "Release v1.0.0"
-   git push origin main --tags
+4. Claude Code executes (main already has everything via the normal branch→merge workflow —
+   there is no dev branch to merge from; see §12 Branch Strategy):
+   git checkout main && git pull origin main
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z
 
-5. GitHub Actions triggers automatically:
-   CI: lint + typecheck
-   Build: Next.js + FastAPI
-   Deploy: SSH to 72.60.234.180
-   Health check: GET /api/health
-   Rollback: if health check fails, redeploy previous tag
+5. Tag push triggers `.github/workflows/release.yml`, which auto-creates a GitHub Release with
+   `--generate-notes` (PR titles only, no rationale). Immediately overwrite it with the notes
+   compiled in step 2:
+   gh release edit vX.Y.Z --notes-file <compiled-notes-file>
 
-6. Dev branch continues from main after release:
-   git checkout dev
-   git merge main
+6. The same tag push also triggers the deploy workflows (see §12 GitHub Actions Pipeline below —
+   as of 2026-09 this path has been dormant in practice; routine changes deploy via the manual
+   SSH commands in AGENTS.md §6 instead, and this tag-based path is reserved for when Mike
+   explicitly says "release")
 ```
 
 ---

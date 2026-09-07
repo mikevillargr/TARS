@@ -219,13 +219,23 @@ the manual SSH commands above, immediately after merging to `main`.
 
 ## 7. Versioning & Docs — Update On Every Production Change
 
-Per `CLAUDE.md` §0: every change that reaches production updates **both** `CLAUDE.md` (relevant
-section) and `SYSTEM_STATE.md` (version table + version history) in the same commit, even for
-small fixes. Bump the patch version. If you skip this, TARS's own self-knowledge drifts from
-reality and it will misreport its own capabilities to Mike.
+Per `CLAUDE.md` §0: every change that reaches production updates **all three** of the following
+in the same commit, even for small fixes:
 
-If you remove a feature, **remove its spec from both docs** — don't leave a dead spec that a
-future agent tries to rebuild.
+1. `CLAUDE.md` — the relevant spec section
+2. `SYSTEM_STATE.md` — version table + a new Version History entry (bump the patch version)
+3. `docs/changelog/vX.Y.Z.md` — a new file with the **same content** as the `SYSTEM_STATE.md`
+   entry you just wrote (see `docs/changelog/README.md` for the format). This is what gets
+   compiled into GitHub release notes when a formal release happens — `gh release
+   create --generate-notes` alone only pulls PR titles and loses the "why."
+
+If you skip #1–2, TARS's own self-knowledge drifts from reality and it will misreport its own
+capabilities to Mike. If you skip #3, the eventual release notes for this change will be a bare
+PR title with no rationale.
+
+If you remove a feature, **remove its spec from `CLAUDE.md`/`SYSTEM_STATE.md`** — don't leave a
+dead spec that a future agent tries to rebuild. (The `docs/changelog/` entry for the change that
+removed it stays — it's historical record, not a live spec.)
 
 ## 8. Frontend Stack Specifics
 
@@ -270,7 +280,7 @@ Any connected browser tab receives the event immediately via the `useNotificatio
 - [ ] Did I find where the feature is actually rendered (not just a similarly-named file)?
 - [ ] Did I update all callers if I changed an API shape?
 - [ ] Did I run `npx tsc --noEmit` (and the backend import check, if relevant) with zero errors?
-- [ ] Did I update `CLAUDE.md` + `SYSTEM_STATE.md` if this reaches production?
+- [ ] Did I update `CLAUDE.md` + `SYSTEM_STATE.md` + add a `docs/changelog/vX.Y.Z.md` file if this reaches production?
 - [ ] If merged and deployed, did I verify the SSH deploy commands ran without retry loops?
 
 ---
