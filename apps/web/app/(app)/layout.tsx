@@ -2,7 +2,7 @@
 
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/shell/app-sidebar"
-import { Plus, Search, MessageSquare, CalendarDays, Brain, MoreHorizontal, Mic, Loader2, Bell, BellOff, ClipboardList } from "lucide-react"
+import { Plus, Search, MessageSquare, CalendarDays, MoreHorizontal, Mic, Loader2, Bell, BellOff, ClipboardList, Radar } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -52,10 +52,10 @@ function BottomTabBar() {
   const onChat = pathname.startsWith("/chat")
 
   const tabs = [
+    { label: "Today",    href: "/today",        Icon: Radar },
     { label: "Chat",     href: "/chat",         Icon: MessageSquare },
     { label: "To-Dos",   href: "/reminders",    Icon: ClipboardList },
     { label: "Calendar", href: "/calendar",     Icon: CalendarDays },
-    { label: "Brain",    href: "/second-brain", Icon: Brain },
   ]
 
   return (
@@ -231,10 +231,10 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
   // Global Cmd/Ctrl+1-4 nav shortcuts
   useEffect(() => {
     const NAV_KEYS: Record<string, string> = {
-      "1": "/chat",
-      "2": "/reminders",
-      "3": "/calendar",
-      "4": "/second-brain",
+      "1": "/today",
+      "2": "/chat",
+      "3": "/reminders",
+      "4": "/calendar",
     }
     const handler = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return

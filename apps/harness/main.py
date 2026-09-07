@@ -26,6 +26,7 @@ from api.routes import tts as tts_route
 from api.routes import notifications as notifications_route
 from api.routes import rokid as rokid_route
 from api.routes import reminders as reminders_route
+from api.routes import signals as signals_route
 from api.routes import analytics as analytics_route
 from api.routes import feed as feed_route
 from core.config import settings
@@ -172,5 +173,6 @@ app.include_router(domains_route.router, prefix="/api/domains")
 app.include_router(image_proxy_route.router, prefix="/api")
 app.include_router(rokid_route.router, prefix="/api/rokid")
 app.include_router(reminders_route.router, prefix="/api/reminders")
+app.include_router(signals_route.router, prefix="/api/signals")
 app.include_router(analytics_route.router, prefix="/api")
 app.include_router(feed_route.router, prefix="/api/feed")
