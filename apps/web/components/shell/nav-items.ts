@@ -1,8 +1,9 @@
 export const navItems = [
-  { label: "Chat",         href: "/chat",         icon: "MessageSquare", shortcut: "1" },
-  { label: "To-Dos",       href: "/reminders",    icon: "ClipboardList", shortcut: "2" },
-  { label: "Calendar",     href: "/calendar",     icon: "CalendarDays",  shortcut: "3" },
-  { label: "Second Brain", href: "/second-brain", icon: "Brain",         shortcut: "4" },
+  { label: "Today",        href: "/today",        icon: "Radar",         shortcut: "1" },
+  { label: "Chat",         href: "/chat",         icon: "MessageSquare", shortcut: "2" },
+  { label: "To-Dos",       href: "/reminders",    icon: "ClipboardList", shortcut: "3" },
+  { label: "Calendar",     href: "/calendar",     icon: "CalendarDays",  shortcut: "4" },
+  { label: "Second Brain", href: "/second-brain", icon: "Brain" },
   { label: "Projects",     href: "/tasks",        icon: "CheckSquare" },
   { label: "Meetings",     href: "/meetings",     icon: "Video" },
   { label: "Contacts",     href: "/contacts",     icon: "Users" },
