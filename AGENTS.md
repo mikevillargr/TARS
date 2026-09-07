@@ -1,24 +1,70 @@
 # TARS Agent Operations Manual
 
-**You are an agent working on the TARS codebase. Read every section before you touch any file.**
+**Read this before you touch any file.** `CLAUDE.md` at the repo root is the full product/architecture
+spec (stack, data model, connectors, component specs, design language) — read that too. This file is
+about *how to work in this repo*: git discipline, where code actually lives, and verification steps.
+
+This file has two parts:
+1. **Live — Interactive Sessions** — the real, current workflow for anyone (Claude Code, another
+   coding agent, or Mike) working in this repo today.
+2. **Retired — Autonomous Agent Jobs** — historical documentation of an in-app feature that no
+   longer exists. Kept for archival context because a few orphaned files still reference it.
 
 ---
 
-## 1. The Goal
+# PART 1 — Live: Interactive Sessions
 
-Implement the user's request so it actually appears on the live site at https://tarsmv.duckdns.org.
+## 1. The #1 Rule — Local Branch First, Main Is Production
 
-A change is only "done" when:
-1. The code is correct AND
-2. TypeScript compiles AND
-3. The PR is merged to `main` AND
-4. A version tag is pushed AND
-5. The live deployment is updated
+**No commits land directly on `main`. Ever.** This is the standing rule as of September 2026 —
+it supersedes any older doc text or memory that says otherwise.
 
-**The harness handles steps 3, 4, and 5 automatically AFTER your work finishes.**
-**Your responsibility is steps 1 and 2.** If you skip the verification, broken code reaches production.
+```
+1. Start every change on a branch:
+   git checkout main && git pull origin main
+   git checkout -b fix/short-description        # or feat/, chore/, refactor/, docs/
 
----
+2. Do the work locally. Commit on the branch as you go:
+   git add <specific files>                     # never git add -A / git add .
+   git commit -m "type: description"
+
+3. Verify before merging (see §5 — Mandatory Verification)
+
+4. Merge into main only when the change is ready to ship:
+   git checkout main && git pull origin main
+   git merge --no-ff fix/short-description
+   git push origin main
+   (or open a PR and merge via GitHub — either is fine; the gate is "not a direct commit to main")
+
+5. Deploy (see §6). Merging to main does not auto-deploy by itself — deploy is a
+   separate, explicit step that should follow the merge promptly.
+```
+
+**Never push a work-in-progress branch's commits straight onto `main`.** If you're mid-task and
+the session ends, the branch stays as a branch — do not merge unfinished work to close it out.
+
+**Ask before merging/deploying** if the change is large, risky, touches auth/payments/data
+deletion, or you're not confident it's finished. Small, low-risk fixes (typos, copy, obvious bugs)
+can go through the full branch→merge→deploy cycle without pausing for approval — the point of the
+branch is a clean rollback path, not a permission gate for every commit.
+
+## 1a. Destructive Operations Require Double Confirmation
+
+Before any destructive or hard-to-reverse action, **state exactly what you're about to do and
+wait for explicit confirmation — then confirm once more immediately before executing it.** One
+"yes, go ahead" earlier in a conversation authorizes the general plan, not license to chain
+further destructive steps without saying what they are.
+
+This covers (non-exhaustive): deleting or force-pushing branches (local or remote), `git reset
+--hard` / `git clean`, dropping or truncating DB tables/columns, deleting migrations, removing
+files that aren't clearly dead/unused, revoking API keys or connector auth, and any action against
+the production server beyond the standard deploy commands in §6.
+
+Routine, easily-reversed actions are exempt: creating a branch, committing to a branch, opening a
+PR, running the standard SSH deploy commands in §6, or deleting a file you just created in the
+same session.
+
+If you're not sure whether something counts as destructive, treat it as if it does.
 
 ## 2. Codebase Map — Where Things Actually Live
 
@@ -27,253 +73,184 @@ The repo is a Turborepo monorepo at `/opt/tars` on the server, `~/Documents/TARS
 ```
 apps/web/                  Next.js 15 PWA (frontend)
   app/(app)/               Application routes — these are the LIVE PAGES
-    chat/page.tsx          Main chat UI (inline conversation list + thread)
-    tasks/page.tsx
+    chat/page.tsx          Main chat UI (inline conversation list + thread — most chat
+                            sub-UI is inline here, NOT in components/chat/)
+    tasks/page.tsx          Projects (kanban)
+    reminders/page.tsx      To-Dos (quick checklist)
     meetings/page.tsx
     calendar/page.tsx
+    feed/page.tsx
     second-brain/page.tsx
-    agent-jobs/page.tsx    Agent job dashboard
     artifacts/page.tsx
     connectors/page.tsx
     cron/page.tsx
-    email-digest/page.tsx
-    memory/page.tsx
+    contacts/page.tsx
+    memory/page.tsx         Mnemon browser
     settings/page.tsx
   app/(auth)/login/        Login page
   app/api/                 Next.js API routes (auth, proxy to harness)
-  components/              SHARED components — verify they're imported!
-    chat/                  Chat sub-components (most are inline in page.tsx, NOT here)
-    agent-jobs/
-      AgentStatusChip.tsx  Ephemeral ticker shown in chat while an agent job runs.
-                           Listens to tool_start + text_chunk events on the job's
-                           WebSocket. Self-removes from the thread on completion.
-                           DO NOT replace with AgentJobStream inline — that's the
-                           verbose view for the Agent Jobs page only.
+  components/              SHARED components — verify they're imported before editing!
     second-brain/
     shell/                 Sidebar, command palette
     ui/                    shadcn components
   hooks/
     useNotifications.ts    Subscribes to /api/notifications/stream WebSocket.
-                           Chat page uses this to receive new_message events and
-                           show unread dots without polling. DO NOT add polling
-                           loops — use this hook instead.
+                            Chat page uses this to receive new_message events and
+                            show unread dots without polling. DO NOT add polling
+                            loops — use this hook instead.
+    useTtsPlayback.ts       Kokoro TTS synthesis queue + audio playback
+    useVoiceInput.ts        Mic recording, VAD silence detection, transcription
   lib/
     api-client.ts          apiGet / apiPost / apiDelete helpers
     websocket.ts           TarsWebSocket class with auto-reconnect + visibilitychange
 
 apps/harness/              FastAPI backend
-  main.py                  App entry + lifespan startup (also handles graceful
-                           agent job drain on shutdown and re-queue on restart)
+  main.py                  App entry + lifespan startup
   api/routes/              ALL HTTP endpoints
     chat.py                Chat conversations + messages (mounted at /api/chat)
-    notifications.py       WebSocket /api/notifications/stream — user-level
-                           real-time events. Extend this for Phase 2 push notifs.
-    tasks.py
-    meetings.py
-    agent_jobs.py
-    artifacts.py
-    ...
-  agents/                  Agent system
-    job_manager.py         Job lifecycle, Evolutionarist orchestrator.
-                           _notify_chat() inserts a DB message AND publishes to
-                           notifications broadcaster — always use this, never
-                           insert Message rows directly in agent code.
-    executor.py            Claude Code SDK wrapper for sub-agents. Merges PRs to
-                           main and resets working tree — does NOT call deploy.sh
-                           directly (deploy goes through GitHub Actions tag pipeline).
-    notifications.py       In-memory pub/sub broadcaster keyed by user_id.
-                           publish(user_id, event) → all connected WS clients.
-                           Phase 2: add calendar/task/meeting events here.
-    approval.py            Approval gates
-  core/                    Routing, context assembler, model client
+    notifications.py       WebSocket /api/notifications/stream — user-level real-time events
+    agent_jobs.py           ORPHANED — see Part 2. Not mounted in main.py. Do not wire back up
+                            without reading Part 2 first (imports a package that no longer exists).
+    tasks.py / reminders.py / meetings.py / artifacts.py / feed.py / contacts.py ...
+  core/                    Routing, context assembler, model client, notifications broadcaster
+    notifications.py       In-memory pub/sub broadcaster keyed by user_id (moved here from a
+                            since-removed agents/ package — import from core.notifications, not
+                            agents.notifications)
+    router.py              Tier classification
+    model_client.py         Anthropic + Z.ai unified, per-tier backup/fallback
   memory/                  Mnemon + Second Brain
-  connectors/              Gmail, Calendar, Fireflies
-  db/models.py             SQLAlchemy models
-  db/migrations/           Alembic migrations
+  connectors/              Gmail, Calendar, Fireflies, Google Workspace, Strava, etc.
+  jobs/                    scheduler.py (cron loops), prompt_cron.py, meeting_processor.py
+  ingest/                  Document parsers + chunking pipeline
+  db/
+    models.py              SQLAlchemy models
+    migrations/            Alembic migrations
 ```
 
----
-
-## 3. THE #1 RULE — Find Where Code Is Actually Used Before Editing
+## 3. Find Where Code Is Actually Used Before Editing
 
 **Most agent failures come from editing a file that looks right but is never imported.**
 
-A common pattern:
-- User asks "add Load More button to chat sidebar"
-- Agent finds `apps/web/components/chat/conversation-list.tsx`
-- Implements there
-- Commits, deploys, nothing changes — the file is dead code
+A common pattern: user asks "add Load More to chat sidebar" → agent finds
+`components/chat/conversation-list.tsx` → implements there → commits → nothing changes, because
+the actual chat sidebar is inline in `app/(app)/chat/page.tsx`.
 
-**The actual chat sidebar is inline in `apps/web/app/(app)/chat/page.tsx`.**
-
-Before you write ONE line of code:
+Before writing a line of code:
 
 ```bash
 # Verify the component you're about to edit is imported somewhere
-grep -rn "ConversationList\|conversation-list" /opt/tars/apps/web/app /opt/tars/apps/web/components --include="*.tsx" --include="*.ts" | grep -v ".next" | grep "import\|from"
+grep -rn "ConversationList\|conversation-list" apps/web/app apps/web/components \
+  --include="*.tsx" --include="*.ts" | grep -v ".next" | grep "import\|from"
 
 # Find where the FEATURE actually renders
-grep -rn "conversations.map\|conversation.title\|setActiveChatId" /opt/tars/apps/web/app --include="*.tsx"
+grep -rn "conversations.map\|conversation.title\|setActiveChatId" apps/web/app --include="*.tsx"
 ```
 
-If your search shows the file you were about to edit is NOT imported anywhere, **stop and look elsewhere**. The user's chat UI lives in `chat/page.tsx`. Their tasks UI lives in `tasks/page.tsx`. Most things are inline.
-
----
+If the file you were about to edit isn't imported anywhere, stop and look elsewhere. Most things
+are inline in the page files, not in the components subfolders their names suggest.
 
 ## 4. API Shape Changes — Update All Callers Or Don't Change
 
-When you change a FastAPI endpoint's response shape:
+When you change a FastAPI endpoint's response shape, find every caller in the same commit:
 
 ```bash
-# Find every place the frontend calls this endpoint
-grep -rn "/chat/conversations\|/api/chat/conversations" /opt/tars/apps/web --include="*.ts" --include="*.tsx"
-
-# Find every place it's typed
-grep -rn "ConversationListOut\|Conversation\b" /opt/tars/apps/web --include="*.ts" --include="*.tsx"
+grep -rn "/chat/conversations\|/api/chat/conversations" apps/web --include="*.ts" --include="*.tsx"
+grep -rn "ConversationListOut\|Conversation\b" apps/web --include="*.ts" --include="*.tsx"
 ```
 
-Update every caller in the same commit. If you change `GET /chat/conversations` from returning `List[Conversation]` to `{conversations, total, has_more}`, every frontend call that does `.map()` on the response will break silently.
+If `GET /chat/conversations` changes from `List[Conversation]` to
+`{conversations, total, has_more}`, every frontend `.map()` on the raw response breaks silently.
+Update all of them before merging.
 
----
-
-## 5. Mandatory Verification Before You Stop
+## 5. Mandatory Verification Before Merging To Main
 
 ```bash
-cd /opt/tars/apps/web
+cd apps/web
 npx tsc --noEmit 2>&1 | head -40
 ```
 
-If there are TypeScript errors, fix them. **Do not stop with a broken build.**
-
-The harness runs this check before commit. If it fails, your job is marked failed and nothing deploys.
+Fix any TypeScript errors — do not merge with a broken build.
 
 For backend changes, verify imports parse:
 ```bash
-cd /opt/tars/apps/harness && source .venv/bin/activate
+cd apps/harness && source .venv/bin/activate
 python3 -c "from main import app; print('OK')"
 ```
 
----
+## 6. Deployment (After Merging To Main)
 
-## 6. Git Rules (Mandatory)
+The production server has fail2ban — **never run SSH retry loops.** One failed attempt = stop,
+report to Mike, wait for instruction.
 
-You do NOT do git operations. The harness handles all of these automatically:
-- Branch creation (you start on `agent/<job_id>`)
-- Staging changes
-- Committing with conventional commit format
-- Pushing to GitHub
-- Opening PR to `main`
-- Auto-merging when checks pass
-- Pulling on the production server
-- Building and reloading pm2 processes
-- Tagging the next patch version
-- Triggering the GitHub Actions deploy
+```bash
+# Pull latest
+ssh tars "cd /opt/tars && git pull origin main"
 
-**You: edit files. Run read-only git (status / log / diff / grep) if needed. Then stop.**
+# Run migrations (if the change touched db/models.py or added a migration)
+ssh tars "cd /opt/tars/apps/harness && source .venv/bin/activate && python3 -m alembic upgrade head"
 
-Forbidden: `git commit / push / checkout / merge / pull / fetch / add / restore` and `gh pr create / merge / ready / close`.
+# Restart harness (backend changes)
+ssh tars "pm2 restart tars-harness"
 
----
-
-## 7. Versioning & Release Notes
-
-- Semver: `MAJOR.MINOR.PATCH`
-- Agent jobs always trigger PATCH bumps automatically (`v1.4.7` → `v1.4.8`)
-- Release notes are auto-generated from PR titles via GitHub `--generate-notes`
-- Your commit message becomes a line in the release notes — make it readable
-
-**Commit message format (the harness generates this from your final summary):**
-```
-type(scope): short description in present tense
+# Build and deploy web (frontend changes)
+ssh tars "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && mkdir -p .next/standalone/apps/web/public && cp -r public/* .next/standalone/apps/web/public/ && pm2 restart tars-web"
 ```
 
-Types: `feat` `fix` `refactor` `docs` `test` `chore`
+`ssh tars` is an alias in `~/.ssh/config` — never use the raw IP directly.
 
-Bad final summaries that produce bad commits:
-- "Done. Here's what I did:" → useless
-- "Everything looks correct." → useless
-- "I made the following changes:" → useless
+Formal tagged releases (`git tag vX.Y.Z && git push origin vX.Y.Z`) trigger the GitHub Actions
+deploy workflows (`deploy-web.yml` / `deploy-harness.yml`) and are reserved for when Mike
+explicitly says "release" — see `CLAUDE.md` §12 for that process. Day-to-day changes deploy via
+the manual SSH commands above, immediately after merging to `main`.
 
-Good final summaries:
-- "Added Load More button to chat sidebar that paginates 20 conversations at a time"
-- "Lowered Mnemon similarity threshold from 0.7 to 0.45 and added keyword fallback"
-- "Fixed agent stream WebSocket reconnection on tab focus"
+**Reality check (verified against GitHub, 2026-09-07):**
+- The tag-triggered deploy pipeline is **dormant in practice**. The last real tag/release is
+  `v2.13.4` (2026-06-22) even though the product changelog has moved through `v2.15.12` since —
+  every one of those releases shipped via the manual SSH commands, not a tag push. Treat the
+  manual SSH path as the actual production deploy mechanism today; tags are for the rare explicit
+  "release" moment, not routine shipping.
+- **`ci.yml` (lint + typecheck) has been failing on every push to `main` since at least
+  2026-06-29** — real ESLint errors in `apps/web` (e.g. `apps/web/hooks/useTtsPlayback.ts:56`,
+  `playNext` used before declaration), not a broken workflow config. Nothing currently gates on
+  this passing, so it's been silently red for months. Don't treat a green local `tsc --noEmit` as
+  proof CI would pass — it won't, on `main`'s current lint state, until someone fixes the existing
+  errors. This is a known, unfixed pre-existing condition, not something introduced by your change
+  — but if you touch a file with existing lint errors, clean up what's in your diff.
 
-**Write your final summary as a one-line description of what changed.** The harness will turn it into the commit message and release note.
+## 7. Versioning & Docs — Update On Every Production Change
 
----
+Per `CLAUDE.md` §0: every change that reaches production updates **both** `CLAUDE.md` (relevant
+section) and `SYSTEM_STATE.md` (version table + version history) in the same commit, even for
+small fixes. Bump the patch version. If you skip this, TARS's own self-knowledge drifts from
+reality and it will misreport its own capabilities to Mike.
 
-## 8. Deployment Flow (What Happens After You Stop)
+If you remove a feature, **remove its spec from both docs** — don't leave a dead spec that a
+future agent tries to rebuild.
 
-```
-You finish editing
-  ↓
-Harness runs npx tsc --noEmit
-  ↓ (pass)
-git add -A
-git commit -m "fix(agent): your summary"
-git push origin agent/<job_id>
-  ↓
-gh pr create --base main
-gh pr merge --merge
-  ↓
-SSH to production server
-git fetch origin && git reset --hard origin/main
-npm install --legacy-peer-deps
-NODE_ENV=production npm run build
-pm2 reload tars-web (zero downtime)
-  ↓
-git tag v1.X.Y && git push origin v1.X.Y
-  ↓
-GitHub Actions Release workflow auto-creates the GitHub Release
-  ↓
-DONE — live on https://tarsmv.duckdns.org
-```
+## 8. Frontend Stack Specifics
 
-**If any step fails the user sees nothing change.** This is why TypeScript verification before commit is non-negotiable.
+- Next.js 15 App Router (not pages router). `(app)` and `(auth)` are route groups.
+- Most pages are client components (`"use client"`) — they use state + WebSocket.
+- Styling: Tailwind + CSS variables (`var(--c-ink)`, `var(--c-moss)`, etc.) — see
+  `apps/web/DESIGN.md` before any UI work.
+- No emojis in UI text unless explicitly requested.
+- shadcn components in `apps/web/components/ui/`; icons from `lucide-react`.
 
----
+## 9. Backend Stack Specifics
 
-## 9. Frontend Stack Specifics
+- FastAPI, Python 3.11+, SQLAlchemy 2.0 async with asyncpg, pgvector for embeddings.
+- Alembic migrations — generate with `alembic revision --autogenerate -m "msg"`, then ALWAYS
+  read the generated file and verify it before committing.
+- Pydantic v2. All routes use `Depends(require_auth)` for user_id.
+- Streaming responses use SSE via `StreamingResponse`.
 
-- Next.js 15 with App Router (NOT pages router)
-- `(app)` and `(auth)` are route groups (parentheses get stripped from URL)
-- Server Components by default — add `"use client"` at top for client components
-- Most pages are client components because they use state + WebSocket
-- Styling: Tailwind + CSS variables (`var(--c-ink)`, `var(--c-moss)`, etc.)
-- No emojis in UI text unless explicitly requested
-- shadcn components in `apps/web/components/ui/`
-- Icons from `lucide-react`
+## 10. Real-Time Notification Pattern
 
-When in doubt about a Next.js API, read `node_modules/next/dist/docs/` — this version has breaking changes from older Next.js docs.
+TARS has a user-level real-time notification channel. Use it whenever you need to push an update
+to the UI without the user doing anything.
 
----
-
-## 10. Backend Stack Specifics
-
-- FastAPI with Python 3.11+
-- SQLAlchemy 2.0 async with asyncpg
-- pgvector for embeddings
-- Alembic for migrations — generate with `alembic revision --autogenerate -m "msg"` then ALWAYS read the generated file and verify it
-- Pydantic v2 for request/response models
-- All routes use `Depends(require_auth)` for user_id
-- Streaming responses use SSE via `StreamingResponse`
-- Agent jobs run as asyncio tasks, broadcast events via WebSocket
-
----
-
-## 11. Real-Time Notification Pattern
-
-TARS has a user-level real-time notification channel. Use it whenever you need to push an update to the chat UI without the user doing anything.
-
-**How it works:**
-1. Backend calls `agents.notifications.publish(user_id, event_dict)`
-2. Any connected browser tab receives the event on its WebSocket immediately
-3. The chat page `useNotifications` hook handles it
-
-**To send a notification from backend code:**
 ```python
-from agents.notifications import publish as notify
+from core.notifications import publish as notify
 
 await notify(user_id, {
     "type": "new_message",           # or any type you define
@@ -284,39 +261,46 @@ await notify(user_id, {
 })
 ```
 
-**Always use `_notify_chat()` in job_manager.py when posting an agent reply** — it inserts the DB row AND calls `publish()` in one step. Never insert a `Message` row directly if you want the UI to update live.
+Any connected browser tab receives the event immediately via the `useNotifications` hook.
+**Do NOT add polling loops** — this is the right pattern for pushing UI updates.
 
-**To add a new notification type (Phase 2 — calendar, tasks, etc.):**
-1. Call `publish(user_id, {"type": "your_type", ...})` in the relevant backend handler
-2. Add a handler in `hooks/useNotifications.ts`: `ws.on("your_type", handler)`
-3. Wire it up in whatever page cares about it
+## 11. Self-Check Before You Stop
 
-**Do NOT add polling loops** to check for new data. The notification system is the right pattern.
-
----
-
-## 11. If You're Unsure
-
-You can ask the user a question by running:
-```bash
-tars-ask "Should I add this as a new feature or replace the existing one?"
-```
-
-The user will be paged in chat and your job pauses until they answer. Use this when:
-- The instruction is ambiguous
-- You found two viable implementation paths
-- The change has security or data implications
-
-Do NOT use `tars-ask` for trivial decisions you can make yourself.
-
----
-
-## 12. Self-Check Before You Stop
-
-- [ ] Did I find where the feature is actually rendered (not just a file with a related name)?
+- [ ] Is this change on a branch, not committed directly to `main`?
+- [ ] Did I find where the feature is actually rendered (not just a similarly-named file)?
 - [ ] Did I update all callers if I changed an API shape?
-- [ ] Did I run `npx tsc --noEmit` and see zero errors?
-- [ ] Is my final summary a single clear sentence that will make a good commit message?
-- [ ] Did I avoid all forbidden git operations?
+- [ ] Did I run `npx tsc --noEmit` (and the backend import check, if relevant) with zero errors?
+- [ ] Did I update `CLAUDE.md` + `SYSTEM_STATE.md` if this reaches production?
+- [ ] If merged and deployed, did I verify the SSH deploy commands ran without retry loops?
 
-When all of these are yes, stop. The harness takes it from there.
+---
+
+# PART 2 — Retired: Autonomous Agent Jobs
+
+**This feature was retired (per Mike, September 2026). The workflow below no longer runs.**
+It's kept here only because a few orphaned files in the codebase still reference it — if you run
+into them, know what they were for instead of trying to rebuild or "fix" them.
+
+Historically, TARS had an in-app "Agent Jobs" feature: a chat tool (`create_agent_job`) spawned a
+Claude Code subprocess against the production checkout, which worked fully autonomously —
+the harness (not the agent) handled all git operations:
+
+- Harness created a branch (`agent/<job_id>`), staged, committed, and pushed
+- Harness opened a PR to `main` and **auto-merged it** once checks passed — no human gate
+- Harness pulled on the production server, built, and reloaded PM2 processes
+- Harness tagged the next patch version and pushed the tag, which triggered the GitHub Actions
+  deploy workflows
+
+The agent's job in that world was narrow: edit files, run read-only git/verification commands,
+and stop — never touch `git commit/push/checkout/merge` or `gh pr` directly.
+
+**Cleanup done (2026-09-07):** `CLAUDE.md` and `SYSTEM_STATE.md` no longer list Agent Jobs as a
+live component (nav order, component spec, session table, and connector inventory all corrected
+and annotated as retired); the orphaned `apps/harness/api/routes/agent_jobs.py` (dead import of
+the deleted `agents.job_manager`/`agents.approval` package, not mounted in `main.py`) was deleted.
+
+**Still present, harmless:** `apps/harness/db/migrations/versions/
+b44136b7d629_agent_job_evolutionarist_fields.py` — migrations are immutable history, left as-is.
+
+If Agent Jobs UI, tools, or docs come up in a task, treat them as **removed**, not as a target to
+restore, unless Mike explicitly asks to bring the feature back.
