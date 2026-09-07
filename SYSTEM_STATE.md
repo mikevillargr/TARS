@@ -88,7 +88,7 @@ requests are excluded — vision routing owns model choice.
 
 ---
 
-## Active Components (13)
+## Active Components (12)
 
 | # | Component | Route | Status |
 |---|---|---|---|
@@ -99,12 +99,15 @@ requests are excluded — vision routing owns model choice.
 | 4 | Calendar | /calendar | Live |
 | 5 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
 | 6 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval; **export** to DOCX, PDF, or Google Doc via item detail modal |
-| 7 | Agent Jobs | /agent-jobs | Live |
-| 8 | Artifacts | /artifacts | Live |
-| 9 | Cron Manager | /cron | Live |
-| 10 | Connectors | /connectors | Live |
-| 11 | Mnemon | /memory | Live |
-| 12 | Settings | /settings | Live |
+| 7 | Artifacts | /artifacts | Live |
+| 8 | Cron Manager | /cron | Live |
+| 9 | Connectors | /connectors | Live |
+| 10 | Mnemon | /memory | Live |
+| 11 | Settings | /settings | Live |
+
+**Agent Jobs (retired, 2026-09):** the in-app autonomous Claude Code subprocess feature was
+removed — no route, no nav entry, backend `agents/` package deleted. See `AGENTS.md` Part 2 at
+the repo root for the historical runbook and known orphaned remnants.
 
 ---
 
@@ -701,6 +704,9 @@ Fixes:
 - Supervised approval flow (Approve / Modify / Reject)
 - Agent Jobs UI: live output stream, approval flow
 - Artifacts view: auto-save hook, version tracking, file grid/list
+
+> Agent Jobs (the executor + UI from this session) was retired 2026-09 — see the "Agent Jobs
+> (retired)" note under Active Components above. Artifacts is unaffected and still live.
 
 ---
 

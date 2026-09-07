@@ -48,6 +48,24 @@ deletion, or you're not confident it's finished. Small, low-risk fixes (typos, c
 can go through the full branch→merge→deploy cycle without pausing for approval — the point of the
 branch is a clean rollback path, not a permission gate for every commit.
 
+## 1a. Destructive Operations Require Double Confirmation
+
+Before any destructive or hard-to-reverse action, **state exactly what you're about to do and
+wait for explicit confirmation — then confirm once more immediately before executing it.** One
+"yes, go ahead" earlier in a conversation authorizes the general plan, not license to chain
+further destructive steps without saying what they are.
+
+This covers (non-exhaustive): deleting or force-pushing branches (local or remote), `git reset
+--hard` / `git clean`, dropping or truncating DB tables/columns, deleting migrations, removing
+files that aren't clearly dead/unused, revoking API keys or connector auth, and any action against
+the production server beyond the standard deploy commands in §6.
+
+Routine, easily-reversed actions are exempt: creating a branch, committing to a branch, opening a
+PR, running the standard SSH deploy commands in §6, or deleting a file you just created in the
+same session.
+
+If you're not sure whether something counts as destructive, treat it as if it does.
+
 ## 2. Codebase Map — Where Things Actually Live
 
 The repo is a Turborepo monorepo at `/opt/tars` on the server, `~/Documents/TARS` locally.
@@ -185,6 +203,20 @@ deploy workflows (`deploy-web.yml` / `deploy-harness.yml`) and are reserved for 
 explicitly says "release" — see `CLAUDE.md` §12 for that process. Day-to-day changes deploy via
 the manual SSH commands above, immediately after merging to `main`.
 
+**Reality check (verified against GitHub, 2026-09-07):**
+- The tag-triggered deploy pipeline is **dormant in practice**. The last real tag/release is
+  `v2.13.4` (2026-06-22) even though the product changelog has moved through `v2.15.12` since —
+  every one of those releases shipped via the manual SSH commands, not a tag push. Treat the
+  manual SSH path as the actual production deploy mechanism today; tags are for the rare explicit
+  "release" moment, not routine shipping.
+- **`ci.yml` (lint + typecheck) has been failing on every push to `main` since at least
+  2026-06-29** — real ESLint errors in `apps/web` (e.g. `apps/web/hooks/useTtsPlayback.ts:56`,
+  `playNext` used before declaration), not a broken workflow config. Nothing currently gates on
+  this passing, so it's been silently red for months. Don't treat a green local `tsc --noEmit` as
+  proof CI would pass — it won't, on `main`'s current lint state, until someone fixes the existing
+  errors. This is a known, unfixed pre-existing condition, not something introduced by your change
+  — but if you touch a file with existing lint errors, clean up what's in your diff.
+
 ## 7. Versioning & Docs — Update On Every Production Change
 
 Per `CLAUDE.md` §0: every change that reaches production updates **both** `CLAUDE.md` (relevant
@@ -262,16 +294,13 @@ the harness (not the agent) handled all git operations:
 The agent's job in that world was narrow: edit files, run read-only git/verification commands,
 and stop — never touch `git commit/push/checkout/merge` or `gh pr` directly.
 
-**Known orphaned remnants as of this writing:**
-- `apps/harness/api/routes/agent_jobs.py` — not mounted in `main.py`, imports a package
-  (`agents.job_manager`, `agents.approval`) that was deleted along with the feature. It will
-  raise `ImportError` if anything tries to import it.
-- `apps/harness/db/migrations/versions/b44136b7d629_agent_job_evolutionarist_fields.py` — harmless,
-  migrations are immutable history.
-- `CLAUDE.md` and `SYSTEM_STATE.md` still list "Agent Jobs" as a live, shipped component (nav
-  order, component spec §8, session table §14, and the component/connector inventory in
-  `SYSTEM_STATE.md`). **This is stale — flagged, not yet fixed.** Don't trust those sections
-  until someone cleans them up; don't build new work assuming Agent Jobs is real.
+**Cleanup done (2026-09-07):** `CLAUDE.md` and `SYSTEM_STATE.md` no longer list Agent Jobs as a
+live component (nav order, component spec, session table, and connector inventory all corrected
+and annotated as retired); the orphaned `apps/harness/api/routes/agent_jobs.py` (dead import of
+the deleted `agents.job_manager`/`agents.approval` package, not mounted in `main.py`) was deleted.
+
+**Still present, harmless:** `apps/harness/db/migrations/versions/
+b44136b7d629_agent_job_evolutionarist_fields.py` — migrations are immutable history, left as-is.
 
 If Agent Jobs UI, tools, or docs come up in a task, treat them as **removed**, not as a target to
 restore, unless Mike explicitly asks to bring the feature back.
