@@ -721,10 +721,17 @@ Single user. Username + password. No registration flow.
 ## 12. Deployment Process
 
 ### Philosophy
-- **Local first** — all development happens locally
-- **Commit often** — save progress to GitHub frequently with clear commit messages
-- **Never push to main without explicit instruction** — main is production
-- **Releases are explicit** — tagged with semver, full release notes required
+- **Local first** — all development happens locally, on a branch
+- **No direct commits to `main`** — every change starts on a branch (`fix/`, `feat/`, `chore/`,
+  `refactor/`, `docs/`); `main` is production and is only ever updated by merging a branch into it
+- **Commit often on the branch** — save progress to GitHub frequently with clear commit messages
+- **Deploy follows the merge** — once a branch is merged to `main`, deploy promptly (see SSH
+  commands below); don't wait for a separate go-ahead on routine changes
+- **Formal releases are explicit** — semver tags + full release notes, only when Mike says
+  "release" (see Release Process below)
+
+See `AGENTS.md` at the repo root for the full branch → merge → deploy workflow and mandatory
+verification steps every agent must follow.
 
 ---
 
@@ -756,37 +763,49 @@ Note: `ssh tars` is an alias in `~/.ssh/config` on the dev machine. Never use th
 ### Branch Strategy
 
 ```
-main          active development + production
-              all work happens here
-              deploy by pushing a version tag
+main          production — always deployable, never committed to directly
 
-feature/*     optional, for large isolated features
-              merge into main when complete
+fix/*         one branch per change or task; branch name describes the change
+feat/*        merge into main via PR or local merge only when ready to deploy
+chore/*
+refactor/*
+docs/*
 ```
 
-No dev environment exists yet. If a dev server is provisioned later,
-a dev branch and deploy pipeline can be added at that time.
+No dev server exists. There is a long-abandoned `dev` branch in git (hundreds of commits behind
+`main`) left over from an earlier workflow — it is not part of the active process; don't merge
+into or out of it without checking with Mike first.
 
 ---
 
 ### Daily Development Workflow
 
 ```
-1. All work done locally (Next.js dev server + FastAPI uvicorn + Docker Compose for Postgres/Redis)
+1. Branch from main:
+   git checkout main && git pull origin main
+   git checkout -b fix/short-description
 
-2. Commit frequently to main — after every meaningful chunk:
-   git add .
+2. Work locally (Next.js dev server + FastAPI uvicorn + Docker Compose for Postgres/Redis)
+
+3. Commit on the branch as you go:
+   git add <specific files>
    git commit -m "feat: add chat streaming endpoint"
-   git push origin main
 
-3. Commit message format:
+4. Commit message format:
    feat:     new feature
    fix:      bug fix
    chore:    config, deps, tooling
    refactor: code restructure, no behavior change
    docs:     documentation only
 
-4. Deploy by pushing a version tag (triggers GitHub Actions deploy pipeline)
+5. Verify (typecheck / import check — see AGENTS.md §5), then merge to main:
+   git checkout main && git pull origin main
+   git merge --no-ff fix/short-description
+   git push origin main
+
+6. Deploy via the manual SSH commands above, promptly after merging. Formal semver-tagged
+   releases (which trigger the GitHub Actions deploy workflows) are reserved for when Mike
+   explicitly says "release" — see Release Process below.
 ```
 
 ---
