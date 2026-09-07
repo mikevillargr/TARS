@@ -96,6 +96,60 @@ class Reminder(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
 
+class Signal(Base):
+    """
+    An inferred item on the /today screen: something TARS noticed across email,
+    meetings, calendar, and projects that appears to need a decision.
+
+    A Signal is not a Task. A Task is work you have committed to; a Signal is a
+    claim that you might need to. Acting on a Signal frequently *produces* a
+    Task (see result_ref) and then the Signal is done — it's a triage object
+    with a short life, not a record to keep.
+    """
+    __tablename__ = "signals"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
+
+    # "action" needs a decision; "fyi" is awareness only and renders as a plain row.
+    kind: Mapped[str] = mapped_column(String, nullable=False, default="action")
+
+    # Provenance — what the inference was drawn from.
+    source: Mapped[str] = mapped_column(String, nullable=False)          # gmail|fireflies|calendar|project|feed|strava
+    source_label: Mapped[str] = mapped_column(String, nullable=False)    # display text, e.g. "Gmail"
+    source_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # thread/meeting/task id
+    citation: Mapped[Optional[str]] = mapped_column(String, nullable=True)    # human-readable pointer
+
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    urgency: Mapped[str] = mapped_column(String, nullable=False, default="normal")  # normal|time|overdue
+    reasoning: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Ordered; [0] is the model's pick and becomes the primary button.
+    # Each entry: {"kind": str, "label": str, "payload": dict}
+    actions: Mapped[list] = mapped_column(JSON, default=list)
+    # Present when the signal implies a time-bound commitment (drives .ics).
+    calendar_event: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    status: Mapped[str] = mapped_column(String, nullable=False, default="open", index=True)  # open|snoozed|done|dismissed
+    snoozed_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    acted_kind: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # which action was taken
+    result_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # what it became (task id, event id, conversation id)
+
+    # Stable identity for "this same observation" across generator runs, so a
+    # dismissed signal doesn't reappear on the next sweep. Nullable because not
+    # every source can produce one; Postgres permits repeated NULLs under a
+    # unique index, so the constraint below stays safe.
+    dedupe_key: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    acted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "dedupe_key", name="uq_signals_user_dedupe"),
+    )
+
+
 class TaskColumn(Base):
     __tablename__ = "task_columns"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)

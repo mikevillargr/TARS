@@ -8,7 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
-import type { Signal, SignalAction, SignalUrgency } from "@/lib/today-mock"
+import { formatAge, type Signal, type SignalAction, type SignalUrgency } from "@/lib/signals"
 
 /**
  * SignalCard — one AI-inferred item.
@@ -268,9 +268,9 @@ export function SignalCard({
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <span className="tars-label" style={{ color: style.accent }}>
-              {signal.sourceLabel}
+              {signal.source_label}
             </span>
-            <span className="tars-label tars-label--muted">· {signal.age}</span>
+            <span className="tars-label tars-label--muted">· {formatAge(signal.created_at)}</span>
             {style.badge && (
               <span
                 className="badge"
@@ -347,7 +347,7 @@ export function SignalCard({
             </DropdownMenu>
           )}
 
-          {signal.calendarEvent && (
+          {signal.calendar_event && (
             <button
               onClick={() => onAddToCalendar(signal)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-colors text-[0.8125rem]"
