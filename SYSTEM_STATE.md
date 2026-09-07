@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.17.0 |
+| Version | v2.17.1 |
 | Released | 2026-09-07 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,18 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.17.1 — 2026-09-07
+**Fix: calendar conflict detection crashed in production**
+- `detect_calendar_conflicts` passed `time_min`/`time_max` as ISO strings, but
+  `GoogleCalendarClient.list_events` takes `datetime` objects and calls `.isoformat()` itself —
+  so every sweep logged `'str' object has no attribute 'isoformat'` and produced zero calendar
+  signals.
+- It passed local testing only because no Google Calendar was connected there, so the detector
+  returned early and never reached the call. The first production sweep exposed it immediately.
+- Now covered by a stub-connector test asserting the client receives `datetime`, not `str`.
+
+---
 
 ### v2.17.0 — 2026-09-07
 **Feature: signal generation — `/today` fills itself**

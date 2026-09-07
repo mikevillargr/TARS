@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.17.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.17.1 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -990,6 +990,11 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.17.1 Fix: calendar conflict detection crashed in production — detect_calendar_conflicts
+        passed time_min/time_max as ISO strings but GoogleCalendarClient.list_events takes
+        datetimes and calls .isoformat() itself ('str' object has no attribute 'isoformat').
+        Passed locally only because no calendar was connected, so the detector returned before
+        reaching the call. Harness-only, no schema change.
 v2.17.0 Feature: signal generation — /today fills itself. jobs/signal_generator.py with four
         detectors split by fact vs judgement: deterministic (stalled/overdue tasks, unconverted
         Fireflies action items grouped BY MEETING, calendar conflicts) and model-assisted

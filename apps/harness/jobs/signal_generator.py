@@ -217,10 +217,14 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
     try:
         raw = await loop.run_in_executor(
             None,
+            # list_events takes datetimes and calls .isoformat() itself —
+            # passing strings raised 'str' object has no attribute 'isoformat'
+            # in production. It passed locally only because no calendar was
+            # connected, so the function returned before ever reaching here.
             lambda: client.list_events(
                 calendar_id="primary",
-                time_min=now.isoformat(),
-                time_max=end.isoformat(),
+                time_min=now,
+                time_max=end,
             ),
         )
     except Exception as exc:  # a calendar outage must not kill the sweep
