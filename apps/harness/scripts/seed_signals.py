@@ -168,7 +168,7 @@ def _rows(user_id: str) -> list[Signal]:
 async def main(reset: bool) -> None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
-            select(User).where(User.name == settings.tars_username)
+            select(User).where(User.id == settings.tars_username)
         )
         user = result.scalars().first()
         if not user:

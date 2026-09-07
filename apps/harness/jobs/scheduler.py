@@ -326,6 +326,13 @@ async def _sync_feeds() -> None:
                 log.warning("Feed sync failed for '%s': %s", source.name, exc)
 
 
+async def _generate_signals() -> None:
+    """Sweep every source and write new /today signals."""
+    from jobs.signal_generator import run_sweep
+    result = await run_sweep()
+    log.info("signal_sweep: %s", result)
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 _ONE_HOUR    = 60 * 60
@@ -449,6 +456,15 @@ def build_tasks() -> list[asyncio.Task]:
                 run_immediately=True,
             ),
             _sync_feeds,
+        ),
+        (
+            JobState(
+                name="signal_sweep",
+                description="Infer /today signals from meetings, calendar, and projects (every 4 hours)",
+                interval_sec=_FOUR_HOURS,
+                run_immediately=True,
+            ),
+            _generate_signals,
         ),
     ]
 
