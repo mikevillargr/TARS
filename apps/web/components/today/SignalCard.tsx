@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { X, Clock, ChevronDown, CalendarPlus, Link2, MoreHorizontal } from "lucide-react"
 import {
   DropdownMenu,
@@ -62,6 +62,7 @@ const URGENCY: Record<SignalUrgency, UrgencyStyle> = {
 const AXIS_LOCK_PX = 10    // movement before we decide horizontal vs. vertical
 const COMMIT_PX = 88       // past this, releasing commits the action
 const MAX_DRAG_PX = 132    // rubber-band ceiling
+const WHEEL_END_MS = 140   // silence after the last wheel event = gesture over
 
 type SwipeIntent = "dismiss" | "snooze" | null
 
@@ -86,6 +87,11 @@ export function SignalCard({
 
   const start = useRef<{ x: number; y: number } | null>(null)
   const axis = useRef<"x" | "y" | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  // Mirrors `dx` for callbacks that fire outside React's render cycle (the
+  // wheel end-timer closure would otherwise read a stale value).
+  const dxRef = useRef(0)
+  const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const style = URGENCY[signal.urgency]
   const [primary, ...alternates] = signal.actions
@@ -94,10 +100,40 @@ export function SignalCard({
   const intent: SwipeIntent = dx === 0 ? null : dx < 0 ? "dismiss" : "snooze"
   const armed = Math.abs(dx) >= COMMIT_PX
 
-  // ── Swipe handlers ─────────────────────────────────────────────────────────
-  // touch-action: pan-y on the card lets the browser keep vertical scrolling
-  // natively, so we never have to preventDefault (which React's passive
-  // listeners wouldn't allow anyway).
+  // ── Gesture engine ─────────────────────────────────────────────────────────
+  // One commit/reset path shared by three input types:
+  //   · touch      — phone/tablet, via touch events
+  //   · trackpad   — two-finger horizontal swipe, via wheel deltaX
+  //   · pointer    — the × and snooze buttons, for mouse users
+  //
+  // touch-action: pan-y keeps vertical scrolling native on touch. The wheel
+  // path has to preventDefault, because a horizontal two-finger swipe is also
+  // the macOS browser back/forward gesture — without this you'd navigate away
+  // mid-triage.
+
+  /** Rubber-banded so the card never feels unbounded past the commit point. */
+  const applyDrag = useCallback((raw: number) => {
+    const over = Math.max(0, Math.abs(raw) - COMMIT_PX)
+    const damped = Math.sign(raw) * Math.min(Math.abs(raw) - over * 0.6, MAX_DRAG_PX)
+    dxRef.current = damped
+    setDx(damped)
+  }, [])
+
+  const endDrag = useCallback(() => {
+    const current = dxRef.current
+    if (Math.abs(current) >= COMMIT_PX) {
+      const committed: SwipeIntent = current < 0 ? "dismiss" : "snooze"
+      setLeaving(committed)
+      // Let the exit transition play before the row leaves the list.
+      setTimeout(() => {
+        if (committed === "dismiss") onDismiss(signal.id)
+        else onSnooze(signal.id)
+      }, 200)
+    } else {
+      dxRef.current = 0
+      setDx(0)
+    }
+  }, [onDismiss, onSnooze, signal.id])
 
   function handleTouchStart(e: React.TouchEvent) {
     const t = e.touches[0]
@@ -116,28 +152,51 @@ export function SignalCard({
       axis.current = Math.abs(rawX) > Math.abs(rawY) ? "x" : "y"
     }
     if (axis.current !== "x") return
-
-    // Rubber-band past the commit point so the card never feels unbounded.
-    const over = Math.max(0, Math.abs(rawX) - COMMIT_PX)
-    const damped = Math.sign(rawX) * Math.min(Math.abs(rawX) - over * 0.6, MAX_DRAG_PX)
-    setDx(damped)
+    applyDrag(rawX)
   }
 
   function handleTouchEnd() {
-    if (axis.current === "x" && Math.abs(dx) >= COMMIT_PX) {
-      const committed: SwipeIntent = dx < 0 ? "dismiss" : "snooze"
-      setLeaving(committed)
-      // Let the exit transition play before the row leaves the list.
-      setTimeout(() => {
-        if (committed === "dismiss") onDismiss(signal.id)
-        else onSnooze(signal.id)
-      }, 200)
-    } else {
-      setDx(0)
-    }
+    if (axis.current === "x") endDrag()
     start.current = null
     axis.current = null
   }
+
+  // Trackpad horizontal swipe. Registered manually because it must be
+  // non-passive to preventDefault; React attaches wheel listeners passively.
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el) return
+
+    function onWheel(e: WheelEvent) {
+      if (leaving) return
+      // Vertical intent — let the page scroll, and abandon any partial drag.
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) {
+        if (dxRef.current !== 0 && !wheelTimer.current) {
+          dxRef.current = 0
+          setDx(0)
+        }
+        return
+      }
+
+      // Ours: stop the browser turning this into a back/forward navigation.
+      e.preventDefault()
+      // deltaX is positive swiping content left; invert so the card follows
+      // the fingers the same way it follows a thumb.
+      applyDrag(dxRef.current - e.deltaX)
+
+      if (wheelTimer.current) clearTimeout(wheelTimer.current)
+      wheelTimer.current = setTimeout(() => {
+        wheelTimer.current = null
+        endDrag()
+      }, WHEEL_END_MS)
+    }
+
+    el.addEventListener("wheel", onWheel, { passive: false })
+    return () => {
+      el.removeEventListener("wheel", onWheel)
+      if (wheelTimer.current) clearTimeout(wheelTimer.current)
+    }
+  }, [applyDrag, endDrag, leaving])
 
   const translate = leaving
     ? leaving === "dismiss"
@@ -182,11 +241,15 @@ export function SignalCard({
       )}
 
       <div
+        ref={cardRef}
         className="card relative"
         style={{
           padding: "0.875rem 1rem",
           borderColor: style.border,
           touchAction: "pan-y",
+          // Belt-and-braces against the macOS back-swipe: even if a wheel
+          // event slips through, the gesture won't escape to history nav.
+          overscrollBehaviorX: "contain",
           transform: `translate3d(${translate}, 0, 0)`,
           opacity: leaving ? 0 : 1,
           // No transition while the finger is down — the card must track it 1:1.
