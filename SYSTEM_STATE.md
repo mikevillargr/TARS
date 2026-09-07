@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.15.12 |
-| Released | 2026-07-16 |
+| Version | v2.16.0 |
+| Released | 2026-09-07 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -88,22 +88,23 @@ requests are excluded — vision routing owns model choice.
 
 ---
 
-## Active Components (12)
+## Active Components (13)
 
 | # | Component | Route | Status |
 |---|---|---|---|
-| 1 | Chat | /chat | Live |
-| 2 | Projects | /tasks | Live — renamed from "Tasks" |
-| 2b | To-Dos | /reminders | Live — quick personal checklist (renamed from "Reminders"); groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
-| 3 | Meetings | /meetings | Live |
-| 4 | Calendar | /calendar | Live |
-| 5 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
-| 6 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval; **export** to DOCX, PDF, or Google Doc via item detail modal |
-| 7 | Artifacts | /artifacts | Live |
-| 8 | Cron Manager | /cron | Live |
-| 9 | Connectors | /connectors | Live |
-| 10 | Mnemon | /memory | Live |
-| 11 | Settings | /settings | Live |
+| 1 | Today | /today | Live — landing screen. AI-inferred signals needing a decision, grouped by urgency, with named actions, swipe-to-dismiss, snooze, undo, and a state-driven ambient backdrop. Replaces the old prompt-cron daily digest. **Signal generation from real sources is not built yet, so the list is empty until it lands.** |
+| 2 | Chat | /chat | Live |
+| 3 | Projects | /tasks | Live — renamed from "Tasks" |
+| 3b | To-Dos | /reminders | Live — quick personal checklist (renamed from "Reminders"); groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
+| 4 | Meetings | /meetings | Live |
+| 5 | Calendar | /calendar | Live |
+| 6 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
+| 7 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval; **export** to DOCX, PDF, or Google Doc via item detail modal |
+| 8 | Artifacts | /artifacts | Live |
+| 9 | Cron Manager | /cron | Live |
+| 10 | Connectors | /connectors | Live |
+| 11 | Mnemon | /memory | Live |
+| 12 | Settings | /settings | Live |
 
 **Agent Jobs (retired, 2026-09):** the in-app autonomous Claude Code subprocess feature was
 removed — no route, no nav entry, backend `agents/` package deleted. See `AGENTS.md` Part 2 at
@@ -162,6 +163,33 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.16.0 — 2026-09-07
+**Feature: Today screen + Signals**
+- New `/today` route, first in nav, and the app's landing surface. Does **not** replace `/chat`.
+- Lists **signals**: items TARS inferred across email, meeting transcripts, calendar, and
+  projects that appear to need a decision. Replaces the prompt-cron daily digest, which dumped
+  prose into a chat conversation you then had to act on manually.
+- New `signals` table (migration `r5s6t7u8v9w0`) with a `dedupe_key` unique per user, so a
+  dismissed signal doesn't reappear on the next generator sweep.
+- `GET /api/signals`, `POST /{id}/act|snooze|dismiss|restore`, `GET /{id}/event.ics`.
+  Snoozed items wake on read rather than via a worker.
+- Action dispatch splits deliberately: `create_reminder` (**the default — signal work lands in
+  To-Dos, not Projects**), `create_task`, and `create_event` execute server-side; `draft_reply`,
+  `move_event`, `open_meeting`, `save_brain` open a pre-seeded conversation so email keeps the
+  draft-card approval gate that already exists in chat.
+- Undo restores the signal but deliberately does **not** delete a side effect already created.
+- UI: uncapped urgency-grouped cards, a named primary action plus alternates in an overflow
+  menu, `why` disclosure with reasoning + citation, swipe-to-dismiss on both touch and trackpad,
+  5s undo with a draining timer, and three distinct blank states (earned / parked / quiet).
+- A state-driven ambient backdrop on `/today` only: moss glow tracks a sun arc across the day,
+  intensity scales with open signal count, ALL CLEAR collapses it to the boot glow.
+- **Known gap:** signal *generation* from real sources is not built. `/today` will show
+  "NOTHING IN" on production until that job lands. `scripts/seed_signals.py` seeds dev data.
+- Fix: `next.config.ts` `allowedDevOrigins` — Next 16 blocked `/_next/*` dev resources on
+  127.0.0.1, so React never hydrated and the whole app was non-interactive on that origin.
+
+---
 
 ### v2.15.12 — 2026-07-16
 **Fix + Enhance: typeset pass — WCAG contrast, code block chrome, prose sizing, label consistency**

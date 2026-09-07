@@ -1,7 +1,7 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.15.12 (post-sessions 1–9+, live on production; docs
-> consolidation pass — branch-first git workflow, Agent Jobs retirement cleanup)
+> Last updated: September 2026 — v2.16.0 (post-sessions 1–9+, live on production;
+> Today screen + Signals)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -251,6 +251,24 @@ Task {
   created_at, updated_at
 }
 
+Signal {
+  id, user_id
+  kind          // "action" | "fyi"
+  source        // "gmail" | "fireflies" | "calendar" | "project" | "feed" | "strava"
+  source_label, source_ref, citation
+  title, urgency // "normal" | "time" | "overdue"
+  reasoning     // shown under the `why` disclosure
+  actions[]     // [{kind, label, payload}] — [0] is TARS's pick
+  calendar_event // JSON when the signal implies a commitment (drives .ics)
+  status        // "open" | "snoozed" | "done" | "dismissed"
+  snoozed_until, acted_kind, acted_at
+  result_ref    // what it became: reminder / task / event / conversation id
+  dedupe_key    // unique per user — stops a dismissed signal returning next sweep
+  created_at, updated_at
+}
+// A Signal is NOT a Task. A Task is work you committed to; a Signal is a claim
+// you might need to. Acting on one usually produces a To-Do, then the Signal is done.
+
 Reminder {
   id, user_id
   text          // the reminder text
@@ -398,14 +416,39 @@ Linear, GitHub — plug in when needed
 
 ---
 
-## 8. Application Components (13)
+## 8. Application Components (14)
 
-### Navigation Order (13 components)
-Chat, Projects, To-Dos, Meetings, Contacts, Calendar, Feed, Second Brain, Artifacts, Cron Manager, Connectors, Mnemon, Settings
+### Navigation Order (14 components)
+Today, Chat, Projects, To-Dos, Meetings, Contacts, Calendar, Feed, Second Brain, Artifacts, Cron Manager, Connectors, Mnemon, Settings
 
 ### Component Specs
 
-**1. Chat**
+**1. Today** (route: /today)
+The landing surface. Signals TARS inferred across email, meetings, calendar, and projects,
+each needing a decision. Replaces the old prompt-cron daily digest that dumped prose into a
+chat conversation.
+
+- Header is an instrument readout, not a greeting: `BRIEF · MON 07 SEP · 06:40` plus a verdict
+  ("2 can't wait" / "Nothing urgent" / "All clear"), never a raw count
+- Signal cards grouped by urgency (overdue / today / when you can). **Never truncated** — a
+  heavy morning should look heavy
+- Each card: source badge + age, imperative title, one specifically-named primary action
+  (never "Approve"), alternates behind an overflow menu, collapsible `why` with reasoning +
+  citation, snooze, dismiss
+- Dismiss and snooze are recoverable — 5s undo bar with a draining hairline; cleared/snoozed
+  are visitable states, not a void
+- Swipe left to dismiss, right to snooze — works on touch and on trackpad (wheel deltaX)
+- "Add to calendar" on signals carrying an event → `.ics` from a real endpoint (never a blob;
+  blob downloads break in the installed PWA shell)
+- Ambient field: a state-driven backdrop, `/today` only. Moss glow tracks a sun arc across the
+  day, amber peaks at golden hour, intensity scales with open signal count, ALL CLEAR collapses
+  it to the boot glow. Grain seeded per-date so no two days render identically
+- Three distinct blank states: **earned** (you cleared it — shows a session receipt),
+  **parked** (everything snoozed, nothing done), **quiet** (nothing came in). Conflating them
+  makes the screen lie two-thirds of the time
+- FYI rows (kind="fyi") render as plain text, no card weight
+
+**2. Chat**
 - Conversation list, message thread, model badge per message
 - Tool call chips inline (e.g. "Queried Gmail", "Created Task")
 - Context bar showing active Mnemon injections
@@ -418,13 +461,13 @@ Chat, Projects, To-Dos, Meetings, Contacts, Calendar, Feed, Second Brain, Artifa
 - Voice input: `useVoiceInput` hook handles microphone recording, VAD silence detection, and transcription
 - Voice mode toggle: enables TTS for all responses in the current conversation (persisted per-session)
 
-**2. Projects** (route: /tasks)
+**3. Projects** (route: /tasks)
 - Kanban: Inbox / Todo / In Progress / Done / Snoozed
 - Cards: source badge, priority color bar, due date, connector sync indicator
 - Right panel detail: full description, source reference, activity log
 - Bulk actions, inline quick-add, filter/sort bar
 
-**2b. To-Dos** (route: /reminders)
+**3b. To-Dos** (route: /reminders)
 - Quick personal checklist — no pipeline, no priority, no connectors
 - Inline quick-add at top: type and press Enter
 - Groups: Overdue / Today / Tomorrow / Upcoming / Someday / Done (collapsible)
@@ -433,20 +476,20 @@ Chat, Projects, To-Dos, Meetings, Contacts, Calendar, Feed, Second Brain, Artifa
 - Agent tools: `create_reminder` (instant, no approval gate) and `list_reminders`
 - Distinct from Projects: use To-Dos for personal "don't forget" items; Projects for work action items with tracking
 
-**3. Meetings**
+**4. Meetings**
 - List with status badge: Processing / Ready / Action Required
 - Detail: Summary tab, Transcript tab (speaker labels + timestamps), Actions tab
 - Action items: owner, due date suggestion, one-click Create Task
 - Related Second Brain items surfaced automatically
 
-**4. Calendar**
+**5. Calendar**
 - Month / Week / Day toggle, Week view default
 - Event types color-coded: meetings, tasks with due dates, cron jobs, agent jobs
 - Click event: opens right panel detail with link to source view
 - Mini month picker sidebar, Today button
 - Mobile: Day view default, swipeable
 
-**4b. Feed** (route: /feed)
+**5b. Feed** (route: /feed)
 - Three-panel layout: category sidebar (source list, unread counts, "+ Add Feed"), compact article list, reading pane
 - Subscribe to any URL: RSS/Atom, website (auto-discovers `<link rel="alternate">`), YouTube channel (XML feed), Reddit (/r/subreddit.rss), Google News topics
 - Four media types:
@@ -462,7 +505,7 @@ Chat, Projects, To-Dos, Meetings, Contacts, Calendar, Feed, Second Brain, Artifa
 - Rolling 90-day item cleanup; starred and saved-to-brain items kept indefinitely
 - Background hourly sync job (`feed_sync` in scheduler); per-source configurable interval (default 4h)
 
-**5. Second Brain**
+**6. Second Brain**
 - Collections sidebar panel (named groups of items)
 - Masonry/card grid + list toggle
 - Semantic search bar, domain/tag/collection filters; **Starred** sidebar filter (amber star) for pinned items
@@ -473,7 +516,7 @@ Chat, Projects, To-Dos, Meetings, Contacts, Calendar, Feed, Second Brain, Artifa
 - PWA share target (native share sheet on mobile)
 - Quick Capture: URL, Note, Document upload, Voice memo
 
-**6. Artifacts**
+**7. Artifacts**
 A generated output library. Every file TARS produces is automatically saved, versioned, and retrievable here.
 
 > Note: the Agent Jobs feature (autonomous Claude Code subprocess self-modifying production) was
@@ -497,7 +540,7 @@ Features:
 - Version tracking: regenerating the same document creates a new version linked to the original
 - Empty state: explains that files generated by TARS in chat, cron reports, and meetings appear here automatically
 
-**7. Cron Manager**
+**8. Cron Manager**
 Two-type system. Connector Jobs (interval-based sync) and Prompt Jobs (wall-clock scheduled, Asia/Manila timezone).
 
 Connector Jobs tab:
@@ -511,20 +554,20 @@ Prompt Jobs tab:
 - On fire: runs prompt through Tier 3 (Claude Sonnet), saves result as new chat conversation, triggers new_message notification
 - Cards show: schedule, last output preview, "Open in chat →" link, Test / Edit / Pause / Delete actions
 
-**8. Connectors**
+**9. Connectors**
 - Grid of connector cards: icon, name, status, last synced, capabilities
 - Connect/disconnect flow
 - Webhook log per connector showing recent inbound events
 - Which components use each connector
 
-**9. Mnemon (Memory Browser)**
+**10. Mnemon (Memory Browser)**
 - Memory list: content, domain badge, source, importance score, date
 - Filter by domain, source, date, importance
 - Semantic search across all memories
 - Edit and delete individual memories
 - Manual memory addition
 
-**10. Settings**
+**11. Settings**
 - Profile and preferences
 - Model routing config: tier assignments (provider + model per tier) **plus an optional backup
   model per tier** — used as automatic fallback when the primary errors/times out (see §4)
@@ -548,7 +591,9 @@ tars/
 │   │   ├── app/
 │   │   │   ├── (auth)/login/
 │   │   │   ├── (app)/
+│   │   │   │   ├── today/          # Today screen — signals triage (landing)
 │   │   │   │   ├── chat/
+│   │   │   │   ├── today/
 │   │   │   │   ├── tasks/
 │   │   │   │   ├── meetings/
 │   │   │   │   ├── calendar/
@@ -562,6 +607,7 @@ tars/
 │   │   │   │   └── settings/
 │   │   │   └── api/            # thin proxy to harness
 │   │   ├── components/
+│   │   │   ├── today/          # SignalCard, AmbientField
 │   │   │   ├── shell/          # sidebar, topbar, right panel
 │   │   │   ├── chat/
 │   │   │   ├── tasks/
@@ -934,6 +980,21 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.16.0 Feature: Today screen + Signals. New /today landing route (does NOT replace /chat)
+        listing AI-inferred items needing a decision, replacing the prompt-cron daily digest
+        that dumped prose into a chat conversation. New Signal model + table (migration
+        r5s6t7u8v9w0) with dedupe_key so dismissed signals don't return on the next sweep.
+        GET/act/snooze/dismiss/restore at /api/signals plus a real .ics endpoint. Action
+        dispatch splits: create_reminder (default — signal work lands in To-Dos, not
+        Projects) / create_task / create_event execute server-side; draft_reply / move_event /
+        open_meeting / save_brain open a pre-seeded conversation so email keeps its existing
+        draft-card gate. Undo deliberately does not roll back side effects already produced.
+        Frontend: uncapped urgency-grouped cards, named primary action + overflow alternates,
+        swipe-to-dismiss on touch AND trackpad, 5s undo with draining timer, three distinct
+        blank states (earned/parked/quiet), state-driven ambient field on /today only.
+        Also fixed: next.config allowedDevOrigins — Next 16 blocked dev resources on
+        127.0.0.1, leaving the whole app unhydrated and non-interactive. Signal generation
+        from real sources is NOT built yet; /today is empty until it lands.
 v2.15.12 Fix + Enhance: typeset pass — WCAG contrast, code block chrome, prose sizing, label
         consistency. `--c-ink-faint` in light mode #948a7b → #7a7062 (WCAG AA 4.5:1, was 3.0:1;
         all .tars-label text in light mode was too faint). Code/SVG block headers: hardcoded
