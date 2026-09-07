@@ -69,6 +69,42 @@ interface PendingUndo {
   previous: SignalStatus
 }
 
+/**
+ * A blank list means three different things, and conflating them makes the
+ * screen lie two-thirds of the time:
+ *
+ *   earned  — you worked the stack down. Reward it, and show the receipt.
+ *   quiet   — nothing came in. Don't congratulate someone for an empty inbox
+ *             they had no hand in; tell them what lands here and when.
+ *   parked  — everything got snoozed. Nothing is done. Saying "all clear"
+ *             here is the fastest way to teach someone to distrust a readout.
+ */
+type BlankKind = "earned" | "quiet" | "parked"
+
+interface SessionTally {
+  acted: number
+  dismissed: number
+  snoozed: number
+  firstAt: number | null
+  lastAt: number | null
+}
+
+const EMPTY_TALLY: SessionTally = {
+  acted: 0,
+  dismissed: 0,
+  snoozed: 0,
+  firstAt: null,
+  lastAt: null,
+}
+
+function formatSpan(ms: number): string {
+  const secs = Math.round(ms / 1000)
+  if (secs < 60) return `${secs}s`
+  const mins = Math.round(secs / 60)
+  if (mins < 60) return `${mins} min`
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`
+}
+
 // ─── .ics generation ─────────────────────────────────────────────────────────
 
 function toIcsStamp(iso: string): string {
@@ -131,6 +167,7 @@ export default function TodayPage() {
   const [briefOpen, setBriefOpen] = useState(false)
   const [undo, setUndo] = useState<PendingUndo | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [tally, setTally] = useState<SessionTally>(EMPTY_TALLY)
 
   // Client-only clock (avoids SSR hydration mismatch on the readout)
   const clockMs = useClockMs()
@@ -167,6 +204,18 @@ export default function TodayPage() {
       setStatuses(prev => {
         setUndo({ id, label: undoLabel, previous: prev[id] })
         return { ...prev, [id]: next }
+      })
+      // Session receipt — recorded here rather than in an effect so there's no
+      // cascading render, and so undo can't corrupt the tally after the fact.
+      setTally(prev => {
+        const now = Date.now()
+        return {
+          acted: prev.acted + (next === "done" ? 1 : 0),
+          dismissed: prev.dismissed + (next === "cleared" ? 1 : 0),
+          snoozed: prev.snoozed + (next === "snoozed" ? 1 : 0),
+          firstAt: prev.firstAt ?? now,
+          lastAt: now,
+        }
       })
     },
     [],
@@ -207,6 +256,17 @@ export default function TodayPage() {
     s => s.urgency === "overdue" || s.urgency === "time",
   ).length
   const readout = buildReadout(urgentCount, openSignals.length - urgentCount)
+
+  // Which blank state we're in — see BlankKind. "parked" wins over "earned"
+  // because deferred work isn't finished work, and claiming otherwise is the
+  // kind of small lie that costs a readout its credibility.
+  const touched = tally.acted + tally.dismissed + tally.snoozed
+  const blankKind: BlankKind =
+    snoozedCount > 0 && tally.acted + tally.dismissed === 0
+      ? "parked"
+      : touched > 0
+        ? "earned"
+        : "quiet"
   const dateLine = clock
     ? clock
         .toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
@@ -214,6 +274,12 @@ export default function TodayPage() {
     : ""
   const timeLine = clock
     ? clock.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    : ""
+
+  // Next inference pass. MOCK — production reads this off the actual cron
+  // schedule rather than assuming a 4-hourly sweep.
+  const nextSweep = clock
+    ? `${String((Math.floor(clock.getHours() / 4) + 1) * 4 % 24).padStart(2, "0")}:00`
     : ""
 
   return (
@@ -326,32 +392,95 @@ export default function TodayPage() {
               </div>
             )}
 
-            {/* All-clear state — the field calms, the machine reports in */}
+            {/* Blank slate — three states, because a blank list means three
+                different things. The field calms behind all of them. */}
             {allClear && (
               <div
                 className="flex flex-col items-center justify-center text-center py-20 mb-8"
-                style={{ animation: "tars-boot-in 700ms ease-out" }}
+                style={{ animation: "tars-boot-in 700ms cubic-bezier(0.25, 1, 0.5, 1)" }}
               >
-                <span
-                  className="tars-display mb-2"
-                  style={{ color: "var(--c-moss)", fontFamily: "var(--font-mono), monospace" }}
-                >
-                  ALL CLEAR
-                </span>
-                <span className="tars-label">
-                  {dateLine} · {timeLine}
-                </span>
-                <span
-                  className="text-sm mt-3"
-                  style={{ color: "var(--c-ink-muted)" }}
-                >
-                  {ALL_CLEAR_LINES[
-                    (clock ? clock.getDate() : 0) % ALL_CLEAR_LINES.length
-                  ]}
-                </span>
-                {snoozedCount > 0 && (
-                  <span className="tars-label tars-label--muted mt-3">
-                    {snoozedCount} snoozed for later
+                {blankKind === "earned" && (
+                  <>
+                    <span
+                      className="tars-display mb-2"
+                      style={{ color: "var(--c-moss)", fontFamily: "var(--font-mono), monospace" }}
+                    >
+                      ALL CLEAR
+                    </span>
+                    <span className="text-sm" style={{ color: "var(--c-ink-muted)" }}>
+                      {ALL_CLEAR_LINES[(clock ? clock.getDate() : 0) % ALL_CLEAR_LINES.length]}
+                    </span>
+
+                    {/* The receipt. Evidence of work done, in the machine
+                        voice — this is the reward, not a confetti burst. */}
+                    <div
+                      className="flex items-center gap-3 mt-6 px-3 py-2 rounded-md flex-wrap justify-center"
+                      style={{ border: "1px solid var(--c-border-faint)" }}
+                    >
+                      <span className="tars-label">{timeLine}</span>
+                      {tally.acted > 0 && (
+                        <span className="tars-label" style={{ color: "var(--c-moss)" }}>
+                          {tally.acted} actioned
+                        </span>
+                      )}
+                      {tally.dismissed > 0 && (
+                        <span className="tars-label tars-label--muted">
+                          {tally.dismissed} dismissed
+                        </span>
+                      )}
+                      {tally.snoozed > 0 && (
+                        <span className="tars-label tars-label--muted">
+                          {tally.snoozed} snoozed
+                        </span>
+                      )}
+                      {tally.firstAt && tally.lastAt && tally.lastAt - tally.firstAt > 1500 && (
+                        <span className="tars-label tars-label--muted">
+                          cleared in {formatSpan(tally.lastAt - tally.firstAt)}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {blankKind === "parked" && (
+                  <>
+                    <span
+                      className="tars-display mb-2"
+                      style={{ color: "var(--c-amber)", fontFamily: "var(--font-mono), monospace" }}
+                    >
+                      ALL PARKED
+                    </span>
+                    <span className="text-sm" style={{ color: "var(--c-ink-muted)" }}>
+                      Nothing done, everything deferred. {snoozedCount} come back tonight.
+                    </span>
+                  </>
+                )}
+
+                {blankKind === "quiet" && (
+                  <>
+                    <span
+                      className="tars-display mb-2"
+                      style={{ color: "var(--c-ink-faint)", fontFamily: "var(--font-mono), monospace" }}
+                    >
+                      NOTHING IN
+                    </span>
+                    <span
+                      className="text-sm max-w-sm"
+                      style={{ color: "var(--c-ink-muted)", textWrap: "pretty" }}
+                    >
+                      No signals this sweep. TARS reads your inbox, meeting
+                      transcripts, calendar, and open projects, and surfaces only
+                      what needs a decision.
+                    </span>
+                    <span className="tars-label tars-label--muted mt-4">
+                      next sweep {nextSweep}
+                    </span>
+                  </>
+                )}
+
+                {snoozedCount > 0 && blankKind === "earned" && (
+                  <span className="tars-label tars-label--muted mt-4">
+                    {snoozedCount} waiting for tonight
                   </span>
                 )}
               </div>
