@@ -37,6 +37,26 @@ const ALL_CLEAR_LINES = [
   "Nothing pending. Go ride.",
 ]
 
+/**
+ * The headline is a verdict, not a tally.
+ *
+ * "8 need you" makes you do the triage maths yourself. What's actually worth
+ * knowing at 06:40 is whether anything is on fire — so lead with that, and let
+ * the count of everything else sit in the mono layer beside it. The group
+ * headers below carry the precise breakdown; this line only has to answer
+ * "how bad is today".
+ */
+function buildReadout(urgent: number, rest: number): { lead: string; aside: string | null } {
+  if (urgent === 0 && rest === 0) return { lead: "All clear", aside: null }
+  if (urgent === 0) {
+    return { lead: "Nothing urgent", aside: `${rest} when you can` }
+  }
+  return {
+    lead: `${urgent} can't wait`,
+    aside: rest > 0 ? `${rest} that can` : null,
+  }
+}
+
 // ─── Status model ────────────────────────────────────────────────────────────
 // Mirrors the proposed Signal.status column. Dismissal is never destructive:
 // cleared items remain visitable, which is what makes fast triage safe.
@@ -183,6 +203,10 @@ export default function TodayPage() {
   }, [undo])
 
   const allClear = openSignals.length === 0
+  const urgentCount = openSignals.filter(
+    s => s.urgency === "overdue" || s.urgency === "time",
+  ).length
+  const readout = buildReadout(urgentCount, openSignals.length - urgentCount)
   const dateLine = clock
     ? clock
         .toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" })
@@ -205,25 +229,20 @@ export default function TodayPage() {
             <span className="tars-label">· {timeLine}</span>
           </div>
           <div className="flex items-baseline gap-4 mt-2 flex-wrap">
-            {/* The count re-keys on change so the tick-down animation replays —
-                state feedback, not decoration: you see the number drop as you
+            {/* Re-keys on change so the tick animation replays — state
+                feedback, not decoration: the verdict visibly softens as you
                 clear the stack. */}
-            <span className="tars-title" style={{ color: "var(--c-ink)" }}>
-              {allClear ? (
-                "All clear"
-              ) : (
-                <>
-                  <span
-                    key={openSignals.length}
-                    className="inline-block"
-                    style={{ animation: "tars-count-tick 320ms cubic-bezier(0.25, 1, 0.5, 1)" }}
-                  >
-                    {openSignals.length}
-                  </span>{" "}
-                  need you
-                </>
-              )}
+            <span
+              key={readout.lead}
+              className="tars-title inline-block"
+              style={{
+                color: "var(--c-ink)",
+                animation: "tars-count-tick 320ms cubic-bezier(0.25, 1, 0.5, 1)",
+              }}
+            >
+              {readout.lead}
             </span>
+            {readout.aside && <span className="tars-label">{readout.aside}</span>}
             <span className="tars-label">{MOCK_MEETINGS.length} meetings</span>
             {/* "tasks" is load-bearing — there's also an overdue *signal*
                 group below, and two different "overdue 2" readouts meaning
