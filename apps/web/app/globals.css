@@ -678,6 +678,18 @@ html, body, #__next, main {
   100% { transform: translate3d(0, 0, 0) scale(1.04); }
 }
 
+/* /today readout — the open-signal count ticking down as the stack clears */
+@keyframes tars-count-tick {
+  0%   { transform: translateY(-0.35em); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+/* /today undo bar — hairline draining over the 5s undo window */
+@keyframes tars-undo-drain {
+  0%   { width: 100%; }
+  100% { width: 0%; }
+}
+
 /* Signal card dismiss — collapse out of the stack */
 @keyframes tars-signal-out {
   0%   { opacity: 1; transform: translateX(0) scale(1); max-height: 320px; }

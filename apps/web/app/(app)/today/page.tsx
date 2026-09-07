@@ -12,7 +12,30 @@ import {
   MOCK_OVERDUE,
   MOCK_BRIEF,
   type Signal,
+  type SignalAction,
+  type SignalUrgency,
 } from "@/lib/today-mock"
+
+// ─── Grouping ────────────────────────────────────────────────────────────────
+// Uncapped by design: a heavy morning should look heavy. Hiding items behind
+// "show 3 more" is exactly wrong on a surface whose whole job is "what needs
+// you". Grouping gives the list structure instead of truncation.
+
+const GROUP_ORDER: SignalUrgency[] = ["overdue", "time", "normal"]
+
+const GROUP_LABEL: Record<SignalUrgency, string> = {
+  overdue: "overdue",
+  time: "today",
+  normal: "when you can",
+}
+
+/** Deterministic per-day pick so the line varies but never feels random. */
+const ALL_CLEAR_LINES = [
+  "Nothing needs you. Enjoy it.",
+  "Zero signals. Suspiciously quiet.",
+  "All clear. Don't get used to it.",
+  "Nothing pending. Go ride.",
+]
 
 // ─── Status model ────────────────────────────────────────────────────────────
 // Mirrors the proposed Signal.status column. Dismissal is never destructive:
@@ -139,11 +162,11 @@ export default function TodayPage() {
   )
 
   const handleAct = useCallback(
-    (signal: Signal) => {
+    (signal: Signal, action: SignalAction) => {
       // MOCK — production dispatches to the existing tool endpoints
       // (send_email / create_task / update_calendar_event / …).
-      setStatus(signal.id, "done", `${signal.action.label} — done`)
-      setToast(`${signal.action.label} → would call ${signal.action.kind}()`)
+      setStatus(signal.id, "done", `${action.label} — done`)
+      setToast(`${action.label} → would call ${action.kind}()`)
     },
     [setStatus],
   )
@@ -182,12 +205,31 @@ export default function TodayPage() {
             <span className="tars-label">· {timeLine}</span>
           </div>
           <div className="flex items-baseline gap-4 mt-2 flex-wrap">
+            {/* The count re-keys on change so the tick-down animation replays —
+                state feedback, not decoration: you see the number drop as you
+                clear the stack. */}
             <span className="tars-title" style={{ color: "var(--c-ink)" }}>
-              {allClear ? "All clear" : `${openSignals.length} need you`}
+              {allClear ? (
+                "All clear"
+              ) : (
+                <>
+                  <span
+                    key={openSignals.length}
+                    className="inline-block"
+                    style={{ animation: "tars-count-tick 320ms cubic-bezier(0.25, 1, 0.5, 1)" }}
+                  >
+                    {openSignals.length}
+                  </span>{" "}
+                  need you
+                </>
+              )}
             </span>
             <span className="tars-label">{MOCK_MEETINGS.length} meetings</span>
+            {/* "tasks" is load-bearing — there's also an overdue *signal*
+                group below, and two different "overdue 2" readouts meaning
+                different things is how you teach someone to distrust a UI. */}
             <span className="tars-label" style={{ color: "var(--c-rose)" }}>
-              {MOCK_OVERDUE.length} overdue
+              {MOCK_OVERDUE.length} tasks overdue
             </span>
           </div>
         </header>
@@ -223,26 +265,46 @@ export default function TodayPage() {
               )}
             </div>
 
-            {/* Needs you */}
+            {/* Needs you — grouped by urgency, never truncated */}
             {!allClear && (
-              <>
-                <div className="flex items-baseline gap-2 mb-3">
-                  <span className="tars-label">needs you</span>
-                  <span className="tars-label tars-label--moss">{openSignals.length}</span>
-                </div>
-                <div className="flex flex-col gap-3 mb-8">
-                  {openSignals.map(signal => (
-                    <SignalCard
-                      key={signal.id}
-                      signal={signal}
-                      onAct={handleAct}
-                      onSnooze={handleSnooze}
-                      onDismiss={handleDismiss}
-                      onAddToCalendar={handleAddToCalendar}
-                    />
-                  ))}
-                </div>
-              </>
+              <div className="mb-8">
+                {GROUP_ORDER.map(group => {
+                  const items = openSignals.filter(s => s.urgency === group)
+                  if (items.length === 0) return null
+                  return (
+                    <section key={group} className="mb-6 last:mb-0">
+                      <div className="flex items-baseline gap-2 mb-3">
+                        <span
+                          className="tars-label"
+                          style={{
+                            color:
+                              group === "overdue"
+                                ? "var(--c-rose)"
+                                : group === "time"
+                                  ? "var(--c-amber)"
+                                  : "var(--c-ink-faint)",
+                          }}
+                        >
+                          {GROUP_LABEL[group]}
+                        </span>
+                        <span className="tars-label tars-label--muted">{items.length}</span>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {items.map(signal => (
+                          <SignalCard
+                            key={signal.id}
+                            signal={signal}
+                            onAct={handleAct}
+                            onSnooze={handleSnooze}
+                            onDismiss={handleDismiss}
+                            onAddToCalendar={handleAddToCalendar}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  )
+                })}
+              </div>
             )}
 
             {/* All-clear state — the field calms, the machine reports in */}
@@ -258,7 +320,15 @@ export default function TodayPage() {
                   ALL CLEAR
                 </span>
                 <span className="tars-label">
-                  {dateLine} · {timeLine} · nothing needs you
+                  {dateLine} · {timeLine}
+                </span>
+                <span
+                  className="text-sm mt-3"
+                  style={{ color: "var(--c-ink-muted)" }}
+                >
+                  {ALL_CLEAR_LINES[
+                    (clock ? clock.getDate() : 0) % ALL_CLEAR_LINES.length
+                  ]}
                 </span>
                 {snoozedCount > 0 && (
                   <span className="tars-label tars-label--muted mt-3">
@@ -360,14 +430,25 @@ export default function TodayPage() {
       {/* ── Undo bar — makes dismissal safe ─────────────────────────────────── */}
       {undo && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-lg"
+          className="fixed left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-lg overflow-hidden"
           style={{
             bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))",
             backgroundColor: "var(--c-ink)",
             color: "var(--c-canvas)",
-            animation: "tars-pill-in 220ms ease-out",
+            animation: "tars-pill-in 220ms cubic-bezier(0.25, 1, 0.5, 1)",
           }}
         >
+          {/* Draining hairline — shows how long undo stays available, so the
+              5s window is legible instead of a guess. */}
+          <span
+            key={undo.id}
+            className="absolute bottom-0 left-0 h-[2px]"
+            style={{
+              backgroundColor: "var(--c-moss)",
+              animation: "tars-undo-drain 5s linear forwards",
+            }}
+            aria-hidden="true"
+          />
           <span className="tars-label" style={{ color: "var(--c-canvas)" }}>
             {undo.label}
           </span>
