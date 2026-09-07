@@ -68,6 +68,7 @@ class ActResult(BaseModel):
     ok: bool
     # Set when the action produced something to navigate to.
     conversation_id: Optional[str] = None
+    reminder_id: Optional[str] = None
     task_id: Optional[str] = None
     event_id: Optional[str] = None
     message: str
@@ -233,7 +234,33 @@ async def act_on_signal(
 
     result = ActResult(ok=True, message=action.get("label", "Done"))
 
-    if body.kind == "create_task":
+    if body.kind == "create_reminder":
+        # The default landing place for signal-derived work. A signal is a
+        # "don't forget this" prompt, which is what To-Dos are for; Projects
+        # is for tracked work with a pipeline, and most signals never warrant
+        # a kanban card.
+        due = payload.get("due_at")
+        rem = Reminder(
+            user_id=user_id,
+            text=payload.get("text") or sig.title,
+            due_at=(
+                datetime.fromisoformat(str(due).replace("Z", "+00:00"))
+                if due
+                # Time-pressured signals arrive with today already implied;
+                # dropping that would lose the only urgency the item had.
+                else datetime.now(timezone.utc)
+                if sig.urgency in ("overdue", "time")
+                else None
+            ),
+        )
+        db.add(rem)
+        await db.flush()
+        result.reminder_id = rem.id
+        sig.result_ref = rem.id
+
+    elif body.kind == "create_task":
+        # Escalation path, offered as an alternate: this one really is tracked
+        # project work and wants a card with a status pipeline.
         task = Task(
             user_id=user_id,
             title=payload.get("title") or sig.title,
@@ -248,12 +275,6 @@ async def act_on_signal(
         await db.flush()
         result.task_id = task.id
         sig.result_ref = task.id
-
-    elif body.kind == "create_reminder":
-        rem = Reminder(user_id=user_id, text=payload.get("text") or sig.title)
-        db.add(rem)
-        await db.flush()
-        sig.result_ref = rem.id
 
     elif body.kind == "create_event":
         event_id = await _create_event(sig, db, user_id)

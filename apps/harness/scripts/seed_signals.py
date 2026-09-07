@@ -46,7 +46,7 @@ def _rows(user_id: str) -> list[Signal]:
             ),
             actions=[
                 {"kind": "draft_reply", "label": "Draft reply"},
-                {"kind": "create_task", "label": "Create task instead"},
+                {"kind": "create_reminder", "label": "Add to To-Dos"},
                 {"kind": "save_brain", "label": "Save thread to Second Brain"},
             ],
             dedupe_key=f"{SEED_PREFIX}aalaw-redline",
@@ -86,7 +86,7 @@ def _rows(user_id: str) -> list[Signal]:
                 "email exists."
             ),
             actions=[
-                {"kind": "create_task", "label": "Create task"},
+                {"kind": "create_reminder", "label": "Add to To-Dos"},
                 {"kind": "draft_reply", "label": "Draft the email now"},
                 {"kind": "open_meeting", "label": "Open the meeting"},
             ],
@@ -109,7 +109,7 @@ def _rows(user_id: str) -> list[Signal]:
             actions=[
                 {"kind": "create_event", "label": "Schedule follow-up"},
                 {"kind": "draft_reply", "label": "Ask Aaron for times"},
-                {"kind": "create_task", "label": "Create task"},
+                {"kind": "create_reminder", "label": "Add to To-Dos"},
             ],
             calendar_event={
                 "title": "Entire Travel Group — follow-up session",
@@ -135,7 +135,7 @@ def _rows(user_id: str) -> list[Signal]:
             ),
             actions=[
                 {"kind": "open_meeting", "label": "Open project"},
-                {"kind": "create_task", "label": "Split into smaller tasks"},
+                {"kind": "create_task", "label": "Add to Projects"},
             ],
             dedupe_key=f"{SEED_PREFIX}nch-deck-stalled",
             created_at=now - timedelta(days=5),

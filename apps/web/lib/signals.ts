@@ -15,19 +15,40 @@ export type SignalUrgency = "normal" | "time" | "overdue"
 export type SignalStatus = "open" | "snoozed" | "done" | "dismissed"
 
 /**
- * Action kinds the harness knows how to dispatch. The first three execute
- * server-side; the rest open a pre-seeded conversation, because they need
- * composition or judgement and chat is where the approval gates already live.
+ * The complete action vocabulary. Nothing outside this list can appear on a
+ * card — the generator picks from it, and the harness dispatches on it.
+ *
+ * EXECUTED SERVER-SIDE — outcome fully specified by the payload, nothing to
+ * negotiate, so no confirmation step:
+ *   create_reminder  Add to To-Dos      the default home for signal work
+ *   create_task      Add to Projects    escalation, for tracked project work
+ *   create_event     Book it            only when the signal carries an event
+ *
+ * HANDED TO CHAT — needs composition or judgement, so it opens a pre-seeded
+ * conversation where the existing approval gates apply (email in particular
+ * keeps its draft-card confirm step):
+ *   draft_reply      Draft reply / Draft chase email / Ask X for times
+ *   move_event       Move <event> / Reschedule
+ *   open_meeting     Open meeting / Open project / Review transcript
+ *   save_brain       Save to Second Brain
+ *   discuss          Ask TARS about this — the catch-all
  */
 export type SignalActionKind =
-  | "create_task"
   | "create_reminder"
+  | "create_task"
   | "create_event"
   | "draft_reply"
   | "move_event"
   | "open_meeting"
   | "save_brain"
   | "discuss"
+
+/** Actions the harness completes itself; everything else opens a conversation. */
+export const EXECUTED_KINDS: SignalActionKind[] = [
+  "create_reminder",
+  "create_task",
+  "create_event",
+]
 
 export interface SignalAction {
   kind: SignalActionKind
