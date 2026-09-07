@@ -1,7 +1,7 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.16.0 (post-sessions 1–9+, live on production;
-> Today screen + Signals)
+> Last updated: September 2026 — v2.17.0 (post-sessions 1–9+, live on production;
+> Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
 ---
@@ -447,6 +447,16 @@ chat conversation.
   **parked** (everything snoozed, nothing done), **quiet** (nothing came in). Conflating them
   makes the screen lie two-thirds of the time
 - FYI rows (kind="fyi") render as plain text, no card weight
+- **Generation** (`jobs/signal_generator.py`, `signal_sweep` every 4h, or
+  `POST /api/signals/generate` on demand). Four detectors, split by whether the answer is a
+  fact or a judgement:
+  - *Deterministic, no model:* stalled/overdue tasks, Fireflies action items that never became
+    work (**grouped by meeting**, not one card per item — one real week produced 225 items),
+    overlapping calendar events
+  - *Model-assisted (Tier 2, strict JSON):* commitments you made in meeting transcripts,
+    surfaced with the verbatim quote
+  - `dedupe_key` is checked against signals in **any** status, so a dismissed signal never
+    returns. Deliberate: re-nagging is how a triage surface loses trust
 
 **2. Chat**
 - Conversation list, message thread, model badge per message
@@ -980,6 +990,21 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.17.0 Feature: signal generation — /today fills itself. jobs/signal_generator.py with four
+        detectors split by fact vs judgement: deterministic (stalled/overdue tasks, unconverted
+        Fireflies action items grouped BY MEETING, calendar conflicts) and model-assisted
+        (Tier 2 JSON extraction of commitments from transcripts, with verbatim quotes).
+        Scheduled as signal_sweep every 4h; POST /api/signals/generate runs one inline on
+        demand. Grouping mattered: one real week produced 225 unconverted action items, which
+        as individual cards is a wall rather than a triage surface — 225 became 18. Sweep
+        results report created/already_seen/deferred_by_cap separately and surface model_errors,
+        because a misconfigured tier otherwise looks identical to "nothing to report".
+        Fix: core/model_client._resolve_pair hardcoded "glm-4.7" as the tier2 fallback
+        regardless of provider, so an anthropic tier2 with no model override sent a Z.ai model
+        name to the Anthropic API and 404'd EVERY tier2 request — silently breaking all of
+        Tier 2 on any install using the default tier2_provider. Now provider-appropriate.
+        Fix: user resolution used User.name; canonical row matches User.id (v2.15.10 pattern).
+        Harness-only, no schema change.
 v2.16.0 Feature: Today screen + Signals. New /today landing route (does NOT replace /chat)
         listing AI-inferred items needing a decision, replacing the prompt-cron daily digest
         that dumped prose into a chat conversation. New Signal model + table (migration

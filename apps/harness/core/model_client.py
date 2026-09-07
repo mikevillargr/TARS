@@ -1512,7 +1512,12 @@ class ModelClient:
             if tier_key == "tier1":
                 model = settings.tier1_model
             elif tier_key == "tier2":
-                model = "glm-4.7"
+                # Must match the provider. This previously hardcoded "glm-4.7"
+                # regardless, so an anthropic tier2 with no model override sent
+                # a Z.ai model name to the Anthropic API and 404'd every single
+                # request — silently breaking all of Tier 2 on any install using
+                # the default tier2_provider ("anthropic") without an override.
+                model = "claude-sonnet-4-6" if provider == "anthropic" else "glm-4.7"
             else:
                 model = "claude-sonnet-4-6"
         return provider, model

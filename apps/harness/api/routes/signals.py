@@ -221,6 +221,23 @@ async def list_signals(
     return rows
 
 
+@router.post("/generate")
+async def generate_signals(
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_auth),
+):
+    """
+    Run a sweep now instead of waiting for the 4-hourly job.
+
+    Runs inline rather than as a background task so the caller gets the real
+    result — the frontend refresh button needs to know whether anything was
+    actually found, and a fire-and-forget would just return an optimistic lie.
+    """
+    from jobs.signal_generator import generate_for_user
+
+    return await generate_for_user(db, user_id)
+
+
 @router.post("/{signal_id}/act", response_model=ActResult)
 async def act_on_signal(
     signal_id: str,

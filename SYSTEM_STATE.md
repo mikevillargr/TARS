@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.16.0 |
+| Version | v2.17.0 |
 | Released | 2026-09-07 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -92,7 +92,7 @@ requests are excluded — vision routing owns model choice.
 
 | # | Component | Route | Status |
 |---|---|---|---|
-| 1 | Today | /today | Live — landing screen. AI-inferred signals needing a decision, grouped by urgency, with named actions, swipe-to-dismiss, snooze, undo, and a state-driven ambient backdrop. Replaces the old prompt-cron daily digest. **Signal generation from real sources is not built yet, so the list is empty until it lands.** |
+| 1 | Today | /today | Live — landing screen. AI-inferred signals needing a decision, grouped by urgency, with named actions, swipe-to-dismiss, snooze, undo, and a state-driven ambient backdrop. Replaces the old prompt-cron daily digest. Populated by the `signal_sweep` job every 4 hours (stalled tasks, unconverted meeting action items grouped by meeting, calendar conflicts, and Tier 2 extraction of commitments from transcripts), or on demand via `POST /api/signals/generate`. |
 | 2 | Chat | /chat | Live |
 | 3 | Projects | /tasks | Live — renamed from "Tasks" |
 | 3b | To-Dos | /reminders | Live — quick personal checklist (renamed from "Reminders"); groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
@@ -163,6 +163,33 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.17.0 — 2026-09-07
+**Feature: signal generation — `/today` fills itself**
+- `jobs/signal_generator.py`, scheduled as `signal_sweep` every 4 hours, plus
+  `POST /api/signals/generate` to run one inline on demand.
+- Four detectors, split by whether the answer is a **fact** or a **judgement**:
+  - *Deterministic (no model):* overdue/stalled tasks; Fireflies action items that never became
+    work; overlapping calendar events in the next 7 days. Asking a model whether two datetimes
+    overlap would be slower, cost money, and be less reliable than a comparison.
+  - *Model-assisted (Tier 2, strict JSON):* commitments made in meeting transcripts, surfaced
+    with the verbatim quote that supports them.
+- Action items are grouped **by meeting**, not one card per item. One real week produced 225
+  unconverted items; as individual cards that is a wall, not a triage surface. 225 → 18.
+- `dedupe_key` is checked against signals in **any** status, so a dismissed signal never
+  returns — a dismissed-but-still-true condition stays dismissed, because re-nagging is how a
+  triage surface loses trust.
+- Sweep results report `created` / `already_seen` / `deferred_by_cap` separately and surface
+  `model_errors`; a misconfigured tier otherwise looks identical to "nothing to report".
+- **Fix:** `core/model_client._resolve_pair` hardcoded `glm-4.7` as the tier2 fallback
+  regardless of provider, so an `anthropic` tier2 with no model override sent a Z.ai model name
+  to the Anthropic API and 404'd **every** Tier 2 request. This silently broke all of Tier 2 on
+  any install using the default `tier2_provider` without an override. Now provider-appropriate.
+- **Fix:** user resolution used `User.name`; the canonical row matches on `User.id`
+  (the v2.15.10 pattern).
+- Harness-only, no schema change.
+
+---
 
 ### v2.16.0 — 2026-09-07
 **Feature: Today screen + Signals**
