@@ -8,9 +8,19 @@ Deliberately split into two kinds of detector:
     Asking a model "do these two events overlap?" would be slower, cost money,
     and be less reliable than a comparison operator. No model touches them.
 
-  · Model-assisted — "did I commit to something in this transcript?", "is this
-    thread waiting on me?". These need judgement, so they go to Tier 2 with a
-    strict JSON contract and a conservative prompt.
+  · Model-assisted — "is this email thread waiting on me?". Needs judgement,
+    so it goes to Tier 2 with a strict JSON contract and a conservative prompt.
+
+There used to be a second model-assisted detector here — detect_meeting_commitments,
+which re-extracted "things Mike committed to" from raw transcripts independently of
+meeting_processor.py's action-item extraction. Retired in v2.19.0: it had to guess
+ownership from scratch on a truncated transcript with no cross-reference, and kept
+misattributing other attendees' first-person commitments to Mike (v2.18.10/v2.18.11
+patched around this twice before it was clear the second extraction pass was the
+actual problem). meeting_processor.py's extraction already does this reliably — it
+has the full transcript, Fireflies' own overview/action-items text, and one focused
+job — so its prompt was broadened to also capture informal verbal commitments, not
+just explicitly-stated to-dos. detect_unconverted_action_items below now covers both.
 
 Every detector returns candidates carrying a stable `dedupe_key`. A signal is
 only inserted if no signal with that key exists for the user in ANY status, so
@@ -19,8 +29,6 @@ deliberate trade: a dismissed-but-still-true condition (a task that stays
 stalled) stays dismissed. Re-nagging is how a triage surface loses trust.
 """
 import asyncio
-import difflib
-import hashlib
 import json
 import logging
 import re
@@ -206,18 +214,25 @@ async def detect_stalled_tasks(db: AsyncSession, user_id: str) -> list[Candidate
 
 async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> list[Candidate]:
     """
-    Fireflies extracted action items that never became work.
+    Action items extracted from meetings that never became work — both
+    explicitly-stated to-dos and, since v2.19.0, informal verbal commitments
+    ("let me send that over") that meeting_processor.py's extraction now also
+    captures as action items. That consolidation retired the separate
+    detect_meeting_commitments detector, which re-derived ownership from a
+    truncated transcript with no cross-reference and kept misattributing
+    other attendees' commitments to Mike — meeting_processor.py already does
+    this reliably (full transcript, Fireflies' own context, one focused job),
+    so there was no reason for a second, worse extraction pass.
 
     Grouped by meeting, one signal per meeting — NOT one per item. A real week
     produced 225 unconverted items here; as individual cards that is not a
     triage surface, it's a wall. "4 action items from the NCH sync were never
     assigned" is one decision; four near-identical cards is four.
 
-    Fireflies extracts every action item in the transcript regardless of who
-    it's for — it has no notion of "mine". Items explicitly owned by another
-    attendee are filtered out here so the brief doesn't fill up with other
-    people's work; unassigned items stay in since there's no one else to
-    attribute them to.
+    Every action item is extracted regardless of who it's for — the extraction
+    has no notion of "mine". Items explicitly owned by another attendee are
+    filtered out here so the brief doesn't fill up with other people's work;
+    unassigned items stay in since there's no one else to attribute them to.
     """
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     user_name = user.name if user and user.name else "Mike Villar"
@@ -382,143 +397,8 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
 
 # ─── Model-assisted detector ──────────────────────────────────────────────────
 
-EXTRACT_SYSTEM = """You extract commitments from meeting transcripts for a triage screen.
-
-Return ONLY a JSON array. No prose, no code fence. Each element:
-{"title": "<imperative, <=110 chars, what Mike must do>",
- "quote": "<short verbatim quote showing the commitment>",
- "urgency": "normal" | "time"}
-
-Rules:
-- ONLY things Mike himself committed to do, or was explicitly asked to do.
-  Not other people's commitments. Not general discussion.
-- Before extracting anything, check the speaker label on the line the quote
-  comes from. "Let me...", "I'll...", "I'm going to..." is the SPEAKER's own
-  commitment — if that speaker isn't Mike, this is someone else's item, not
-  his, even if it's addressed to him ("let me send YOU the file" is the
-  sender's task, not the recipient's). Only count a first-person statement as
-  Mike's if the speaker label right before it is Mike's.
-- "You need to / you should / can you..." IS Mike's when explicitly addressed
-  to him by someone else — but not when addressed to a third person or to
-  "the team" in general (e.g. "your team should review this" is the team's
-  job, not a personal task for Mike unless he says he'll do it himself).
-- You may be given a list of action items already extracted from this
-  meeting, each with an owner. If what you're about to extract is
-  substantially the same piece of work as one of those and its owner isn't
-  Mike, skip it — that work is already correctly attributed to someone else,
-  even if Mike was part of the same conversation about it.
-- Skip anything already obviously done inside the meeting.
-- "time" urgency only if a deadline was stated or clearly implied this week.
-- If nothing qualifies, return []. An empty array is a correct, common answer —
-  do not invent items to seem useful.
-- Maximum 3 items per transcript. Pick the most consequential."""
-
-# First-person phrasing ("I'll...", "let me...", "on me") that only counts
-# as Mike's commitment if the transcript speaker immediately before the
-# quote is Mike. The prompt above already asks the model to check this, but
-# Tier 2 (GLM) does not reliably follow it — see v2.18.x for a long history
-# of this tier's instruction-following gaps. This is the deterministic
-# backstop: locate the quote in the transcript (which build_plain_transcript
-# labels with "{speaker}:" headers) and check who actually said it.
-_FIRST_PERSON_RE = re.compile(r"\b(i|me|my)\b", re.I)
-_SPEAKER_HEADER_RE = re.compile(r"\n([A-Za-z][\w'.-]*(?: [A-Za-z][\w'.-]*){0,3}):\n")
-# Below this similarity, a transcript line isn't confidently "the same
-# sentence" as the model's quote — verified against real production
-# quotes, which are frequently light paraphrases ("Let me message you..."
-# for an actual line of "I'll message you...") rather than truly verbatim.
-_QUOTE_MATCH_THRESHOLD = 0.45
-
-
-def _speaker_for_quote(transcript: str, quote: str) -> Optional[str]:
-    """Nearest preceding speaker for a quote inside the transcript. Tries an
-    exact substring match first, then falls back to the most similar single
-    transcript line (the model's "verbatim" quote is often a paraphrase, not
-    an exact copy). None if nothing matches with reasonable confidence —
-    callers must treat that as "can't tell", not "it's Mike"."""
-    quote = (quote or "").strip()
-    if not quote:
-        return None
-
-    idx = transcript.find(quote)
-    if idx != -1:
-        return _nearest_speaker(transcript, idx)
-
-    best_pos, best_ratio = -1, 0.0
-    pos = 0
-    for line in transcript.split("\n"):
-        content = line.strip()
-        if content and not content.endswith(":"):
-            ratio = difflib.SequenceMatcher(None, quote.lower(), content.lower()).ratio()
-            if ratio > best_ratio:
-                best_pos, best_ratio = pos, ratio
-        pos += len(line) + 1
-    if best_ratio < _QUOTE_MATCH_THRESHOLD:
-        return None
-    return _nearest_speaker(transcript, best_pos)
-
-
-def _nearest_speaker(transcript: str, idx: int) -> Optional[str]:
-    matches = list(_SPEAKER_HEADER_RE.finditer(transcript[:idx]))
-    return matches[-1].group(1).strip() if matches else None
-
-
-def _commitment_misattributed(transcript: str, quote: str, user_name: str) -> bool:
-    """True when a first-person quote ("let me...", "I'll...") was actually
-    said by someone other than Mike — the model attributing another
-    attendee's own commitment to Mike, the exact failure this exists to catch."""
-    if not _FIRST_PERSON_RE.search(quote or ""):
-        return False
-    speaker = _speaker_for_quote(transcript, quote)
-    return bool(speaker) and _owner_is_someone_else(speaker, user_name)
-
-
-async def _other_owned_items_block(db: AsyncSession, meeting_id: str, user_name: str) -> str:
-    """
-    Action items Fireflies/meeting_processor already extracted for this
-    meeting and attributed to someone other than Mike — the same ownership
-    data the Meetings screen trusts. Fed into the extraction prompt as
-    grounding so the model can recognize "this is already someone else's
-    work" by meaning, not by string-matching a freshly generated title
-    against a differently-worded action-item summary (tried that; genuine
-    matches came back at 20-38% similarity, indistinguishable from noise —
-    the two extractions phrase the same work too differently for that to be
-    a reliable filter on its own).
-    """
-    rows = (
-        await db.execute(
-            select(MeetingActionItem.owner, MeetingActionItem.raw_text).where(
-                MeetingActionItem.meeting_id == meeting_id,
-            )
-        )
-    ).all()
-    others = [(o, t) for o, t in rows if _owner_is_someone_else(o, user_name)]
-    if not others:
-        return ""
-    lines = "\n".join(f"- {owner}: {text}" for owner, text in others)
-    return (
-        "\n\nAction items already extracted from this meeting, with owners "
-        "(do not re-extract any of these as Mike's own commitment):\n" + lines
-    )
-
-
-def _extract_json_array(text: str) -> list:
-    """Models wrap JSON in prose or fences more often than they should."""
-    text = text.strip()
-    fence = re.search(r"```(?:json)?\s*(.+?)\s*```", text, re.S)
-    if fence:
-        text = fence.group(1).strip()
-    start, end = text.find("["), text.rfind("]")
-    if start == -1 or end == -1 or end < start:
-        return []
-    try:
-        parsed = json.loads(text[start : end + 1])
-        return parsed if isinstance(parsed, list) else []
-    except json.JSONDecodeError:
-        return []
-
-
 def _extract_json_object(text: str) -> dict:
-    """Same deal as _extract_json_array, for detectors returning one object."""
+    """Models wrap JSON in prose or fences more often than they should."""
     text = text.strip()
     fence = re.search(r"```(?:json)?\s*(.+?)\s*```", text, re.S)
     if fence:
@@ -553,92 +433,8 @@ async def _complete(system: str, prompt: str, max_tokens: int = 900) -> str:
 
 
 # Populated per-sweep so a broken model tier surfaces in the result instead of
-# looking like "nothing found". Shared by every model-assisted detector;
-# cleared once per sweep by generate_for_user, not per-detector, so the
-# second detector to run doesn't wipe out the first one's errors.
+# looking like "nothing found". Cleared once per sweep by generate_for_user.
 _MODEL_ERRORS: list[str] = []
-
-
-async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Candidate]:
-    """Things Mike said he'd do, that never became anything."""
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-    user_name = user.name if user and user.name else "Mike Villar"
-
-    since = datetime.now(timezone.utc) - timedelta(days=MEETING_LOOKBACK_DAYS)
-    meetings = (
-        await db.execute(
-            select(Meeting)
-            .where(
-                Meeting.user_id == user_id,
-                Meeting.created_at >= since,
-                Meeting.transcript.is_not(None),
-            )
-            .order_by(Meeting.created_at.desc())
-            .limit(5)
-        )
-    ).scalars().all()
-
-    out: list[Candidate] = []
-    for m in meetings:
-        transcript = (m.transcript or "")[:12000]
-        if len(transcript) < 200:
-            continue
-        other_items = await _other_owned_items_block(db, m.id, user_name)
-        prompt = (
-            f"Meeting: {m.title}\n"
-            f"Attendees: {', '.join(str(a) for a in (m.attendees or [])) or 'unknown'}\n\n"
-            f"Transcript:\n{transcript}"
-            f"{other_items}"
-        )
-        try:
-            raw = await _complete(EXTRACT_SYSTEM, prompt)
-        except Exception as exc:
-            # One bad meeting must not abort the sweep — but don't swallow it
-            # either. A misconfigured tier silently yields zero commitments
-            # forever, which looks identical to "nothing to report".
-            log.warning("signal_generator: extraction failed for %s: %s", m.id, exc)
-            _MODEL_ERRORS.append(str(exc)[:200])
-            continue
-
-        client_name = await _client_for_attendees(db, user_id, m.attendees)
-        for item in _extract_json_array(raw)[:3]:
-            title = str(item.get("title") or "").strip()
-            if not title:
-                continue
-            quote = str(item.get("quote") or "").strip()
-            if _commitment_misattributed(transcript, quote, user_name):
-                # The model attributed another attendee's first-person
-                # commitment ("let me...", "I'll...") to Mike — the quote's
-                # actual speaker isn't him. Confirmed against production data
-                # to be a real, recurring failure mode of this extraction.
-                continue
-            urgency = item.get("urgency") if item.get("urgency") in ("normal", "time") else "normal"
-            fingerprint = hashlib.sha1(title.lower().encode()).hexdigest()[:12]
-            out.append(_candidate(
-                dedupe_key=f"commit:{m.id}:{fingerprint}",
-                source="fireflies",
-                source_label="Fireflies",
-                source_ref=m.id,
-                title=title[:180],
-                urgency=urgency,
-                context_label=client_name,
-                # Only claim what was actually checked. An earlier draft said
-                # "No matching task, To-Do, or sent email exists" — nothing
-                # verifies that, and a reasoning line that asserts unverified
-                # facts is worse than a shorter one that doesn't.
-                reasoning=(
-                    (f"You said: \"{quote}\"\n\n" if quote else "")
-                    + f"Picked up from the transcript of \"{m.title}\" as something you "
-                      f"took on. Not yet checked against existing tasks or sent mail."
-                ),
-                citation=f"Meeting · {m.title[:60]}",
-                actions=[
-                    {"kind": "create_reminder", "label": "Add to To-Dos"},
-                    {"kind": "draft_reply", "label": "Draft the email now"},
-                    {"kind": "open_meeting", "label": "Open the meeting"},
-                ],
-            ))
-    return out
 
 
 EMAIL_EXTRACT_SYSTEM = """You review an inbound email thread for Mike Villar's triage screen \
@@ -701,8 +497,9 @@ async def detect_actionable_emails(db: AsyncSession, user_id: str) -> list[Candi
     Inbound email still waiting on Mike — whether unread, or read and quietly
     never answered. "Waiting on Mike" is deterministic (GmailClient.get_awaiting_reply
     reads it off the SENT label); "does it actually need anything from him" is
-    judgement, so that part goes to Tier 2 with the same conservative,
-    empty-is-a-valid-answer contract as detect_meeting_commitments.
+    judgement, so that part goes to Tier 2 with a conservative,
+    empty-is-a-valid-answer contract: newsletters/receipts/automated notices
+    correctly resolve to "no action needed," not invented busywork.
 
     dedupe_key includes the thread's latest message id, not just the thread id,
     so a dismissed thread stays dismissed (dismissing it means "no action was
@@ -799,7 +596,6 @@ DETECTORS = (
     ("stalled_tasks", detect_stalled_tasks),
     ("unconverted_action_items", detect_unconverted_action_items),
     ("calendar_conflicts", detect_calendar_conflicts),
-    ("meeting_commitments", detect_meeting_commitments),
     ("actionable_emails", detect_actionable_emails),
 )
 

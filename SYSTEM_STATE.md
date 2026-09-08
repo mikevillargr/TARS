@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.11 |
+| Version | v2.19.0 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,29 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.0 — 2026-09-08
+**Retire: detect_meeting_commitments folded into meeting_processor.py's action-item extraction**
+- Root-cause resolution to the v2.18.10/v2.18.11 misattribution bug, not another patch on
+  top of it: `detect_meeting_commitments` existed as a second, independent extraction over
+  raw meeting transcripts, re-deriving ownership from scratch with no cross-reference —
+  structurally worse at this than `meeting_processor.py`'s existing action-item extraction,
+  which already does it reliably (full transcript, Fireflies' own overview/action-items
+  text, one focused job — evidenced by correct real names like "Isabelle Bryce", "Vanessa
+  Ramos" in production `MeetingActionItem.owner` data). Rather than keep defending a worse
+  extraction with heuristics, `meeting_processor.py`'s prompt was broadened to also capture
+  informal verbal commitments ("let me send that over"), not just explicitly-stated to-dos,
+  with the same owner-attribution rigor. `detect_meeting_commitments`, `EXTRACT_SYSTEM`, and
+  the v2.18.10/v2.18.11 speaker-lookup/grounding helpers are all removed —
+  `detect_unconverted_action_items` (already correctly owner-filtered since v2.17.2) now
+  covers both cases through one reliable data source instead of two.
+- Net simplification: signal_generator.py shrank by ~200 lines; one fewer Tier 2 call per
+  meeting per sweep.
+- Scope note: this only changes extraction for meetings processed going forward — it does
+  not retroactively re-tag ownership on already-processed historical meetings.
+- Harness-only, no schema change.
+
+---
 
 ### v2.18.11 — 2026-09-08
 **Enhance: meeting-commitment extraction now grounded in Fireflies' own owner data**

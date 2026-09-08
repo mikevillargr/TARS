@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.11 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -451,17 +451,23 @@ chat conversation.
   makes the screen lie two-thirds of the time
 - FYI rows (kind="fyi") render as plain text, no card weight
 - **Generation** (`jobs/signal_generator.py`, `signal_sweep` every 4h, or
-  `POST /api/signals/generate` on demand). Five detectors, split by whether the answer is a
+  `POST /api/signals/generate` on demand). Four detectors, split by whether the answer is a
   fact or a judgement:
-  - *Deterministic, no model:* stalled/overdue tasks, Fireflies action items that never became
-    work (**grouped by meeting**, not one card per item — one real week produced 225 items),
-    overlapping calendar events, inbound Gmail threads still awaiting a reply (read off the
-    SENT label on the thread's last message, not unread status alone — catches read-but-
-    never-answered mail too)
-  - *Model-assisted (Tier 2, strict JSON):* commitments you made in meeting transcripts,
-    surfaced with the verbatim quote; and, for each awaiting-reply Gmail thread, whether it
+  - *Deterministic, no model:* stalled/overdue tasks, meeting action items that never became
+    work — both explicitly-stated to-dos and, since v2.19.0, informal verbal commitments
+    ("let me send that over") captured by `meeting_processor.py`'s extraction, which owns
+    ownership attribution for both (**grouped by meeting**, not one card per item — one real
+    week produced 225 items), overlapping calendar events, inbound Gmail threads still
+    awaiting a reply (read off the SENT label on the thread's last message, not unread status
+    alone — catches read-but-never-answered mail too)
+  - *Model-assisted (Tier 2, strict JSON):* for each awaiting-reply Gmail thread, whether it
     actually needs anything from you (newsletters/receipts/automated mail correctly resolve to
-    "no" — an empty result is a valid, common answer, not a failure to try harder)
+    "no" — an empty result is a valid, common answer, not a failure to try harder). A separate
+    meeting-commitments detector existed here through v2.18.11 but was retired in v2.19.0 —
+    it re-derived ownership from a truncated transcript with no cross-reference and kept
+    misattributing other attendees' commitments to Mike; `meeting_processor.py`'s extraction
+    already does this reliably, so its prompt was broadened instead of maintaining a second,
+    worse extraction pass.
   - Meeting/calendar/email signals carry a best-effort **`context_label`**, rendered as its
     own chip (never folded into the title or source badge — titles stay clean imperatives).
     Resolved from the Contacts graph (attendee/sender email → synced Google Contacts'
@@ -1008,6 +1014,21 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.0 Retire: detect_meeting_commitments folded into meeting_processor.py's action-item
+        extraction — root cause resolved instead of patched again. It existed as a second,
+        independent extraction over raw transcripts, re-deriving ownership from scratch with
+        no cross-reference — structurally worse at this than meeting_processor.py's existing
+        extraction, which already does it reliably (full transcript, Fireflies' own context,
+        one focused job — evidenced by correct real names like "Isabelle Bryce" in production
+        MeetingActionItem.owner data). meeting_processor.py's prompt broadened to also capture
+        informal verbal commitments ("let me send that over"), not just explicit to-dos, with
+        the same owner-attribution rigor. detect_meeting_commitments, EXTRACT_SYSTEM, and the
+        v2.18.10/v2.18.11 speaker-lookup/grounding helpers all removed;
+        detect_unconverted_action_items (already correctly owner-filtered since v2.17.2) now
+        covers both cases through one reliable source instead of two. ~200 fewer lines, one
+        fewer Tier 2 call per meeting per sweep. Only affects meetings processed going
+        forward — does not retroactively re-tag historical meetings. Harness-only, no schema
+        change.
 v2.18.11 Enhance: meeting-commitment extraction (detect_meeting_commitments) now grounded
         in Fireflies' own owner data, not just the v2.18.10 transcript speaker-check.
         Fair question after v2.18.10 shipped: the Meetings screen already trusts
