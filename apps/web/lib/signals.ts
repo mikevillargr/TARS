@@ -72,6 +72,10 @@ export interface Signal {
   source_label: string
   source_ref: string | null
   citation: string | null
+  /** A resolved client name, or (email only, when no client matches) a coarse
+   *  category like "Billing" — rendered as its own chip, not folded into
+   *  source_label or the title. */
+  context_label: string | null
   title: string
   urgency: SignalUrgency
   reasoning: string | null

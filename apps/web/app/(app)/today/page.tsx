@@ -496,7 +496,10 @@ export default function TodayPage() {
                 <ul className="flex flex-col gap-2 mb-8">
                   {fyiSignals.map(item => (
                     <li key={item.id} className="flex items-start gap-2.5 text-sm">
-                      <span className="tars-label shrink-0 mt-[3px]">{item.source_label}</span>
+                      <span className="tars-label shrink-0 mt-[3px]">
+                        {item.source_label}
+                        {item.context_label ? ` · ${item.context_label}` : ""}
+                      </span>
                       <span style={{ color: "var(--c-ink-muted)", textWrap: "pretty" }}>
                         {item.title}
                       </span>

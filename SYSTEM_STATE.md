@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.0 |
+| Version | v2.18.1 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,31 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.1 — 2026-09-08
+**Redesign: signal cards get a dedicated context chip**
+- New `Signal.context_label` column (migration `s6t7u8v9w0x1`) replaces the v2.17.2/v2.18.0
+  approach of prefixing a client name onto the title (`"NCH Inc.: ..."`) and appending it to
+  `source_label` (`"Fireflies · NCH Inc."`). Titles are clean imperatives again; the client
+  renders as its own chip in the card header.
+- All four client-tagging detectors (`detect_unconverted_action_items`,
+  `detect_meeting_commitments`, `detect_calendar_conflicts`, `detect_actionable_emails`) now
+  pass `context_label=...` to the candidate instead of mutating title/source_label.
+- `EMAIL_EXTRACT_SYSTEM` gained a `category` field (billing/legal/banking/vendor/recruiting/
+  scheduling/internal) for email senders who aren't a resolved client — an AWS billing email
+  or a bank notice still gets a scannable chip instead of nothing. Client resolution always
+  takes priority; category is strictly a fallback, never both on one card.
+- `SignalCard.tsx`: new neutral chip style (`--c-surface-2` fill, `--c-ink-muted` text,
+  `--c-border-faint` hairline) — deliberately not moss, which stays reserved for
+  interactive/accent elsewhere in the app. Added a 12px source icon per detector (mail /
+  meeting / calendar / project / feed / activity), tinted with the existing urgency accent —
+  no new color introduced. FYI rows carry the same context inline as text, not a boxed chip,
+  keeping "no card weight" true for that row type.
+- Design pass referenced Refero MCP for tag-chip patterns (Raycast/Linear-style dark
+  changelog cards); Mobbin was requested but isn't connected as an MCP for this session.
+- Harness + web + DB migration.
+
+---
 
 ### v2.18.0 — 2026-09-08
 **Feature: fifth signal detector — actionable email**

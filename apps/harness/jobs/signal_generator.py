@@ -131,6 +131,7 @@ def _candidate(
     kind: str = "action",
     source_ref: Optional[str] = None,
     calendar_event: Optional[dict] = None,
+    context_label: Optional[str] = None,
 ) -> Candidate:
     return Candidate(
         dedupe_key=dedupe_key,
@@ -142,6 +143,7 @@ def _candidate(
         citation=citation,
         actions=actions or [],
         kind=kind,
+        context_label=context_label,
         source_ref=source_ref,
         calendar_event=calendar_event,
     )
@@ -251,15 +253,14 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
             else f"{n} action items from \"{meeting.title[:50]}\" were never assigned"
         )
         client_name = await _client_for_attendees(db, user_id, meeting.attendees)
-        if client_name:
-            title = f"{client_name}: {title}"
         out.append(_candidate(
             dedupe_key=f"mai-batch:{meeting_id}",
             source="fireflies",
-            source_label=f"Fireflies · {client_name}" if client_name else "Fireflies",
+            source_label="Fireflies",
             source_ref=meeting_id,
             title=title,
             urgency="normal",
+            context_label=client_name,
             reasoning=(
                 f"Fireflies extracted {n} action item{'s' if n != 1 else ''} assigned to you "
                 f"from this meeting and none were converted to a task or To-Do.\n\n"
@@ -340,14 +341,14 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
         when = a_start.strftime("%a %d %b, %H:%M")
         # Named client_name, not client — `client` above is the GoogleCalendarClient instance.
         client_name = await _client_for_attendees(db, user_id, a_attendees + b_attendees)
-        title = f"You're double-booked {when} — {a_title} vs. {b_title}"
         out.append(_candidate(
             dedupe_key=f"cal-conflict:{pair}",
             source="calendar",
-            source_label=f"Calendar · {client_name}" if client_name else "Calendar",
+            source_label="Calendar",
             source_ref=a_id,
-            title=f"{client_name}: {title}" if client_name else title,
+            title=f"You're double-booked {when} — {a_title} vs. {b_title}",
             urgency="time" if a_start - now < timedelta(days=2) else "normal",
+            context_label=client_name,
             reasoning=(
                 f"\"{a_title}\" runs {a_start.strftime('%H:%M')}–{a_end.strftime('%H:%M')} and "
                 f"\"{b_title}\" starts {b_start.strftime('%H:%M')}, so they overlap."
@@ -485,10 +486,11 @@ async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Can
             out.append(_candidate(
                 dedupe_key=f"commit:{m.id}:{fingerprint}",
                 source="fireflies",
-                source_label=f"Fireflies · {client_name}" if client_name else "Fireflies",
+                source_label="Fireflies",
                 source_ref=m.id,
-                title=f"{client_name}: {title[:180]}" if client_name else title[:180],
+                title=title[:180],
                 urgency=urgency,
+                context_label=client_name,
                 # Only claim what was actually checked. An earlier draft said
                 # "No matching task, To-Do, or sent email exists" — nothing
                 # verifies that, and a reasoning line that asserts unverified
@@ -516,7 +518,8 @@ Return ONLY a JSON object. No prose, no code fence:
  "kind": "action" | "fyi",
  "title": "<imperative, <=110 chars, what Mike must do>",
  "urgency": "normal" | "time",
- "suggested_action": "draft_reply" | "create_task" | "create_reminder"}
+ "suggested_action": "draft_reply" | "create_task" | "create_reminder",
+ "category": "billing" | "legal" | "banking" | "vendor" | "recruiting" | "scheduling" | "internal" | null}
 
 Rules:
 - actionable=false for newsletters, receipts, automated notifications, threads already
@@ -530,12 +533,29 @@ Rules:
 - suggested_action: "draft_reply" for anything needing a written response (the default for
   most actionable email); "create_task" for tracked project work; "create_reminder" for a
   simple personal reminder that needs no reply.
+- category is a coarse tag for triage-screen scanning, used only when the sender is NOT a
+  client/business contact (an AWS invoice is "billing", a bank notice is "banking", a job
+  applicant is "recruiting", a tool/agency vendor is "vendor", a logistics/venue email is
+  "scheduling", something from Mike's own team is "internal"). Use null for client or
+  personal correspondence — client identification is handled separately and takes priority.
 - If actionable is false, the other fields are ignored — just return {"actionable": false}."""
 
 _EMAIL_ACTION_LABELS = {
     "draft_reply":     {"kind": "draft_reply", "label": "Draft reply"},
     "create_task":     {"kind": "create_task", "label": "Add to Projects"},
     "create_reminder": {"kind": "create_reminder", "label": "Add to To-Dos"},
+}
+
+# Display text for the model's category guess — used as the context chip only
+# when no client resolves from the Contacts graph (that takes priority).
+_EMAIL_CATEGORY_LABELS = {
+    "billing":    "Billing",
+    "legal":      "Legal",
+    "banking":    "Banking",
+    "vendor":     "Vendor",
+    "recruiting": "Recruiting",
+    "scheduling": "Scheduling",
+    "internal":   "Internal",
 }
 
 
@@ -616,15 +636,21 @@ async def detect_actionable_emails(db: AsyncSession, user_id: str) -> list[Candi
         )
 
         client_name = await _client_for_attendees(db, user_id, [c["from_email"]])
-        title_final = f"{client_name}: {title[:180]}" if client_name else title[:180]
+        category_label = _EMAIL_CATEGORY_LABELS.get(parsed.get("category") or "")
+        # Client identification takes priority — it's the more specific,
+        # deterministic answer. Category is only a fallback for senders that
+        # aren't in the Contacts graph as a client/business relationship.
+        context_label = client_name or category_label
+
         out.append(_candidate(
             dedupe_key=f"email:{c['thread_id']}:{c['message_id']}",
             source="gmail",
-            source_label=f"Gmail · {client_name}" if client_name else "Gmail",
+            source_label="Gmail",
             source_ref=c["thread_id"],
-            title=title_final,
+            title=title[:180],
             urgency=urgency,
             kind=kind,
+            context_label=context_label,
             reasoning=(
                 f"From {c['from_name']} — \"{c['subject']}\".\n\n"
                 + ("Unread. " if c["unread"] else "Read, but no reply sent. ")

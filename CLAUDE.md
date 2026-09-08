@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.1 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -256,6 +256,9 @@ Signal {
   kind          // "action" | "fyi"
   source        // "gmail" | "fireflies" | "calendar" | "project" | "feed" | "strava"
   source_label, source_ref, citation
+  context_label // resolved client name, or (email only, no client match) a coarse
+                // category ("Billing"/"Legal"/"Banking"/"Vendor"/"Recruiting"/
+                // "Scheduling"/"Internal") — rendered as its own chip, never both
   title, urgency // "normal" | "time" | "overdue"
   reasoning     // shown under the `why` disclosure
   actions[]     // [{kind, label, payload}] — [0] is TARS's pick
@@ -459,10 +462,13 @@ chat conversation.
     surfaced with the verbatim quote; and, for each awaiting-reply Gmail thread, whether it
     actually needs anything from you (newsletters/receipts/automated mail correctly resolve to
     "no" — an empty result is a valid, common answer, not a failure to try harder)
-  - Meeting/calendar/email signals get a best-effort **client name** tag (title prefixed
-    `"{Client}: ..."`, source badge `"Fireflies · {Client}"` / `"Gmail · {Client}"`) resolved
-    from the Contacts graph (attendee/sender email → synced Google Contacts' organization
-    field) — not a hardcoded client list, so it stays correct as clients change
+  - Meeting/calendar/email signals carry a best-effort **`context_label`**, rendered as its
+    own chip (never folded into the title or source badge — titles stay clean imperatives).
+    Resolved from the Contacts graph (attendee/sender email → synced Google Contacts'
+    organization field) — not a hardcoded client list, so it stays correct as clients change.
+    For email with no client match, the same chip slot falls back to a coarse category
+    (Billing/Legal/Banking/Vendor/Recruiting/Scheduling/Internal) from the Tier 2 model —
+    client resolution always takes priority; category is strictly a fallback, never both
   - Fireflies action items explicitly owned by another meeting attendee are filtered out
     (Fireflies extraction has no notion of "mine"); unassigned items stay in
   - `dedupe_key` is checked against signals in **any** status, so a dismissed signal never
@@ -1002,6 +1008,25 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.1 Redesign: signal cards get a dedicated context chip, replacing the v2.17.2/v2.18.0
+        string-munging. New Signal.context_label column (migration s6t7u8v9w0x1) — client
+        name or (email only, no client match) a coarse category, rendered as its own chip
+        in the header row instead of being prefixed onto the title / appended to
+        source_label. Titles are clean imperatives again. detect_unconverted_action_items,
+        detect_meeting_commitments, detect_calendar_conflicts, detect_actionable_emails all
+        pass context_label=... instead of mutating title/source_label. EMAIL_EXTRACT_SYSTEM
+        gained a category field (billing/legal/banking/vendor/recruiting/scheduling/internal)
+        used only when the sender isn't a resolved client — GmailClient.get_awaiting_reply
+        senders without a Contacts match (AWS billing, a bank notice, a job applicant) still
+        get a scannable chip instead of nothing. Client resolution always takes priority over
+        category; never both on one card. SignalCard.tsx: new neutral chip style
+        (--c-surface-2 fill, --c-ink-muted text, --c-border-faint hairline — deliberately not
+        moss, which stays reserved for interactive/accent elsewhere) plus a 12px source icon
+        per detector (Mail/Video/Calendar/FolderKanban/Rss/Activity, tinted with the existing
+        urgency accent — no new color introduced). FYI rows get the same context inline
+        (no boxed chip — "no card weight" stays true for fyi). Design referenced via Refero
+        MCP (Raycast/Linear-style dark changelog tag-chip patterns); Mobbin was requested but
+        is not connected as an MCP for this session. Harness + web + DB migration.
 v2.18.0 Feature: fifth signal detector — actionable email. detect_actionable_emails surfaces
         inbound Gmail threads still awaiting a reply, whether unread or read-but-never-
         answered. New GmailClient.get_awaiting_reply (connectors/gmail.py) determines "still
