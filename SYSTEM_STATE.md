@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.9 |
+| Version | v2.18.10 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,40 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.10 — 2026-09-08
+**Fix: meeting-commitment signals attributed other attendees' spoken commitments to Mike**
+- Root cause, confirmed against live production data: `detect_meeting_commitments`
+  (jobs/signal_generator.py) re-extracts "things Mike committed to" from the raw
+  transcript via a Tier 2 (GLM) model call, and the model does not reliably check
+  *who* said a first-person line before attributing it to Mike. Two real, currently-open
+  production signals on inspection: "Resend captions and ad headlines for Star Clippers"
+  quoted "Let me message you with the updated captions" — actually said by Isabelle
+  Bryce, not Mike; "Post on-page content for Switzerland campaign" quoted "You're just
+  waiting on me to post the on page post" — same speaker, same misattribution pattern.
+  Separately confirmed `detect_unconverted_action_items`'s owner filter (v2.17.2) is
+  working correctly for everything currently open — the only bad signals found there
+  were stale, already-dismissed rows generated during a past window where the harness
+  process had been deployed via `git pull` but not `pm2 restart`, so it kept running
+  pre-fix code for a stretch. That's now a known deploy-hygiene risk: `git pull` alone
+  does not update the running process.
+- Fix: `_commitment_misattributed` (new) is a deterministic backstop, not a prompt
+  tweak alone — it locates the model's quote inside the actual transcript (exact match,
+  falling back to fuzzy line matching via `difflib` since quotes are often light
+  paraphrases, not verbatim) and checks the nearest preceding speaker header. A
+  first-person quote ("I'll...", "let me...", "...on me") whose real speaker isn't Mike
+  is dropped before the signal is ever created. Verified directly against the real
+  production transcript for both examples above — both now correctly filtered; a
+  genuinely ambiguous third quote ("if you wouldn't mind...", no first-person marker)
+  correctly stays in, matching this codebase's existing "ambiguous stays in" convention.
+  EXTRACT_SYSTEM prompt also tightened with explicit speaker-attribution rules as a
+  first line of defense.
+- One-time production cleanup: the two confirmed-misattributed open signals dismissed
+  directly (same `status='dismissed'` the app's own dismiss action sets — reversible via
+  the existing Restore action in Today's dismissed view).
+- Harness-only, no schema change.
+
+---
 
 ### v2.18.9 — 2026-09-08
 **Fix: fact-extraction quality tightened before the v2.18.8 backfill ran**

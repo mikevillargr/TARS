@@ -19,6 +19,7 @@ deliberate trade: a dismissed-but-still-true condition (a task that stays
 stalled) stays dismissed. Re-nagging is how a triage surface loses trust.
 """
 import asyncio
+import difflib
 import hashlib
 import json
 import logging
@@ -391,11 +392,79 @@ Return ONLY a JSON array. No prose, no code fence. Each element:
 Rules:
 - ONLY things Mike himself committed to do, or was explicitly asked to do.
   Not other people's commitments. Not general discussion.
+- Before extracting anything, check the speaker label on the line the quote
+  comes from. "Let me...", "I'll...", "I'm going to..." is the SPEAKER's own
+  commitment — if that speaker isn't Mike, this is someone else's item, not
+  his, even if it's addressed to him ("let me send YOU the file" is the
+  sender's task, not the recipient's). Only count a first-person statement as
+  Mike's if the speaker label right before it is Mike's.
+- "You need to / you should / can you..." IS Mike's when explicitly addressed
+  to him by someone else — but not when addressed to a third person or to
+  "the team" in general (e.g. "your team should review this" is the team's
+  job, not a personal task for Mike unless he says he'll do it himself).
 - Skip anything already obviously done inside the meeting.
 - "time" urgency only if a deadline was stated or clearly implied this week.
 - If nothing qualifies, return []. An empty array is a correct, common answer —
   do not invent items to seem useful.
 - Maximum 3 items per transcript. Pick the most consequential."""
+
+# First-person phrasing ("I'll...", "let me...", "on me") that only counts
+# as Mike's commitment if the transcript speaker immediately before the
+# quote is Mike. The prompt above already asks the model to check this, but
+# Tier 2 (GLM) does not reliably follow it — see v2.18.x for a long history
+# of this tier's instruction-following gaps. This is the deterministic
+# backstop: locate the quote in the transcript (which build_plain_transcript
+# labels with "{speaker}:" headers) and check who actually said it.
+_FIRST_PERSON_RE = re.compile(r"\b(i|me|my)\b", re.I)
+_SPEAKER_HEADER_RE = re.compile(r"\n([A-Za-z][\w'.-]*(?: [A-Za-z][\w'.-]*){0,3}):\n")
+# Below this similarity, a transcript line isn't confidently "the same
+# sentence" as the model's quote — verified against real production
+# quotes, which are frequently light paraphrases ("Let me message you..."
+# for an actual line of "I'll message you...") rather than truly verbatim.
+_QUOTE_MATCH_THRESHOLD = 0.45
+
+
+def _speaker_for_quote(transcript: str, quote: str) -> Optional[str]:
+    """Nearest preceding speaker for a quote inside the transcript. Tries an
+    exact substring match first, then falls back to the most similar single
+    transcript line (the model's "verbatim" quote is often a paraphrase, not
+    an exact copy). None if nothing matches with reasonable confidence —
+    callers must treat that as "can't tell", not "it's Mike"."""
+    quote = (quote or "").strip()
+    if not quote:
+        return None
+
+    idx = transcript.find(quote)
+    if idx != -1:
+        return _nearest_speaker(transcript, idx)
+
+    best_pos, best_ratio = -1, 0.0
+    pos = 0
+    for line in transcript.split("\n"):
+        content = line.strip()
+        if content and not content.endswith(":"):
+            ratio = difflib.SequenceMatcher(None, quote.lower(), content.lower()).ratio()
+            if ratio > best_ratio:
+                best_pos, best_ratio = pos, ratio
+        pos += len(line) + 1
+    if best_ratio < _QUOTE_MATCH_THRESHOLD:
+        return None
+    return _nearest_speaker(transcript, best_pos)
+
+
+def _nearest_speaker(transcript: str, idx: int) -> Optional[str]:
+    matches = list(_SPEAKER_HEADER_RE.finditer(transcript[:idx]))
+    return matches[-1].group(1).strip() if matches else None
+
+
+def _commitment_misattributed(transcript: str, quote: str, user_name: str) -> bool:
+    """True when a first-person quote ("let me...", "I'll...") was actually
+    said by someone other than Mike — the model attributing another
+    attendee's own commitment to Mike, the exact failure this exists to catch."""
+    if not _FIRST_PERSON_RE.search(quote or ""):
+        return False
+    speaker = _speaker_for_quote(transcript, quote)
+    return bool(speaker) and _owner_is_someone_else(speaker, user_name)
 
 
 def _extract_json_array(text: str) -> list:
@@ -458,6 +527,9 @@ _MODEL_ERRORS: list[str] = []
 
 async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Candidate]:
     """Things Mike said he'd do, that never became anything."""
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    user_name = user.name if user and user.name else "Mike Villar"
+
     since = datetime.now(timezone.utc) - timedelta(days=MEETING_LOOKBACK_DAYS)
     meetings = (
         await db.execute(
@@ -498,6 +570,12 @@ async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Can
             if not title:
                 continue
             quote = str(item.get("quote") or "").strip()
+            if _commitment_misattributed(transcript, quote, user_name):
+                # The model attributed another attendee's first-person
+                # commitment ("let me...", "I'll...") to Mike — the quote's
+                # actual speaker isn't him. Confirmed against production data
+                # to be a real, recurring failure mode of this extraction.
+                continue
             urgency = item.get("urgency") if item.get("urgency") in ("normal", "time") else "normal"
             fingerprint = hashlib.sha1(title.lower().encode()).hexdigest()[:12]
             out.append(_candidate(
