@@ -392,8 +392,9 @@ async def _extract_and_save_facts(
                 "Output SKIP if no personal facts about the user are present."
             ),
             messages=[{"role": "user", "content": f"User's message: {user_content[:500]}"}],
+            **_zai_kwargs(_provider),
         )
-        raw = resp.content[0].text.strip()
+        raw = _first_text_block(resp)
         if not raw or raw.upper() == "SKIP":
             return
 
@@ -3131,7 +3132,17 @@ plt.close('all')
                 log.info("[notifications] published new_message for conv %s", conversation_id)
 
                 title_msgs = messages + [{"role": "assistant", "content": assistant_content}]
-                new_title = await _generate_title(title_msgs, client)
+                # Regenerate on the first turn, then every 5 turns after — not every
+                # single turn. Firing every turn meant every fast back-and-forth
+                # conversation could have several title-gen calls in flight at once
+                # with no ordering guarantee, so a stale call finishing last could
+                # silently overwrite a fresher title (and it multiplied Z.ai request
+                # volume on top of the main reply + fact-extraction calls).
+                _assistant_turns = sum(1 for m in title_msgs if m.get("role") == "assistant")
+                if _assistant_turns == 1 or _assistant_turns % 5 == 0:
+                    new_title = await _generate_title(title_msgs, client)
+                else:
+                    new_title = None
                 if new_title:
                     await bg_db.execute(
                         sa_update(Conversation)

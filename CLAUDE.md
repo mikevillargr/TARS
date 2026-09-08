@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.6 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.7 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1008,6 +1008,18 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.7 Fix + Change: a third instance of the v2.18.6 thinking-block bug found in
+        _extract_and_save_facts (memory extraction) — fixed the same way (_first_text_block +
+        _zai_kwargs). Also: conversation titles now regenerate on the first assistant turn,
+        then every 5 turns after, instead of every single turn. Firing every turn meant a
+        fast back-and-forth conversation could have several title-gen calls in flight
+        concurrently with no ordering guarantee — a stale call finishing after a fresher one
+        could silently overwrite it, which is the likely explanation for a title observed
+        stuck on stale text even after the v2.18.6 fix was confirmed live and working
+        correctly in isolation. Throttling also cuts Z.ai request volume (title-gen was
+        firing alongside the main reply and fact-extraction calls on every turn, contributing
+        to the rate-limit errors seen during the v2.18.5/2.18.6 investigation). Harness-only,
+        no schema change.
 v2.18.6 Fix: the tier/category classifier, conversation title generation, and rolling
         compaction were all silently broken on any Z.ai (GLM 4.x) tier1 model — the root
         cause behind chat titles stuck on "New Conversation" and (very likely) the erratic
