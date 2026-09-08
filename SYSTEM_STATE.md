@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.6 |
+| Version | v2.18.7 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,22 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.7 — 2026-09-08
+**Fix + change: third thinking-block instance found; title generation throttled**
+- Found a third call site with the exact v2.18.6 bug: `_extract_and_save_facts` (memory
+  extraction) — fixed with the same `_first_text_block`/`_zai_kwargs` helpers.
+- Conversation titles now regenerate on the first assistant turn, then every 5 turns after,
+  instead of unconditionally on every turn. Confirmed live that the v2.18.6 fix itself
+  works correctly in isolation, but a title was still observed stuck on stale text — the
+  likely cause is that firing on every turn let multiple title-gen calls run concurrently
+  in a fast back-and-forth conversation with no ordering guarantee, so a slower/earlier
+  call finishing last could silently overwrite a fresher title. Throttling also cuts Z.ai
+  request volume, since title-gen was firing alongside the main reply and fact-extraction
+  calls on every single turn.
+- Harness-only, no schema change.
+
+---
 
 ### v2.18.6 — 2026-09-08
 **Fix: classifier, chat titles, and compaction all silently broken on Z.ai tier1**
