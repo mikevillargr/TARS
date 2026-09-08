@@ -322,10 +322,15 @@ async def classify_full(prompt: str) -> Tuple[ModelTier, str]:
         # this call threw on effectively every request and silently fell back to
         # the heuristic classifier below. Disable thinking for zai and give the
         # two-token answer room to actually appear.
+        # Disabling thinking should be sufficient on its own, but max_tokens is
+        # bumped well past what a two-word answer needs too — a generous ceiling
+        # here is cheap insurance against a future model/endpoint change quietly
+        # re-enabling a reasoning preamble, so a truncated response degrades to
+        # the heuristic instead of silently mis-classifying forever.
         extra = {"extra_body": {"thinking": {"type": "disabled"}}} if provider == "zai" else {}
         resp = await _aclient.messages.create(
             model=model,
-            max_tokens=20,
+            max_tokens=200,
             system=_CLASSIFY_SYSTEM,
             messages=[{"role": "user", "content": s}],
             **extra,

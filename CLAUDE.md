@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.7 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.8 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1008,6 +1008,28 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.8 Fix + RCA: root-caused why memory extraction had been degraded for ~2 months
+        despite no deploy being responsible. `_extract_and_save_facts`/`_generate_title`
+        were hardcoded to Claude until commit 5ca261f (2026-06-04, "respect configured
+        provider") made them dynamically pick provider/model from Settings — introducing
+        the latent `resp.content[0].text.strip()` bug fixed in v2.18.6/v2.18.7, dormant
+        until Tier 1's provider/model was ever pointed at a Z.ai "hybrid reasoning" GLM
+        model. That pointing happens via `PATCH /api/settings/model-routing`, which writes
+        straight to `.env` (`dotenv_set_key`) with no git commit and no CI/CD — a pure
+        runtime settings change, invisible in deploy history, which is exactly why no
+        deployment could explain the timing. Weekly conversation-memory counts corroborate
+        the window: ~44-143/week through late June, cratering to 10 (Jul 6), then 0 for
+        three weeks, then a 1-3/week trickle through August (occasional short thinking
+        traces fitting under the old token caps by chance) until the v2.18.6/2.18.7 fixes.
+        Given that mechanism, max_tokens across all four affected call sites is now bumped
+        well past any realistic output length as defense-in-depth beyond the
+        thinking-disabled fix alone (classifier 20->200, titles 30->200, fact-extraction
+        300->800, compaction 600->1200) — so a future model/endpoint change quietly
+        reintroducing a reasoning preamble degrades gracefully instead of silently
+        breaking again. A one-time backfill re-ran extraction over the affected window's
+        historical user messages to recover facts that were never saved; mnemon.write's
+        existing cosine-similarity dedup (threshold 0.12) prevented duplicate memories
+        for anything that had already gotten through. Harness-only, no schema change.
 v2.18.7 Fix + Change: a third instance of the v2.18.6 thinking-block bug found in
         _extract_and_save_facts (memory extraction) — fixed the same way (_first_text_block +
         _zai_kwargs). Also: conversation titles now regenerate on the first assistant turn,

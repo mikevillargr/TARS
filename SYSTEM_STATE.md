@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.7 |
+| Version | v2.18.8 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,28 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.8 — 2026-09-08
+**Fix + RCA: root cause of ~2 months of degraded memory extraction, found and closed**
+- RCA: `_extract_and_save_facts`/`_generate_title` were hardcoded to Claude until commit
+  `5ca261f` (2026-06-04) made them provider-configurable, introducing the latent
+  `content[0].text` bug fixed in v2.18.6/v2.18.7. It stayed dormant until Tier 1's
+  provider/model was pointed at a Z.ai reasoning model — a change made through
+  `PATCH /api/settings/model-routing`, which writes directly to `.env` with no git
+  commit and no deploy. That's the resolution to "no deployments happened, so why did
+  this break": it wasn't a deploy, it was a Settings-page change, invisible in deploy
+  history by construction.
+- Weekly memory counts corroborate the timeline: ~44-143/week through late June, 10
+  (Jul 6), 0 for three weeks, then a 1-3/week trickle through August until the fix.
+- Hardened all four affected call sites with generous `max_tokens` as defense-in-depth
+  on top of the thinking-disabled fix: classifier 20→200, titles 30→200, fact-extraction
+  300→800, compaction 600→1200.
+- One-time backfill re-ran extraction over the affected window's historical messages to
+  recover facts that were silently dropped; existing cosine-similarity dedup in
+  `mnemon.write` (threshold 0.12) prevented duplicates for anything already captured.
+- Harness-only, no schema change.
+
+---
 
 ### v2.18.7 — 2026-09-08
 **Fix + change: third thinking-block instance found; title generation throttled**
