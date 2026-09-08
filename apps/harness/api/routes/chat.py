@@ -1122,15 +1122,17 @@ async def send_message(
                         try:
                             from sqlalchemy import select as _select
                             from db.models import Connector
+                            _cal_account = tool_input.get("account") or "work"
+                            _cal_conn_name = "Google Calendar (Personal)" if _cal_account == "personal" else "Google Calendar"
                             conn_result = await bg_db.execute(
                                 _select(Connector).where(
                                     Connector.user_id == user_id,
-                                    Connector.name == "Google Calendar",
+                                    Connector.name == _cal_conn_name,
                                 )
                             )
                             conn = conn_result.scalar_one_or_none()
                             if not conn or not conn.auth.get("refresh_token"):
-                                return "Google Calendar not connected. Event not created."
+                                return f"{_cal_conn_name} not connected. Event not created."
 
                             from connectors.google_calendar import GoogleCalendarClient
                             from datetime import datetime, timedelta
@@ -1167,15 +1169,17 @@ async def send_message(
                         try:
                             from sqlalchemy import select as _select
                             from db.models import Connector
+                            _cal_account = tool_input.get("account") or "work"
+                            _cal_conn_name = "Google Calendar (Personal)" if _cal_account == "personal" else "Google Calendar"
                             conn_result = await bg_db.execute(
                                 _select(Connector).where(
                                     Connector.user_id == user_id,
-                                    Connector.name == "Google Calendar",
+                                    Connector.name == _cal_conn_name,
                                 )
                             )
                             conn = conn_result.scalar_one_or_none()
                             if not conn or not conn.auth.get("refresh_token"):
-                                return "Google Calendar not connected."
+                                return f"{_cal_conn_name} not connected."
 
                             from connectors.google_calendar import GoogleCalendarClient
                             from datetime import datetime, timedelta
@@ -1221,15 +1225,17 @@ async def send_message(
                         try:
                             from sqlalchemy import select as _select
                             from db.models import Connector
+                            _cal_account = tool_input.get("account") or "work"
+                            _cal_conn_name = "Google Calendar (Personal)" if _cal_account == "personal" else "Google Calendar"
                             conn_result = await bg_db.execute(
                                 _select(Connector).where(
                                     Connector.user_id == user_id,
-                                    Connector.name == "Google Calendar",
+                                    Connector.name == _cal_conn_name,
                                 )
                             )
                             conn = conn_result.scalar_one_or_none()
                             if not conn or not conn.auth.get("refresh_token"):
-                                return "Google Calendar not connected."
+                                return f"{_cal_conn_name} not connected."
 
                             from connectors.google_calendar import GoogleCalendarClient
                             import asyncio as _asyncio

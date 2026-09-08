@@ -311,6 +311,7 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
   const [durationMin, setDurationMin] = useState(60)
   const [location, setLocation] = useState("")
   const [description, setDescription] = useState("")
+  const [account, setAccount] = useState<"work" | "personal">("work")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
@@ -325,11 +326,12 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
         duration_min: durationMin,
         location: location.trim() || undefined,
         description: stripToLabels(description).trim() || undefined,
+        account,
       })
       onCreated()
       onClose()
     } catch {
-      setError("Failed to create event. Is Google Calendar connected?")
+      setError(`Failed to create event. Is ${account === "personal" ? "Google Calendar (Personal)" : "Google Calendar"} connected?`)
     } finally {
       setSaving(false)
     }
@@ -353,6 +355,13 @@ function AddEventModal({ defaultDate, onClose, onCreated }: { defaultDate: Date;
               placeholder="Event title"
               className="input-field w-full"
             />
+          </div>
+          <div>
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-ink-muted font-medium mb-1">Calendar</label>
+            <select value={account} onChange={e => setAccount(e.target.value as "work" | "personal")} className="input-field w-full">
+              <option value="work">Work</option>
+              <option value="personal">Personal</option>
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

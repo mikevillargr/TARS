@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.3 |
+| Version | v2.18.4 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -119,7 +119,7 @@ the repo root for the historical runbook and known orphaned remnants.
 | Gmail | read, webhook | Live |
 | Gmail (Personal) | read, write (send/reply) | Built, not yet connected — OAuth consent screen blocks personal @gmail.com accounts (likely "Internal" user type); needs Google Cloud Console fix before connecting |
 | Google Calendar | read, write | Live |
-| Google Calendar (Personal) | read | Live — connect via Connectors page |
+| Google Calendar (Personal) | read, write (create/update/delete) | Live — connect via Connectors page |
 | Google Workspace (Personal) | read, write | Live — connect via Connectors page |
 | Fireflies | read, webhook (meeting.ended) | Live |
 | Strava | read | Live |
@@ -163,6 +163,23 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.4 — 2026-09-08
+**Feat: multi-account calendar parity + cross-calendar conflicts + manual email account override**
+- `detect_calendar_conflicts` (Signals) now merges work AND personal calendar events into
+  one timeline before checking overlap — previously only checked the work calendar, so a
+  work meeting double-booked against a personal appointment was invisible to `/today`.
+  Cross-account conflicts skip client-name resolution and label the personal side inline.
+- `EmailDraftCard` header now has a clickable `WORK`/`PERSONAL` toggle (was a read-only tag
+  reflecting only the model's inferred account) — lets Mike correct the account before
+  sending on a fresh compose, where there's no reply-thread to disambiguate from.
+- Calendar writes now support the personal account: `create_calendar_event` /
+  `update_calendar_event` / `delete_calendar_event` tools and the manual Add Event modal all
+  gained an `account` field (`work`|`personal`, default `work`); `gcal_personal` capability
+  bumped `read` -> `read, write`; the REST `/api/calendar/events` routes accept the same field.
+- Harness + web, no schema change.
+
+---
 
 ### v2.18.3 — 2026-09-08
 **Feat: personal Gmail can send/reply, not just read**

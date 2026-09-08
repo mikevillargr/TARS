@@ -277,13 +277,14 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
     return out
 
 
-async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Candidate]:
-    """Overlapping accepted events, and days with no gap to breathe."""
+async def _fetch_calendar_events(
+    db: AsyncSession, user_id: str, conn_name: str, now: datetime, end: datetime,
+) -> list[dict]:
     conn = (
         await db.execute(
             select(Connector).where(
                 Connector.user_id == user_id,
-                Connector.name == "Google Calendar",
+                Connector.name == conn_name,
             )
         )
     ).scalar_one_or_none()
@@ -292,12 +293,10 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
 
     from connectors.google_calendar import GoogleCalendarClient
 
-    now = datetime.now(timezone.utc)
-    end = now + timedelta(days=CALENDAR_LOOKAHEAD_DAYS)
     client = GoogleCalendarClient(conn.auth)
     loop = asyncio.get_event_loop()
     try:
-        raw = await loop.run_in_executor(
+        return await loop.run_in_executor(
             None,
             # list_events takes datetimes and calls .isoformat() itself —
             # passing strings raised 'str' object has no attribute 'isoformat'
@@ -308,45 +307,63 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
                 time_min=now,
                 time_max=end,
             ),
-        )
+        ) or []
     except Exception as exc:  # a calendar outage must not kill the sweep
-        log.warning("signal_generator: calendar fetch failed: %s", exc)
+        log.warning("signal_generator: calendar fetch failed (%s): %s", conn_name, exc)
+        return []
+
+
+async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Candidate]:
+    """Overlapping accepted events across BOTH calendars — a work meeting double-booked
+    against a personal appointment is exactly the case this exists to catch, so work and
+    personal events are merged into one timeline before checking for overlap."""
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(days=CALENDAR_LOOKAHEAD_DAYS)
+
+    work_raw = await _fetch_calendar_events(db, user_id, "Google Calendar", now, end)
+    personal_raw = await _fetch_calendar_events(db, user_id, "Google Calendar (Personal)", now, end)
+    if not work_raw and not personal_raw:
         return []
 
     timed = []
-    for ev in raw or []:
-        start = (ev.get("start") or {}).get("dateTime")
-        stop = (ev.get("end") or {}).get("dateTime")
-        if not start or not stop:
-            continue  # all-day events can't conflict in a meaningful way
-        try:
-            timed.append((
-                datetime.fromisoformat(start.replace("Z", "+00:00")),
-                datetime.fromisoformat(stop.replace("Z", "+00:00")),
-                ev.get("summary") or "(untitled)",
-                ev.get("id") or "",
-                [a.get("email") for a in (ev.get("attendees") or []) if a.get("email")],
-            ))
-        except ValueError:
-            continue
+    for account, raw in (("work", work_raw), ("personal", personal_raw)):
+        for ev in raw:
+            start = (ev.get("start") or {}).get("dateTime")
+            stop = (ev.get("end") or {}).get("dateTime")
+            if not start or not stop:
+                continue  # all-day events can't conflict in a meaningful way
+            try:
+                timed.append((
+                    datetime.fromisoformat(start.replace("Z", "+00:00")),
+                    datetime.fromisoformat(stop.replace("Z", "+00:00")),
+                    ev.get("summary") or "(untitled)",
+                    ev.get("id") or "",
+                    [a.get("email") for a in (ev.get("attendees") or []) if a.get("email")],
+                    account,
+                ))
+            except ValueError:
+                continue
     timed.sort(key=lambda x: x[0])
 
     out: list[Candidate] = []
     for i in range(len(timed) - 1):
-        a_start, a_end, a_title, a_id, a_attendees = timed[i]
-        b_start, b_end, b_title, b_id, b_attendees = timed[i + 1]
+        a_start, a_end, a_title, a_id, a_attendees, a_acct = timed[i]
+        b_start, b_end, b_title, b_id, b_attendees, b_acct = timed[i + 1]
         if b_start >= a_end:
             continue
         pair = ":".join(sorted([a_id, b_id]))
         when = a_start.strftime("%a %d %b, %H:%M")
-        # Named client_name, not client — `client` above is the GoogleCalendarClient instance.
-        client_name = await _client_for_attendees(db, user_id, a_attendees + b_attendees)
+        cross_account = a_acct != b_acct
+        a_label = f"{a_title} (personal)" if cross_account and a_acct == "personal" else a_title
+        b_label = f"{b_title} (personal)" if cross_account and b_acct == "personal" else b_title
+        # A cross-account conflict has no client to resolve either side against.
+        client_name = None if cross_account else await _client_for_attendees(db, user_id, a_attendees + b_attendees)
         out.append(_candidate(
             dedupe_key=f"cal-conflict:{pair}",
             source="calendar",
             source_label="Calendar",
             source_ref=a_id,
-            title=f"You're double-booked {when} — {a_title} vs. {b_title}",
+            title=f"You're double-booked {when} — {a_label} vs. {b_label}",
             urgency="time" if a_start - now < timedelta(days=2) else "normal",
             context_label=client_name,
             reasoning=(

@@ -80,7 +80,9 @@ CREATE_CALENDAR_EVENT_TOOL = {
         "asked in this message ('schedule a meeting', 'add this to my calendar', 'book X') "
         "OR has verbally approved a prior proposal ('go ahead', 'yes', 'do it', 'go schedule it'). "
         "Do NOT use proactively — use propose_calendar_event when you detect an implied event "
-        "Mike hasn't asked you to schedule."
+        "Mike hasn't asked you to schedule. Set account to 'personal' when Mike says 'my "
+        "personal calendar' or the event is clearly personal (family, health, errands) — "
+        "otherwise default to 'work'."
     ),
     "input_schema": {
         "type": "object",
@@ -91,6 +93,11 @@ CREATE_CALENDAR_EVENT_TOOL = {
             "description": {"type": "string", "description": "Optional notes or agenda"},
             "location": {"type": "string", "description": "Optional location or video link"},
             "attendees": {"type": "array", "items": {"type": "string"}, "description": "Attendee email addresses"},
+            "account": {
+                "type": "string",
+                "enum": ["work", "personal"],
+                "description": "Which Google Calendar to create the event on. Default: work.",
+            },
         },
         "required": ["title", "datetime_iso"],
     },
@@ -103,7 +110,8 @@ UPDATE_CALENDAR_EVENT_TOOL = {
         "explicitly asked in this message ('reschedule', 'move it to', 'change the time') "
         "OR has verbally approved ('go ahead', 'yes update it', 'do it'). "
         "Pass only the fields that should change. The event_id is shown in brackets in "
-        "the calendar context, e.g. [abc12345]. Do NOT use proactively."
+        "the calendar context, e.g. [abc12345] — note whether it came from the WORK CALENDAR "
+        "or PERSONAL CALENDAR section and set account to match. Do NOT use proactively."
     ),
     "input_schema": {
         "type": "object",
@@ -115,6 +123,11 @@ UPDATE_CALENDAR_EVENT_TOOL = {
             "description": {"type": "string", "description": "New description or agenda"},
             "location": {"type": "string", "description": "New location or video link"},
             "attendees": {"type": "array", "items": {"type": "string"}, "description": "Full attendee email list (replaces existing list)"},
+            "account": {
+                "type": "string",
+                "enum": ["work", "personal"],
+                "description": "Which calendar the event_id belongs to — match the section it came from in context. Default: work.",
+            },
         },
         "required": ["event_id"],
     },
@@ -126,13 +139,19 @@ DELETE_CALENDAR_EVENT_TOOL = {
         "Delete a Google Calendar event immediately. Use ONLY when Mike has explicitly "
         "asked in this message ('cancel', 'remove', 'delete') OR has verbally approved "
         "('yes delete it', 'go ahead remove it'). The event_id is shown in brackets in "
-        "the calendar context, e.g. [abc12345]. Do NOT use proactively."
+        "the calendar context, e.g. [abc12345] — note whether it came from the WORK CALENDAR "
+        "or PERSONAL CALENDAR section and set account to match. Do NOT use proactively."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
             "event_id": {"type": "string", "description": "The event ID from the calendar context (the value in brackets)"},
             "title": {"type": "string", "description": "Event title — for confirmation message only, not used in the API call"},
+            "account": {
+                "type": "string",
+                "enum": ["work", "personal"],
+                "description": "Which calendar the event_id belongs to — match the section it came from in context. Default: work.",
+            },
         },
         "required": ["event_id"],
     },
