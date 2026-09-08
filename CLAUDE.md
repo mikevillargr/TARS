@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.4 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.5 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1008,6 +1008,27 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.5 Fix: read_email silently reported "no email found" for HTML-only messages — the
+        common case for bank/bills-payment/notification emails. _extract_body (connectors/
+        gmail.py) only ever recognized text/plain MIME parts; a multipart/mixed message whose
+        only content part is text/html (no plain-text alternative) returned "" from every
+        recursive branch, so extract_thread_text produced an empty string, read_email's
+        search path treats empty bodies as no-match (`if text: all_results.append(...)`), and
+        the model correctly reported zero results even though Gmail's own search found the
+        thread. Root-caused by reproducing the exact failure against production: live search
+        for "metrobank online" against the connected personal Gmail found 5 real threads, but
+        extract_thread_text on the top match returned length-0 — confirmed the message's only
+        body part was text/html. Fix: new _walk_body_parts recursively collects the first
+        text/plain AND first text/html found anywhere in the MIME tree (order-independent,
+        so a text/html-first multipart/alternative still prefers plain when present); new
+        _html_to_text (lxml, already a dependency via trafilatura) strips script/style and
+        converts to readable text as the fallback when no plain part exists. Symptom
+        surfaced as multi-turn hallucination-looking behavior (TARS increasingly confidently
+        claiming "no Metrobank emails anywhere, must be a third account") — this bug alone is
+        sufficient to produce that exact symptom for any phrasing tried, since the search path
+        only inspects the top-ranked match per account (threads[:1]); if that top match is
+        HTML-only, the empty extraction reports as "no email found" regardless of how many
+        real matches exist below it. Harness-only, no schema change.
 v2.18.4 Feat: multi-account calendar parity + cross-calendar conflict detection + manual
         email account override. Three pieces: (1) detect_calendar_conflicts (signal_generator.py)
         now merges work AND personal calendar events into one timeline before checking overlap
