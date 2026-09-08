@@ -119,6 +119,12 @@ class Signal(Base):
     source_label: Mapped[str] = mapped_column(String, nullable=False)    # display text, e.g. "Gmail"
     source_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # thread/meeting/task id
     citation: Mapped[Optional[str]] = mapped_column(String, nullable=True)    # human-readable pointer
+    # A short scannable tag, rendered as its own chip — a resolved client name
+    # (from the Contacts graph) where one applies, or, for email with no client
+    # match, a coarse category ("Billing", "Legal", ...) from the model. Kept
+    # as a distinct field rather than baked into source_label/title so the
+    # frontend can render it separately and titles stay clean imperatives.
+    context_label: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     title: Mapped[str] = mapped_column(Text, nullable=False)
     urgency: Mapped[str] = mapped_column(String, nullable=False, default="normal")  # normal|time|overdue

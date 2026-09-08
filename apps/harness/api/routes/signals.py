@@ -43,6 +43,7 @@ class SignalOut(BaseModel):
     source_label: str
     source_ref: Optional[str]
     citation: Optional[str]
+    context_label: Optional[str] = None
     title: str
     urgency: str
     reasoning: Optional[str]

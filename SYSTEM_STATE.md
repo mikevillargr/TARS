@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.17.2 |
+| Version | v2.18.1 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,62 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.1 — 2026-09-08
+**Redesign: signal cards get a dedicated context chip**
+- New `Signal.context_label` column (migration `s6t7u8v9w0x1`) replaces the v2.17.2/v2.18.0
+  approach of prefixing a client name onto the title (`"NCH Inc.: ..."`) and appending it to
+  `source_label` (`"Fireflies · NCH Inc."`). Titles are clean imperatives again; the client
+  renders as its own chip in the card header.
+- All four client-tagging detectors (`detect_unconverted_action_items`,
+  `detect_meeting_commitments`, `detect_calendar_conflicts`, `detect_actionable_emails`) now
+  pass `context_label=...` to the candidate instead of mutating title/source_label.
+- `EMAIL_EXTRACT_SYSTEM` gained a `category` field (billing/legal/banking/vendor/recruiting/
+  scheduling/internal) for email senders who aren't a resolved client — an AWS billing email
+  or a bank notice still gets a scannable chip instead of nothing. Client resolution always
+  takes priority; category is strictly a fallback, never both on one card.
+- `SignalCard.tsx`: new neutral chip style (`--c-surface-2` fill, `--c-ink-muted` text,
+  `--c-border-faint` hairline) — deliberately not moss, which stays reserved for
+  interactive/accent elsewhere in the app. Added a 12px source icon per detector (mail /
+  meeting / calendar / project / feed / activity), tinted with the existing urgency accent —
+  no new color introduced. FYI rows carry the same context inline as text, not a boxed chip,
+  keeping "no card weight" true for that row type.
+- Design pass referenced Refero MCP for tag-chip patterns (Raycast/Linear-style dark
+  changelog cards); Mobbin was requested but isn't connected as an MCP for this session.
+- Harness + web + DB migration.
+
+---
+
+### v2.18.0 — 2026-09-08
+**Feature: fifth signal detector — actionable email**
+- `detect_actionable_emails` surfaces inbound Gmail threads still awaiting a reply, whether
+  unread or read-but-never-answered — closing the gap where email signals didn't exist at all.
+- New `GmailClient.get_awaiting_reply` (`connectors/gmail.py`) determines "still waiting"
+  deterministically off the **SENT label** on a thread's most recent message rather than the
+  unread flag or a From-address comparison — works across whatever alias received the mail,
+  and catches messages Mike opened but never replied to, not just unread ones. Excludes
+  Promotions/Social/Forums categories before a model call is ever spent.
+- For threads that pass, Tier 2 judges actionability with the same conservative,
+  empty-is-a-valid-answer contract as `detect_meeting_commitments`: newsletters, receipts, and
+  automated notices correctly resolve to "no action needed" rather than being invented into
+  cards.
+- Reuses v2.17.2's `_client_for_attendees` for client tagging (sender email → Contacts
+  organization field).
+- `dedupe_key` = `thread_id` + latest message id, so dismissing a thread means "no action was
+  needed" and it stays dismissed unless a genuinely new message arrives on it.
+- Actions surfaced (`draft_reply` / `create_task` / `create_reminder`) were all
+  already-supported signal action kinds — no frontend changes needed.
+- **Scoped to the primary Gmail account only for v1** — `read_email`'s thread-id resolution
+  always tries the work account first, so personal-account threads would fail the
+  `draft_reply` hand-off. Follow-up if needed.
+- Refactor: `_EXTRACTION_ERRORS` renamed `_MODEL_ERRORS` and its `.clear()` moved from inside
+  `detect_meeting_commitments` to once per sweep in `generate_for_user` — two model-assisted
+  detectors sharing one clear-on-entry list would wipe each other's errors. The
+  empty-candidates early return in `generate_for_user` now also surfaces `model_errors`
+  instead of silently dropping them.
+- Harness-only, no schema change.
+
+---
 
 ### v2.17.2 — 2026-09-08
 **Fix + Enhance: signal generator surfaced other people's action items, and cards lacked client context**

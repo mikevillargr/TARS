@@ -1,14 +1,28 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { X, Clock, ChevronDown, CalendarPlus, Link2, MoreHorizontal } from "lucide-react"
+import {
+  X, Clock, ChevronDown, CalendarPlus, Link2, MoreHorizontal,
+  Mail, Video, Calendar, FolderKanban, Rss, Activity, type LucideIcon,
+} from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
-import { formatAge, type Signal, type SignalAction, type SignalUrgency } from "@/lib/signals"
+import { formatAge, type Signal, type SignalAction, type SignalUrgency, type SignalSource } from "@/lib/signals"
+
+// Small provenance icon per source — same accent color as the source label,
+// so scanning the header row doesn't need to read the text first.
+const SOURCE_ICON: Record<SignalSource, LucideIcon> = {
+  gmail: Mail,
+  fireflies: Video,
+  calendar: Calendar,
+  project: FolderKanban,
+  feed: Rss,
+  strava: Activity,
+}
 
 /**
  * SignalCard — one AI-inferred item.
@@ -94,6 +108,7 @@ export function SignalCard({
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const style = URGENCY[signal.urgency]
+  const SourceIcon = SOURCE_ICON[signal.source]
   const [primary, ...alternates] = signal.actions
 
   // Which action the current drag would commit, and whether it's armed yet.
@@ -266,10 +281,29 @@ export function SignalCard({
       >
         {/* Header row: provenance + status + dismiss */}
         <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+            <SourceIcon size={12} style={{ color: style.accent }} aria-hidden="true" />
             <span className="tars-label" style={{ color: style.accent }}>
               {signal.source_label}
             </span>
+            {signal.context_label && (
+              // Neutral, not moss — moss stays reserved for interactive/accent
+              // states elsewhere; a chip on every card would dilute that.
+              <span
+                className="tars-label"
+                style={{
+                  color: "var(--c-ink-muted)",
+                  backgroundColor: "var(--c-surface-2)",
+                  border: "1px solid var(--c-border-faint)",
+                  borderRadius: "0.3rem",
+                  padding: "0.05rem 0.4rem",
+                  textTransform: "none",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {signal.context_label}
+              </span>
+            )}
             <span className="tars-label tars-label--muted">· {formatAge(signal.created_at)}</span>
             {style.badge && (
               <span

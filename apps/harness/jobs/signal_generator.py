@@ -41,8 +41,13 @@ log = logging.getLogger(__name__)
 MEETING_LOOKBACK_DAYS = 7
 STALLED_TASK_DAYS = 4
 CALENDAR_LOOKAHEAD_DAYS = 7
+EMAIL_LOOKBACK_DAYS = 10
 # Cap per sweep, so one pathological day can't produce a hundred cards.
 MAX_NEW_PER_SWEEP = 12
+# Threads checked deterministically (cheap metadata calls) vs. how many of
+# those get a full-body model judgment (the expensive, bounded step).
+MAX_EMAIL_CANDIDATES = 25
+MAX_EMAIL_TO_MODEL = 10
 
 # Domains that never identify a client — Mike's own org plus the personal
 # webmail providers that regularly show up in attendee lists.
@@ -126,6 +131,7 @@ def _candidate(
     kind: str = "action",
     source_ref: Optional[str] = None,
     calendar_event: Optional[dict] = None,
+    context_label: Optional[str] = None,
 ) -> Candidate:
     return Candidate(
         dedupe_key=dedupe_key,
@@ -137,6 +143,7 @@ def _candidate(
         citation=citation,
         actions=actions or [],
         kind=kind,
+        context_label=context_label,
         source_ref=source_ref,
         calendar_event=calendar_event,
     )
@@ -246,15 +253,14 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
             else f"{n} action items from \"{meeting.title[:50]}\" were never assigned"
         )
         client_name = await _client_for_attendees(db, user_id, meeting.attendees)
-        if client_name:
-            title = f"{client_name}: {title}"
         out.append(_candidate(
             dedupe_key=f"mai-batch:{meeting_id}",
             source="fireflies",
-            source_label=f"Fireflies · {client_name}" if client_name else "Fireflies",
+            source_label="Fireflies",
             source_ref=meeting_id,
             title=title,
             urgency="normal",
+            context_label=client_name,
             reasoning=(
                 f"Fireflies extracted {n} action item{'s' if n != 1 else ''} assigned to you "
                 f"from this meeting and none were converted to a task or To-Do.\n\n"
@@ -335,14 +341,14 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
         when = a_start.strftime("%a %d %b, %H:%M")
         # Named client_name, not client — `client` above is the GoogleCalendarClient instance.
         client_name = await _client_for_attendees(db, user_id, a_attendees + b_attendees)
-        title = f"You're double-booked {when} — {a_title} vs. {b_title}"
         out.append(_candidate(
             dedupe_key=f"cal-conflict:{pair}",
             source="calendar",
-            source_label=f"Calendar · {client_name}" if client_name else "Calendar",
+            source_label="Calendar",
             source_ref=a_id,
-            title=f"{client_name}: {title}" if client_name else title,
+            title=f"You're double-booked {when} — {a_title} vs. {b_title}",
             urgency="time" if a_start - now < timedelta(days=2) else "normal",
+            context_label=client_name,
             reasoning=(
                 f"\"{a_title}\" runs {a_start.strftime('%H:%M')}–{a_end.strftime('%H:%M')} and "
                 f"\"{b_title}\" starts {b_start.strftime('%H:%M')}, so they overlap."
@@ -391,6 +397,22 @@ def _extract_json_array(text: str) -> list:
         return []
 
 
+def _extract_json_object(text: str) -> dict:
+    """Same deal as _extract_json_array, for detectors returning one object."""
+    text = text.strip()
+    fence = re.search(r"```(?:json)?\s*(.+?)\s*```", text, re.S)
+    if fence:
+        text = fence.group(1).strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        return {}
+    try:
+        parsed = json.loads(text[start : end + 1])
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
 async def _complete(system: str, prompt: str, max_tokens: int = 900) -> str:
     """Collect a non-streaming completion off the streaming client."""
     from core.model_client import get_model_client, ModelTier
@@ -411,13 +433,14 @@ async def _complete(system: str, prompt: str, max_tokens: int = 900) -> str:
 
 
 # Populated per-sweep so a broken model tier surfaces in the result instead of
-# looking like "no commitments found".
-_EXTRACTION_ERRORS: list[str] = []
+# looking like "nothing found". Shared by every model-assisted detector;
+# cleared once per sweep by generate_for_user, not per-detector, so the
+# second detector to run doesn't wipe out the first one's errors.
+_MODEL_ERRORS: list[str] = []
 
 
 async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Candidate]:
     """Things Mike said he'd do, that never became anything."""
-    _EXTRACTION_ERRORS.clear()
     since = datetime.now(timezone.utc) - timedelta(days=MEETING_LOOKBACK_DAYS)
     meetings = (
         await db.execute(
@@ -449,7 +472,7 @@ async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Can
             # either. A misconfigured tier silently yields zero commitments
             # forever, which looks identical to "nothing to report".
             log.warning("signal_generator: extraction failed for %s: %s", m.id, exc)
-            _EXTRACTION_ERRORS.append(str(exc)[:200])
+            _MODEL_ERRORS.append(str(exc)[:200])
             continue
 
         client_name = await _client_for_attendees(db, user_id, m.attendees)
@@ -463,10 +486,11 @@ async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Can
             out.append(_candidate(
                 dedupe_key=f"commit:{m.id}:{fingerprint}",
                 source="fireflies",
-                source_label=f"Fireflies · {client_name}" if client_name else "Fireflies",
+                source_label="Fireflies",
                 source_ref=m.id,
-                title=f"{client_name}: {title[:180]}" if client_name else title[:180],
+                title=title[:180],
                 urgency=urgency,
+                context_label=client_name,
                 # Only claim what was actually checked. An earlier draft said
                 # "No matching task, To-Do, or sent email exists" — nothing
                 # verifies that, and a reasoning line that asserts unverified
@@ -486,6 +510,158 @@ async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Can
     return out
 
 
+EMAIL_EXTRACT_SYSTEM = """You review an inbound email thread for Mike Villar's triage screen \
+and decide whether it needs a decision from him.
+
+Return ONLY a JSON object. No prose, no code fence:
+{"actionable": true | false,
+ "kind": "action" | "fyi",
+ "title": "<imperative, <=110 chars, what Mike must do>",
+ "urgency": "normal" | "time",
+ "suggested_action": "draft_reply" | "create_task" | "create_reminder",
+ "category": "billing" | "legal" | "banking" | "vendor" | "recruiting" | "scheduling" | "internal" | null}
+
+Rules:
+- actionable=false for newsletters, receipts, automated notifications, threads already
+  resolved, or anything that doesn't need a response or decision from Mike. This is the
+  correct, common answer — do not invent an action item to seem useful.
+- actionable=true only when Mike himself needs to reply, decide, approve, pay, schedule,
+  or review something because of this email.
+- kind="fyi" for something worth knowing but not needing a reply (rare — a contract was
+  countersigned, a payment cleared). Everything else that's actionable is kind="action".
+- "time" urgency only if a deadline is stated or clearly implied this week.
+- suggested_action: "draft_reply" for anything needing a written response (the default for
+  most actionable email); "create_task" for tracked project work; "create_reminder" for a
+  simple personal reminder that needs no reply.
+- category is a coarse tag for triage-screen scanning, used only when the sender is NOT a
+  client/business contact (an AWS invoice is "billing", a bank notice is "banking", a job
+  applicant is "recruiting", a tool/agency vendor is "vendor", a logistics/venue email is
+  "scheduling", something from Mike's own team is "internal"). Use null for client or
+  personal correspondence — client identification is handled separately and takes priority.
+- If actionable is false, the other fields are ignored — just return {"actionable": false}."""
+
+_EMAIL_ACTION_LABELS = {
+    "draft_reply":     {"kind": "draft_reply", "label": "Draft reply"},
+    "create_task":     {"kind": "create_task", "label": "Add to Projects"},
+    "create_reminder": {"kind": "create_reminder", "label": "Add to To-Dos"},
+}
+
+# Display text for the model's category guess — used as the context chip only
+# when no client resolves from the Contacts graph (that takes priority).
+_EMAIL_CATEGORY_LABELS = {
+    "billing":    "Billing",
+    "legal":      "Legal",
+    "banking":    "Banking",
+    "vendor":     "Vendor",
+    "recruiting": "Recruiting",
+    "scheduling": "Scheduling",
+    "internal":   "Internal",
+}
+
+
+def _email_actions(primary_kind: str) -> list[dict]:
+    """Primary first (TARS's pick), the other two supported kinds as alternates."""
+    order = [primary_kind] + [k for k in _EMAIL_ACTION_LABELS if k != primary_kind]
+    return [_EMAIL_ACTION_LABELS[k] for k in order]
+
+
+async def detect_actionable_emails(db: AsyncSession, user_id: str) -> list[Candidate]:
+    """
+    Inbound email still waiting on Mike — whether unread, or read and quietly
+    never answered. "Waiting on Mike" is deterministic (GmailClient.get_awaiting_reply
+    reads it off the SENT label); "does it actually need anything from him" is
+    judgement, so that part goes to Tier 2 with the same conservative,
+    empty-is-a-valid-answer contract as detect_meeting_commitments.
+
+    dedupe_key includes the thread's latest message id, not just the thread id,
+    so a dismissed thread stays dismissed (dismissing it means "no action was
+    needed") while a genuinely new reply on the same thread gets judged fresh.
+    """
+    conn = (
+        await db.execute(
+            select(Connector).where(
+                Connector.user_id == user_id,
+                Connector.name == "Gmail",
+            )
+        )
+    ).scalar_one_or_none()
+    if not conn or not (conn.auth or {}).get("refresh_token"):
+        return []
+
+    from connectors.gmail import GmailClient, extract_thread_text
+
+    client = GmailClient(conn.auth)
+    loop = asyncio.get_event_loop()
+    try:
+        pending = await loop.run_in_executor(
+            None,
+            lambda: client.get_awaiting_reply(MAX_EMAIL_CANDIDATES, EMAIL_LOOKBACK_DAYS),
+        )
+    except Exception as exc:  # a Gmail outage must not kill the sweep
+        log.warning("signal_generator: gmail fetch failed: %s", exc)
+        return []
+
+    out: list[Candidate] = []
+    for c in pending[:MAX_EMAIL_TO_MODEL]:
+        try:
+            thread = await loop.run_in_executor(
+                None, lambda tid=c["thread_id"]: client.get_thread(tid)
+            )
+        except Exception as exc:
+            log.warning("signal_generator: thread fetch failed for %s: %s", c["thread_id"], exc)
+            continue
+        body = extract_thread_text(thread)
+        if not body:
+            continue
+        prompt = f"From: {c['from_name']} <{c['from_email']}>\nSubject: {c['subject']}\n\nThread:\n{body[-6000:]}"
+        try:
+            raw = await _complete(EMAIL_EXTRACT_SYSTEM, prompt)
+        except Exception as exc:
+            log.warning("signal_generator: email extraction failed for %s: %s", c["thread_id"], exc)
+            _MODEL_ERRORS.append(str(exc)[:200])
+            continue
+
+        parsed = _extract_json_object(raw)
+        if not parsed.get("actionable"):
+            continue
+        title = str(parsed.get("title") or "").strip()
+        if not title:
+            continue
+        kind = parsed.get("kind") if parsed.get("kind") in ("action", "fyi") else "action"
+        urgency = parsed.get("urgency") if parsed.get("urgency") in ("normal", "time") else "normal"
+        suggested = (
+            parsed.get("suggested_action")
+            if parsed.get("suggested_action") in _EMAIL_ACTION_LABELS
+            else "draft_reply"
+        )
+
+        client_name = await _client_for_attendees(db, user_id, [c["from_email"]])
+        category_label = _EMAIL_CATEGORY_LABELS.get(parsed.get("category") or "")
+        # Client identification takes priority — it's the more specific,
+        # deterministic answer. Category is only a fallback for senders that
+        # aren't in the Contacts graph as a client/business relationship.
+        context_label = client_name or category_label
+
+        out.append(_candidate(
+            dedupe_key=f"email:{c['thread_id']}:{c['message_id']}",
+            source="gmail",
+            source_label="Gmail",
+            source_ref=c["thread_id"],
+            title=title[:180],
+            urgency=urgency,
+            kind=kind,
+            context_label=context_label,
+            reasoning=(
+                f"From {c['from_name']} — \"{c['subject']}\".\n\n"
+                + ("Unread. " if c["unread"] else "Read, but no reply sent. ")
+                + "Not yet checked against sent mail beyond this thread."
+            ),
+            citation=f"Gmail · {c['subject'][:60]}",
+            actions=_email_actions(suggested),
+        ))
+    return out
+
+
 # ─── Orchestrator ─────────────────────────────────────────────────────────────
 
 DETECTORS = (
@@ -493,6 +669,7 @@ DETECTORS = (
     ("unconverted_action_items", detect_unconverted_action_items),
     ("calendar_conflicts", detect_calendar_conflicts),
     ("meeting_commitments", detect_meeting_commitments),
+    ("actionable_emails", detect_actionable_emails),
 )
 
 URGENCY_RANK = {"overdue": 0, "time": 1, "normal": 2}
@@ -500,6 +677,7 @@ URGENCY_RANK = {"overdue": 0, "time": 1, "normal": 2}
 
 async def generate_for_user(db: AsyncSession, user_id: str) -> dict[str, Any]:
     """Run every detector, drop anything already seen, insert the rest."""
+    _MODEL_ERRORS.clear()
     candidates: list[Candidate] = []
     per_detector: dict[str, int] = {}
 
@@ -515,7 +693,11 @@ async def generate_for_user(db: AsyncSession, user_id: str) -> dict[str, Any]:
         candidates.extend(found)
 
     if not candidates:
-        return {"created": 0, "detectors": per_detector}
+        return {
+            "created": 0,
+            **({"model_errors": _MODEL_ERRORS[:3]} if _MODEL_ERRORS else {}),
+            "detectors": per_detector,
+        }
 
     keys = [c["dedupe_key"] for c in candidates]
     seen = {
@@ -543,7 +725,7 @@ async def generate_for_user(db: AsyncSession, user_id: str) -> dict[str, Any]:
     # about rather than hiding inside one number.
     result = {
         "created": len(fresh),
-        **({"model_errors": _EXTRACTION_ERRORS[:3]} if _EXTRACTION_ERRORS else {}),
+        **({"model_errors": _MODEL_ERRORS[:3]} if _MODEL_ERRORS else {}),
         "already_seen": len(candidates) - len(unseen),
         "deferred_by_cap": len(unseen) - len(fresh),
         "detectors": per_detector,
