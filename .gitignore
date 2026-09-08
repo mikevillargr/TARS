@@ -23,6 +23,9 @@ __pycache__/
 postgres_data/
 redis_data/
 
+# Local DB seed snapshot (scripts/seed-from-prod.ps1)
+.seed/
+
 # Secrets / keys
 *.pem
 *.key

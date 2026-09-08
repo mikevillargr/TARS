@@ -24,6 +24,7 @@ class ConfirmSendRequest(BaseModel):
     body: str
     cc: Optional[str] = None
     thread_id: Optional[str] = None
+    account: Optional[str] = "work"
 
 
 @router.post("/confirm-send")
@@ -32,15 +33,16 @@ async def confirm_send(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    conn_name = "Gmail (Personal)" if req.account == "personal" else "Gmail"
     conn_result = await db.execute(
         select(Connector).where(
             Connector.user_id == user_id,
-            Connector.name == "Gmail",
+            Connector.name == conn_name,
         )
     )
     conn = conn_result.scalar_one_or_none()
     if not conn or not conn.auth.get("refresh_token"):
-        raise HTTPException(status_code=400, detail="Gmail not connected.")
+        raise HTTPException(status_code=400, detail=f"{conn_name} not connected.")
 
     try:
         import asyncio

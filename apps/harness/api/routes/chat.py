@@ -1823,6 +1823,7 @@ async def send_message(
                         _draft_id = str(_uuid.uuid4())
                         _to = tool_input.get("to", "")
                         _subject = tool_input.get("subject", "")
+                        _account = tool_input.get("account") or "work"
                         await _emit_card({
                             "type": "email_draft",
                             "draft_id": _draft_id,
@@ -1831,10 +1832,11 @@ async def send_message(
                             "body": tool_input.get("body", ""),
                             "cc": tool_input.get("cc"),
                             "thread_id": tool_input.get("thread_id"),
+                            "account": _account,
                         })
                         return (
                             f"Draft prepared (draft_id={_draft_id}) — To: {_to}, "
-                            f"Subject: {_subject}. Showing to Mike for approval. "
+                            f"Subject: {_subject}, Account: {_account}. Showing to Mike for approval. "
                             "If Mike asks to revise, call send_email again with the updated content."
                         )
 
@@ -1843,15 +1845,17 @@ async def send_message(
                             from sqlalchemy import select as _select
                             from db.models import Connector
                             import asyncio as _asyncio
+                            _account = tool_input.get("account") or "work"
+                            _conn_name = "Gmail (Personal)" if _account == "personal" else "Gmail"
                             conn_result = await bg_db.execute(
                                 _select(Connector).where(
                                     Connector.user_id == user_id,
-                                    Connector.name == "Gmail",
+                                    Connector.name == _conn_name,
                                 )
                             )
                             conn = conn_result.scalar_one_or_none()
                             if not conn or not conn.auth.get("refresh_token"):
-                                return "Gmail not connected — can't send."
+                                return f"{_conn_name} not connected — can't send."
                             from connectors.gmail import GmailClient
                             gclient = GmailClient(conn.auth)
                             loop = _asyncio.get_event_loop()
