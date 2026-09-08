@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.3 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.4 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -408,7 +408,7 @@ class Connector:
 | Gmail | read, webhook |
 | Gmail (Personal) | read, write (send/reply) — separate account slot, same OAuth credentials, state=personal |
 | Google Calendar | read, write |
-| Google Calendar (Personal) | read — separate account slot |
+| Google Calendar (Personal) | read, write (create/update/delete) — separate account slot |
 | Google Workspace | search Drive + read & write Docs/Sheets/Slides by link (Drive export → existing parsers) |
 | Google Workspace (Personal) | read, write — separate account slot |
 | Fireflies | read, webhook (meeting.ended) |
@@ -1008,6 +1008,23 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.4 Feat: multi-account calendar parity + cross-calendar conflict detection + manual
+        email account override. Three pieces: (1) detect_calendar_conflicts (signal_generator.py)
+        now merges work AND personal calendar events into one timeline before checking overlap
+        — previously only checked "Google Calendar", so a work meeting double-booked against a
+        personal appointment was invisible to Today/Signals; new _fetch_calendar_events helper
+        fetches each account, cross-account conflicts skip client-name resolution (no client to
+        resolve against) and label the personal side inline ("(personal)"). (2) EmailDraftCard
+        gained a manual WORK/PERSONAL toggle in its header (was a read-only tag reflecting only
+        the model's guess) — lets Mike override the account before sending when the model
+        guesses wrong on a fresh compose (unambiguous on replies, since the source thread pins
+        it). (3) Calendar writes now support the personal account: create_calendar_event /
+        update_calendar_event / delete_calendar_event tools and the manual Add Event modal all
+        gained an account field (work|personal, default work), gcal_personal capability bumped
+        read -> read+write, and the /api/calendar/events REST routes (POST/PATCH/DELETE) accept
+        the same field for consistency with the chip-proposal path. Model is prompted to infer
+        account from which CALENDAR context section (WORK/PERSONAL) an event_id came from, same
+        pattern as v2.18.3's email account inference. Harness + web, no schema change.
 v2.18.3 Feat: personal Gmail can now send/reply, not just read. gmail_personal capability
         list updated read -> read+write. send_email/confirm_send_email tools (and the manual
         Send button's POST /api/email/confirm-send) gained an account field ("work"|"personal",

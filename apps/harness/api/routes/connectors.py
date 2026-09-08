@@ -36,7 +36,7 @@ _CONNECTOR_CAPS = {
     "google_people":             ["read", "write"],
     "google_workspace":          ["read", "write"],
     "gmail_personal":            ["read", "write"],
-    "gcal_personal":             ["read"],
+    "gcal_personal":             ["read", "write"],
     "google_workspace_personal": ["read", "write"],
     "strava":                    ["read"],
     "garmin":                    ["read"],

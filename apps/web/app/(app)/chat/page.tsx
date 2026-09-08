@@ -410,6 +410,7 @@ function EmailDraftCard({
   const [editCc, setEditCc]         = useState(draft.cc ?? "")
   const [editSubject, setEditSubject] = useState(draft.subject)
   const [editBody, setEditBody]     = useState(draft.body)
+  const [editAccount, setEditAccount] = useState<"work" | "personal">(draft.account ?? "work")
 
   async function confirmSend() {
     setSending(true)
@@ -421,7 +422,7 @@ function EmailDraftCard({
         body:      editBody,
         cc:        editCc || null,
         thread_id: draft.thread_id ?? null,
-        account:   draft.account ?? "work",
+        account:   editAccount,
       })
       setSent(true)
       if (draft.draft_id) {
@@ -440,7 +441,7 @@ function EmailDraftCard({
         <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid color-mix(in srgb, var(--c-moss) 20%, transparent)", backgroundColor: "var(--c-moss-soft)" }}>
           <Mail size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
           <span className="text-xs font-semibold" style={{ color: "var(--c-moss)" }}>Sent</span>
-          {draft.account === "personal" && (
+          {editAccount === "personal" && (
             <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>PERSONAL</span>
           )}
           <button onClick={onDismiss} className="ml-auto" style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
@@ -486,9 +487,19 @@ function EmailDraftCard({
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--c-border-faint)", backgroundColor: "var(--c-surface)" }}>
         <Mail size={12} style={{ color: "var(--c-amber)", flexShrink: 0 }} />
         <span className="text-xs font-semibold" style={{ color: "var(--c-amber)" }}>Draft — waiting for approval</span>
-        {draft.account === "personal" && (
-          <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>PERSONAL</span>
-        )}
+        <button
+          onClick={() => setEditAccount(a => (a === "personal" ? "work" : "personal"))}
+          title="Switch which Gmail account this sends from"
+          className="tars-label"
+          style={{
+            color: editAccount === "personal" ? "var(--c-moss)" : "var(--c-ink-faint)",
+            border: "1px solid var(--c-border-faint)",
+            borderRadius: "4px",
+            padding: "1px 5px",
+          }}
+        >
+          {editAccount === "personal" ? "PERSONAL" : "WORK"}
+        </button>
         <div className="ml-auto flex items-center gap-1.5">
           <button
             onClick={() => setEditing(e => !e)}

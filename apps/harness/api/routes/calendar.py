@@ -38,6 +38,7 @@ class CreateEventRequest(BaseModel):
     duration_min: int = 60
     description: Optional[str] = None
     location: Optional[str] = None
+    account: Optional[str] = "work"
 
 
 class UpdateEventRequest(BaseModel):
@@ -47,6 +48,7 @@ class UpdateEventRequest(BaseModel):
     description: Optional[str] = None
     location: Optional[str] = None
     attendees: Optional[List[str]] = None
+    account: Optional[str] = "work"
 
 
 @router.get("/events", response_model=List[CalendarEventOut])
@@ -190,15 +192,17 @@ async def create_event(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    is_personal = body.account == "personal"
+    conn_name = "Google Calendar (Personal)" if is_personal else "Google Calendar"
     r = await db.execute(
         select(Connector).where(
             Connector.user_id == user_id,
-            Connector.name == "Google Calendar",
+            Connector.name == conn_name,
         )
     )
     conn = r.scalar_one_or_none()
     if not conn or not conn.auth.get("refresh_token"):
-        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+        raise HTTPException(status_code=400, detail=f"{conn_name} not connected")
 
     from connectors.google_calendar import GoogleCalendarClient
     loop = asyncio.get_event_loop()
@@ -231,9 +235,10 @@ async def create_event(
     start_str = created.get("start", {}).get("dateTime") or created.get("start", {}).get("date", "")
     end_str = created.get("end", {}).get("dateTime") or created.get("end", {}).get("date", "")
 
+    event_type = "gcal_personal" if is_personal else "gcal"
     return CalendarEventOut(
-        id=f"gcal-{created['id']}",
-        type="gcal",
+        id=f"{event_type}-{created['id']}",
+        type=event_type,
         title=created.get("summary", body.title),
         start=start_str,
         end=end_str,
@@ -253,15 +258,16 @@ async def update_event(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    conn_name = "Google Calendar (Personal)" if body.account == "personal" else "Google Calendar"
     r = await db.execute(
         select(Connector).where(
             Connector.user_id == user_id,
-            Connector.name == "Google Calendar",
+            Connector.name == conn_name,
         )
     )
     conn = r.scalar_one_or_none()
     if not conn or not conn.auth.get("refresh_token"):
-        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+        raise HTTPException(status_code=400, detail=f"{conn_name} not connected")
 
     from connectors.google_calendar import GoogleCalendarClient
     loop = asyncio.get_event_loop()
@@ -302,18 +308,20 @@ async def update_event(
 @router.delete("/events/{event_id}", status_code=204)
 async def delete_event(
     event_id: str,
+    account: Optional[str] = Query("work"),
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
+    conn_name = "Google Calendar (Personal)" if account == "personal" else "Google Calendar"
     r = await db.execute(
         select(Connector).where(
             Connector.user_id == user_id,
-            Connector.name == "Google Calendar",
+            Connector.name == conn_name,
         )
     )
     conn = r.scalar_one_or_none()
     if not conn or not conn.auth.get("refresh_token"):
-        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+        raise HTTPException(status_code=400, detail=f"{conn_name} not connected")
 
     from connectors.google_calendar import GoogleCalendarClient
     loop = asyncio.get_event_loop()
