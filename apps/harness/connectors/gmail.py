@@ -88,6 +88,61 @@ class GmailClient:
                 log.debug("Thread metadata fetch failed %s: %s", t["id"], exc)
         return summaries
 
+    def get_awaiting_reply(self, max_threads: int = 25, newer_than_days: int = 10) -> List[dict]:
+        """
+        Inbox threads still waiting on a reply — whether read or unread.
+
+        "Awaiting reply" is read off the SENT label on the thread's most recent
+        message rather than comparing From-address, since that works across
+        whatever alias the account received the message on without needing to
+        know the account's own address. Bulk-mail categories are excluded
+        up front so obvious newsletters/notifications never reach a caller
+        that's about to spend a model call deciding if they're actionable.
+        """
+        threads = self.list_threads(
+            query=(
+                f"in:inbox newer_than:{newer_than_days}d "
+                "-category:promotions -category:social -category:forums"
+            ),
+            max_results=max_threads,
+        )
+        out = []
+        for t in threads:
+            try:
+                data = (
+                    self._service.users()
+                    .threads()
+                    .get(userId="me", id=t["id"], format="metadata",
+                         metadataHeaders=["Subject", "From", "Date"])
+                    .execute()
+                )
+                msgs = data.get("messages", [])
+                if not msgs:
+                    continue
+                latest = msgs[-1]
+                label_ids = latest.get("labelIds", [])
+                if "SENT" in label_ids:
+                    continue  # last word in the thread was already Mike's
+                headers = {h["name"]: h["value"] for h in latest.get("payload", {}).get("headers", [])}
+                from_raw = headers.get("From", "")
+                from_name = from_raw.split("<")[0].strip().strip('"') or from_raw
+                from_email = (
+                    from_raw.split("<")[-1].rstrip(">").strip().lower()
+                    if "<" in from_raw else from_raw.strip().lower()
+                )
+                out.append({
+                    "thread_id":  t["id"],
+                    "message_id": latest.get("id", ""),
+                    "subject":    headers.get("Subject", "(no subject)"),
+                    "from_name":  from_name,
+                    "from_email": from_email,
+                    "date":       headers.get("Date", ""),
+                    "snippet":    data.get("snippet", ""),
+                    "unread":     "UNREAD" in label_ids,
+                })
+            except Exception as exc:
+                log.debug("Thread metadata fetch failed %s: %s", t["id"], exc)
+        return out
 
     def send_email(
         self,

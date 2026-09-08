@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.17.2 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -448,15 +448,27 @@ chat conversation.
   makes the screen lie two-thirds of the time
 - FYI rows (kind="fyi") render as plain text, no card weight
 - **Generation** (`jobs/signal_generator.py`, `signal_sweep` every 4h, or
-  `POST /api/signals/generate` on demand). Four detectors, split by whether the answer is a
+  `POST /api/signals/generate` on demand). Five detectors, split by whether the answer is a
   fact or a judgement:
   - *Deterministic, no model:* stalled/overdue tasks, Fireflies action items that never became
     work (**grouped by meeting**, not one card per item — one real week produced 225 items),
-    overlapping calendar events
+    overlapping calendar events, inbound Gmail threads still awaiting a reply (read off the
+    SENT label on the thread's last message, not unread status alone — catches read-but-
+    never-answered mail too)
   - *Model-assisted (Tier 2, strict JSON):* commitments you made in meeting transcripts,
-    surfaced with the verbatim quote
+    surfaced with the verbatim quote; and, for each awaiting-reply Gmail thread, whether it
+    actually needs anything from you (newsletters/receipts/automated mail correctly resolve to
+    "no" — an empty result is a valid, common answer, not a failure to try harder)
+  - Meeting/calendar/email signals get a best-effort **client name** tag (title prefixed
+    `"{Client}: ..."`, source badge `"Fireflies · {Client}"` / `"Gmail · {Client}"`) resolved
+    from the Contacts graph (attendee/sender email → synced Google Contacts' organization
+    field) — not a hardcoded client list, so it stays correct as clients change
+  - Fireflies action items explicitly owned by another meeting attendee are filtered out
+    (Fireflies extraction has no notion of "mine"); unassigned items stay in
   - `dedupe_key` is checked against signals in **any** status, so a dismissed signal never
-    returns. Deliberate: re-nagging is how a triage surface loses trust
+    returns. Deliberate: re-nagging is how a triage surface loses trust — for email this also
+    means dismissing an awaiting-reply thread means "no action was needed" and it won't
+    resurface unless a genuinely new message arrives on it
 
 **2. Chat**
 - Conversation list, message thread, model badge per message
@@ -990,6 +1002,27 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.0 Feature: fifth signal detector — actionable email. detect_actionable_emails surfaces
+        inbound Gmail threads still awaiting a reply, whether unread or read-but-never-
+        answered. New GmailClient.get_awaiting_reply (connectors/gmail.py) determines "still
+        waiting" deterministically off the SENT label on a thread's last message rather than
+        an unread flag or From-address comparison — works across aliases, and catches mail
+        Mike opened but never replied to, not just unread mail. Excludes Promotions/Social/
+        Forums categories before spending a model call. For threads that pass, Tier 2 judges
+        actionability with the same conservative, empty-is-valid contract as
+        detect_meeting_commitments: newsletters/receipts/automated notices correctly resolve
+        to "no action needed." Reuses v2.17.2's _client_for_attendees for client tagging (sender
+        email -> Contacts org). dedupe_key = thread_id + latest message id, so dismissing a
+        thread means "no action was needed" and it stays dismissed unless a new message
+        arrives. Actions surfaced (draft_reply / create_task / create_reminder) were all
+        already-supported signal action kinds — no frontend changes needed. Scoped to the
+        primary Gmail account only for v1: read_email's thread-id resolution always tries the
+        work account first, so personal-account threads would fail the draft_reply hand-off.
+        Also: _EXTRACTION_ERRORS renamed _MODEL_ERRORS and its clear() moved from inside
+        detect_meeting_commitments to once per sweep in generate_for_user, since two
+        model-assisted detectors sharing one clear-on-entry list would wipe each other's
+        errors; the empty-candidates early return in generate_for_user now also surfaces
+        model_errors instead of silently dropping them. Harness-only, no schema change.
 v2.17.2 Fix + Enhance: signal generator surfaced other people's action items, and cards
         lacked client context. detect_unconverted_action_items grouped every Fireflies action
         item with no task_id into the brief regardless of owner — Fireflies extraction has no
