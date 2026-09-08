@@ -25,7 +25,7 @@ export default function LoginPage() {
       })
 
       if (res.ok) {
-        router.push("/chat")
+        router.push("/today")
       } else {
         setError("Invalid credentials")
       }

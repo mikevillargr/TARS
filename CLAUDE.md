@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.1 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.2 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1008,6 +1008,15 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.2 Fix: Today, not Chat, is now the actual landing surface — code now matches what
+        §8 already specified since v2.16.0 ("The landing surface"). Root `/` redirect
+        (app/page.tsx) and post-login redirect (login/page.tsx) changed /chat -> /today;
+        PWA manifest start_url changed to /today so a fresh install/launch lands there
+        too. Note: an ALREADY-installed PWA icon has its start_url baked in at install
+        time on most platforms and won't pick this up until removed and reinstalled —
+        this only affects new installs and browser-tab entry automatically. Chat is
+        still reachable normally (nav item, shortcut "2"), unchanged otherwise. Web-only,
+        no schema change.
 v2.18.1 Redesign: signal cards get a dedicated context chip, replacing the v2.17.2/v2.18.0
         string-munging. New Signal.context_label column (migration s6t7u8v9w0x1) — client
         name or (email only, no client match) a coarse category, rendered as its own chip
