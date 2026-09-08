@@ -3,7 +3,9 @@ Gmail connector — read threads, fetch full messages, send emails.
 """
 
 import base64
+import html as html_lib
 import logging
+import re
 from email import message_from_bytes
 from email.mime.text import MIMEText
 from typing import List, Optional
@@ -209,14 +211,51 @@ def extract_thread_text(thread: dict) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def _extract_body(payload: dict) -> str:
-    mime = payload.get("mimeType", "")
-    if mime == "text/plain":
-        data = payload.get("body", {}).get("data", "")
-        return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace") if data else ""
+def _html_to_text(raw_html: str) -> str:
+    """Best-effort HTML → plain text, for the many transactional/notification
+    emails (bank alerts, bills-payment confirmations) that ship HTML-only
+    with no text/plain alternative part."""
+    try:
+        from lxml import html as lxml_html
+        tree = lxml_html.fromstring(raw_html)
+        for bad in tree.xpath("//script | //style"):
+            bad.drop_tree()
+        text = tree.text_content()
+    except Exception:
+        text = re.sub(r"<[^>]+>", " ", raw_html)
+    text = html_lib.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n\n", text)
+    return text.strip()
 
-    for part in payload.get("parts", []):
-        text = _extract_body(part)
-        if text:
-            return text
+
+def _walk_body_parts(payload: dict) -> tuple[str, str]:
+    """Recursively collect the first text/plain and first text/html payload
+    found anywhere in the MIME tree, regardless of part ordering."""
+    mime = payload.get("mimeType", "")
+    data = payload.get("body", {}).get("data", "")
+    if data:
+        decoded = base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
+        if mime == "text/plain":
+            return decoded, ""
+        if mime == "text/html":
+            return "", decoded
+
+    plain_found, html_found = "", ""
+    for part in payload.get("parts", []) or []:
+        p, h = _walk_body_parts(part)
+        plain_found = plain_found or p
+        html_found = html_found or h
+    return plain_found, html_found
+
+
+def _extract_body(payload: dict) -> str:
+    # Plain text is preferred when present; HTML-only messages (the common
+    # case for bank/bills-payment notifications) fall back to a stripped
+    # text rendering instead of being treated as empty.
+    plain, html = _walk_body_parts(payload)
+    if plain:
+        return plain
+    if html:
+        return _html_to_text(html)
     return ""

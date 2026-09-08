@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.4 |
+| Version | v2.18.5 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,29 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.5 — 2026-09-08
+**Fix: read_email returned "no email found" for HTML-only messages**
+- `_extract_body` (connectors/gmail.py) only recognized `text/plain` MIME parts. Bank/bills-
+  payment/notification emails are commonly HTML-only with no plain-text alternative, so
+  extraction returned `""`, and `read_email`'s search path silently treats an empty body as
+  no-match — reporting zero results even though Gmail's own search found the thread.
+- Root-caused by reproducing live against production: searching personal Gmail for
+  "metrobank online" found 5 real threads, but body extraction on the top match returned
+  length 0 — confirmed HTML-only.
+- Fix: new `_walk_body_parts` collects the first `text/plain` and first `text/html` anywhere
+  in the MIME tree (order-independent — still prefers plain when both exist); new
+  `_html_to_text` (via `lxml`, already present through trafilatura) strips script/style and
+  renders readable text as the fallback.
+- Note: the multi-turn conversation where this surfaced read like model hallucination
+  (increasingly confident "no Metrobank emails anywhere, must be a third account"). Live
+  reproduction shows this bug alone is sufficient to produce that exact symptom for any of
+  the search phrasings tried, since the search path only inspects the top-ranked match per
+  account (`threads[:1]`) — if that top match is HTML-only, the empty extraction is reported
+  as "no email found" regardless of how many real matches exist below it.
+- Harness-only, no schema change.
+
+---
 
 ### v2.18.4 — 2026-09-08
 **Feat: multi-account calendar parity + cross-calendar conflicts + manual email account override**
