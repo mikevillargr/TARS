@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.5 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.6 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1008,6 +1008,31 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.6 Fix: the tier/category classifier, conversation title generation, and rolling
+        compaction were all silently broken on any Z.ai (GLM 4.x) tier1 model — the root
+        cause behind chat titles stuck on "New Conversation" and (very likely) the erratic
+        multi-model bouncing seen in the v2.18.5 investigation. Z.ai's Anthropic-compatible
+        endpoint puts a mandatory "thinking" block at content[0] with text=None before any
+        real output on these "hybrid reasoning" models; all three call sites did the naive
+        `resp.content[0].text.strip()` with a tight max_tokens (8 for the classifier, 15 for
+        titles) that the thinking trace alone exceeded, so nearly every call threw
+        AttributeError, was swallowed by a bare except, and fell back silently: the
+        classifier fell back to the crude length/regex _heuristic (core/router.py) for
+        every message that wasn't an obvious fast-path match, titles stayed unset, and
+        compaction silently never ran. Confirmed live against production: reproducing the
+        classifier call with the real config returned a thinking-only block and would have
+        raised on every call; the same call with `extra_body={"thinking":{"type":
+        "disabled"}}` (the typed `thinking=` kwarg isn't in the installed anthropic==0.43.0
+        SDK) and a fixed content-block scan returned a correct classification immediately.
+        Fix: new _first_text_block/_zai_kwargs helpers (chat.py) and an equivalent inline
+        fix in router.py — scan all content blocks for the first non-None text instead of
+        blindly indexing [0], disable thinking for zai calls via extra_body, and raise a
+        real fallback-triggering error when no text block is found (max_tokens bumped
+        8->20 for the classifier, 15->30 for titles). The heuristic classifier's
+        length/regex rules explain the earlier bounce between models mid-conversation —
+        short reactive replies ("What", "Huh") hit its short-message path to Tier 1 while
+        real follow-up questions defaulted to Tier 2 with no actual judgement behind either
+        choice. Harness-only, no schema change.
 v2.18.5 Fix: read_email silently reported "no email found" for HTML-only messages — the
         common case for bank/bills-payment/notification emails. _extract_body (connectors/
         gmail.py) only ever recognized text/plain MIME parts; a multipart/mixed message whose

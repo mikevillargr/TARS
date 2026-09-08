@@ -316,13 +316,28 @@ async def classify_full(prompt: str) -> Tuple[ModelTier, str]:
         import anthropic as _anthropic
         base_url = settings.zai_base_url if provider == "zai" else None
         _aclient = _anthropic.AsyncAnthropic(api_key=key, **({"base_url": base_url} if base_url else {}))
+        # Z.ai's Anthropic-compatible endpoint (GLM 4.x "hybrid reasoning" models)
+        # puts a mandatory thinking block at content[0] with text=None before any
+        # real output — max_tokens=8 was nowhere near enough to get past it, so
+        # this call threw on effectively every request and silently fell back to
+        # the heuristic classifier below. Disable thinking for zai and give the
+        # two-token answer room to actually appear.
+        extra = {"extra_body": {"thinking": {"type": "disabled"}}} if provider == "zai" else {}
         resp = await _aclient.messages.create(
             model=model,
-            max_tokens=8,
+            max_tokens=20,
             system=_CLASSIFY_SYSTEM,
             messages=[{"role": "user", "content": s}],
+            **extra,
         )
-        raw = resp.content[0].text.strip().lower()
+        raw = None
+        for block in resp.content or []:
+            text = getattr(block, "text", None)
+            if text:
+                raw = text.strip().lower()
+                break
+        if raw is None:
+            raise ValueError("no text block in classifier response")
         # Refine the category from the model's second token when valid.
         model_cat = next((c for c in CATEGORIES if c in raw), None)
         if model_cat:

@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.5 |
+| Version | v2.18.6 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,31 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.6 — 2026-09-08
+**Fix: classifier, chat titles, and compaction all silently broken on Z.ai tier1**
+- Root cause: Z.ai's Anthropic-compatible endpoint puts a mandatory "thinking" block at
+  `content[0]` (`text=None`) before any real output on GLM 4.x "hybrid reasoning" models.
+  Three call sites — the tier/category classifier (`max_tokens=8`), conversation title
+  generation (`max_tokens=15`), and rolling compaction — all did `content[0].text.strip()`
+  directly; the thinking trace alone blew past those token budgets, so the call threw on
+  nearly every request and was swallowed by a bare `except`.
+- Classifier impact: every ambiguous message fell back to the crude length/regex
+  `_heuristic` in `core/router.py` instead of a real model judgement — this is the likely
+  cause of the erratic model-bouncing seen mid-conversation (short replies routed to Tier 1,
+  everything else defaulting to Tier 2, with no real reasoning behind either).
+- Title impact: title generation kept throwing and returning `None`, so `if new_title:`
+  never fired and conversations stayed on "New Conversation" indefinitely.
+- Confirmed live against production before and after the fix — the broken call reliably
+  returned a thinking-only block; the fixed call returned a correct classification/title
+  immediately.
+- Fix: scan all response content blocks for the first non-`None` text instead of blindly
+  indexing `[0]`; pass `extra_body={"thinking": {"type": "disabled"}}` for zai calls (the
+  installed `anthropic==0.43.0` SDK predates typed `thinking=` support); raised token
+  budgets slightly (classifier 8→20, titles 15→30) as a second safety margin.
+- Harness-only, no schema change.
+
+---
 
 ### v2.18.5 — 2026-09-08
 **Fix: read_email returned "no email found" for HTML-only messages**

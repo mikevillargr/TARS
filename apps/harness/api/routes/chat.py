@@ -459,6 +459,28 @@ def _strip_tool_artifacts(text: str) -> str:
     return text.strip()
 
 
+def _first_text_block(resp) -> Optional[str]:
+    """Z.ai's Anthropic-compatible endpoint (GLM 4.x, "hybrid reasoning" models)
+    puts a 'thinking' block at content[0] with text=None — blindly reading
+    content[0].text crashes or (worse) silently returns nothing whenever the
+    thinking trace runs past max_tokens. Scan for the first real text block
+    instead, from any provider's response shape."""
+    for block in getattr(resp, "content", None) or []:
+        text = getattr(block, "text", None)
+        if text:
+            return text.strip()
+    return None
+
+
+def _zai_kwargs(provider: str) -> dict:
+    """Disable GLM's extended-thinking preamble for small utility calls (title
+    generation, compaction) where reasoning adds nothing but risks eating the
+    whole token budget before any real output is produced. The installed
+    anthropic SDK predates typed `thinking=` support, so this goes via
+    extra_body; Anthropic's own models don't need or want this passed."""
+    return {"extra_body": {"thinking": {"type": "disabled"}}} if provider == "zai" else {}
+
+
 async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
     """Generate a 3-5 word conversation title from recent exchanges."""
     recent = messages[-8:]
@@ -477,11 +499,13 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
         _title_client = _anth_t.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _title_client.messages.create(
             model=_model,
-            max_tokens=15,
+            max_tokens=30,
             system="Write a 3-5 word title for this conversation. No quotes, no punctuation, no explanation. Just the title.",
             messages=[{"role": "user", "content": context}],
+            **_zai_kwargs(_provider),
         )
-        return resp.content[0].text.strip()[:60]
+        text = _first_text_block(resp)
+        return text[:60] if text else None
     except Exception as exc:
         log.warning("Title generation failed: %s", exc)
         return None
@@ -544,8 +568,11 @@ async def _compact_conversation(conv_id: str, db: AsyncSession) -> None:
                 "Write in third person. Max 500 words. No filler."
             ),
             messages=[{"role": "user", "content": transcript}],
+            **_zai_kwargs(_provider),
         )
-        new_summary = resp.content[0].text.strip()
+        new_summary = _first_text_block(resp)
+        if not new_summary:
+            raise ValueError("no text block in compaction response")
 
         snapshot = dict(conv.context_snapshot or {})
         snapshot["rolling_summary"] = new_summary
