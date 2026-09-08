@@ -196,6 +196,16 @@ Extract two things and return valid JSON only, no commentary:
   ]
 }
 
+An action item is anything a specific person is now on the hook for — not just
+explicitly-stated to-dos, but informal commitments made in passing too ("let me
+send that over", "I'll follow up with them", "sure, I can take a look"). Attribute
+each one to whoever actually said it — check the speaker of that line, not just
+who the topic was about. A first-person commitment ("I'll...", "let me...") belongs
+to the person who said it, even if it's addressed to someone else ("let me send
+YOU the file" is the sender's item, not the recipient's). If someone commits on
+behalf of their team rather than personally, attribute it to them by name, not to
+"the team" — owner should always be a specific person or null, never a group.
+
 Be specific and concrete. If no action items, return an empty array."""
 
     try:
