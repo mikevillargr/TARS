@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.2 |
+| Version | v2.18.3 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -117,7 +117,7 @@ the repo root for the historical runbook and known orphaned remnants.
 | Connector | Capabilities | Status |
 |---|---|---|
 | Gmail | read, webhook | Live |
-| Gmail (Personal) | read | Live — connect via Connectors page |
+| Gmail (Personal) | read, write (send/reply) | Built, not yet connected — OAuth consent screen blocks personal @gmail.com accounts (likely "Internal" user type); needs Google Cloud Console fix before connecting |
 | Google Calendar | read, write | Live |
 | Google Calendar (Personal) | read | Live — connect via Connectors page |
 | Google Workspace (Personal) | read, write | Live — connect via Connectors page |
@@ -163,6 +163,23 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.3 — 2026-09-08
+**Feat: personal Gmail can send/reply, not just read**
+- `gmail_personal` connector capability list changed `["read"]` -> `["read", "write"]`.
+- `send_email` / `confirm_send_email` tools and the manual Send button's
+  `POST /api/email/confirm-send` gained an `account` field (`"work"` | `"personal"`,
+  default `"work"`) that selects which Connector row (`Gmail` vs `Gmail (Personal)`) the
+  `GmailClient` sends through. Both send paths were previously hardcoded to the work Gmail
+  connector regardless of which inbox the draft came from.
+- Model defaults to `account: "personal"` when replying to a thread shown under
+  `[PERSONAL GMAIL]` context, or when Mike explicitly asks to send from his personal email.
+- `EmailDraftCard` shows a small `PERSONAL` label on the draft/sent card when applicable.
+- Caveat: personal Gmail OAuth itself is still blocked — see Active Connectors above. This
+  ships the send capability so it's ready the moment that's connected.
+- Harness + web, no schema change.
+
+---
 
 ### v2.18.2 — 2026-09-08
 **Fix: Today is now the actual landing surface, matching the spec**

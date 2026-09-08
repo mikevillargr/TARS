@@ -247,7 +247,9 @@ SEND_EMAIL_TOOL = {
         "way, call send_email again with the fully updated content — do NOT output the "
         "revised text as prose. Every revision must produce a new draft card. "
         "For replies to an existing thread, supply the thread_id shown as [thread_id] in "
-        "the Gmail context."
+        "the Gmail context. Set account to 'personal' when replying to a thread shown under "
+        "[PERSONAL GMAIL] context, or when Mike explicitly asks to send from his personal "
+        "email — otherwise default to 'work'."
     ),
     "input_schema": {
         "type": "object",
@@ -275,6 +277,11 @@ SEND_EMAIL_TOOL = {
                     "Include when replying to an existing email thread."
                 ),
             },
+            "account": {
+                "type": "string",
+                "enum": ["work", "personal"],
+                "description": "Which Gmail account to send from. Default: work.",
+            },
         },
         "required": ["to", "subject", "body"],
     },
@@ -286,7 +293,7 @@ CONFIRM_SEND_EMAIL_TOOL = {
         "Send an email immediately. Use ONLY when Mike has verbally approved a draft "
         "shown earlier in this conversation ('go ahead', 'send it', 'yes send', 'go send'). "
         "Do NOT use to compose and send in one shot — always draft first with send_email, "
-        "then confirm here when Mike approves. Pass the exact to/subject/body/cc/thread_id "
+        "then confirm here when Mike approves. Pass the exact to/subject/body/cc/thread_id/account "
         "from the draft."
     ),
     "input_schema": {
@@ -297,6 +304,11 @@ CONFIRM_SEND_EMAIL_TOOL = {
             "body": {"type": "string", "description": "Plain-text email body."},
             "cc": {"type": "string", "description": "CC address(es). Omit if not needed."},
             "thread_id": {"type": "string", "description": "Thread ID for replies — from the prior send_email call."},
+            "account": {
+                "type": "string",
+                "enum": ["work", "personal"],
+                "description": "Which Gmail account to send from — must match the account from the prior send_email draft. Default: work.",
+            },
         },
         "required": ["to", "subject", "body"],
     },

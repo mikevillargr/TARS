@@ -133,6 +133,7 @@ interface EmailDraft {
   body: string
   cc?: string
   thread_id?: string
+  account?: "work" | "personal"
 }
 
 function formatSuggestTime(iso: string) {
@@ -420,6 +421,7 @@ function EmailDraftCard({
         body:      editBody,
         cc:        editCc || null,
         thread_id: draft.thread_id ?? null,
+        account:   draft.account ?? "work",
       })
       setSent(true)
       if (draft.draft_id) {
@@ -438,6 +440,9 @@ function EmailDraftCard({
         <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid color-mix(in srgb, var(--c-moss) 20%, transparent)", backgroundColor: "var(--c-moss-soft)" }}>
           <Mail size={12} style={{ color: "var(--c-moss)", flexShrink: 0 }} />
           <span className="text-xs font-semibold" style={{ color: "var(--c-moss)" }}>Sent</span>
+          {draft.account === "personal" && (
+            <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>PERSONAL</span>
+          )}
           <button onClick={onDismiss} className="ml-auto" style={{ color: "var(--c-ink-faint)" }}><X size={11} /></button>
         </div>
         <div className="px-3 py-2.5 space-y-1.5 text-xs" style={{ color: "var(--c-ink)" }}>
@@ -481,6 +486,9 @@ function EmailDraftCard({
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--c-border-faint)", backgroundColor: "var(--c-surface)" }}>
         <Mail size={12} style={{ color: "var(--c-amber)", flexShrink: 0 }} />
         <span className="text-xs font-semibold" style={{ color: "var(--c-amber)" }}>Draft — waiting for approval</span>
+        {draft.account === "personal" && (
+          <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>PERSONAL</span>
+        )}
         <div className="ml-auto flex items-center gap-1.5">
           <button
             onClick={() => setEditing(e => !e)}
@@ -1210,6 +1218,7 @@ function InlineMessageCards({
             body:      e.body as string,
             cc:        e.cc as string | undefined,
             thread_id: e.thread_id as string | undefined,
+            account:   (e.account as EmailDraft["account"]) ?? "work",
           }
           return (
             <EmailDraftCard
@@ -2388,6 +2397,7 @@ export default function ChatPage() {
                   body:      evt.body as string,
                   cc:        evt.cc as string | undefined,
                   thread_id: evt.thread_id as string | undefined,
+                  account:   (evt.account as EmailDraft["account"]) ?? "work",
                 }
                 streamingCardsRef.current.push({ type: "email_draft", ...draft })
                 setEmailDrafts(prev => [...prev, draft])

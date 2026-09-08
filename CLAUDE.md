@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.2 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.3 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -406,7 +406,7 @@ class Connector:
 | Connector | Capabilities |
 |---|---|
 | Gmail | read, webhook |
-| Gmail (Personal) | read — separate account slot, same OAuth credentials, state=personal |
+| Gmail (Personal) | read, write (send/reply) — separate account slot, same OAuth credentials, state=personal |
 | Google Calendar | read, write |
 | Google Calendar (Personal) | read — separate account slot |
 | Google Workspace | search Drive + read & write Docs/Sheets/Slides by link (Drive export → existing parsers) |
@@ -1008,6 +1008,18 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.3 Feat: personal Gmail can now send/reply, not just read. gmail_personal capability
+        list updated read -> read+write. send_email/confirm_send_email tools (and the manual
+        Send button's POST /api/email/confirm-send) gained an account field ("work"|"personal",
+        default "work") that resolves which Connector row (Gmail vs Gmail (Personal)) the
+        GmailClient sends through — previously both send paths were hardcoded to the work
+        Gmail connector regardless of which inbox the draft came from. Model is prompted to
+        default to "personal" when the draft is a reply to a thread shown under
+        [PERSONAL GMAIL] context, or when Mike explicitly asks to send from his personal
+        email. EmailDraftCard shows a small PERSONAL label when applicable. Note: personal
+        Gmail OAuth is still blocked pending Google Cloud Console changes (see connectors
+        page) — this ships the send capability so it's ready the moment that's connected.
+        Harness + web, no schema change.
 v2.18.2 Fix: Today, not Chat, is now the actual landing surface — code now matches what
         §8 already specified since v2.16.0 ("The landing surface"). Root `/` redirect
         (app/page.tsx) and post-login redirect (login/page.tsx) changed /chat -> /today;
