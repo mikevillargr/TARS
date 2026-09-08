@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.10 |
+| Version | v2.18.11 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,31 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.11 — 2026-09-08
+**Enhance: meeting-commitment extraction now grounded in Fireflies' own owner data**
+- Follow-up to v2.18.10. That fix caught misattribution via a transcript speaker-lookup,
+  but a fair question surfaced it was solving the problem the hard way: the Meetings
+  screen already trusts `MeetingActionItem.owner`, extracted reliably by the same
+  meeting-processing pipeline (real names — "Isabelle Bryce", "Vanessa Ramos" — not
+  nulls) — so why not just reuse that instead of re-deriving ownership from scratch?
+- Checked: two of the three real misattributed signals from v2.18.10 DO correspond to
+  action items Fireflies already correctly attributed to someone else. But naive string
+  similarity between a freshly generated commitment title and the differently-phrased
+  action-item summary came back at 20-38% — not distinguishable from noise, so it isn't
+  a usable hard filter on its own. And the third misattributed signal wasn't in the
+  structured action-items list at all — exactly the class of item this detector exists
+  to catch, so owner cross-referencing alone can't fully replace it.
+- Fix: `_other_owned_items_block` (new) feeds the meeting's already-extracted,
+  owner-tagged action items into the commitment-extraction prompt as grounding context,
+  so the model judges semantic overlap (which it's far better at than string-matching)
+  instead of re-deriving ownership blind. EXTRACT_SYSTEM prompt gained an explicit rule
+  to skip anything substantially overlapping an already-owned item. The v2.18.10
+  transcript speaker-check stays as the deterministic backstop for commitments that
+  never made it into the structured list.
+- Harness-only, no schema change.
+
+---
 
 ### v2.18.10 — 2026-09-08
 **Fix: meeting-commitment signals attributed other attendees' spoken commitments to Mike**

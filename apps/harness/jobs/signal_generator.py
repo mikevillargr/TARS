@@ -402,6 +402,11 @@ Rules:
   to him by someone else — but not when addressed to a third person or to
   "the team" in general (e.g. "your team should review this" is the team's
   job, not a personal task for Mike unless he says he'll do it himself).
+- You may be given a list of action items already extracted from this
+  meeting, each with an owner. If what you're about to extract is
+  substantially the same piece of work as one of those and its owner isn't
+  Mike, skip it — that work is already correctly attributed to someone else,
+  even if Mike was part of the same conversation about it.
 - Skip anything already obviously done inside the meeting.
 - "time" urgency only if a deadline was stated or clearly implied this week.
 - If nothing qualifies, return []. An empty array is a correct, common answer —
@@ -465,6 +470,35 @@ def _commitment_misattributed(transcript: str, quote: str, user_name: str) -> bo
         return False
     speaker = _speaker_for_quote(transcript, quote)
     return bool(speaker) and _owner_is_someone_else(speaker, user_name)
+
+
+async def _other_owned_items_block(db: AsyncSession, meeting_id: str, user_name: str) -> str:
+    """
+    Action items Fireflies/meeting_processor already extracted for this
+    meeting and attributed to someone other than Mike — the same ownership
+    data the Meetings screen trusts. Fed into the extraction prompt as
+    grounding so the model can recognize "this is already someone else's
+    work" by meaning, not by string-matching a freshly generated title
+    against a differently-worded action-item summary (tried that; genuine
+    matches came back at 20-38% similarity, indistinguishable from noise —
+    the two extractions phrase the same work too differently for that to be
+    a reliable filter on its own).
+    """
+    rows = (
+        await db.execute(
+            select(MeetingActionItem.owner, MeetingActionItem.raw_text).where(
+                MeetingActionItem.meeting_id == meeting_id,
+            )
+        )
+    ).all()
+    others = [(o, t) for o, t in rows if _owner_is_someone_else(o, user_name)]
+    if not others:
+        return ""
+    lines = "\n".join(f"- {owner}: {text}" for owner, text in others)
+    return (
+        "\n\nAction items already extracted from this meeting, with owners "
+        "(do not re-extract any of these as Mike's own commitment):\n" + lines
+    )
 
 
 def _extract_json_array(text: str) -> list:
@@ -549,10 +583,12 @@ async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Can
         transcript = (m.transcript or "")[:12000]
         if len(transcript) < 200:
             continue
+        other_items = await _other_owned_items_block(db, m.id, user_name)
         prompt = (
             f"Meeting: {m.title}\n"
             f"Attendees: {', '.join(str(a) for a in (m.attendees or [])) or 'unknown'}\n\n"
             f"Transcript:\n{transcript}"
+            f"{other_items}"
         )
         try:
             raw = await _complete(EXTRACT_SYSTEM, prompt)

@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.10 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.11 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1008,6 +1008,21 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.11 Enhance: meeting-commitment extraction (detect_meeting_commitments) now grounded
+        in Fireflies' own owner data, not just the v2.18.10 transcript speaker-check.
+        Fair question after v2.18.10 shipped: the Meetings screen already trusts
+        MeetingActionItem.owner (reliably extracted — real names, not nulls), so why
+        re-derive ownership from scratch? Checked: 2 of the 3 misattributed signals DID
+        correspond to items Fireflies already correctly attributed to someone else, but
+        naive title-vs-action-item string similarity came back 20-38% — not a usable
+        hard filter (different phrasings of the same work don't share much text). The
+        3rd wasn't in the structured list at all — exactly what this detector exists to
+        catch, so cross-referencing alone can't fully replace it. New
+        _other_owned_items_block feeds the meeting's already-extracted, owner-tagged
+        action items into the extraction prompt as grounding so the model judges
+        semantic overlap instead of re-deriving ownership blind; EXTRACT_SYSTEM gained
+        an explicit skip-if-overlaps rule. v2.18.10's transcript speaker-check stays as
+        the deterministic backstop. Harness-only, no schema change.
 v2.18.10 Fix: detect_meeting_commitments (Today/Signals) was attributing OTHER attendees'
         spoken commitments to Mike. Confirmed against live production data: the detector
         re-extracts "things Mike committed to" from the raw transcript via Tier 2 (GLM),
