@@ -2,7 +2,7 @@
   "name": "TARS",
   "short_name": "TARS",
   "description": "Mike's personal AI operating system",
-  "start_url": "/chat",
+  "start_url": "/today",
   "display": "standalone",
   "background_color": "#f6f3ec",
   "theme_color": "#f6f3ec",

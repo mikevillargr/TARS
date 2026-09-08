@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.1 |
+| Version | v2.18.2 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,21 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.2 — 2026-09-08
+**Fix: Today is now the actual landing surface, matching the spec**
+- §8 has called Today "the landing surface" since v2.16.0, but the code never matched: root
+  `/` and post-login both redirected to `/chat`, and the PWA manifest's `start_url` was
+  `/chat`. All three now point to `/today`.
+- Files: `app/page.tsx` (root redirect), `app/(auth)/login/page.tsx` (post-login redirect),
+  `public/manifest.json` (`start_url`).
+- Caveat: an already-installed PWA icon has its `start_url` baked in at install time on most
+  platforms and generally won't pick up this change until removed and reinstalled — new
+  installs and normal browser-tab entry get it immediately.
+- Chat is unaffected otherwise — still first-class in nav, shortcut "2".
+- Web-only, no schema change.
+
+---
 
 ### v2.18.1 — 2026-09-08
 **Redesign: signal cards get a dedicated context chip**
