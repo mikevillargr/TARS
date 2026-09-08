@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.9 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.10 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1008,6 +1008,26 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.10 Fix: detect_meeting_commitments (Today/Signals) was attributing OTHER attendees'
+        spoken commitments to Mike. Confirmed against live production data: the detector
+        re-extracts "things Mike committed to" from the raw transcript via Tier 2 (GLM),
+        and the model doesn't reliably check who actually said a first-person line before
+        crediting it to Mike — two real open signals ("Resend captions and ad headlines
+        for Star Clippers", "Post on-page content for Switzerland campaign") both quoted
+        lines actually spoken by Isabelle Bryce. New _commitment_misattributed is a
+        deterministic backstop (not just a prompt fix): locates the model's quote in the
+        real transcript — exact match, falling back to difflib fuzzy line matching since
+        quotes are often paraphrased, not verbatim — and checks the nearest preceding
+        speaker header; a first-person quote ("I'll...", "let me...", "...on me") whose
+        real speaker isn't Mike is dropped. Verified against the real production
+        transcript for both examples. detect_unconverted_action_items's owner filter
+        (v2.17.2) was separately confirmed still correct for everything currently open —
+        the only bad signals found there were stale rows from a past window where the
+        harness had been `git pull`ed but not `pm2 restart`ed, so it briefly kept running
+        pre-fix code (a deploy-hygiene gap, not a code bug: git pull alone does not
+        update the running process). One-time cleanup: dismissed the two confirmed-bad
+        open signals directly in the DB (same status='dismissed' the app's own dismiss
+        action sets — reversible via Restore). Harness-only, no schema change.
 v2.18.9 Fix: fact-extraction quality tightened after a manual sample review ahead of the
         v2.18.8 backfill. Two issues found: (1) raw [[id|type|label]] mention markers were
         being fed straight into the extraction prompt (e.g. a client contact reference
