@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.17.1 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.17.2 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -990,6 +990,19 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.17.2 Fix + Enhance: signal generator surfaced other people's action items, and cards
+        lacked client context. detect_unconverted_action_items grouped every Fireflies action
+        item with no task_id into the brief regardless of owner — Fireflies extraction has no
+        notion of "mine". New _owner_is_someone_else filters out items whose extracted owner
+        explicitly names someone other than the user; unassigned items stay in (ambiguous,
+        not "someone else's"). New _client_for_attendees resolves a best-effort client name
+        per meeting/event from the Contacts graph (attendee emails, external domains only, →
+        Contact.organization, most common wins) — not a hardcoded client list, so it stays
+        correct as clients change. Applied to detect_unconverted_action_items,
+        detect_meeting_commitments, detect_calendar_conflicts: title prefixed "{Client}: ...",
+        source_label becomes "Fireflies · {Client}" / "Calendar · {Client}" when one resolves.
+        detect_stalled_tasks untouched (no attendee data to derive a client from). Harness-only,
+        no schema change.
 v2.17.1 Fix: calendar conflict detection crashed in production — detect_calendar_conflicts
         passed time_min/time_max as ISO strings but GoogleCalendarClient.list_events takes
         datetimes and calls .isoformat() itself ('str' object has no attribute 'isoformat').
