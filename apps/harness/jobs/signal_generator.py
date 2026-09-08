@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
 from db.models import (
-    Signal, Task, Meeting, MeetingActionItem, Connector, User,
+    Signal, Task, Meeting, MeetingActionItem, Connector, Contact, User,
 )
 from db.session import AsyncSessionLocal
 
@@ -43,6 +43,68 @@ STALLED_TASK_DAYS = 4
 CALENDAR_LOOKAHEAD_DAYS = 7
 # Cap per sweep, so one pathological day can't produce a hundred cards.
 MAX_NEW_PER_SWEEP = 12
+
+# Domains that never identify a client — Mike's own org plus the personal
+# webmail providers that regularly show up in attendee lists.
+_NON_CLIENT_DOMAINS = {
+    "growth-rocket.com", "gmail.com", "googlemail.com", "outlook.com",
+    "hotmail.com", "yahoo.com", "icloud.com",
+}
+
+
+def _owner_is_someone_else(owner: Optional[str], user_name: str) -> bool:
+    """
+    True only when the extracted owner is explicitly a name other than the
+    user's. An unassigned item (owner is None/blank) is ambiguous, not
+    "someone else's" — it stays in. This is what keeps meeting action items
+    that were assigned to other attendees out of the brief; Fireflies
+    extraction has no concept of "mine", so the detector has to apply it.
+    """
+    owner = (owner or "").strip().lower()
+    if not owner:
+        return False
+    first_name = (user_name or "Mike Villar").strip().split()[0].lower()
+    full_name = (user_name or "Mike Villar").strip().lower()
+    if owner == first_name or owner == full_name or owner.startswith(first_name + " "):
+        return False
+    return True
+
+
+async def _client_for_attendees(
+    db: AsyncSession, user_id: str, attendees: Optional[list[str]]
+) -> Optional[str]:
+    """
+    Best-effort client name for a meeting or event, from the Contacts graph
+    rather than a hardcoded client list — so it stays correct as clients
+    change. Matches attendee emails (external domains only) against synced
+    Google Contacts and returns the most common organization. None when
+    nothing resolves — callers fall back to no client tag rather than a guess.
+    """
+    if not attendees:
+        return None
+    emails = [a.strip().lower() for a in attendees if a and "@" in a]
+    emails = [e for e in emails if e.split("@", 1)[-1] not in _NON_CLIENT_DOMAINS]
+    if not emails:
+        return None
+
+    rows = (
+        await db.execute(
+            select(Contact.organization).where(
+                Contact.user_id == user_id,
+                Contact.primary_email.in_(emails),
+                Contact.organization.is_not(None),
+            )
+        )
+    ).scalars().all()
+
+    counts: dict[str, int] = {}
+    for org in rows:
+        org = (org or "").strip()
+        if org and org.lower() != "growth rocket":
+            counts[org] = counts.get(org, 0) + 1
+    if not counts:
+        return None
+    return max(counts.items(), key=lambda kv: kv[1])[0]
 
 
 # ─── Candidate ────────────────────────────────────────────────────────────────
@@ -142,7 +204,16 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
     produced 225 unconverted items here; as individual cards that is not a
     triage surface, it's a wall. "4 action items from the NCH sync were never
     assigned" is one decision; four near-identical cards is four.
+
+    Fireflies extracts every action item in the transcript regardless of who
+    it's for — it has no notion of "mine". Items explicitly owned by another
+    attendee are filtered out here so the brief doesn't fill up with other
+    people's work; unassigned items stay in since there's no one else to
+    attribute them to.
     """
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    user_name = user.name if user and user.name else "Mike Villar"
+
     since = datetime.now(timezone.utc) - timedelta(days=MEETING_LOOKBACK_DAYS)
     rows = (
         await db.execute(
@@ -160,6 +231,8 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
     for item, meeting in rows:
         if not (item.raw_text or "").strip():
             continue
+        if _owner_is_someone_else(item.owner, user_name):
+            continue
         by_meeting.setdefault(meeting.id, (meeting, []))[1].append(item)
 
     out: list[Candidate] = []
@@ -172,16 +245,19 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
             if n == 1
             else f"{n} action items from \"{meeting.title[:50]}\" were never assigned"
         )
+        client_name = await _client_for_attendees(db, user_id, meeting.attendees)
+        if client_name:
+            title = f"{client_name}: {title}"
         out.append(_candidate(
             dedupe_key=f"mai-batch:{meeting_id}",
             source="fireflies",
-            source_label="Fireflies",
+            source_label=f"Fireflies · {client_name}" if client_name else "Fireflies",
             source_ref=meeting_id,
             title=title,
             urgency="normal",
             reasoning=(
-                f"Fireflies extracted {n} action item{'s' if n != 1 else ''} from this meeting "
-                f"and none were converted to a task or To-Do.\n\n"
+                f"Fireflies extracted {n} action item{'s' if n != 1 else ''} assigned to you "
+                f"from this meeting and none were converted to a task or To-Do.\n\n"
                 + "\n".join(f"· {p}" for p in preview)
                 + (f"\n· …and {more} more" if more > 0 else "")
             ),
@@ -243,6 +319,7 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
                 datetime.fromisoformat(stop.replace("Z", "+00:00")),
                 ev.get("summary") or "(untitled)",
                 ev.get("id") or "",
+                [a.get("email") for a in (ev.get("attendees") or []) if a.get("email")],
             ))
         except ValueError:
             continue
@@ -250,18 +327,21 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
 
     out: list[Candidate] = []
     for i in range(len(timed) - 1):
-        a_start, a_end, a_title, a_id = timed[i]
-        b_start, b_end, b_title, b_id = timed[i + 1]
+        a_start, a_end, a_title, a_id, a_attendees = timed[i]
+        b_start, b_end, b_title, b_id, b_attendees = timed[i + 1]
         if b_start >= a_end:
             continue
         pair = ":".join(sorted([a_id, b_id]))
         when = a_start.strftime("%a %d %b, %H:%M")
+        # Named client_name, not client — `client` above is the GoogleCalendarClient instance.
+        client_name = await _client_for_attendees(db, user_id, a_attendees + b_attendees)
+        title = f"You're double-booked {when} — {a_title} vs. {b_title}"
         out.append(_candidate(
             dedupe_key=f"cal-conflict:{pair}",
             source="calendar",
-            source_label="Calendar",
+            source_label=f"Calendar · {client_name}" if client_name else "Calendar",
             source_ref=a_id,
-            title=f"You're double-booked {when} — {a_title} vs. {b_title}",
+            title=f"{client_name}: {title}" if client_name else title,
             urgency="time" if a_start - now < timedelta(days=2) else "normal",
             reasoning=(
                 f"\"{a_title}\" runs {a_start.strftime('%H:%M')}–{a_end.strftime('%H:%M')} and "
@@ -372,6 +452,7 @@ async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Can
             _EXTRACTION_ERRORS.append(str(exc)[:200])
             continue
 
+        client_name = await _client_for_attendees(db, user_id, m.attendees)
         for item in _extract_json_array(raw)[:3]:
             title = str(item.get("title") or "").strip()
             if not title:
@@ -382,9 +463,9 @@ async def detect_meeting_commitments(db: AsyncSession, user_id: str) -> list[Can
             out.append(_candidate(
                 dedupe_key=f"commit:{m.id}:{fingerprint}",
                 source="fireflies",
-                source_label="Fireflies",
+                source_label=f"Fireflies · {client_name}" if client_name else "Fireflies",
                 source_ref=m.id,
-                title=title[:180],
+                title=f"{client_name}: {title[:180]}" if client_name else title[:180],
                 urgency=urgency,
                 # Only claim what was actually checked. An earlier draft said
                 # "No matching task, To-Do, or sent email exists" — nothing

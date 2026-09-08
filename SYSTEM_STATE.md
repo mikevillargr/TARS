@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.17.1 |
-| Released | 2026-09-07 |
+| Version | v2.17.2 |
+| Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -163,6 +163,29 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.17.2 — 2026-09-08
+**Fix + Enhance: signal generator surfaced other people's action items, and cards lacked client context**
+- `detect_unconverted_action_items` grouped every Fireflies action item whose `task_id` was
+  unset into the brief, regardless of who it was assigned to — Fireflies extraction has no
+  notion of "mine", so a meeting with items for other attendees put their work on Mike's Today
+  screen too. New `_owner_is_someone_else` filters out items whose extracted `owner` explicitly
+  names someone other than the user (matched against `User.name`); unassigned items (`owner` is
+  null/blank) stay in since there's no one else to attribute them to.
+- Card titles from meeting/calendar detectors were generic ("4 action items from 'Weekly Sync'
+  were never assigned") with no indication of which client the meeting was for. New
+  `_client_for_attendees` resolves a best-effort client name per meeting/event from the
+  Contacts graph — matches attendee emails (external domains only, Growth Rocket + common
+  personal webmail excluded) against synced Google Contacts and returns the most common
+  `organization`. Deliberately not a hardcoded client list, so it stays correct as clients
+  change. Applied to `detect_unconverted_action_items`, `detect_meeting_commitments`, and
+  `detect_calendar_conflicts`: title prefixed `"{Client}: ..."` and `source_label` becomes
+  `"Fireflies · {Client}"` / `"Calendar · {Client}"` when a client resolves; unchanged when it
+  doesn't (no client tag rather than a guess). `detect_stalled_tasks` untouched — Task has no
+  attendee data to derive a client from.
+- Harness-only, no schema change.
+
+---
 
 ### v2.17.1 — 2026-09-07
 **Fix: calendar conflict detection crashed in production**
