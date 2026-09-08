@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.18.8 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.18.9 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1008,6 +1008,20 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.18.9 Fix: fact-extraction quality tightened after a manual sample review ahead of the
+        v2.18.8 backfill. Two issues found: (1) raw [[id|type|label]] mention markers were
+        being fed straight into the extraction prompt (e.g. a client contact reference
+        appeared as literal id/type soup) — new _strip_mention_markers replaces markers with
+        just the label before both fact-extraction and title-generation see the text.
+        (2) The prompt was extracting low-value pseudo-facts from mere questions or requests
+        ("user is asking about their ride performance", "user wants email drafted for X") —
+        tightened to explicitly exclude questions/requests/"a conversation happened" and
+        require a concrete, durable fact (decision, preference, identifying detail, status
+        change), with SKIP framed as the common, correct answer rather than a last resort.
+        Verified via a 15-message dry-run spread across the affected window before and after:
+        before, "how was my ride" and "draft an email to X" both produced junk facts; after,
+        both correctly SKIP while genuine updates (e.g. a bike component change) still extract
+        cleanly. Harness-only, no schema change.
 v2.18.8 Fix + RCA: root-caused why memory extraction had been degraded for ~2 months
         despite no deploy being responsible. `_extract_and_save_facts`/`_generate_title`
         were hardcoded to Claude until commit 5ca261f (2026-06-04, "respect configured
