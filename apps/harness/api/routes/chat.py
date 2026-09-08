@@ -377,7 +377,9 @@ async def _extract_and_save_facts(
         _fact_client = _anth.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _fact_client.messages.create(
             model=_model,
-            max_tokens=300,
+            # Generous margin beyond what a handful of DOMAIN|fact lines needs —
+            # cheap insurance on top of the thinking-disabled fix.
+            max_tokens=800,
             system=(
                 "Extract personal facts about the user from their message. Only use what THEY said — "
                 "ignore the assistant context completely.\n"
@@ -500,7 +502,10 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
         _title_client = _anth_t.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _title_client.messages.create(
             model=_model,
-            max_tokens=30,
+            # Generous on purpose: _zai_kwargs disables thinking, but this is
+            # cheap insurance against a future model/endpoint change quietly
+            # bringing a reasoning preamble back and truncating the real answer.
+            max_tokens=200,
             system="Write a 3-5 word title for this conversation. No quotes, no punctuation, no explanation. Just the title.",
             messages=[{"role": "user", "content": context}],
             **_zai_kwargs(_provider),
@@ -562,7 +567,10 @@ async def _compact_conversation(conv_id: str, db: AsyncSession) -> None:
         _c = _anth.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _c.messages.create(
             model=_model,
-            max_tokens=600,
+            # 500 words is ~650-700 tokens on its own, so 600 was already tight
+            # before thinking overhead existed; generous margin on top of the
+            # thinking-disabled fix rather than relying on that alone.
+            max_tokens=1200,
             system=(
                 "Summarise this conversation transcript into a compact factual paragraph "
                 "covering key decisions, facts established, tasks created, and important context. "
