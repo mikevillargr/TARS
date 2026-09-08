@@ -45,6 +45,13 @@ from db.models import Conversation, Message, User, Task, Artifact, Reminder
 _MENTION_RE = _re.compile(r'\[\[([^\]|]+)\|([^\]|]+)\|([^\]]+)\]\]')
 
 
+def _strip_mention_markers(text: str) -> str:
+    """Replace [[id|type|label]] with just the human-readable label — for feeding
+    into small utility prompts (title/fact-extraction) that have no use for the
+    raw entity id and would otherwise see literal id/type soup in the transcript."""
+    return _MENTION_RE.sub(lambda m: m.group(3), text)
+
+
 async def _resolve_mentions(content: str, user_id: str, db: AsyncSession) -> tuple[str, list[str]]:
     """Parse [[id|type|label]] mentions, fetch entity context, return (stripped_content, snippets)."""
     snippets: list[str] = []
@@ -381,8 +388,8 @@ async def _extract_and_save_facts(
             # cheap insurance on top of the thinking-disabled fix.
             max_tokens=800,
             system=(
-                "Extract personal facts about the user from their message. Only use what THEY said — "
-                "ignore the assistant context completely.\n"
+                "Extract durable personal facts about the user from their message. Only use what "
+                "THEY said — ignore the assistant context completely.\n"
                 "Output each fact on its own line in this exact format:\n"
                 "  DOMAIN|fact in third person\n"
                 "Valid domains: work, personal, health, cycling, client\n"
@@ -391,9 +398,14 @@ async def _extract_and_save_facts(
                 "  health|User has Maxicare insurance, premium due June 1\n"
                 "  work|User decided to delay the OpenRice campaign until Q3\n"
                 "  client|User's NCH Inc. contact is Jaime Santos\n"
-                "Output SKIP if no personal facts about the user are present."
+                "Do NOT extract: questions the user is asking, requests for TARS to do something, "
+                "or the fact that a conversation happened at all — a fact must be something concrete "
+                "and durable (a decision, a preference, an identifying detail, a status change), not "
+                "'user is asking about X' or 'user wants to know Y'.\n"
+                "Output SKIP if no such fact is present — SKIP is the correct, common answer for most "
+                "messages; do not strain to invent a fact just to produce output."
             ),
-            messages=[{"role": "user", "content": f"User's message: {user_content[:500]}"}],
+            messages=[{"role": "user", "content": f"User's message: {_strip_mention_markers(user_content)[:500]}"}],
             **_zai_kwargs(_provider),
         )
         raw = _first_text_block(resp)
@@ -488,7 +500,7 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
     """Generate a 3-5 word conversation title from recent exchanges."""
     recent = messages[-8:]
     context = "\n".join(
-        f"{m['role'].upper()}: {_strip_tool_artifacts(str(m.get('content', '')))[:300]}"
+        f"{m['role'].upper()}: {_strip_mention_markers(_strip_tool_artifacts(str(m.get('content', ''))))[:300]}"
         for m in recent
         if m.get("content") and not str(m.get("content", "")).startswith("<tool")
     )

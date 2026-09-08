@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.18.8 |
+| Version | v2.18.9 |
 | Released | 2026-09-08 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,23 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.18.9 — 2026-09-08
+**Fix: fact-extraction quality tightened before the v2.18.8 backfill ran**
+- Manual dry-run review across 15 messages spread over the affected window surfaced two
+  issues: raw `[[id|type|label]]` mention markers leaking into the extraction prompt, and
+  low-value pseudo-facts being extracted from mere questions/requests ("user is asking
+  about their ride performance").
+- New `_strip_mention_markers` replaces markers with the plain label before fact-extraction
+  and title-generation see the text.
+- Extraction prompt now explicitly excludes questions/requests/"a conversation happened",
+  requiring a concrete durable fact (decision, preference, identifying detail, status
+  change); SKIP is framed as the common correct answer, not a fallback.
+- Re-verified the same 15-message sample after the change: junk extractions correctly
+  became SKIP, genuine updates (e.g. a bike component change) still extract cleanly.
+- Harness-only, no schema change.
+
+---
 
 ### v2.18.8 — 2026-09-08
 **Fix + RCA: root cause of ~2 months of degraded memory extraction, found and closed**
