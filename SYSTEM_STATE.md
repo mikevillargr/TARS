@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.0 |
-| Released | 2026-09-08 |
+| Version | v2.19.1 |
+| Released | 2026-09-09 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -163,6 +163,33 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.1 — 2026-09-09
+**Fix: owner filter tightened to a strict allowlist; confirmed the v2.19.0 retirement closed
+the recurring-duplicate bug too**
+- User reported (after v2.19.0) still seeing misattributed cards and recurring cards on
+  topics already dismissed. Investigation against live production data found both were
+  explained by the now-retired `detect_meeting_commitments`: ~24 signals from that detector,
+  all already dismissed by the user by hand, spanning 6 sweeps across one day with
+  near-duplicate titles for the same underlying meetings ("Resend captions and ad headlines
+  for Star Clippers" / "Resend ad copy and headlines to Vanessa" / "Send captions and
+  headlines") — its `dedupe_key` fingerprinted the model's own generated title text, which
+  reworded slightly every sweep, defeating dedup entirely. Confirmed zero open
+  `fireflies`-sourced signals on production post-retirement, and a live manual sweep run
+  directly on the server showed exactly 4 detectors (no `meeting_commitments`), no errors —
+  the v2.19.0 fix was working; the backlog was just old signals created before it landed,
+  never bulk-cleaned.
+- Separately, explicit correction to `detect_unconverted_action_items`'s owner filter:
+  `_owner_is_someone_else` treated an unassigned owner as "ambiguous, stays in" — replaced
+  with `_owner_is_mike`, a strict allowlist that only surfaces an item when it's explicitly
+  attached to "Mike"/"Mike Villar" by name. No name means "not confirmed as his," not "maybe
+  his." Trades a possible false negative (a genuinely-his item that came through unassigned)
+  for zero false positives. Checked against current production data: 0 unassigned items in
+  the active 7-day window, so no immediate visible change — this is a forward-looking
+  tightening for future extractions.
+- Harness-only, no schema change.
+
+---
 
 ### v2.19.0 — 2026-09-08
 **Retire: detect_meeting_commitments folded into meeting_processor.py's action-item extraction**

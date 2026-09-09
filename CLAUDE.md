@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.1 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -475,8 +475,12 @@ chat conversation.
     For email with no client match, the same chip slot falls back to a coarse category
     (Billing/Legal/Banking/Vendor/Recruiting/Scheduling/Internal) from the Tier 2 model —
     client resolution always takes priority; category is strictly a fallback, never both
-  - Fireflies action items explicitly owned by another meeting attendee are filtered out
-    (Fireflies extraction has no notion of "mine"); unassigned items stay in
+  - Meeting action items are only surfaced when explicitly attached to Mike by name — the
+    extraction has no notion of "mine", so owned-by-someone-else AND unassigned items are
+    both excluded (since v2.19.1; unassigned used to pass through as "ambiguous, stays in"
+    — corrected because a name-only allowlist is what actually stops other people's work
+    from showing up, at the cost of missing a genuinely-his item that came through with no
+    owner attached)
   - `dedupe_key` is checked against signals in **any** status, so a dismissed signal never
     returns. Deliberate: re-nagging is how a triage surface loses trust — for email this also
     means dismissing an awaiting-reply thread means "no action was needed" and it won't
@@ -1014,6 +1018,24 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.1 Fix: owner filter tightened to a strict allowlist; confirmed v2.19.0 also closed
+        the recurring-duplicate complaint. User reported (after v2.19.0) still seeing
+        misattributed and recurring cards. Traced against live production data: both were
+        the now-retired detect_meeting_commitments — ~24 signals, all already dismissed by
+        hand, spanning 6 sweeps in one day with near-duplicate titles for the same meetings
+        ("Resend captions and ad headlines for Star Clippers" / "Resend ad copy and
+        headlines to Vanessa" / "Send captions and headlines") because its dedupe_key
+        fingerprinted the model's own generated title text, which reworded every sweep,
+        defeating dedup entirely. Confirmed zero open fireflies signals post-retirement and
+        ran a live manual sweep on the server showing exactly 4 detectors, no errors — the
+        v2.19.0 fix was working; the backlog was old signals created before it landed,
+        never bulk-cleaned. Separately, explicit correction to
+        detect_unconverted_action_items: _owner_is_someone_else (unassigned = "ambiguous,
+        stays in") replaced with _owner_is_mike, a strict allowlist — only surfaces an item
+        explicitly attached to "Mike"/"Mike Villar" by name; no name means excluded, not
+        ambiguous. Checked against production: 0 unassigned items in the active 7-day
+        window, so no immediate visible change — forward-looking tightening. Harness-only,
+        no schema change.
 v2.19.0 Retire: detect_meeting_commitments folded into meeting_processor.py's action-item
         extraction — root cause resolved instead of patched again. It existed as a second,
         independent extraction over raw transcripts, re-deriving ownership from scratch with

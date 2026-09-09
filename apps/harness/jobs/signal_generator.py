@@ -66,22 +66,24 @@ _NON_CLIENT_DOMAINS = {
 }
 
 
-def _owner_is_someone_else(owner: Optional[str], user_name: str) -> bool:
+def _owner_is_mike(owner: Optional[str], user_name: str) -> bool:
     """
-    True only when the extracted owner is explicitly a name other than the
-    user's. An unassigned item (owner is None/blank) is ambiguous, not
-    "someone else's" — it stays in. This is what keeps meeting action items
-    that were assigned to other attendees out of the brief; Fireflies
-    extraction has no concept of "mine", so the detector has to apply it.
+    True only when the action item is explicitly attached to the user by
+    name — "Mike" or "Mike Villar" (or whatever User.name resolves to). An
+    earlier version of this check treated an unassigned owner (None/blank)
+    as ambiguous and let it through; per explicit correction, that's wrong —
+    the extraction already names an owner for everything it can attribute,
+    so no name means "not confirmed as his," not "maybe his." The tradeoff
+    is accepted: a genuinely-his item that happened to come through
+    unassigned gets missed, in exchange for zero false positives from other
+    attendees' work.
     """
     owner = (owner or "").strip().lower()
     if not owner:
         return False
     first_name = (user_name or "Mike Villar").strip().split()[0].lower()
     full_name = (user_name or "Mike Villar").strip().lower()
-    if owner == first_name or owner == full_name or owner.startswith(first_name + " "):
-        return False
-    return True
+    return owner == first_name or owner == full_name or owner.startswith(first_name + " ")
 
 
 async def _client_for_attendees(
@@ -230,9 +232,10 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
     assigned" is one decision; four near-identical cards is four.
 
     Every action item is extracted regardless of who it's for — the extraction
-    has no notion of "mine". Items explicitly owned by another attendee are
-    filtered out here so the brief doesn't fill up with other people's work;
-    unassigned items stay in since there's no one else to attribute them to.
+    has no notion of "mine". Only items explicitly attached to Mike by name
+    are surfaced; anything owned by someone else, or with no owner at all,
+    is excluded (see _owner_is_mike — no name means "not confirmed as his,"
+    not "maybe his").
     """
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     user_name = user.name if user and user.name else "Mike Villar"
@@ -254,7 +257,7 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
     for item, meeting in rows:
         if not (item.raw_text or "").strip():
             continue
-        if _owner_is_someone_else(item.owner, user_name):
+        if not _owner_is_mike(item.owner, user_name):
             continue
         by_meeting.setdefault(meeting.id, (meeting, []))[1].append(item)
 
