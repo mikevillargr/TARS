@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.5 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.6 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -478,6 +478,12 @@ chat conversation.
   **parked** (everything snoozed, nothing done), **quiet** (nothing came in). Conflating them
   makes the screen lie two-thirds of the time
 - FYI rows (kind="fyi") render as plain text, no card weight
+- Right rail's "today" event list shows a video-call icon only on events that actually have
+  one (since v2.19.6) — clicking it opens the meeting link (Zoom/Meet/Teams/etc.) in a new
+  tab. `GET /calendar/events` resolves `meeting_url` per event via
+  `connectors/google_calendar.extract_meeting_url` (dedicated Meet field → structured
+  conferencing data → a plain-text link in location/description); events with nothing to
+  join (a task due date, a past Fireflies meeting) get no icon at all rather than a dead one
 - **Generation** (`jobs/signal_generator.py`, `signal_sweep` every 4h, or
   `POST /api/signals/generate` on demand). Four detectors, split by whether the answer is a
   fact or a judgement:
@@ -1048,6 +1054,17 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.6 Fix: Today's right-rail "today" event list showed a video-call icon on every event
+        regardless of whether it actually had one — purely decorative, did nothing on click.
+        New extract_meeting_url (connectors/google_calendar.py) resolves a real join link per
+        event, checked in order: hangoutLink (Meet's dedicated field), conferenceData entry
+        points (covers Meet with custom conferencing and Zoom added via its calendar
+        integration), then a plain-text link in location or description (how a manually
+        pasted Zoom/Teams/Meet link usually shows up). GET /calendar/events now returns
+        meeting_url per event (CalendarEventOut); Today's right rail renders the icon only
+        when one resolves, as a real <a target="_blank"> to the link — no icon at all on
+        events with nothing to join (a task due date, a past Fireflies meeting) rather than
+        a dead one. Harness + web, no schema change.
 v2.19.5 Feature: Today card actions finish the matrix — move_event executes directly, and
         email-sourced draft_reply resolves fully in-card instead of handing off to chat.
         (1) move_event moved from the chat-handoff tier to the executed tier: new

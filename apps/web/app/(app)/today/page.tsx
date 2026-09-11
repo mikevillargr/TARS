@@ -593,7 +593,18 @@ export default function TodayPage() {
                           {ev.title}
                         </p>
                       </div>
-                      <Video size={11} style={{ color: "var(--c-ink-faint)", marginTop: 3 }} />
+                      {ev.meeting_url && (
+                        <a
+                          href={ev.meeting_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Join video call"
+                          className="shrink-0 transition-opacity hover:opacity-100 opacity-70"
+                          style={{ color: "var(--c-moss)", marginTop: 3 }}
+                        >
+                          <Video size={11} />
+                        </a>
+                      )}
                     </div>
                   ))}
                 </div>

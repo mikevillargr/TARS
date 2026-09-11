@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.5 |
+| Version | v2.19.6 |
 | Released | 2026-09-11 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,23 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.6 — 2026-09-11
+**Fix: Today's meeting-list video icons were purely decorative**
+- The right rail's "today" event list showed a video-call icon on every event regardless of
+  whether it actually had a video link — nothing happened on click.
+- New `extract_meeting_url` (`connectors/google_calendar.py`) resolves a real join link per
+  event, checked in order of reliability: `hangoutLink` (Meet's dedicated field), structured
+  `conferenceData` entry points (covers Meet with custom conferencing and Zoom added via its
+  calendar integration), then a plain-text link found in `location` or `description` (how a
+  manually pasted Zoom/Teams/Meet link usually shows up).
+- `GET /calendar/events` now returns `meeting_url` per event; Today's right rail renders the
+  icon only when one resolves, as a real link that opens the meeting (Zoom/Meet/Teams/etc.)
+  in a new tab — no icon at all on events with nothing to join (a task due date, a past
+  Fireflies meeting) rather than a dead one.
+- Harness + web, no schema change.
+
+---
 
 ### v2.19.5 — 2026-09-11
 **Feature: Today card actions finish the matrix — move_event executes directly, email-sourced

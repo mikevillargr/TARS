@@ -202,6 +202,11 @@ export interface CalendarEvent {
   start: string
   end: string | null
   all_day?: boolean
+  /** Video-call link, when the harness could find one (Meet's dedicated
+   *  field, structured conferencing data, or a plain-text Zoom/Teams/Meet
+   *  link in location or description) — null for events with nothing to
+   *  join (a task due date, a past Fireflies meeting). */
+  meeting_url?: string | null
 }
 
 export interface TaskRow {
