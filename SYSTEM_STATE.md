@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.7 |
+| Version | v2.19.8 |
 | Released | 2026-09-11 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,15 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.8 — 2026-09-11
+**Fix: hydration mismatch on chat's boot-quote random index**
+- `MessageArea`'s empty-state TARS quote picked its random index inside
+  `useState(() => Math.random(...))`, which runs during server render too — client hydration
+  could pick a different index than the server did, producing a React hydration mismatch.
+  `quoteIndex` now starts `null` and is set inside a `useEffect`, so the random pick only
+  happens client-side after mount; the quote line renders only once `quoteIndex !== null`.
+- Web-only, no schema change.
 
 ### v2.19.7 — 2026-09-11
 **Feature: @-mention support in Today's ComposeStrip, with real recipient resolution for
