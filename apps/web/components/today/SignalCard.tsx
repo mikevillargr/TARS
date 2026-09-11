@@ -18,16 +18,29 @@ import {
 } from "@/lib/signals"
 import { InlineActionForm } from "@/components/today/InlineActionForm"
 import { ComposeStrip } from "@/components/today/ComposeStrip"
+import { DraftReplyResolver } from "@/components/today/DraftReplyResolver"
 
 // Actions whose outcome is worth editing before it's created — the payload
-// the detector proposed is a draft, not a decision.
-const FORM_KINDS = new Set<SignalActionKind>(["create_reminder", "create_task", "create_event"])
+// the detector proposed is a draft, not a decision. move_event included: a
+// new time is a fully specified answer, no different from a due date.
+const FORM_KINDS = new Set<SignalActionKind>(["create_reminder", "create_task", "create_event", "move_event"])
 
 // Actions handed to chat because they need actual composition or judgement —
 // not editable inline, but still worth a chance to steer before handoff
-// rather than trusting TARS's inference alone. open_meeting is the only kind
-// with no intermediate step at all: pure navigation, nothing to negotiate.
-const COMPOSE_KINDS = new Set<SignalActionKind>(["draft_reply", "move_event", "save_brain", "discuss"])
+// rather than trusting TARS's inference alone. draft_reply is ALSO in this
+// set — for a calendar-sourced "Ask to reschedule" it stays a real chat
+// handoff, but for an email-sourced signal (source === "gmail") the same
+// click instead resolves in-card via DraftReplyResolver; see canDraftInCard
+// below. open_meeting is the only kind with no intermediate step at all:
+// pure navigation, nothing to negotiate.
+const COMPOSE_KINDS = new Set<SignalActionKind>(["draft_reply", "save_brain", "discuss"])
+
+/** draft_reply resolves in-card only when there's a real thread to reply to —
+ *  see api/routes/signals.py's _generate_reply_draft docstring for why a
+ *  calendar-sourced "Ask to reschedule" can't take this path. */
+function canDraftInCard(signal: Signal, action: SignalAction): boolean {
+  return action.kind === "draft_reply" && signal.source === "gmail"
+}
 
 // Small provenance icon per source — same accent color as the source label,
 // so scanning the header row doesn't need to read the text first.
@@ -106,6 +119,13 @@ interface SignalCardProps {
   // Fires when a COMPOSE_KINDS strip is confirmed — carries the steering note
   // (possibly empty) to prepend ahead of TARS's reasoning in the seeded chat.
   onCompose: (signal: Signal, action: SignalAction, note: string) => void
+  // draft_reply's in-card path (DraftReplyResolver) never goes through
+  // onCompose/onResolve — it posts to /signals/{id}/draft itself, then
+  // reports back one of two distinct outcomes so Today can react correctly:
+  // a discarded draft is still fully undoable (nothing external happened),
+  // an actually-sent one is not.
+  onDraftDiscard: (signal: Signal) => void
+  onDraftSent: (signal: Signal) => void
   onSnooze: (id: string) => void
   onDismiss: (id: string) => void
   onAddToCalendar: (signal: Signal) => void
@@ -116,6 +136,8 @@ export function SignalCard({
   onAct,
   onResolve,
   onCompose,
+  onDraftDiscard,
+  onDraftSent,
   onSnooze,
   onDismiss,
   onAddToCalendar,
@@ -127,6 +149,13 @@ export function SignalCard({
   // Only one at a time — the dropdown's alternates and the primary button
   // share this same slot.
   const [expandedAction, setExpandedAction] = useState<SignalAction | null>(null)
+  // True once DraftReplyResolver has actually generated a draft for the
+  // current expandedAction — at that point the signal is already marked
+  // done server-side, so the action row must stop being able to swap or
+  // close the panel out from under it (see handleActionClick). False (the
+  // safe default) during compose/loading, where nothing has committed yet
+  // and free cancellation is fine.
+  const [draftCommitted, setDraftCommitted] = useState(false)
 
   const start = useRef<{ x: number; y: number } | null>(null)
   const axis = useRef<"x" | "y" | null>(null)
@@ -144,12 +173,22 @@ export function SignalCard({
    *  immediately for open_meeting, the only kind with nothing to show. */
   const handleActionClick = useCallback((action: SignalAction) => {
     if (FORM_KINDS.has(action.kind) || COMPOSE_KINDS.has(action.kind)) {
+      // The action row stays visible and clickable even while an
+      // intermediate step is expanded below it — fine right up until a real
+      // draft exists, since nothing has committed and swapping or closing
+      // is harmless cancellation. Once draftCommitted, the signal is already
+      // marked done server-side, so swapping away here would silently
+      // unmount the review UI without going through onDiscard's bookkeeping
+      // — block it, whether the click is this same action (toggle-close) or
+      // a different one (dropdown alternate). Its own Cancel/Discard/Send
+      // is the only way out from there.
+      if (draftCommitted) return
       setExpandedAction(prev => (prev?.kind === action.kind ? null : action))
       return
     }
     setExpandedAction(null)
     onAct(signal, action)
-  }, [onAct, signal])
+  }, [onAct, signal, draftCommitted])
 
   // Which action the current drag would commit, and whether it's armed yet.
   const intent: SwipeIntent = dx === 0 ? null : dx < 0 ? "dismiss" : "snooze"
@@ -483,18 +522,32 @@ export function SignalCard({
           />
         )}
 
-        {/* Compose strip — the intermediate step for actions handed to chat.
-            Replaces "click → the whole card gets dumped into a new
-            conversation with no chance to steer it first". */}
+        {/* Compose strip / draft resolver — the intermediate step for actions
+            handed to chat, or (for an email-sourced draft_reply) resolved
+            right here instead. DraftReplyResolver manages its own
+            compose → loading → ready lifecycle internally, so expandedAction
+            stays set throughout — collapsing it early would unmount the
+            EmailDraftCard mid-review. */}
         {expandedAction && COMPOSE_KINDS.has(expandedAction.kind) && (
-          <ComposeStrip
-            action={expandedAction}
-            onCancel={() => setExpandedAction(null)}
-            onConfirm={(note) => {
-              onCompose(signal, expandedAction, note)
-              setExpandedAction(null)
-            }}
-          />
+          canDraftInCard(signal, expandedAction) ? (
+            <DraftReplyResolver
+              signal={signal}
+              action={expandedAction}
+              onCancel={() => setExpandedAction(null)}
+              onDrafted={() => setDraftCommitted(true)}
+              onDiscard={() => { onDraftDiscard(signal); setExpandedAction(null); setDraftCommitted(false) }}
+              onSent={() => { onDraftSent(signal); setExpandedAction(null); setDraftCommitted(false) }}
+            />
+          ) : (
+            <ComposeStrip
+              action={expandedAction}
+              onCancel={() => setExpandedAction(null)}
+              onConfirm={(note) => {
+                onCompose(signal, expandedAction, note)
+                setExpandedAction(null)
+              }}
+            />
+          )
         )}
 
         {/* Reasoning disclosure — the "show your work" layer */}

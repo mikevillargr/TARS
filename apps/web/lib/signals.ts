@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from "@/lib/api-client"
+import type { EmailDraft } from "@/components/chat/EmailDraftCard"
 
 // ─── Types — mirror api/routes/signals.py ────────────────────────────────────
 
@@ -17,25 +18,37 @@ export type SignalStatus = "open" | "snoozed" | "done" | "dismissed"
 /**
  * The complete action vocabulary. Nothing outside this list can appear on a
  * card — the generator picks from it, and the harness dispatches on it.
+ * Every kind gets a real intermediate step except open_meeting, which is
+ * pure navigation with nothing to negotiate.
  *
  * EXECUTED SERVER-SIDE, EDITABLE FIRST — SignalCard expands an inline form
  * (InlineActionForm) before any of these commit; Confirm sends the edits as
- * payload_override, merged over the action's own payload server-side:
+ * payload_override, merged over the action's own payload server-side. All
+ * go through POST /act:
  *   create_reminder  Add to To-Dos      the default home for signal work
  *   create_task      Add to Projects    escalation, for tracked project work
  *   create_event     Book it            only when the signal carries an event
+ *   move_event       Move <event>       a new time is a full answer — no LLM needed
  *
  * PURE NAVIGATION — source_ref is already the id; no form, no chat, just a
  * route computed server-side (ActResult.route) and pushed to:
  *   open_meeting     Open meeting / Open project / Review transcript
  *
- * HANDED TO CHAT, STEERED FIRST — SignalCard expands a ComposeStrip (a
- * freeform note, optional) before any of these open a conversation; Confirm
- * sends it as ActRequest.note, prepended ahead of TARS's own reasoning in
- * the seeded prompt. Still lands behind the existing approval gates once in
- * chat (email in particular keeps its draft-card confirm step):
- *   draft_reply      Draft reply / Draft chase email / Ask X for times
- *   move_event       Move <event> / Reschedule
+ * RESOLVED IN-CARD, VIA POST /draft (not /act) — email-sourced draft_reply
+ * only (source === "gmail"). SignalCard's ComposeStrip collects an optional
+ * steering note, then this generates an actual reply and renders it as an
+ * EmailDraftCard right in the card — Send hits /email/confirm-send directly,
+ * no conversation ever created:
+ *   draft_reply      Draft reply       ONLY when signal.source === "gmail"
+ *
+ * HANDED TO CHAT, STEERED FIRST, VIA POST /act — anything left that still
+ * needs actual composition or judgement. SignalCard expands the same
+ * ComposeStrip as above; Confirm sends the note as ActRequest.note,
+ * prepended ahead of TARS's own reasoning in the seeded prompt:
+ *   draft_reply      Ask to reschedule   when signal.source !== "gmail" — a NEW
+ *                                        email to an attendee, not a reply, needs
+ *                                        the same who-to-address judgement chat
+ *                                        already does via the Contacts graph
  *   save_brain       Save to Second Brain
  *   discuss          Ask TARS about this — the catch-all
  */
@@ -50,14 +63,16 @@ export type SignalActionKind =
   | "discuss"
 
 /** Kinds SignalCard shows an inline form for before committing (FORM_KINDS in
- *  SignalCard.tsx). Chat-handoff kinds get their own intermediate step too
- *  (COMPOSE_KINDS, a ComposeStrip) but don't commit anything server-side
- *  directly, so they're not counted here. open_meeting is the only kind
- *  with no intermediate step at all — pure navigation. */
+ *  SignalCard.tsx). The chat-handoff and in-card-draft kinds get their own
+ *  intermediate steps too (COMPOSE_KINDS' ComposeStrip; draft_reply's
+ *  DraftReplyResolver) but don't commit through payload_override, so they're
+ *  not counted here. open_meeting is the only kind with no intermediate step
+ *  at all — pure navigation. */
 export const EXECUTED_KINDS: SignalActionKind[] = [
   "create_reminder",
   "create_task",
   "create_event",
+  "move_event",
 ]
 
 export interface SignalAction {
@@ -146,6 +161,16 @@ export function actOnSignal(id: string, kind: SignalActionKind, opts?: ActOption
     payload_override: opts?.payloadOverride,
     note: opts?.note,
   })
+}
+
+/**
+ * draft_reply's in-card resolution — only valid when signal.source ===
+ * "gmail" (see the vocabulary doc above SignalActionKind). Marks the signal
+ * done server-side the moment this returns; sending the draft afterward is
+ * a separate step through /email/confirm-send.
+ */
+export function generateReplyDraft(id: string, note?: string) {
+  return apiPost<{ ok: boolean; draft: EmailDraft }>(`/signals/${id}/draft`, { note })
 }
 
 export function snoozeSignal(id: string, until?: string) {

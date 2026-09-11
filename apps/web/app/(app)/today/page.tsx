@@ -280,6 +280,24 @@ export default function TodayPage() {
     [commit],
   )
 
+  // draft_reply's in-card path (DraftReplyResolver) calls the harness itself
+  // (POST /signals/{id}/draft, then /email/confirm-send on Send) — these two
+  // only do the local bookkeeping commit() normally handles, split because
+  // the two outcomes aren't equally undoable: discarding an unsent draft
+  // rolled back nothing, so it gets the same undo bar as everything else;
+  // an actually-sent email did something real, so it just clears quietly.
+  const handleDraftDiscard = useCallback((signal: Signal) => {
+    removeLocally(signal.id)
+    recordTally("acted")
+    setUndo({ id: signal.id, label: "Draft discarded" })
+  }, [removeLocally, recordTally])
+
+  const handleDraftSent = useCallback((signal: Signal) => {
+    removeLocally(signal.id)
+    recordTally("acted")
+    setToast("Sent")
+  }, [removeLocally, recordTally])
+
   const handleUndo = useCallback(async () => {
     if (!undo) return
     const id = undo.id
@@ -430,6 +448,8 @@ export default function TodayPage() {
                             onAct={handleAct}
                             onResolve={handleResolve}
                             onCompose={handleCompose}
+                            onDraftDiscard={handleDraftDiscard}
+                            onDraftSent={handleDraftSent}
                             onSnooze={handleSnooze}
                             onDismiss={handleDismiss}
                             onAddToCalendar={handleAddToCalendar}

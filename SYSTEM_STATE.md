@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.4 |
+| Version | v2.19.5 |
 | Released | 2026-09-11 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,37 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.5 — 2026-09-11
+**Feature: Today card actions finish the matrix — move_event executes directly, email-sourced
+draft_reply resolves fully in-card**
+- `move_event` moved from the chat-handoff tier to the executed tier alongside
+  `create_reminder`/`create_task`/`create_event`: a new date/time/duration picker in
+  `InlineActionForm` PATCHes the real calendar event directly (`_update_event` in
+  `api/routes/signals.py`, reusing the same connector-selection logic as
+  `PATCH /calendar/events/{id}`) — no LLM needed to reschedule to a time Mike picked himself.
+  `detect_calendar_conflicts` now stores `account`/`current_start`/`duration_min` on the
+  action payload so the picker knows which calendar to patch.
+- `draft_reply` gets a real in-card resolution for email-sourced signals
+  (`signal.source === "gmail"`) — the exact case this feature was originally requested to
+  fix ("clicking Draft reply just kicks me to chat with the card dumped in as a prompt"). New
+  `DraftReplyResolver` component runs compose → loading → ready: the existing steering-note
+  strip now triggers `POST /signals/{id}/draft`, which fetches the real Gmail thread and
+  composes a reply via Tier 2 (new `core/model_client.complete_text` helper, promoted out of
+  a module-private function in `jobs/signal_generator.py` so both files could use it),
+  returning it for review as an `EmailDraftCard` — extracted from `chat/page.tsx` (was ~220
+  lines inline, used exactly once) into `components/chat/EmailDraftCard.tsx` so chat and
+  Today share one component. Sending still goes through the existing
+  `/email/confirm-send` gate; the new endpoint never sends anything itself. The signal is
+  marked done the moment the draft exists — the same convention as every other acted-on
+  signal — and the action row can no longer swap or close the review panel out from under
+  itself once that's happened.
+- Calendar-conflict-sourced `draft_reply` ("Ask to reschedule") still hands off to chat — it's
+  a new email to an attendee, not a reply, and needs the same who-to-address judgement chat
+  already applies via the Contacts graph.
+- Harness + web, no schema change.
+
+---
 
 ### v2.19.4 — 2026-09-11
 **Feature: the v2.19.3 inline-action-step extended to the chat-handoff kinds**
