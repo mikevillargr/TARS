@@ -29,6 +29,11 @@ class CalendarEventOut(BaseModel):
     attendees: List[str]
     source_id: Optional[str]
     description: Optional[str]
+    # Video-call link, when one can be found (see extract_meeting_url) — only
+    # ever set on gcal events; tasks and past Fireflies meetings have nothing
+    # to join. Default so the task/meeting construction sites below don't
+    # need updating.
+    meeting_url: Optional[str] = None
 
 
 class CreateEventRequest(BaseModel):
@@ -78,7 +83,7 @@ async def list_events(
             conn = r.scalar_one_or_none()
             if not conn or not conn.auth.get("refresh_token"):
                 return
-            from connectors.google_calendar import GoogleCalendarClient
+            from connectors.google_calendar import GoogleCalendarClient, extract_meeting_url
             loop = asyncio.get_event_loop()
             client = GoogleCalendarClient(conn.auth)
             gcal_events = await loop.run_in_executor(
@@ -120,6 +125,7 @@ async def list_events(
                     attendees=attendees,
                     source_id=e["id"],
                     description=e.get("description"),
+                    meeting_url=extract_meeting_url(e),
                 ))
         except Exception as exc:
             log.warning("GCal events fetch failed (%s): %s", conn_name, exc)
@@ -204,7 +210,7 @@ async def create_event(
     if not conn or not conn.auth.get("refresh_token"):
         raise HTTPException(status_code=400, detail=f"{conn_name} not connected")
 
-    from connectors.google_calendar import GoogleCalendarClient
+    from connectors.google_calendar import GoogleCalendarClient, extract_meeting_url
     loop = asyncio.get_event_loop()
     client = GoogleCalendarClient(conn.auth)
 
@@ -248,6 +254,7 @@ async def create_event(
         attendees=[],
         source_id=created["id"],
         description=created.get("description"),
+        meeting_url=extract_meeting_url(created),
     )
 
 

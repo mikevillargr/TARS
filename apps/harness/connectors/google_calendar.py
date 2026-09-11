@@ -3,6 +3,7 @@ Google Calendar connector — read and write events.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -12,6 +13,43 @@ from google.auth.transport.requests import Request
 from connectors.google_oauth import credentials_from_auth
 
 log = logging.getLogger(__name__)
+
+# Known video-call domains, checked as a last resort against location/
+# description text. hangoutLink and conferenceData (checked first, in
+# extract_meeting_url) cover Meet and any conferencing added through
+# Calendar's own "Add conferencing" flow; this regex only catches a link
+# that was pasted as plain text instead — which is how Zoom links usually
+# end up on an event, since Zoom's calendar add-on writes the invite into
+# location/description rather than populating conferenceData.
+_MEETING_URL_RE = re.compile(
+    r"https?://(?:[\w-]+\.)?"
+    r"(?:zoom\.us|meet\.google\.com|teams\.microsoft\.com|teams\.live\.com|webex\.com|whereby\.com)"
+    r"[^\s<>\")]*",
+    re.IGNORECASE,
+)
+
+
+def extract_meeting_url(event: dict) -> Optional[str]:
+    """
+    Best-effort video-call link for a raw Google Calendar event dict, checked
+    in order of reliability: the dedicated Meet field, structured
+    conferencing data (covers Meet with custom settings, and Zoom when added
+    via its calendar integration), then a plain-text link in location or
+    description (how a manually pasted Zoom/Teams/Meet link usually shows up).
+    """
+    if event.get("hangoutLink"):
+        return event["hangoutLink"]
+
+    for entry_point in (event.get("conferenceData") or {}).get("entryPoints", []):
+        if entry_point.get("entryPointType") == "video" and entry_point.get("uri"):
+            return entry_point["uri"]
+
+    for field in ("location", "description"):
+        match = _MEETING_URL_RE.search(event.get(field) or "")
+        if match:
+            return match.group(0)
+
+    return None
 
 
 class GoogleCalendarClient:
