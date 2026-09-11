@@ -1302,7 +1302,7 @@ interface MessageAreaProps {
   setStravaCards: React.Dispatch<React.SetStateAction<StravaActivity[]>>
   setMeetingCards: React.Dispatch<React.SetStateAction<MeetingCardData[]>>
   onAsk: (q: string) => void
-  quoteIndex: number
+  quoteIndex: number | null
   messagesEndRef: React.RefObject<HTMLDivElement | null>
   newResponseTopRef: React.RefObject<HTMLDivElement | null>
 }
@@ -1363,15 +1363,17 @@ const MessageArea = memo(function MessageArea({
               }}
             >_</span>
           </p>
-          <p
-            className="text-sm italic max-w-sm leading-relaxed"
-            style={{
-              color: "var(--c-ink-muted)",
-              animation: "slideUpFade 500ms var(--ease-out-expo) 220ms both",
-            }}
-          >
-            &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
-          </p>
+          {quoteIndex !== null && (
+            <p
+              className="text-sm italic max-w-sm leading-relaxed"
+              style={{
+                color: "var(--c-ink-muted)",
+                animation: "slideUpFade 500ms var(--ease-out-expo) 220ms both",
+              }}
+            >
+              &ldquo;{TARS_QUOTES[quoteIndex]}&rdquo;
+            </p>
+          )}
         </div>
       ) : allMessages.map((msg, i) => (
         <React.Fragment key={"id" in msg ? msg.id : `stream-${i}`}>
@@ -1525,7 +1527,10 @@ const TARS_QUOTES = [
 export default function ChatPage() {
   const { setOpen: setSidebarOpen, open: sidebarOpen } = useSidebar()
   const { subscribe: subscribeNotif, clearUnread } = useNotificationContext()
-  const [quoteIndex] = useState(() => Math.floor(Math.random() * TARS_QUOTES.length))
+  const [quoteIndex, setQuoteIndex] = useState<number | null>(null)
+  useEffect(() => {
+    setQuoteIndex(Math.floor(Math.random() * TARS_QUOTES.length))
+  }, [])
   const [conversations, setConversations]           = useState<Conversation[]>([])
   const [visibleConvCount, setVisibleConvCount]     = useState(20)
   const [activeChatId, setActiveChatId]             = useState<string | null>(null)
