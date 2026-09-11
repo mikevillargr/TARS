@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.7 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.8 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1064,6 +1064,12 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.8 Fix: hydration mismatch on chat's boot-quote random index. MessageArea's empty-state
+        TARS quote picked its random index inside useState(() => Math.random(...)), which
+        runs during server render too — client hydration could pick a different index than
+        the server did, producing a React hydration mismatch. quoteIndex now starts null and
+        is set inside a useEffect, so the random pick only happens client-side after mount;
+        the quote line renders only once quoteIndex !== null. Web-only, no schema change.
 v2.19.7 Feature: @-mention support in Today's ComposeStrip, with real recipient resolution
         for email-sourced draft_reply. ComposeStrip's note field was a plain textarea — @
         did nothing, despite the rest of the app (chat, Tasks, Mnemon, Calendar) supporting
