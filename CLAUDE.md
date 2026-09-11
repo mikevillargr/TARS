@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.3 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.4 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -448,9 +448,11 @@ chat conversation.
     payload; nothing commits on the raw click anymore.
   - `open_meeting` is pure navigation (`source_ref` is already the task/meeting id) — no
     form, no conversation, just a route computed server-side and pushed to.
-  - `draft_reply` / `move_event` / `save_brain` / `discuss` still hand off to a pre-seeded
-    chat conversation (composition/judgement stays chat's job), now carrying an optional
-    freeform steering note typed before handoff, surfaced ahead of TARS's own reasoning.
+  - `draft_reply` / `move_event` / `save_brain` / `discuss` expand a `ComposeStrip` (since
+    v2.19.4) — a freeform note field, optional — before handing off to a pre-seeded chat
+    conversation; composition/judgement still stays chat's job, the strip only adds a chance
+    to steer before the card's contents get dumped into a prompt. Confirm sends the note as
+    `ActRequest.note`, surfaced ahead of TARS's own reasoning in the seeded message.
 - Dismiss and snooze are recoverable — 5s undo bar with a draining hairline; cleared/snoozed
   are visitable states, not a void
 - Swipe left to dismiss, right to snooze — works on touch and on trackpad (wheel deltaX)
@@ -658,7 +660,7 @@ tars/
 │   │   │   │   └── settings/
 │   │   │   └── api/            # thin proxy to harness
 │   │   ├── components/
-│   │   │   ├── today/          # SignalCard, InlineActionForm, AmbientField
+│   │   │   ├── today/          # SignalCard, InlineActionForm, ComposeStrip, AmbientField
 │   │   │   ├── shell/          # sidebar, topbar, right panel
 │   │   │   ├── chat/
 │   │   │   ├── tasks/
@@ -1031,6 +1033,18 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.4 Feature: the v2.19.3 intermediate step extended to the chat-handoff kinds. New
+        ComposeStrip component (components/today/ComposeStrip.tsx) expands in the card for
+        draft_reply/move_event/save_brain/discuss — a freeform note field (optional, per-kind
+        placeholder), sharing InlineActionForm's FormShell/fieldStyle so the two steps read as
+        one system. Confirm sends the note as ActRequest.note (plumbing added in v2.19.3 but
+        unused until now — no chat handoff fired without landing on chat first, so there was
+        nothing to steer toward yet), surfaced as "Mike's direction" ahead of TARS's own
+        reasoning in the seeded prompt. Completes the matrix: every action kind but
+        open_meeting (pure navigation, nothing to negotiate) now gets an intermediate step —
+        InlineActionForm for the three that commit directly, ComposeStrip for the four that
+        hand off to chat. SignalCard's `formAction` state renamed `expandedAction` to reflect
+        that it now gates two different step types, not one. Web-only, no schema change.
 v2.19.3 Feature: Today card actions get an intermediate step before they commit. New
         InlineActionForm component expands inside SignalCard for create_reminder/
         create_task/create_event — editable text, due-date/priority chips, and for

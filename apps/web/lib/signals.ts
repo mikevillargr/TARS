@@ -29,10 +29,11 @@ export type SignalStatus = "open" | "snoozed" | "done" | "dismissed"
  * route computed server-side (ActResult.route) and pushed to:
  *   open_meeting     Open meeting / Open project / Review transcript
  *
- * HANDED TO CHAT — needs actual composition or judgement, so it opens a
- * pre-seeded conversation (optionally carrying a freeform steering note)
- * where the existing approval gates apply (email in particular keeps its
- * draft-card confirm step):
+ * HANDED TO CHAT, STEERED FIRST — SignalCard expands a ComposeStrip (a
+ * freeform note, optional) before any of these open a conversation; Confirm
+ * sends it as ActRequest.note, prepended ahead of TARS's own reasoning in
+ * the seeded prompt. Still lands behind the existing approval gates once in
+ * chat (email in particular keeps its draft-card confirm step):
  *   draft_reply      Draft reply / Draft chase email / Ask X for times
  *   move_event       Move <event> / Reschedule
  *   save_brain       Save to Second Brain
@@ -49,8 +50,10 @@ export type SignalActionKind =
   | "discuss"
 
 /** Kinds SignalCard shows an inline form for before committing (FORM_KINDS in
- *  SignalCard.tsx) — everything else either navigates (open_meeting) or
- *  opens a conversation. */
+ *  SignalCard.tsx). Chat-handoff kinds get their own intermediate step too
+ *  (COMPOSE_KINDS, a ComposeStrip) but don't commit anything server-side
+ *  directly, so they're not counted here. open_meeting is the only kind
+ *  with no intermediate step at all — pure navigation. */
 export const EXECUTED_KINDS: SignalActionKind[] = [
   "create_reminder",
   "create_task",
