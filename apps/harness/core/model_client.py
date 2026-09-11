@@ -1385,8 +1385,8 @@ _PROVIDER_DEFAULTS = {
     # (provider, tier) → default model name
     ("anthropic", "tier1"): "claude-haiku-4-5-20251001",
     ("anthropic", "tier2"): None,              # None → no override; uses model_override if set
-    ("anthropic", "tier3"): "claude-sonnet-4-6",
-    ("anthropic", "vision"): "claude-sonnet-4-6",
+    ("anthropic", "tier3"): "claude-sonnet-5",
+    ("anthropic", "vision"): "claude-sonnet-5",
     ("zai",       "tier1"): "glm-4.5-flash",   # free
     ("zai",       "tier2"): "glm-4.7",
     ("zai",       "tier3"): "glm-5.1",
@@ -1548,9 +1548,9 @@ class ModelClient:
                 # a Z.ai model name to the Anthropic API and 404'd every single
                 # request — silently breaking all of Tier 2 on any install using
                 # the default tier2_provider ("anthropic") without an override.
-                model = "claude-sonnet-4-6" if provider == "anthropic" else "glm-4.7"
+                model = "claude-sonnet-5" if provider == "anthropic" else "glm-4.7"
             else:
-                model = "claude-sonnet-4-6"
+                model = "claude-sonnet-5"
         return provider, model
 
     def _resolve_backup_pair(self, tier_key: str) -> Optional[tuple]:
@@ -1562,7 +1562,7 @@ class ModelClient:
         if not bm:
             bm = _PROVIDER_DEFAULTS.get((bp, tier_key))
         if not bm:
-            bm = "claude-sonnet-4-6" if bp == "anthropic" else "glm-4.7"
+            bm = "claude-sonnet-5" if bp == "anthropic" else "glm-4.7"
         return bp, bm
 
     async def _probe(self, provider: str, model: str) -> bool:
@@ -1763,7 +1763,7 @@ class ModelClient:
         # Use provided client (e.g. z.ai) or fall back to the default Anthropic client
         _client = client if client is not None else self.anthropic
         _is_zai = _client is not self.anthropic  # Z.ai doesn't support cache_control
-        model = model or "claude-sonnet-4-6"
+        model = model or "claude-sonnet-5"
         current_messages = list(messages)
         total_input = 0
         total_output = 0

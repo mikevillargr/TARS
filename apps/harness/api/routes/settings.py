@@ -163,9 +163,9 @@ class ModelRoutingUpdate(BaseModel):
 
 _PROVIDER_DEFAULTS = {
     ("anthropic", "tier1"):  "claude-haiku-4-5-20251001",
-    ("anthropic", "tier2"):  "claude-sonnet-4-6",
-    ("anthropic", "tier3"):  "claude-sonnet-4-6",
-    ("anthropic", "vision"): "claude-sonnet-4-6",
+    ("anthropic", "tier2"):  "claude-sonnet-5",
+    ("anthropic", "tier3"):  "claude-sonnet-5",
+    ("anthropic", "vision"): "claude-sonnet-5",
     ("zai",       "tier1"):  "glm-4.5-flash",   # free
     ("zai",       "tier2"):  "glm-4.7",
     ("zai",       "tier3"):  "glm-5.1",
@@ -187,7 +187,7 @@ def _resolved_model(tier_key: str) -> str:
     override = getattr(settings, f"{tier_key}_model_override", "")
     if override:
         return override
-    return _PROVIDER_DEFAULTS.get((provider, tier_key), "claude-sonnet-4-6")
+    return _PROVIDER_DEFAULTS.get((provider, tier_key), "claude-sonnet-5")
 
 
 def _resolved_backup(tier_key: str) -> tuple[str, str]:
@@ -197,7 +197,7 @@ def _resolved_backup(tier_key: str) -> tuple[str, str]:
         return "", ""
     bm = getattr(settings, f"{tier_key}_backup_model_override", "")
     if not bm:
-        bm = _PROVIDER_DEFAULTS.get((bp, tier_key), "claude-sonnet-4-6")
+        bm = _PROVIDER_DEFAULTS.get((bp, tier_key), "claude-sonnet-5")
     return bp, bm
 
 

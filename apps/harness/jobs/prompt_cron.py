@@ -537,7 +537,7 @@ async def execute(job_id: str) -> str | None:
             conversation_id=conv.id,
             role="assistant",
             content=full_response,
-            model_used=settings.tier3_model_override or ("glm-4.7" if settings.tier3_provider == "zai" else "claude-sonnet-4-6"),
+            model_used=settings.tier3_model_override or ("glm-4.7" if settings.tier3_provider == "zai" else "claude-sonnet-5"),
             tokens_used=cron_tokens_used,
             input_tokens=cron_input_tokens,
         )

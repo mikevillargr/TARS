@@ -389,7 +389,7 @@ async def ai_generate(
         _gen_model = _writing_override["model"]
     else:
         _gen_provider = settings.tier3_provider
-        _gen_model = settings.tier3_model_override or ("glm-4.7" if _gen_provider == "zai" else "claude-sonnet-4-6")
+        _gen_model = settings.tier3_model_override or ("glm-4.7" if _gen_provider == "zai" else "claude-sonnet-5")
 
     async def generate():
         try:

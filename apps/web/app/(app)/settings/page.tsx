@@ -80,7 +80,8 @@ type CategoryRouting = Record<CategoryKey, CategoryConfig>
 const ANTHROPIC_MODELS = [
   { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (fast)" },
   { value: "claude-sonnet-4-6",         label: "Claude Sonnet 4.6" },
-  { value: "claude-opus-4-8",           label: "Claude Opus 4.8 (frontier)" },
+  { value: "claude-sonnet-5",           label: "Claude Sonnet 5" },
+  { value: "claude-opus-5",             label: "Claude Opus 5 (frontier)" },
 ]
 
 const ZAI_MODELS = [
@@ -112,7 +113,7 @@ const ZAI_VISION_MODELS = [
 ]
 
 const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
-  anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-4-6", tier3: "claude-sonnet-4-6", vision: "claude-sonnet-4-6" },
+  anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-5", tier3: "claude-sonnet-5", vision: "claude-sonnet-5" },
   zai:       { tier1: "glm-4.5-flash",             tier2: "glm-4.7",           tier3: "glm-5.1",           vision: "glm-5v-turbo" },
 }
 
@@ -181,9 +182,9 @@ export default function SettingsPage() {
   const blankTier = (model: string): TierConfig => ({ provider: "anthropic", model, backupProvider: "", backupModel: "" })
   const [routing, setRouting]   = useState<ModelRouting>({
     tier1:  blankTier("claude-haiku-4-5-20251001"),
-    tier2:  blankTier("claude-sonnet-4-6"),
-    tier3:  blankTier("claude-sonnet-4-6"),
-    vision: blankTier("claude-sonnet-4-6"),
+    tier2:  blankTier("claude-sonnet-5"),
+    tier3:  blankTier("claude-sonnet-5"),
+    vision: blankTier("claude-sonnet-5"),
   })
   const [routingSaving, setRoutingSaving] = useState(false)
   const [routingSaved,  setRoutingSaved]  = useState(false)
