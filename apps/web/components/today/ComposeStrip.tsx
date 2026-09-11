@@ -8,6 +8,16 @@
  * handoff, so the seeded prompt carries what Mike actually wants done
  * instead of TARS's own inference alone.
  *
+ * The note field is a MentionTextarea (since v2.19.7) — @-mentioning a
+ * contact works here the same as everywhere else in the app. What that
+ * mention DOES depends on where the note ends up: for email-sourced
+ * draft_reply (DraftReplyResolver's in-card path), a mentioned contact
+ * becomes a real CC on the generated draft (_cc_from_mentions,
+ * api/routes/signals.py) — not just prose the model might notice. For
+ * every other kind, the note is handed to chat with markers stripped to
+ * plain labels; TARS reads "loop in Jane Doe" but doesn't act on it as a
+ * structured recipient the way the in-card path does.
+ *
  * Shares FormShell/fieldStyle with InlineActionForm so the two intermediate
  * steps read as one system, not two different UIs bolted together.
  */
@@ -15,9 +25,10 @@
 import { useState } from "react"
 import type { SignalAction, SignalActionKind } from "@/lib/signals"
 import { FormShell, fieldStyle } from "@/components/today/InlineActionForm"
+import { MentionTextarea } from "@/components/ui/MentionTextarea"
 
 const PLACEHOLDER: Partial<Record<SignalActionKind, string>> = {
-  draft_reply: 'Anything to add? e.g. "yes to Thursday, push scope to next week"',
+  draft_reply: 'Anything to add? e.g. "yes to Thursday" — @mention someone to CC',
   move_event: 'Anything to add? e.g. "propose next Tuesday afternoon instead"',
   save_brain: "Add a note (optional)",
   discuss: "What do you want to ask?",
@@ -26,6 +37,8 @@ const PLACEHOLDER: Partial<Record<SignalActionKind, string>> = {
 interface ComposeStripProps {
   action: SignalAction
   onCancel: () => void
+  /** Wire-format text ([[id|type|label]] markers intact) — the harness
+   *  resolves mentions from this before use; see the module doc above. */
   onConfirm: (note: string) => void
 }
 
@@ -34,10 +47,10 @@ export function ComposeStrip({ action, onCancel, onConfirm }: ComposeStripProps)
 
   return (
     <FormShell onCancel={onCancel} confirmLabel={action.label} onConfirm={() => onConfirm(note.trim())}>
-      <textarea
+      <MentionTextarea
         autoFocus
         value={note}
-        onChange={(e) => setNote(e.target.value)}
+        onChange={setNote}
         placeholder={PLACEHOLDER[action.kind] ?? "Anything to add? (optional)"}
         rows={2}
         className="w-full text-[0.8125rem] rounded-md px-2.5 py-1.5 outline-none resize-none"

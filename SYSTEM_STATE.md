@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.6 |
+| Version | v2.19.7 |
 | Released | 2026-09-11 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,29 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.7 — 2026-09-11
+**Feature: @-mention support in Today's ComposeStrip, with real recipient resolution for
+email-sourced draft_reply**
+- `ComposeStrip`'s note field was a plain textarea — `@` did nothing, despite the rest of
+  the app (chat, Tasks, Mnemon, Calendar) supporting mentions universally. Swapped to
+  `MentionTextarea`, the same drop-in component those surfaces already use.
+- For email-sourced `draft_reply` specifically, @-mentioning a contact in the note now adds
+  them as a **real CC** on the generated draft — new `_cc_from_mentions`
+  (`api/routes/signals.py`) resolves mentioned contact ids against the `Contact` table for
+  an email address, rather than leaving it to the model to maybe notice a name in free text.
+- For every other kind (calendar-sourced "Ask to reschedule", `save_brain`, `discuss`),
+  mention markers are stripped to plain labels before reaching the seeded chat prompt — the
+  same "no raw id/type soup in a prompt" rule already applied to fact-extraction/title-gen.
+- New `core/mentions.py` promotes the `[[id|type|label]]` regex/strip/extract helpers out of
+  a module-private spot in `api/routes/chat.py` (which keeps its own richer
+  `_resolve_mentions`, with full entity-context injection, for the live composer) so
+  `signals.py` could reuse them without importing a private name across route files.
+  `chat.py`'s `_MENTION_RE`/`_strip_mention_markers` now delegate there instead of keeping a
+  second copy of the regex.
+- Harness + web, no schema change.
+
+---
 
 ### v2.19.6 — 2026-09-11
 **Fix: Today's meeting-list video icons were purely decorative**

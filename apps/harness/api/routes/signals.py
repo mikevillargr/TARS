@@ -49,7 +49,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import require_auth
-from db.models import Signal, Task, Reminder, Conversation, Message, Connector
+from core.mentions import extract_mentions, strip_mention_markers
+from db.models import Signal, Task, Reminder, Conversation, Message, Connector, Contact
 from db.session import get_db
 
 router = APIRouter()
@@ -87,14 +88,18 @@ class ActRequest(BaseModel):
     # Freeform steering for the kinds still handed to chat (save_brain,
     # discuss, and calendar-sourced draft_reply) — prepended to the seeded
     # prompt as Mike's own instruction rather than left for the model to
-    # infer from the card alone.
+    # infer from the card alone. May contain [[id|type|label]] mention
+    # markers (ComposeStrip is a MentionTextarea) — stripped to plain labels
+    # before reaching the prompt; see _seed_conversation.
     note: Optional[str] = None
 
 
 class DraftRequest(BaseModel):
     # Same steering note as ActRequest.note, for the one action kind
     # (email-sourced draft_reply) that resolves in-card instead of going
-    # through /act at all — see POST /{signal_id}/draft.
+    # through /act at all — see POST /{signal_id}/draft. A @-mentioned
+    # contact here becomes a real CC on the generated draft (_cc_from_mentions),
+    # not just prose the model might notice.
     note: Optional[str] = None
 
 
@@ -176,9 +181,14 @@ async def _seed_conversation(
         lines += ["", f"Context: {payload}"]
     # Mike's own steering, typed in the card before handing off — leads with
     # explicit priority over the reasoning above, which is TARS's inference,
-    # not an instruction.
+    # not an instruction. Markers stripped to plain labels (not just left as
+    # wire text): this message is inserted straight into history rather than
+    # going through the live-composer send path, so there's no guarantee
+    # _resolve_mentions ever runs on it before a model reads it — same
+    # "don't feed raw id/type soup into a prompt" rule as everywhere else
+    # that handles mention text server-side.
     if note and note.strip():
-        lines += ["", f"**Mike's direction:** {note.strip()}"]
+        lines += ["", f"**Mike's direction:** {strip_mention_markers(note.strip())}"]
 
     conv = Conversation(user_id=user_id, title=sig.title[:80])
     db.add(conv)
@@ -351,10 +361,18 @@ async def _generate_reply_draft(
     if not subject.lower().startswith("re:"):
         subject = f"Re: {subject}"
 
+    # @-mentioning a contact in the steering note adds them as a real CC —
+    # resolved from the Contacts graph here, not left for the model to maybe
+    # notice a name in prose and maybe do something useful with it. Extracted
+    # from the note BEFORE stripping, since stripping is exactly what throws
+    # the id away.
+    cc = await _cc_from_mentions(note, db, user_id)
+
     thread_text = extract_thread_text(thread)
     prompt = f"Thread:\n{thread_text[-6000:]}\n\n"
-    if note and note.strip():
-        prompt += f"Mike's direction: {note.strip()}\n\n"
+    clean_note = strip_mention_markers(note).strip() if note else ""
+    if clean_note:
+        prompt += f"Mike's direction: {clean_note}\n\n"
     prompt += "Write Mike's reply."
 
     from core.model_client import complete_text
@@ -368,10 +386,37 @@ async def _generate_reply_draft(
         "to": reply_to,
         "subject": subject,
         "body": body.strip(),
-        "cc": None,
+        "cc": cc,
         "thread_id": sig.source_ref,
         "account": "work",  # detect_actionable_emails is work-Gmail-only (v2.18.0 scope note)
     }
+
+
+async def _cc_from_mentions(
+    note: Optional[str], db: AsyncSession, user_id: str
+) -> Optional[str]:
+    """
+    Resolve @-mentioned contacts in a steering note into real CC addresses.
+    Non-contact mentions (a task, a knowledge item) are ignored here — they
+    still reach the model as plain text via strip_mention_markers, just
+    don't mean anything as a recipient. A mentioned contact with no email on
+    file is silently skipped rather than raising: better to draft without
+    them than to block the whole draft over one incomplete contact record.
+    """
+    if not note:
+        return None
+    emails: List[str] = []
+    seen: set = set()
+    for mention in extract_mentions(note):
+        if mention.type != "contact":
+            continue
+        contact = await db.get(Contact, mention.id)
+        if contact and contact.user_id == user_id and contact.primary_email:
+            email = contact.primary_email.strip().lower()
+            if email not in seen:
+                seen.add(email)
+                emails.append(contact.primary_email.strip())
+    return ", ".join(emails) if emails else None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
