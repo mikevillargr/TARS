@@ -39,17 +39,9 @@ from core.model_client import (
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
+from core.mentions import MENTION_RE as _MENTION_RE, strip_mention_markers as _strip_mention_markers
 from db.session import get_db, AsyncSessionLocal
 from db.models import Conversation, Message, User, Task, Artifact, Reminder
-
-_MENTION_RE = _re.compile(r'\[\[([^\]|]+)\|([^\]|]+)\|([^\]]+)\]\]')
-
-
-def _strip_mention_markers(text: str) -> str:
-    """Replace [[id|type|label]] with just the human-readable label — for feeding
-    into small utility prompts (title/fact-extraction) that have no use for the
-    raw entity id and would otherwise see literal id/type soup in the transcript."""
-    return _MENTION_RE.sub(lambda m: m.group(3), text)
 
 
 async def _resolve_mentions(content: str, user_id: str, db: AsyncSession) -> tuple[str, list[str]]:

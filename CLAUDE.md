@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.6 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.7 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -460,12 +460,19 @@ chat conversation.
     acted-on signal; sending is a separate step after. The action row can't swap or close
     this out from under the review once a draft has actually been generated (`draftCommitted`
     in `SignalCard.tsx`) — only the resolver's own Cancel/Discard/Send gets you out.
+    @-mentioning a contact in the steering note (since v2.19.7) adds them as a real CC on
+    the generated draft — resolved server-side (`_cc_from_mentions`), not left for the model
+    to notice a name in prose.
   - `draft_reply` (calendar-sourced, "Ask to reschedule") / `save_brain` / `discuss` expand
     the same `ComposeStrip` (since v2.19.4) but hand off to a pre-seeded chat conversation
     instead — these still need real composition or judgement chat already does well (a
     reschedule request is a NEW email to an attendee, not a reply, and needs the same
     who-to-address judgement chat applies via the Contacts graph). Confirm sends the note as
-    `ActRequest.note`, surfaced ahead of TARS's own reasoning in the seeded message.
+    `ActRequest.note`, surfaced ahead of TARS's own reasoning in the seeded message — mention
+    markers stripped to plain labels first, same rule as everywhere else mention text reaches
+    a prompt server-side.
+  - `ComposeStrip`'s note field is a `MentionTextarea` (since v2.19.7) — @-mentioning a
+    contact, task, or knowledge item works the same as in chat, Tasks, or Mnemon.
 - Dismiss and snooze are recoverable — 5s undo bar with a draining hairline; cleared/snoozed
   are visitable states, not a void
 - Swipe left to dismiss, right to snooze — works on touch and on trackpad (wheel deltaX)
@@ -710,6 +717,9 @@ tars/
 │   │   │   ├── router.py       # tier classification
 │   │   │   ├── context_assembler.py
 │   │   │   ├── model_client.py # Ollama + Anthropic unified
+│   │   │   ├── mentions.py     # [[id|type|label]] regex/strip/extract, shared
+│   │   │   │                   # across routes (chat.py's own _resolve_mentions
+│   │   │   │                   # builds on top for entity-context injection)
 │   │   │   └── streaming.py
 │   │   ├── memory/
 │   │   │   ├── mnemon.py
@@ -1054,6 +1064,23 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.7 Feature: @-mention support in Today's ComposeStrip, with real recipient resolution
+        for email-sourced draft_reply. ComposeStrip's note field was a plain textarea — @
+        did nothing, despite the rest of the app (chat, Tasks, Mnemon, Calendar) supporting
+        mentions universally since v2.9.x/v2.11.0. Swapped to MentionTextarea (same drop-in
+        component those surfaces use). For email-sourced draft_reply specifically,
+        @-mentioning a contact in the note now adds them as a real CC on the generated draft
+        — new _cc_from_mentions (api/routes/signals.py) resolves mentioned contact ids
+        against the Contacts table for an email, not left for the model to maybe notice a
+        name in free text. For every other kind (calendar-sourced "Ask to reschedule",
+        save_brain, discuss), mention markers are stripped to plain labels before reaching
+        the seeded chat prompt — same "no raw id/type soup in a prompt" rule as
+        fact-extraction/title-gen (v2.18.9). New core/mentions.py promotes the mention
+        regex/strip/extract helpers out of a module-private spot in api/routes/chat.py
+        (which keeps its own richer _resolve_mentions, with full entity-context injection,
+        for the live composer) so signals.py could reuse them without importing a private
+        name across route files; chat.py's _MENTION_RE/_strip_mention_markers now delegate
+        there instead of keeping a second copy. Harness + web, no schema change.
 v2.19.6 Fix: Today's right-rail "today" event list showed a video-call icon on every event
         regardless of whether it actually had one — purely decorative, did nothing on click.
         New extract_meeting_url (connectors/google_calendar.py) resolves a real join link per
