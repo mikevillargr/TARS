@@ -17,12 +17,17 @@ import {
   type SignalActionKind,
 } from "@/lib/signals"
 import { InlineActionForm } from "@/components/today/InlineActionForm"
+import { ComposeStrip } from "@/components/today/ComposeStrip"
 
 // Actions whose outcome is worth editing before it's created — the payload
-// the detector proposed is a draft, not a decision. Everything else either
-// executes with nothing to negotiate (open_meeting is pure navigation) or
-// needs actual composition, which is chat's job, not a form field's.
+// the detector proposed is a draft, not a decision.
 const FORM_KINDS = new Set<SignalActionKind>(["create_reminder", "create_task", "create_event"])
+
+// Actions handed to chat because they need actual composition or judgement —
+// not editable inline, but still worth a chance to steer before handoff
+// rather than trusting TARS's inference alone. open_meeting is the only kind
+// with no intermediate step at all: pure navigation, nothing to negotiate.
+const COMPOSE_KINDS = new Set<SignalActionKind>(["draft_reply", "move_event", "save_brain", "discuss"])
 
 // Small provenance icon per source — same accent color as the source label,
 // so scanning the header row doesn't need to read the text first.
@@ -93,10 +98,14 @@ type SwipeIntent = "dismiss" | "snooze" | null
 
 interface SignalCardProps {
   signal: Signal
+  // Fires for open_meeting — the one kind with no intermediate step.
   onAct: (signal: Signal, action: SignalAction) => void
   // Fires when the inline form for a FORM_KINDS action is confirmed — carries
   // whatever Mike edited, to be merged server-side over the action's payload.
   onResolve: (signal: Signal, action: SignalAction, override: Record<string, unknown>) => void
+  // Fires when a COMPOSE_KINDS strip is confirmed — carries the steering note
+  // (possibly empty) to prepend ahead of TARS's reasoning in the seeded chat.
+  onCompose: (signal: Signal, action: SignalAction, note: string) => void
   onSnooze: (id: string) => void
   onDismiss: (id: string) => void
   onAddToCalendar: (signal: Signal) => void
@@ -106,6 +115,7 @@ export function SignalCard({
   signal,
   onAct,
   onResolve,
+  onCompose,
   onSnooze,
   onDismiss,
   onAddToCalendar,
@@ -113,9 +123,10 @@ export function SignalCard({
   const [showWhy, setShowWhy] = useState(false)
   const [dx, setDx] = useState(0)
   const [leaving, setLeaving] = useState<SwipeIntent>(null)
-  // Which action's inline form is expanded, if any. Only one at a time — the
-  // dropdown's alternates and the primary button share this same slot.
-  const [formAction, setFormAction] = useState<SignalAction | null>(null)
+  // Which action's inline step (form or compose strip) is expanded, if any.
+  // Only one at a time — the dropdown's alternates and the primary button
+  // share this same slot.
+  const [expandedAction, setExpandedAction] = useState<SignalAction | null>(null)
 
   const start = useRef<{ x: number; y: number } | null>(null)
   const axis = useRef<"x" | "y" | null>(null)
@@ -129,14 +140,14 @@ export function SignalCard({
   const SourceIcon = SOURCE_ICON[signal.source]
   const [primary, ...alternates] = signal.actions
 
-  /** Toggles the inline form for FORM_KINDS actions; fires immediately (or
-   *  hands off to chat) for everything else, same as before this existed. */
+  /** Toggles the inline step for FORM_KINDS/COMPOSE_KINDS actions; fires
+   *  immediately for open_meeting, the only kind with nothing to show. */
   const handleActionClick = useCallback((action: SignalAction) => {
-    if (FORM_KINDS.has(action.kind)) {
-      setFormAction(prev => (prev?.kind === action.kind ? null : action))
+    if (FORM_KINDS.has(action.kind) || COMPOSE_KINDS.has(action.kind)) {
+      setExpandedAction(prev => (prev?.kind === action.kind ? null : action))
       return
     }
-    setFormAction(null)
+    setExpandedAction(null)
     onAct(signal, action)
   }, [onAct, signal])
 
@@ -374,9 +385,9 @@ export function SignalCard({
             style={{
               backgroundColor: "var(--c-moss)",
               color: "var(--c-canvas)",
-              opacity: formAction && formAction.kind !== primary.kind ? 0.6 : 1,
+              opacity: expandedAction && expandedAction.kind !== primary.kind ? 0.6 : 1,
             }}
-            aria-expanded={formAction?.kind === primary.kind}
+            aria-expanded={expandedAction?.kind === primary.kind}
           >
             {primary.label}
           </button>
@@ -460,14 +471,28 @@ export function SignalCard({
 
         {/* Inline form — the intermediate step for actions worth editing
             before they exist. Replaces "click → it's already been created". */}
-        {formAction && (
+        {expandedAction && FORM_KINDS.has(expandedAction.kind) && (
           <InlineActionForm
             signal={signal}
-            action={formAction}
-            onCancel={() => setFormAction(null)}
+            action={expandedAction}
+            onCancel={() => setExpandedAction(null)}
             onConfirm={(override) => {
-              onResolve(signal, formAction, override)
-              setFormAction(null)
+              onResolve(signal, expandedAction, override)
+              setExpandedAction(null)
+            }}
+          />
+        )}
+
+        {/* Compose strip — the intermediate step for actions handed to chat.
+            Replaces "click → the whole card gets dumped into a new
+            conversation with no chance to steer it first". */}
+        {expandedAction && COMPOSE_KINDS.has(expandedAction.kind) && (
+          <ComposeStrip
+            action={expandedAction}
+            onCancel={() => setExpandedAction(null)}
+            onConfirm={(note) => {
+              onCompose(signal, expandedAction, note)
+              setExpandedAction(null)
             }}
           />
         )}

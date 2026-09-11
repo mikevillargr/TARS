@@ -225,16 +225,22 @@ export default function TodayPage() {
 
   /**
    * Shared commit path for every way a signal can be acted on — a direct
-   * click, and a form's Confirm. Optimistic removal + undo + navigation all
-   * live here once, so the two callers below can't drift.
+   * click, a form's Confirm, and a compose strip's Confirm. Optimistic
+   * removal + undo + navigation all live here once, so the three callers
+   * below can't drift.
    */
   const commit = useCallback(
-    async (signal: Signal, action: SignalAction, payloadOverride?: Record<string, unknown>) => {
+    async (
+      signal: Signal,
+      action: SignalAction,
+      payloadOverride?: Record<string, unknown>,
+      note?: string,
+    ) => {
       const snapshot = signals
       removeLocally(signal.id)
       recordTally("acted")
       try {
-        const res = await actOnSignal(signal.id, action.kind, { payloadOverride })
+        const res = await actOnSignal(signal.id, action.kind, { payloadOverride, note })
         // open_meeting is pure navigation — it never actually needed chat,
         // it just used to fall through to the conversation handoff below
         // because nothing claimed it first.
@@ -265,6 +271,12 @@ export default function TodayPage() {
   const handleResolve = useCallback(
     (signal: Signal, action: SignalAction, override: Record<string, unknown>) =>
       commit(signal, action, override),
+    [commit],
+  )
+
+  const handleCompose = useCallback(
+    (signal: Signal, action: SignalAction, note: string) =>
+      commit(signal, action, undefined, note),
     [commit],
   )
 
@@ -417,6 +429,7 @@ export default function TodayPage() {
                             signal={signal}
                             onAct={handleAct}
                             onResolve={handleResolve}
+                            onCompose={handleCompose}
                             onSnooze={handleSnooze}
                             onDismiss={handleDismiss}
                             onAddToCalendar={handleAddToCalendar}

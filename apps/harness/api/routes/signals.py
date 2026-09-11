@@ -20,11 +20,14 @@ Dispatch splits deliberately in three:
 
   · Handed to chat — anything requiring actual composition or judgement
     (drafting a reply, rescheduling around other commitments, digging through
-    a transcript). These open a pre-seeded conversation, optionally carrying
-    Mike's own steering note (ActRequest.note), which puts them behind the
-    approval gates that already exist there — email in particular must keep
-    its draft-card confirm step (v2.12.1/v2.12.2), and re-implementing that
-    here would be a second, weaker gate.
+    a transcript). The card's ComposeStrip collects a freeform steering note
+    before handoff — not editable payload like the first tier, since there's
+    nothing structured to edit, but still a real intermediate step rather
+    than firing straight to chat. Sent as ActRequest.note, prepended ahead of
+    the reasoning already in the seeded prompt. These conversations sit
+    behind the approval gates that already exist there — email in particular
+    must keep its draft-card confirm step (v2.12.1/v2.12.2), and
+    re-implementing that here would be a second, weaker gate.
 """
 import asyncio
 from datetime import datetime, timedelta, timezone

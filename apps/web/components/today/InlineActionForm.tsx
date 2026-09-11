@@ -27,8 +27,10 @@ interface InlineActionFormProps {
 }
 
 // ─── Shared bits ─────────────────────────────────────────────────────────────
+// Exported so ComposeStrip.tsx (the equivalent intermediate step for the
+// chat-handoff kinds) can match this look exactly instead of duplicating it.
 
-function FormShell({
+export function FormShell({
   onCancel,
   onConfirm,
   confirmDisabled,
@@ -75,7 +77,7 @@ function FormShell({
   )
 }
 
-const fieldStyle: React.CSSProperties = {
+export const fieldStyle: React.CSSProperties = {
   backgroundColor: "var(--c-surface)",
   border: "1px solid var(--c-border)",
   color: "var(--c-ink)",

@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.3 |
+| Version | v2.19.4 |
 | Released | 2026-09-11 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,28 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.4 — 2026-09-11
+**Feature: the v2.19.3 inline-action-step extended to the chat-handoff kinds**
+- `draft_reply` / `move_event` / `save_brain` / `discuss` — the four action kinds that hand a
+  signal off to a pre-seeded chat conversation — now expand a `ComposeStrip`
+  (`components/today/ComposeStrip.tsx`) first, matching the intermediate-step pattern
+  `InlineActionForm` established for `create_reminder`/`create_task`/`create_event` in
+  v2.19.3. There's nothing structured to edit for these kinds (no title, no due date — the
+  work is composition, which stays chat's job), so the strip is a single freeform note field
+  (optional, with a per-kind placeholder) rather than a full form.
+- Confirm sends the note as `ActRequest.note` — the field itself was added in v2.19.3 as
+  forward-looking plumbing but stayed unused, since nothing in the frontend called a
+  chat-handoff action with a note yet. This is what it was for.
+- `ComposeStrip` shares `InlineActionForm`'s `FormShell`/`fieldStyle` (now exported) so the
+  two intermediate-step UIs read as one system rather than two separately-designed ones.
+- Completes the action matrix started in v2.19.3: every kind except `open_meeting` (pure
+  navigation, nothing to negotiate) now gets a real intermediate step before anything fires —
+  `InlineActionForm` for the three that commit directly, `ComposeStrip` for the four that
+  hand off to chat.
+- Web-only, no schema change.
+
+---
 
 ### v2.19.3 — 2026-09-11
 **Feature: Today card actions get an intermediate step before they commit — inline forms,

@@ -203,19 +203,34 @@ deploy workflows (`deploy-web.yml` / `deploy-harness.yml`) and are reserved for 
 explicitly says "release" — see `CLAUDE.md` §12 for that process. Day-to-day changes deploy via
 the manual SSH commands above, immediately after merging to `main`.
 
-**Reality check (verified against GitHub, 2026-09-07):**
-- The tag-triggered deploy pipeline is **dormant in practice**. The last real tag/release is
-  `v2.13.4` (2026-06-22) even though the product changelog has moved through `v2.15.12` since —
-  every one of those releases shipped via the manual SSH commands, not a tag push. Treat the
-  manual SSH path as the actual production deploy mechanism today; tags are for the rare explicit
-  "release" moment, not routine shipping.
-- **`ci.yml` (lint + typecheck) has been failing on every push to `main` since at least
-  2026-06-29** — real ESLint errors in `apps/web` (e.g. `apps/web/hooks/useTtsPlayback.ts:56`,
-  `playNext` used before declaration), not a broken workflow config. Nothing currently gates on
-  this passing, so it's been silently red for months. Don't treat a green local `tsc --noEmit` as
-  proof CI would pass — it won't, on `main`'s current lint state, until someone fixes the existing
-  errors. This is a known, unfixed pre-existing condition, not something introduced by your change
-  — but if you touch a file with existing lint errors, clean up what's in your diff.
+**Reality check (verified against GitHub, 2026-09-11 — corrects the 2026-09-07 note below this
+line, which was wrong by the time it was written and should not be trusted):**
+- The tag-triggered deploy pipeline is **live and working**, not dormant. Pushing a `vX.Y.Z` tag
+  fires three workflows — `Release` (creates the GitHub Release, always runs), `Deploy Web`, and
+  `Deploy Harness` (each diffs the tag against the previous tag and only SSHes in if its half of
+  the monorepo actually changed, via `infrastructure/scripts/deploy.sh <web|harness> main`).
+  Confirmed via the GitHub API for both `v2.19.1` (2026-09-09) and `v2.19.3` (2026-09-11): all
+  three workflows completed successfully. **Tags do deploy — do not assume otherwise, and do not
+  tell Mike a tag push "probably won't deploy anything" without checking the Actions API first.**
+  The old note below claiming the last real deploy was `v2.13.4` was stale/incorrect when read.
+- **`ci.yml` (lint + typecheck) is still failing on every push to `main`** as of 2026-09-11 — real
+  ESLint errors in `apps/web` (e.g. `apps/web/hooks/useTtsPlayback.ts:56`, `playNext` used before
+  declaration), not a broken workflow config. This is separate from the deploy workflows above —
+  `ci.yml` triggers only on branch pushes and gates nothing, so its red status has no effect on
+  whether a tag push actually deploys. Don't treat a green local `tsc --noEmit` as proof CI would
+  pass — it won't, on `main`'s current lint state, until someone fixes the existing errors. Known,
+  unfixed, pre-existing — but clean up what's in your diff if you touch an already-red file.
+- Since the deploy pipeline is confirmed live: after pushing a tag, verify the actual outcome
+  (`https://api.github.com/repos/mikevillargr/TARS/actions/runs` — no auth needed, or check
+  `https://github.com/mikevillargr/TARS/actions`) rather than assuming success or failure either
+  way. The workflows commonly take a few minutes; `Deploy Web`/`Deploy Harness` skip their SSH
+  step entirely (and report success) when a tag's diff touches neither `apps/web/`+`packages/`
+  nor `apps/harness/` respectively — a "success" doesn't always mean an SSH deploy ran.
+
+**Superseded note (2026-09-07 — kept only so nobody re-adds it; see corrected reality check
+above):** ~~The tag-triggered deploy pipeline is dormant in practice. The last real tag/release is
+v2.13.4 (2026-06-22)...~~ This was wrong — confirmed real, successful tag-triggered deploys both
+before and after this date.
 
 ## 7. Versioning & Docs — Update On Every Production Change
 
