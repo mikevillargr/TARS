@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.1 |
-| Released | 2026-09-09 |
+| Version | v2.19.2 |
+| Released | 2026-09-11 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -163,6 +163,20 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.2 — 2026-09-11
+**Fix: Contacts page crushed on mobile — no responsive master-detail behavior**
+- The Contacts page (`/contacts`) rendered a fixed two-column flex layout (320px list +
+  flex:1 detail) unconditionally, with no mobile breakpoint handling at all. On a narrow
+  viewport the detail panel was squeezed into whatever space was left after the
+  260-360px-wide list sidebar, rendering it unreadably crushed.
+- Fixed with the same `useIsMobile` hook (768px breakpoint) already used elsewhere in the
+  app (Second Brain, Feed): below the breakpoint, only one panel renders at a time,
+  full-width — the contact list when nothing is selected, the detail panel (with a new
+  back button) once a contact is selected. Desktop layout unchanged.
+- Web-only, no schema change.
+
+---
 
 ### v2.19.1 — 2026-09-09
 **Fix: owner filter tightened to a strict allowlist; confirmed the v2.19.0 retirement closed
