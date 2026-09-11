@@ -407,7 +407,18 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
             ),
             citation=f"Calendar · {when}",
             actions=[
-                {"kind": "move_event", "label": f"Move {a_title[:28]}"},
+                {
+                    "kind": "move_event",
+                    "label": f"Move {a_title[:28]}",
+                    # account/duration_min let the card's date/time picker
+                    # PATCH the right calendar with a sensible default
+                    # duration; current_start pre-fills the picker.
+                    "payload": {
+                        "account": a_acct,
+                        "current_start": a_start.isoformat(),
+                        "duration_min": int((a_end - a_start).total_seconds() // 60),
+                    },
+                },
                 {"kind": "draft_reply", "label": "Ask to reschedule"},
             ],
         ))
@@ -433,22 +444,12 @@ def _extract_json_object(text: str) -> dict:
 
 
 async def _complete(system: str, prompt: str, max_tokens: int = 900) -> str:
-    """Collect a non-streaming completion off the streaming client."""
-    from core.model_client import get_model_client, ModelTier
+    """Thin wrapper — implementation moved to core.model_client.complete_text
+    (v2.19.5) so api/routes/signals.py's in-card draft generation could reuse
+    it without importing a module-private name across files."""
+    from core.model_client import complete_text
 
-    client = get_model_client()
-    parts: list[str] = []
-    async for event in client.stream(
-        messages=[{"role": "user", "content": prompt}],
-        tier=ModelTier.TIER2,
-        system=system,
-        max_tokens=max_tokens,
-    ):
-        if event.get("type") == "chunk":
-            parts.append(event.get("text", ""))
-        elif event.get("type") == "error":
-            raise RuntimeError(event.get("error", "model error"))
-    return "".join(parts)
+    return await complete_text(system, prompt, max_tokens=max_tokens)
 
 
 # Populated per-sweep so a broken model tier surfaces in the result instead of

@@ -2140,3 +2140,29 @@ def get_model_client() -> ModelClient:
     if not _client:
         _client = ModelClient()
     return _client
+
+
+async def complete_text(
+    system: str, prompt: str, tier: "ModelTier" = ModelTier.TIER2, max_tokens: int = 900
+) -> str:
+    """
+    Collect a non-streaming completion off the streaming client.
+
+    Promoted out of jobs/signal_generator.py (where it started as a
+    module-private helper for the email-actionability judgement) so
+    api/routes/signals.py's in-card draft generation could reuse it without
+    importing a private name across modules.
+    """
+    client = get_model_client()
+    parts: list[str] = []
+    async for event in client.stream(
+        messages=[{"role": "user", "content": prompt}],
+        tier=tier,
+        system=system,
+        max_tokens=max_tokens,
+    ):
+        if event.get("type") == "chunk":
+            parts.append(event.get("text", ""))
+        elif event.get("type") == "error":
+            raise RuntimeError(event.get("error", "model error"))
+    return "".join(parts)

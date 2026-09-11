@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.4 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.5 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -438,20 +438,33 @@ chat conversation.
 - Each card: source badge + age, imperative title, one specifically-named primary action
   (never "Approve"), alternates behind an overflow menu, collapsible `why` with reasoning +
   citation, snooze, dismiss
-- Action dispatch, by kind (since v2.19.3) — three tiers, not two:
-  - `create_reminder` / `create_task` / `create_event` expand an inline form
-    (`InlineActionForm`) in the card before committing — editable text/title/description,
-    due-date/priority chips, and for events a date/time/duration/calendar picker. A grouped
-    batch signal (one card per meeting, not per item — see Generation below) offers a
-    per-item checklist for `create_task` instead of one bundled task or a wall of cards.
-    Confirm sends the edits as `payload_override`, merged server-side over the action's
-    payload; nothing commits on the raw click anymore.
+- Action dispatch, by kind — four tiers, from "nothing to negotiate" to "needs real judgement".
+  Every kind gets a real intermediate step except `open_meeting`:
+  - `create_reminder` / `create_task` / `create_event` / `move_event` (since v2.19.3;
+    `move_event` moved into this tier in v2.19.5) expand an inline form (`InlineActionForm`)
+    in the card before committing — editable text/title/description, due-date/priority chips,
+    a date/time/duration/calendar picker for events, or (for `move_event`) just a new date/
+    time to PATCH the conflicting event to, no LLM involved. A grouped batch signal (one card
+    per meeting, not per item — see Generation below) offers a per-item checklist for
+    `create_task` instead of one bundled task or a wall of cards. Confirm sends the edits as
+    `payload_override`, merged server-side over the action's payload.
   - `open_meeting` is pure navigation (`source_ref` is already the task/meeting id) — no
     form, no conversation, just a route computed server-side and pushed to.
-  - `draft_reply` / `move_event` / `save_brain` / `discuss` expand a `ComposeStrip` (since
-    v2.19.4) — a freeform note field, optional — before handing off to a pre-seeded chat
-    conversation; composition/judgement still stays chat's job, the strip only adds a chance
-    to steer before the card's contents get dumped into a prompt. Confirm sends the note as
+  - `draft_reply` resolves **in-card** (since v2.19.5) when the signal actually has an email
+    thread behind it (`signal.source === "gmail"`) — `ComposeStrip` collects an optional
+    steering note, then `DraftReplyResolver` calls `POST /signals/{id}/draft` (Tier 2, given
+    the real thread) and renders the result as the same `EmailDraftCard` chat uses (extracted
+    to `components/chat/EmailDraftCard.tsx` so both surfaces share one component), editable
+    and sent via the existing `/email/confirm-send` gate — no conversation ever created. The
+    signal is marked done the moment the draft exists, same convention as every other
+    acted-on signal; sending is a separate step after. The action row can't swap or close
+    this out from under the review once a draft has actually been generated (`draftCommitted`
+    in `SignalCard.tsx`) — only the resolver's own Cancel/Discard/Send gets you out.
+  - `draft_reply` (calendar-sourced, "Ask to reschedule") / `save_brain` / `discuss` expand
+    the same `ComposeStrip` (since v2.19.4) but hand off to a pre-seeded chat conversation
+    instead — these still need real composition or judgement chat already does well (a
+    reschedule request is a NEW email to an attendee, not a reply, and needs the same
+    who-to-address judgement chat applies via the Contacts graph). Confirm sends the note as
     `ActRequest.note`, surfaced ahead of TARS's own reasoning in the seeded message.
 - Dismiss and snooze are recoverable — 5s undo bar with a draining hairline; cleared/snoozed
   are visitable states, not a void
@@ -660,9 +673,11 @@ tars/
 │   │   │   │   └── settings/
 │   │   │   └── api/            # thin proxy to harness
 │   │   ├── components/
-│   │   │   ├── today/          # SignalCard, InlineActionForm, ComposeStrip, AmbientField
+│   │   │   ├── today/          # SignalCard, InlineActionForm, ComposeStrip,
+│   │   │   │                   # DraftReplyResolver, AmbientField
 │   │   │   ├── shell/          # sidebar, topbar, right panel
-│   │   │   ├── chat/
+│   │   │   ├── chat/           # incl. EmailDraftCard.tsx — shared with today/
+│   │   │   │                   # DraftReplyResolver, not chat-only despite the folder
 │   │   │   ├── tasks/
 │   │   │   ├── meetings/
 │   │   │   ├── calendar/
@@ -1033,6 +1048,36 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.5 Feature: Today card actions finish the matrix — move_event executes directly, and
+        email-sourced draft_reply resolves fully in-card instead of handing off to chat.
+        (1) move_event moved from the chat-handoff tier to the executed tier: new
+        InlineActionForm date/time/duration picker PATCHes the real calendar event via a new
+        _update_event helper (api/routes/signals.py), reusing the same connector-selection
+        logic as PATCH /calendar/events/{id} — no LLM needed to reschedule to a time Mike
+        picked himself. detect_calendar_conflicts now stores account/current_start/
+        duration_min on the move_event action payload so the picker knows which calendar to
+        patch and can show the conflicting time as context.
+        (2) draft_reply gets a real in-card resolution for email-sourced signals
+        (signal.source === "gmail") — the case this whole feature request was originally
+        about ("clicking Draft reply just kicks me to chat with the card dumped in as a
+        prompt"). New DraftReplyResolver component (components/today/) runs
+        compose → loading → ready: ComposeStrip's existing steering note now triggers
+        POST /signals/{id}/draft (_generate_reply_draft) instead of opening a conversation —
+        fetches the real Gmail thread, composes a reply via Tier 2 (new complete_text helper,
+        promoted out of jobs/signal_generator.py's module-private _complete so both files
+        could use it), and returns it for review. Renders as EmailDraftCard, extracted
+        verbatim from chat/page.tsx (was ~220 lines inline, only ever used once) into
+        components/chat/EmailDraftCard.tsx so both chat and Today share one component instead
+        of risking two that drift — chat's usage unchanged, gained an optional onSent callback
+        Today needs and chat doesn't. Sending still goes through the existing
+        /email/confirm-send gate; this never sends anything itself. The signal is marked done
+        the moment the draft exists (same convention as every other acted-on signal), and the
+        action row is blocked from swapping or closing the review out from under it once that
+        happens (draftCommitted in SignalCard.tsx) — only the resolver's own Cancel/Discard/
+        Send gets you out. Calendar-conflict-sourced draft_reply ("Ask to reschedule") still
+        hands off to chat — it's a new email to an attendee, not a reply, and needs the same
+        who-to-address judgement chat already applies via the Contacts graph rather than a
+        second, narrower version of it here. Harness + web, no schema change.
 v2.19.4 Feature: the v2.19.3 intermediate step extended to the chat-handoff kinds. New
         ComposeStrip component (components/today/ComposeStrip.tsx) expands in the card for
         draft_reply/move_event/save_brain/discuss — a freeform note field (optional, per-kind

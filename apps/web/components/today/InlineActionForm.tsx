@@ -4,15 +4,18 @@
  * InlineActionForm — the intermediate step for signal actions worth editing
  * before they exist.
  *
- * Renders inside SignalCard, below the action row, for the three kinds whose
+ * Renders inside SignalCard, below the action row, for the four kinds whose
  * outcome is fully specified by an editable payload (FORM_KINDS in
- * SignalCard.tsx): create_reminder, create_task, create_event. Nothing here
- * touches chat — Confirm calls onConfirm with an override object that the
- * harness merges over the action's own payload and executes directly.
+ * SignalCard.tsx): create_reminder, create_task, create_event, move_event.
+ * Nothing here touches chat — Confirm calls onConfirm with an override
+ * object that the harness merges over the action's own payload and executes
+ * directly (move_event PATCHes the real calendar event; the other three
+ * create something new).
  *
  * Each kind gets its own small field set rather than one generic form, since
  * "what needs editing" is genuinely different per kind (a due-date chip row
- * vs. a per-item checklist vs. a date/time/account triple).
+ * vs. a per-item checklist vs. a date/time/account triple vs. just a new
+ * date/time for an event that already exists).
  */
 
 import { useMemo, useState } from "react"
@@ -340,6 +343,67 @@ function EventForm({ signal, action, onCancel, onConfirm }: InlineActionFormProp
   )
 }
 
+// ─── move_event ──────────────────────────────────────────────────────────────
+
+function MoveEventForm({ action, onCancel, onConfirm }: InlineActionFormProps) {
+  const currentStart = action.payload?.current_start as string | undefined
+  const defaultDuration = (action.payload?.duration_min as number | undefined) ?? 60
+  const account = (action.payload?.account as string | undefined) ?? "work"
+
+  // Blank by default, not pre-filled to the conflicting time — "pick a real
+  // new time" should require an actual choice, not a confirm-through-nonsense.
+  const [date, setDate] = useState("")
+  const [time, setTime] = useState("")
+  const [duration, setDuration] = useState(defaultDuration)
+
+  const currentLabel = currentStart
+    ? new Date(currentStart).toLocaleString(undefined, {
+        weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      })
+    : null
+
+  return (
+    <FormShell
+      onCancel={onCancel}
+      confirmDisabled={!date || !time}
+      confirmLabel="Move it"
+      onConfirm={() => onConfirm({ datetime_iso: `${date}T${time}:00`, duration_min: duration })}
+    >
+      {currentLabel && (
+        <p className="text-[0.8125rem]" style={{ color: "var(--c-ink-faint)" }}>
+          Currently {currentLabel} ·{" "}
+          <span style={{ textTransform: "capitalize" }}>{account}</span> calendar
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="flex-1 text-[0.8125rem] rounded-md px-2.5 py-1.5 outline-none"
+          style={fieldStyle}
+        />
+        <input
+          type="time"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          className="flex-1 text-[0.8125rem] rounded-md px-2.5 py-1.5 outline-none"
+          style={fieldStyle}
+        />
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="tars-label" style={{ color: "var(--c-ink-faint)" }}>duration</span>
+        {[30, 60, 90, 120].map((m) => (
+          <Chip key={m} active={duration === m} onClick={() => setDuration(m)}>
+            {m < 60 ? `${m}m` : `${m / 60}h`}
+          </Chip>
+        ))}
+      </div>
+    </FormShell>
+  )
+}
+
 // ─── Dispatch ────────────────────────────────────────────────────────────────
 
 export function InlineActionForm(props: InlineActionFormProps) {
@@ -350,6 +414,8 @@ export function InlineActionForm(props: InlineActionFormProps) {
       return <TaskForm {...props} />
     case "create_event":
       return <EventForm {...props} />
+    case "move_event":
+      return <MoveEventForm {...props} />
     default:
       return null
   }

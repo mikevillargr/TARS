@@ -5,29 +5,39 @@ A Signal is an inferred claim that something needs a decision. This module owns
 its lifecycle (open → snoozed / done / dismissed, all reversible) and the
 dispatch of its actions.
 
-Dispatch splits deliberately in three:
+Dispatch splits in four, from "nothing to negotiate" to "needs real judgement":
 
-  · Executed here — create_reminder / create_task / create_event. The card's
-    inline form (SignalCard + InlineActionForm on the frontend) lets Mike edit
-    the payload before it commits — due date, title, description, priority,
-    which items in a grouped batch actually become tasks — via
-    ActRequest.payload_override, merged over the action's own payload. Still
-    no approval gate: editing a To-Do's text isn't the kind of irreversible,
-    negotiated action email-sending is, and restore_signal covers the rest.
+  · Executed here, via POST /act — create_reminder / create_task / create_event /
+    move_event. The card's inline form (SignalCard + InlineActionForm) lets
+    Mike edit the payload before it commits — due date, title, description,
+    priority, which items in a grouped batch actually become tasks, or (for
+    move_event) a new time to PATCH the event to — via ActRequest.
+    payload_override, merged over the action's own payload. No approval gate:
+    none of these are the kind of irreversible, negotiated action
+    email-sending is, and restore_signal covers what's left.
 
-  · Pure navigation — open_meeting. source_ref is already the task or meeting
-    id; this only ever needed a route, not a conversation.
+  · Pure navigation, via POST /act — open_meeting. source_ref is already the
+    task or meeting id; this only ever needed a route, not a conversation.
 
-  · Handed to chat — anything requiring actual composition or judgement
-    (drafting a reply, rescheduling around other commitments, digging through
-    a transcript). The card's ComposeStrip collects a freeform steering note
-    before handoff — not editable payload like the first tier, since there's
-    nothing structured to edit, but still a real intermediate step rather
-    than firing straight to chat. Sent as ActRequest.note, prepended ahead of
-    the reasoning already in the seeded prompt. These conversations sit
-    behind the approval gates that already exist there — email in particular
-    must keep its draft-card confirm step (v2.12.1/v2.12.2), and
-    re-implementing that here would be a second, weaker gate.
+  · Resolved in-card, via POST /draft (a separate endpoint, not /act) —
+    email-sourced draft_reply. The card's ComposeStrip collects an optional
+    steering note, then this generates an actual reply (Tier 2, given the
+    real thread) and returns it for Mike to edit and send right there via the
+    existing /email/confirm-send gate — no conversation ever created. Marks
+    the signal done the moment the draft exists, same convention as every
+    other acted-on signal; sending is a separate step the returned draft goes
+    through afterward. Only available when source_ref is a real Gmail
+    thread — calendar-conflict-sourced draft_reply ("Ask to reschedule") has
+    no thread to reply to, since it's a new email to an attendee, and that
+    needs the same judgement (who to address, given the Contacts graph) chat
+    already applies rather than a second, narrower version of it here.
+
+  · Handed to chat, via POST /act — anything left that still genuinely needs
+    composition or judgement chat already does well (save_brain, discuss,
+    calendar-sourced draft_reply). The card's ComposeStrip collects the same
+    optional steering note as above; sent as ActRequest.note, prepended
+    ahead of the reasoning already in the seeded prompt. These conversations
+    sit behind the approval gates that already exist there.
 """
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -74,10 +84,23 @@ class ActRequest(BaseModel):
     # action's own payload. Lets "Add to To-Dos" mean the text Mike actually
     # typed, not whatever the detector titled the card.
     payload_override: Optional[dict] = None
-    # Freeform steering for the chat-handoff kinds (draft_reply, move_event,
-    # save_brain, discuss) — prepended to the seeded prompt as Mike's own
-    # instruction rather than left for the model to infer from the card alone.
+    # Freeform steering for the kinds still handed to chat (save_brain,
+    # discuss, and calendar-sourced draft_reply) — prepended to the seeded
+    # prompt as Mike's own instruction rather than left for the model to
+    # infer from the card alone.
     note: Optional[str] = None
+
+
+class DraftRequest(BaseModel):
+    # Same steering note as ActRequest.note, for the one action kind
+    # (email-sourced draft_reply) that resolves in-card instead of going
+    # through /act at all — see POST /{signal_id}/draft.
+    note: Optional[str] = None
+
+
+class DraftResult(BaseModel):
+    ok: bool
+    draft: dict  # {draft_id, to, subject, body, cc, thread_id, account} — EmailDraft shape
 
 
 class SnoozeRequest(BaseModel):
@@ -216,6 +239,139 @@ async def _create_event(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Calendar API error: {exc}")
     return created["id"]
+
+
+async def _update_event(
+    sig: Signal, db: AsyncSession, user_id: str, override: dict
+) -> str:
+    """
+    Reschedule the event this signal is about — move_event's resolution.
+    `sig.source_ref` is the event id (detect_calendar_conflicts sets it to the
+    conflicting event that should move); `override.account` says which
+    calendar it lives on, since a cross-account conflict has no single answer
+    otherwise. Mirrors PATCH /calendar/events/{id} (api/routes/calendar.py)
+    rather than importing it directly — that route is request-shaped
+    (UpdateEventRequest + auth dependency), this is signal-shaped.
+    """
+    if not sig.source_ref:
+        raise HTTPException(status_code=400, detail="Signal has no event to move")
+    if not override.get("datetime_iso"):
+        raise HTTPException(status_code=400, detail="Pick a new time")
+
+    conn_name = "Google Calendar (Personal)" if override.get("account") == "personal" else "Google Calendar"
+    r = await db.execute(
+        select(Connector).where(
+            Connector.user_id == user_id, Connector.name == conn_name
+        )
+    )
+    conn = r.scalar_one_or_none()
+    if not conn or not conn.auth.get("refresh_token"):
+        raise HTTPException(status_code=400, detail=f"{conn_name} not connected")
+
+    from connectors.google_calendar import GoogleCalendarClient
+
+    client = GoogleCalendarClient(conn.auth)
+    start_dt = datetime.fromisoformat(str(override["datetime_iso"]).replace("Z", "+00:00"))
+    dur = int(override.get("duration_min") or 60)
+    end_dt = start_dt + timedelta(minutes=dur)
+    tz_str = str(start_dt.tzinfo or "UTC")
+
+    loop = asyncio.get_event_loop()
+    try:
+        updated = await loop.run_in_executor(
+            None,
+            lambda: client.patch_event(
+                sig.source_ref,
+                start={"dateTime": start_dt.isoformat(), "timeZone": tz_str},
+                end={"dateTime": end_dt.isoformat(), "timeZone": tz_str},
+            ),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Calendar API error: {exc}")
+    return updated["id"]
+
+
+REPLY_DRAFT_SYSTEM = """You draft Mike Villar's reply to an email thread. He will review and \
+edit before sending — write a complete, sendable draft, not a placeholder or an outline.
+
+Plain text only: no subject line, no signature block, no "Dear X" / "Best regards" boilerplate
+unless the thread's own tone uses it. Match the register of Mike's own prior messages in the
+thread if he's written in it before; otherwise professional and brief. If Mike's direction is
+given, follow it exactly — it overrides your own read of what the reply should say."""
+
+
+async def _generate_reply_draft(
+    sig: Signal, db: AsyncSession, user_id: str, note: Optional[str]
+) -> dict:
+    """
+    Compose a reply draft in-card — draft_reply's resolution for email-sourced
+    signals. Only these have a real thread to read: source_ref is a Gmail
+    thread id (set by detect_actionable_emails / the email side of
+    detect_calendar_conflicts), so there's something concrete to fetch and
+    reply to. Calendar-conflict-sourced draft_reply ("Ask to reschedule") has
+    no such thread — that's a new email to an attendee, not a reply, which
+    needs the same judgement chat already applies (who to address, given the
+    Contacts graph) rather than a second, narrower version of it here. That
+    case still falls through to _seed_conversation.
+    """
+    if sig.source != "gmail" or not sig.source_ref:
+        raise HTTPException(
+            status_code=400,
+            detail="In-card drafting needs an email thread — use the chat handoff for this signal.",
+        )
+
+    conn = (
+        await db.execute(
+            select(Connector).where(Connector.user_id == user_id, Connector.name == "Gmail")
+        )
+    ).scalar_one_or_none()
+    if not conn or not conn.auth.get("refresh_token"):
+        raise HTTPException(status_code=400, detail="Gmail not connected")
+
+    from connectors.gmail import GmailClient, extract_thread_text
+
+    client = GmailClient(conn.auth)
+    loop = asyncio.get_event_loop()
+    try:
+        thread = await loop.run_in_executor(None, lambda: client.get_thread(sig.source_ref))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Gmail API error: {exc}")
+
+    messages = thread.get("messages", [])
+    if not messages:
+        raise HTTPException(status_code=404, detail="Thread has no messages")
+    last_headers = {
+        h["name"]: h["value"] for h in messages[-1].get("payload", {}).get("headers", [])
+    }
+    from_raw = last_headers.get("From", "")
+    reply_to = (
+        from_raw.split("<")[-1].rstrip(">").strip() if "<" in from_raw else from_raw.strip()
+    )
+    subject = last_headers.get("Subject", "") or sig.title
+    if not subject.lower().startswith("re:"):
+        subject = f"Re: {subject}"
+
+    thread_text = extract_thread_text(thread)
+    prompt = f"Thread:\n{thread_text[-6000:]}\n\n"
+    if note and note.strip():
+        prompt += f"Mike's direction: {note.strip()}\n\n"
+    prompt += "Write Mike's reply."
+
+    from core.model_client import complete_text
+
+    body = await complete_text(REPLY_DRAFT_SYSTEM, prompt, max_tokens=700)
+
+    import uuid
+
+    return {
+        "draft_id": str(uuid.uuid4()),
+        "to": reply_to,
+        "subject": subject,
+        "body": body.strip(),
+        "cc": None,
+        "thread_id": sig.source_ref,
+        "account": "work",  # detect_actionable_emails is work-Gmail-only (v2.18.0 scope note)
+    }
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -371,6 +527,15 @@ async def act_on_signal(
         result.event_id = event_id
         sig.result_ref = event_id
 
+    elif body.kind == "move_event":
+        # Executed directly (since v2.19.5) — a new time is a fully specified
+        # answer, same as create_event. No LLM needed to reschedule an event
+        # to a time Mike picked himself; the chat handoff this used to fall
+        # through to was overkill for "patch a datetime".
+        event_id = await _update_event(sig, db, user_id, override=payload)
+        result.event_id = event_id
+        sig.result_ref = event_id
+
     elif body.kind == "open_meeting":
         # Pure navigation — source_ref is already the task or meeting id.
         # This never needed chat; it was falling into the conversation
@@ -384,7 +549,8 @@ async def act_on_signal(
         sig.result_ref = sig.source_ref
 
     else:
-        # draft_reply, move_event, save_brain, discuss, …
+        # draft_reply, save_brain, discuss, … — anything left that still
+        # genuinely needs composition or judgement.
         conv_id = await _seed_conversation(sig, action, db, user_id, note=body.note)
         result.conversation_id = conv_id
         sig.result_ref = conv_id
@@ -394,6 +560,34 @@ async def act_on_signal(
     sig.acted_at = datetime.now(timezone.utc)
     await db.commit()
     return result
+
+
+@router.post("/{signal_id}/draft", response_model=DraftResult)
+async def draft_reply_for_signal(
+    signal_id: str,
+    body: DraftRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_auth),
+):
+    """
+    Generate a reply draft in-card — draft_reply's resolution when the signal
+    has a real email thread behind it. Marks the signal done the moment the
+    draft exists, same convention as every other acted-on signal (see
+    restore_signal's docstring): the "work" of this action is producing the
+    draft, not whatever happens to it afterward. Sending is a separate step
+    the returned EmailDraft goes through — /email/confirm-send, the same gate
+    chat's own drafts use — so this endpoint never sends anything itself.
+    """
+    sig = await _get_owned(signal_id, user_id, db)
+    _action_by_kind(sig, "draft_reply")  # 404s if this signal has no such action
+    draft = await _generate_reply_draft(sig, db, user_id, note=body.note)
+
+    sig.status = "done"
+    sig.acted_kind = "draft_reply"
+    sig.acted_at = datetime.now(timezone.utc)
+    sig.result_ref = draft["draft_id"]
+    await db.commit()
+    return DraftResult(ok=True, draft=draft)
 
 
 @router.post("/{signal_id}/snooze", response_model=SignalOut)
