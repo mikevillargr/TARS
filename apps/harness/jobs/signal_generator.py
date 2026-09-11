@@ -264,13 +264,16 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
     out: list[Candidate] = []
     for meeting_id, (meeting, items) in by_meeting.items():
         n = len(items)
-        preview = [i.raw_text.strip()[:110] for i in items[:4]]
+        item_texts = [i.raw_text.strip() for i in items]
+        preview = [t[:110] for t in item_texts[:4]]
         more = n - len(preview)
-        title = (
-            items[0].raw_text.strip()[:180]
-            if n == 1
-            else f"{n} action items from \"{meeting.title[:50]}\" were never assigned"
-        )
+        # The card headline for a batch describes the batch; the reminder/task
+        # payloads below get their own, separate defaults — a To-Do or task
+        # literally titled "4 action items from X were never assigned" is the
+        # detector talking about itself, not a piece of work.
+        single = item_texts[0][:180] if n == 1 else None
+        title = single or f"{n} action items from \"{meeting.title[:50]}\" were never assigned"
+        batch_default = single or f"Follow up on {n} action items from \"{meeting.title[:50]}\""
         client_name = await _client_for_attendees(db, user_id, meeting.attendees)
         out.append(_candidate(
             dedupe_key=f"mai-batch:{meeting_id}",
@@ -289,8 +292,21 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
             citation=f"Meeting · {meeting.title[:60]}",
             actions=[
                 {"kind": "open_meeting", "label": "Review in the meeting"},
-                {"kind": "create_reminder", "label": "Add to To-Dos"},
-                {"kind": "create_task", "label": "Add to Projects"},
+                {
+                    "kind": "create_reminder",
+                    "label": "Add to To-Dos",
+                    "payload": {"text": batch_default},
+                },
+                {
+                    "kind": "create_task",
+                    "label": "Add to Projects",
+                    # `items` lets the card offer "split into separate tasks"
+                    # instead of forcing one task that bundles n unrelated
+                    # commitments together — the reason this signal is grouped
+                    # by meeting in the first place is to keep it one decision,
+                    # not one card per item; splitting should stay opt-in.
+                    "payload": {"title": batch_default, "items": item_texts},
+                },
             ],
         ))
     return out

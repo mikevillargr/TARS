@@ -18,18 +18,23 @@ export type SignalStatus = "open" | "snoozed" | "done" | "dismissed"
  * The complete action vocabulary. Nothing outside this list can appear on a
  * card — the generator picks from it, and the harness dispatches on it.
  *
- * EXECUTED SERVER-SIDE — outcome fully specified by the payload, nothing to
- * negotiate, so no confirmation step:
+ * EXECUTED SERVER-SIDE, EDITABLE FIRST — SignalCard expands an inline form
+ * (InlineActionForm) before any of these commit; Confirm sends the edits as
+ * payload_override, merged over the action's own payload server-side:
  *   create_reminder  Add to To-Dos      the default home for signal work
  *   create_task      Add to Projects    escalation, for tracked project work
  *   create_event     Book it            only when the signal carries an event
  *
- * HANDED TO CHAT — needs composition or judgement, so it opens a pre-seeded
- * conversation where the existing approval gates apply (email in particular
- * keeps its draft-card confirm step):
+ * PURE NAVIGATION — source_ref is already the id; no form, no chat, just a
+ * route computed server-side (ActResult.route) and pushed to:
+ *   open_meeting     Open meeting / Open project / Review transcript
+ *
+ * HANDED TO CHAT — needs actual composition or judgement, so it opens a
+ * pre-seeded conversation (optionally carrying a freeform steering note)
+ * where the existing approval gates apply (email in particular keeps its
+ * draft-card confirm step):
  *   draft_reply      Draft reply / Draft chase email / Ask X for times
  *   move_event       Move <event> / Reschedule
- *   open_meeting     Open meeting / Open project / Review transcript
  *   save_brain       Save to Second Brain
  *   discuss          Ask TARS about this — the catch-all
  */
@@ -43,7 +48,9 @@ export type SignalActionKind =
   | "save_brain"
   | "discuss"
 
-/** Actions the harness completes itself; everything else opens a conversation. */
+/** Kinds SignalCard shows an inline form for before committing (FORM_KINDS in
+ *  SignalCard.tsx) — everything else either navigates (open_meeting) or
+ *  opens a conversation. */
 export const EXECUTED_KINDS: SignalActionKind[] = [
   "create_reminder",
   "create_task",
@@ -90,8 +97,20 @@ export interface ActResult {
   ok: boolean
   conversation_id: string | null
   task_id: string | null
+  task_ids: string[] | null
   event_id: string | null
+  /** In-app route to push to — set for open_meeting, which is pure
+   *  navigation and never actually needed a conversation. */
+  route: string | null
   message: string
+}
+
+/** Edits made in a card's inline form, and/or freeform steering for a chat
+ *  handoff — both optional, both merged server-side over the action's own
+ *  payload rather than replacing it. */
+export interface ActOptions {
+  payloadOverride?: Record<string, unknown>
+  note?: string
 }
 
 /**
@@ -118,8 +137,12 @@ export function listSignals(status: SignalStatus | "all" = "open") {
   return apiGet<Signal[]>(`/signals?status=${status}`)
 }
 
-export function actOnSignal(id: string, kind: SignalActionKind) {
-  return apiPost<ActResult>(`/signals/${id}/act`, { kind })
+export function actOnSignal(id: string, kind: SignalActionKind, opts?: ActOptions) {
+  return apiPost<ActResult>(`/signals/${id}/act`, {
+    kind,
+    payload_override: opts?.payloadOverride,
+    note: opts?.note,
+  })
 }
 
 export function snoozeSignal(id: string, until?: string) {

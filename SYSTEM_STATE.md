@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.2 |
+| Version | v2.19.3 |
 | Released | 2026-09-11 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -163,6 +163,45 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.3 — 2026-09-11
+**Feature: Today card actions get an intermediate step before they commit — inline forms,
+not straight-to-chat**
+- Every action on a `/today` signal card used to do one of two things immediately on click:
+  fire a server-side create (Reminder/Task/Event) using whatever the detector had proposed,
+  or dump the card's contents into a new chat conversation. Neither left room to redirect
+  before something existed. New `InlineActionForm` component (`components/today/
+  InlineActionForm.tsx`) expands inside the card for `create_reminder` / `create_task` /
+  `create_event` — editable text/title/description, due-date chips, priority chips, and for
+  `create_event` a date/time/duration/calendar picker — before Confirm sends the edits as
+  `ActRequest.payload_override`, merged server-side over the action's own payload
+  (`act_on_signal`, `api/routes/signals.py`).
+- Grouped batch signals (e.g. "4 action items from X were never assigned" — one card per
+  meeting, not per item, since v2.17.0) get a per-item checklist for `create_task` instead of
+  either one bundled task covering unrelated commitments or a wall of individual cards:
+  every item defaults checked, editable inline, unchecking is how you get "just this one".
+  `detect_unconverted_action_items` (`jobs/signal_generator.py`) now carries the raw item
+  texts in the action payload (`items`) for this, and no longer defaults the reminder/task
+  payload text to the detector's own summary line ("4 action items from X were never
+  assigned" is the card's headline, not something that belongs as a To-Do's actual text).
+- Fix: `open_meeting` had been silently falling through to the chat-handoff branch since
+  v2.16.0 — its label ("Open project" / "Review in the meeting") never matched what it
+  actually did, which was seed a conversation. It's pure navigation (`source_ref` is already
+  the task or meeting id), so it now gets its own dispatch branch returning a computed
+  `ActResult.route`, and the frontend pushes to it directly — no conversation created. This
+  needed `/tasks` and `/meetings` to actually support `?id=` deep-linking, which neither did
+  before (confirmed: Today's own overdue-task row was pushing to `/tasks?id=` and landing on
+  an unfiltered board). Both pages gained a `Suspense`-wrapped `useSearchParams` reader
+  (mirroring the existing pattern in `second-brain/page.tsx`) that opens the matching
+  task/meeting detail panel once.
+- The four chat-handoff kinds (`draft_reply`, `move_event`, `save_brain`, `discuss`) gained
+  an optional freeform `note` field (`ActRequest.note`), surfaced as "Mike's direction" ahead
+  of the detector's own reasoning in the seeded prompt — steering input, not yet an in-card
+  resolver; drafting/rescheduling still hands off to chat pending a later pass.
+- Harness + web, no schema change — `payload_override`/`note` are request-only fields, not
+  persisted on `Signal`.
+
+---
 
 ### v2.19.2 — 2026-09-11
 **Fix: Contacts page crushed on mobile — no responsive master-detail behavior**

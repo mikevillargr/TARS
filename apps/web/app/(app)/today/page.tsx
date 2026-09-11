@@ -223,13 +223,25 @@ export default function TodayPage() {
     [signals, removeLocally, recordTally],
   )
 
-  const handleAct = useCallback(
-    async (signal: Signal, action: SignalAction) => {
+  /**
+   * Shared commit path for every way a signal can be acted on — a direct
+   * click, and a form's Confirm. Optimistic removal + undo + navigation all
+   * live here once, so the two callers below can't drift.
+   */
+  const commit = useCallback(
+    async (signal: Signal, action: SignalAction, payloadOverride?: Record<string, unknown>) => {
       const snapshot = signals
       removeLocally(signal.id)
       recordTally("acted")
       try {
-        const res = await actOnSignal(signal.id, action.kind)
+        const res = await actOnSignal(signal.id, action.kind, { payloadOverride })
+        // open_meeting is pure navigation — it never actually needed chat,
+        // it just used to fall through to the conversation handoff below
+        // because nothing claimed it first.
+        if (res.route) {
+          router.push(res.route)
+          return
+        }
         // Actions needing composition or judgement hand off to chat; follow
         // the handoff rather than leaving the user to find the conversation.
         if (res.conversation_id) {
@@ -243,6 +255,17 @@ export default function TodayPage() {
       }
     },
     [signals, removeLocally, recordTally, router],
+  )
+
+  const handleAct = useCallback(
+    (signal: Signal, action: SignalAction) => commit(signal, action),
+    [commit],
+  )
+
+  const handleResolve = useCallback(
+    (signal: Signal, action: SignalAction, override: Record<string, unknown>) =>
+      commit(signal, action, override),
+    [commit],
   )
 
   const handleUndo = useCallback(async () => {
@@ -393,6 +416,7 @@ export default function TodayPage() {
                             key={signal.id}
                             signal={signal}
                             onAct={handleAct}
+                            onResolve={handleResolve}
                             onSnooze={handleSnooze}
                             onDismiss={handleDismiss}
                             onAddToCalendar={handleAddToCalendar}
