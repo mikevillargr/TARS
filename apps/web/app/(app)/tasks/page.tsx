@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback, useRef, Suspense } from "react"
 import {
   Calendar, Plus, X, AlertTriangle, Loader2, Paperclip,
   Brain, Trash2, GripVertical, ExternalLink, Archive, CheckSquare,
 } from "lucide-react"
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { MentionTextarea } from "@/components/ui/MentionTextarea"
 import { stripToLabels, syncMentionLinks, type MentionRef } from "@/lib/mentions"
 
@@ -1003,6 +1003,27 @@ function AddColumnCard({ onAdd }: { onAdd: (name: string, color: string) => void
   )
 }
 
+// Reads ?id= and opens that task's detail panel — the "open_meeting" signal
+// action's landing spot for a project card. Must be inside Suspense.
+//
+// One-shot via firedRef, not just an [id] dependency: onOpen's identity
+// changes whenever the tasks list updates (drag reorder, a poll, anything),
+// and without the guard that would re-fire on every one of those, silently
+// stealing focus back to the deep-linked task even after Mike has since
+// clicked into something else.
+function TaskDeepLinkLoader({ onOpen }: { onOpen: (id: string) => void }) {
+  const searchParams = useSearchParams()
+  const id = searchParams.get("id")
+  const firedRef = useRef(false)
+  useEffect(() => {
+    if (id && !firedRef.current) {
+      firedRef.current = true
+      onOpen(id)
+    }
+  }, [id, onOpen])
+  return null
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
@@ -1012,6 +1033,9 @@ export default function TasksPage() {
   const [loading, setLoading]   = useState(true)
   const dragTaskRef             = useRef<Task | null>(null)
   const confirm                 = useConfirm()
+  // ?id= may resolve before tasks finish loading — remember it and apply it
+  // once the list is in, rather than requiring load order to cooperate.
+  const pendingDeepLinkId        = useRef<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -1021,6 +1045,10 @@ export default function TasksPage() {
       ])
       setTasks(tasksData)
       setColumns(columnsData)
+      if (pendingDeepLinkId.current) {
+        const match = tasksData.find(t => t.id === pendingDeepLinkId.current)
+        if (match) setSelected(match)
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -1029,6 +1057,12 @@ export default function TasksPage() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const handleDeepLink = useCallback((id: string) => {
+    pendingDeepLinkId.current = id
+    const match = tasks.find(t => t.id === id)
+    if (match) setSelected(match)
+  }, [tasks])
 
   // ── Task handlers ────────────────────────────────────────────────────────
 
@@ -1116,6 +1150,10 @@ export default function TasksPage() {
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden" style={{ backgroundColor: "var(--c-canvas)" }}>
+      <Suspense fallback={null}>
+        <TaskDeepLinkLoader onOpen={handleDeepLink} />
+      </Suspense>
+
       {/* Header */}
       <div className="px-6 py-3 border-b flex items-center justify-between shrink-0" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
         <h1 className="text-lg font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>Projects</h1>

@@ -11,7 +11,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu"
-import { formatAge, type Signal, type SignalAction, type SignalUrgency, type SignalSource } from "@/lib/signals"
+import {
+  formatAge,
+  type Signal, type SignalAction, type SignalUrgency, type SignalSource,
+  type SignalActionKind,
+} from "@/lib/signals"
+import { InlineActionForm } from "@/components/today/InlineActionForm"
+
+// Actions whose outcome is worth editing before it's created — the payload
+// the detector proposed is a draft, not a decision. Everything else either
+// executes with nothing to negotiate (open_meeting is pure navigation) or
+// needs actual composition, which is chat's job, not a form field's.
+const FORM_KINDS = new Set<SignalActionKind>(["create_reminder", "create_task", "create_event"])
 
 // Small provenance icon per source — same accent color as the source label,
 // so scanning the header row doesn't need to read the text first.
@@ -83,6 +94,9 @@ type SwipeIntent = "dismiss" | "snooze" | null
 interface SignalCardProps {
   signal: Signal
   onAct: (signal: Signal, action: SignalAction) => void
+  // Fires when the inline form for a FORM_KINDS action is confirmed — carries
+  // whatever Mike edited, to be merged server-side over the action's payload.
+  onResolve: (signal: Signal, action: SignalAction, override: Record<string, unknown>) => void
   onSnooze: (id: string) => void
   onDismiss: (id: string) => void
   onAddToCalendar: (signal: Signal) => void
@@ -91,6 +105,7 @@ interface SignalCardProps {
 export function SignalCard({
   signal,
   onAct,
+  onResolve,
   onSnooze,
   onDismiss,
   onAddToCalendar,
@@ -98,6 +113,9 @@ export function SignalCard({
   const [showWhy, setShowWhy] = useState(false)
   const [dx, setDx] = useState(0)
   const [leaving, setLeaving] = useState<SwipeIntent>(null)
+  // Which action's inline form is expanded, if any. Only one at a time — the
+  // dropdown's alternates and the primary button share this same slot.
+  const [formAction, setFormAction] = useState<SignalAction | null>(null)
 
   const start = useRef<{ x: number; y: number } | null>(null)
   const axis = useRef<"x" | "y" | null>(null)
@@ -110,6 +128,17 @@ export function SignalCard({
   const style = URGENCY[signal.urgency]
   const SourceIcon = SOURCE_ICON[signal.source]
   const [primary, ...alternates] = signal.actions
+
+  /** Toggles the inline form for FORM_KINDS actions; fires immediately (or
+   *  hands off to chat) for everything else, same as before this existed. */
+  const handleActionClick = useCallback((action: SignalAction) => {
+    if (FORM_KINDS.has(action.kind)) {
+      setFormAction(prev => (prev?.kind === action.kind ? null : action))
+      return
+    }
+    setFormAction(null)
+    onAct(signal, action)
+  }, [onAct, signal])
 
   // Which action the current drag would commit, and whether it's armed yet.
   const intent: SwipeIntent = dx === 0 ? null : dx < 0 ? "dismiss" : "snooze"
@@ -340,9 +369,14 @@ export function SignalCard({
         {/* Actions */}
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => onAct(signal, primary)}
+            onClick={() => handleActionClick(primary)}
             className="tars-send-btn px-3 py-1.5 rounded-md text-[0.8125rem] font-medium hover:opacity-85"
-            style={{ backgroundColor: "var(--c-moss)", color: "var(--c-canvas)" }}
+            style={{
+              backgroundColor: "var(--c-moss)",
+              color: "var(--c-canvas)",
+              opacity: formAction && formAction.kind !== primary.kind ? 0.6 : 1,
+            }}
+            aria-expanded={formAction?.kind === primary.kind}
           >
             {primary.label}
           </button>
@@ -370,7 +404,7 @@ export function SignalCard({
                   // the text-selection event and never fires here (v2.15.5).
                   <DropdownMenuItem
                     key={`${action.kind}-${i}`}
-                    onClick={() => onAct(signal, action)}
+                    onClick={() => handleActionClick(action)}
                     className="tars-label"
                     style={{ color: "var(--c-ink-muted)" }}
                   >
@@ -423,6 +457,20 @@ export function SignalCard({
             <span className="tars-label hidden sm:inline">snooze</span>
           </button>
         </div>
+
+        {/* Inline form — the intermediate step for actions worth editing
+            before they exist. Replaces "click → it's already been created". */}
+        {formAction && (
+          <InlineActionForm
+            signal={signal}
+            action={formAction}
+            onCancel={() => setFormAction(null)}
+            onConfirm={(override) => {
+              onResolve(signal, formAction, override)
+              setFormAction(null)
+            }}
+          />
+        )}
 
         {/* Reasoning disclosure — the "show your work" layer */}
         {showWhy && (

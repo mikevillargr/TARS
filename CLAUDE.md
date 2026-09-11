@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.2 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.3 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -438,6 +438,19 @@ chat conversation.
 - Each card: source badge + age, imperative title, one specifically-named primary action
   (never "Approve"), alternates behind an overflow menu, collapsible `why` with reasoning +
   citation, snooze, dismiss
+- Action dispatch, by kind (since v2.19.3) — three tiers, not two:
+  - `create_reminder` / `create_task` / `create_event` expand an inline form
+    (`InlineActionForm`) in the card before committing — editable text/title/description,
+    due-date/priority chips, and for events a date/time/duration/calendar picker. A grouped
+    batch signal (one card per meeting, not per item — see Generation below) offers a
+    per-item checklist for `create_task` instead of one bundled task or a wall of cards.
+    Confirm sends the edits as `payload_override`, merged server-side over the action's
+    payload; nothing commits on the raw click anymore.
+  - `open_meeting` is pure navigation (`source_ref` is already the task/meeting id) — no
+    form, no conversation, just a route computed server-side and pushed to.
+  - `draft_reply` / `move_event` / `save_brain` / `discuss` still hand off to a pre-seeded
+    chat conversation (composition/judgement stays chat's job), now carrying an optional
+    freeform steering note typed before handoff, surfaced ahead of TARS's own reasoning.
 - Dismiss and snooze are recoverable — 5s undo bar with a draining hairline; cleared/snoozed
   are visitable states, not a void
 - Swipe left to dismiss, right to snooze — works on touch and on trackpad (wheel deltaX)
@@ -645,7 +658,7 @@ tars/
 │   │   │   │   └── settings/
 │   │   │   └── api/            # thin proxy to harness
 │   │   ├── components/
-│   │   │   ├── today/          # SignalCard, AmbientField
+│   │   │   ├── today/          # SignalCard, InlineActionForm, AmbientField
 │   │   │   ├── shell/          # sidebar, topbar, right panel
 │   │   │   ├── chat/
 │   │   │   ├── tasks/
@@ -1018,6 +1031,28 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.3 Feature: Today card actions get an intermediate step before they commit. New
+        InlineActionForm component expands inside SignalCard for create_reminder/
+        create_task/create_event — editable text, due-date/priority chips, and for
+        create_event a date/time/duration/calendar picker — instead of firing on click
+        with whatever the detector proposed. Confirm sends edits as ActRequest.
+        payload_override, merged server-side over the action's payload (act_on_signal).
+        Grouped batch signals (e.g. "4 action items from X were never assigned") get a
+        per-item checklist for create_task, all checked by default, instead of one
+        bundled task covering unrelated commitments; detect_unconverted_action_items no
+        longer defaults the reminder/task text to its own summary line either. Fix:
+        open_meeting had been silently falling through to the chat-handoff branch since
+        v2.16.0 despite being pure navigation (source_ref is already the task/meeting
+        id) — now returns a computed ActResult.route and the frontend pushes to it
+        directly, no conversation created. Needed /tasks and /meetings to actually
+        support ?id= deep-linking, which neither did (confirmed: Today's own overdue-
+        task row was already relying on it and landing on an unfiltered board); both
+        gained a Suspense-wrapped useSearchParams reader, same pattern as second-brain/
+        page.tsx's capture-param loader. The four chat-handoff kinds (draft_reply,
+        move_event, save_brain, discuss) gained an optional freeform note field,
+        surfaced as "Mike's direction" ahead of the detector's reasoning in the seeded
+        prompt. Harness + web, no schema change — payload_override/note are request-
+        only, not persisted on Signal.
 v2.19.2 Fix: Contacts page (/contacts) crushed on mobile — the two-panel layout (320px
         list + flex:1 detail) had no responsive handling, so the detail panel got
         squeezed into whatever space was left of a narrow viewport after the fixed-width

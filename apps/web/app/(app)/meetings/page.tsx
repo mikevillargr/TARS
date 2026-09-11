@@ -1,7 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Video, Clock, Users, FileText, CheckSquare, Search,
   Sparkles, Calendar, RefreshCw, Loader2, BriefcaseBusiness,
@@ -121,6 +121,24 @@ function duration(m: Meeting): string | null {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`
 }
 
+// Reads ?id= and opens that meeting's detail — the "open_meeting" signal
+// action's landing spot for a Fireflies card. Must be inside Suspense.
+// One-shot via firedRef, same reasoning as TaskDeepLinkLoader (tasks/page.tsx):
+// loadDetail isn't memoized, so its identity changes every render and an
+// [id]-only guard would refire on each one.
+function MeetingDeepLinkLoader({ onOpen }: { onOpen: (id: string) => void }) {
+  const searchParams = useSearchParams()
+  const id = searchParams.get("id")
+  const firedRef = useRef(false)
+  useEffect(() => {
+    if (id && !firedRef.current) {
+      firedRef.current = true
+      onOpen(id)
+    }
+  }, [id, onOpen])
+  return null
+}
+
 export default function MeetingsPage() {
   const router = useRouter()
   const [meetings, setMeetings]   = useState<Meeting[]>([])
@@ -214,6 +232,10 @@ export default function MeetingsPage() {
 
   return (
     <div className="flex h-full bg-canvas">
+      <Suspense fallback={null}>
+        <MeetingDeepLinkLoader onOpen={loadDetail} />
+      </Suspense>
+
       {/* ── List ───────────────────────────────────────────────── */}
       <div className="w-80 border-r flex-col hidden md:flex" style={{ borderColor: "var(--c-border)", backgroundColor: "var(--c-surface)" }}>
         <div className="p-4 border-b space-y-3" style={{ borderColor: "var(--c-border)" }}>

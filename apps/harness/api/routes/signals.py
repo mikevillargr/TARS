@@ -5,18 +5,26 @@ A Signal is an inferred claim that something needs a decision. This module owns
 its lifecycle (open → snoozed / done / dismissed, all reversible) and the
 dispatch of its actions.
 
-Dispatch splits deliberately in two:
+Dispatch splits deliberately in three:
 
-  · Executed here — actions whose outcome is unambiguous and fully specified by
-    the signal's payload (create a task, create a reminder, book the event it
-    already describes). Nothing to negotiate, so nothing to gate.
+  · Executed here — create_reminder / create_task / create_event. The card's
+    inline form (SignalCard + InlineActionForm on the frontend) lets Mike edit
+    the payload before it commits — due date, title, description, priority,
+    which items in a grouped batch actually become tasks — via
+    ActRequest.payload_override, merged over the action's own payload. Still
+    no approval gate: editing a To-Do's text isn't the kind of irreversible,
+    negotiated action email-sending is, and restore_signal covers the rest.
 
-  · Handed to chat — anything requiring composition or judgement (drafting a
-    reply, rescheduling around other commitments, digging through a transcript).
-    These open a pre-seeded conversation instead, which puts them behind the
-    approval gates that already exist there — email in particular must keep its
-    draft-card confirm step (v2.12.1/v2.12.2), and re-implementing that here
-    would be a second, weaker gate.
+  · Pure navigation — open_meeting. source_ref is already the task or meeting
+    id; this only ever needed a route, not a conversation.
+
+  · Handed to chat — anything requiring actual composition or judgement
+    (drafting a reply, rescheduling around other commitments, digging through
+    a transcript). These open a pre-seeded conversation, optionally carrying
+    Mike's own steering note (ActRequest.note), which puts them behind the
+    approval gates that already exist there — email in particular must keep
+    its draft-card confirm step (v2.12.1/v2.12.2), and re-implementing that
+    here would be a second, weaker gate.
 """
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -59,6 +67,14 @@ class SignalOut(BaseModel):
 
 class ActRequest(BaseModel):
     kind: str
+    # Edits made in the card's inline form before committing — merged over the
+    # action's own payload. Lets "Add to To-Dos" mean the text Mike actually
+    # typed, not whatever the detector titled the card.
+    payload_override: Optional[dict] = None
+    # Freeform steering for the chat-handoff kinds (draft_reply, move_event,
+    # save_brain, discuss) — prepended to the seeded prompt as Mike's own
+    # instruction rather than left for the model to infer from the card alone.
+    note: Optional[str] = None
 
 
 class SnoozeRequest(BaseModel):
@@ -71,7 +87,12 @@ class ActResult(BaseModel):
     conversation_id: Optional[str] = None
     reminder_id: Optional[str] = None
     task_id: Optional[str] = None
+    task_ids: Optional[List[str]] = None
     event_id: Optional[str] = None
+    # Set for open_meeting — an in-app route to push to, computed here since
+    # the backend already knows the source→route mapping. No conversation
+    # involved; this was never actually a chat handoff, just misdispatched.
+    route: Optional[str] = None
     message: str
 
 
@@ -106,7 +127,7 @@ def _tonight(now: Optional[datetime] = None) -> datetime:
 
 
 async def _seed_conversation(
-    sig: Signal, action: dict, db: AsyncSession, user_id: str
+    sig: Signal, action: dict, db: AsyncSession, user_id: str, note: Optional[str] = None
 ) -> str:
     """
     Hand the signal to chat with everything the model needs to act on it.
@@ -127,6 +148,11 @@ async def _seed_conversation(
     payload = action.get("payload") or {}
     if payload:
         lines += ["", f"Context: {payload}"]
+    # Mike's own steering, typed in the card before handing off — leads with
+    # explicit priority over the reasoning above, which is TARS's inference,
+    # not an instruction.
+    if note and note.strip():
+        lines += ["", f"**Mike's direction:** {note.strip()}"]
 
     conv = Conversation(user_id=user_id, title=sig.title[:80])
     db.add(conv)
@@ -136,20 +162,28 @@ async def _seed_conversation(
     return conv.id
 
 
-async def _create_event(sig: Signal, db: AsyncSession, user_id: str) -> str:
-    """Book the event the signal already fully describes."""
-    ev = sig.calendar_event or {}
+async def _create_event(
+    sig: Signal, db: AsyncSession, user_id: str, override: Optional[dict] = None
+) -> str:
+    """
+    Book the event the signal describes, or — via `override` from the card's
+    inline form — the event Mike edited it into (different time, different
+    account). Merged over the signal's own calendar_event, not a replacement
+    for it, so a form that only touched one field doesn't lose the rest.
+    """
+    ev = {**(sig.calendar_event or {}), **(override or {})}
     if not ev.get("start"):
         raise HTTPException(status_code=400, detail="Signal has no event to create")
 
+    conn_name = "Google Calendar (Personal)" if ev.get("account") == "personal" else "Google Calendar"
     r = await db.execute(
         select(Connector).where(
-            Connector.user_id == user_id, Connector.name == "Google Calendar"
+            Connector.user_id == user_id, Connector.name == conn_name
         )
     )
     conn = r.scalar_one_or_none()
     if not conn or not conn.auth.get("refresh_token"):
-        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+        raise HTTPException(status_code=400, detail=f"{conn_name} not connected")
 
     from connectors.google_calendar import GoogleCalendarClient
 
@@ -248,7 +282,9 @@ async def act_on_signal(
 ):
     sig = await _get_owned(signal_id, user_id, db)
     action = _action_by_kind(sig, body.kind)
-    payload = action.get("payload") or {}
+    # The card's inline form edits win over whatever the detector proposed —
+    # a signal's own payload is a starting draft, not a fixed instruction.
+    payload = {**(action.get("payload") or {}), **(body.payload_override or {})}
 
     result = ActResult(ok=True, message=action.get("label", "Done"))
 
@@ -257,19 +293,22 @@ async def act_on_signal(
         # "don't forget this" prompt, which is what To-Dos are for; Projects
         # is for tracked work with a pipeline, and most signals never warrant
         # a kanban card.
-        due = payload.get("due_at")
+        #
+        # "due_at" absent from the merged payload means nobody has an opinion
+        # yet — fall back to the urgency-implied default. Present-but-null
+        # means the form's "No date" chip was picked explicitly, which must
+        # win over that default rather than be treated the same as absent.
+        if "due_at" in payload:
+            due = payload["due_at"]
+            due_dt = datetime.fromisoformat(str(due).replace("Z", "+00:00")) if due else None
+        else:
+            # Time-pressured signals arrive with today already implied;
+            # dropping that would lose the only urgency the item had.
+            due_dt = datetime.now(timezone.utc) if sig.urgency in ("overdue", "time") else None
         rem = Reminder(
             user_id=user_id,
             text=payload.get("text") or sig.title,
-            due_at=(
-                datetime.fromisoformat(str(due).replace("Z", "+00:00"))
-                if due
-                # Time-pressured signals arrive with today already implied;
-                # dropping that would lose the only urgency the item had.
-                else datetime.now(timezone.utc)
-                if sig.urgency in ("overdue", "time")
-                else None
-            ),
+            due_at=due_dt,
         )
         db.add(rem)
         await db.flush()
@@ -279,29 +318,71 @@ async def act_on_signal(
     elif body.kind == "create_task":
         # Escalation path, offered as an alternate: this one really is tracked
         # project work and wants a card with a status pipeline.
-        task = Task(
-            user_id=user_id,
-            title=payload.get("title") or sig.title,
-            description=payload.get("description") or sig.reasoning,
-            status="todo",
-            priority=payload.get("priority")
-            or ("high" if sig.urgency in ("overdue", "time") else "normal"),
-            source="signal",
-            source_id=sig.id,
+        priority = payload.get("priority") or (
+            "high" if sig.urgency in ("overdue", "time") else "normal"
         )
-        db.add(task)
-        await db.flush()
-        result.task_id = task.id
-        sig.result_ref = task.id
+        # Grouped signals (e.g. "4 action items from X were never assigned")
+        # carry the individual item texts in payload["items"]; the form lets
+        # Mike tick which ones actually become tracked work instead of
+        # forcing either "one task for everything" or "clean up 225 by hand".
+        selected_items = payload.get("selected_items")
+        if isinstance(selected_items, list) and selected_items:
+            task_ids: list[str] = []
+            for item_text in selected_items:
+                task = Task(
+                    user_id=user_id,
+                    title=str(item_text)[:200],
+                    status="todo",
+                    priority=priority,
+                    source="signal",
+                    source_id=sig.id,
+                )
+                db.add(task)
+                await db.flush()
+                task_ids.append(task.id)
+            result.task_ids = task_ids
+            result.task_id = task_ids[0]
+            sig.result_ref = task_ids[0]
+        else:
+            # No reasoning fallback here — a task description should be what
+            # Mike chose to record, not the detector's internal "why this
+            # surfaced" prose. The form pre-fills this field FROM reasoning
+            # (visible, editable) so that content still reaches the task when
+            # it's actually useful, but only as something Mike saw and kept.
+            task = Task(
+                user_id=user_id,
+                title=payload.get("title") or sig.title,
+                description=payload.get("description"),
+                status="todo",
+                priority=priority,
+                source="signal",
+                source_id=sig.id,
+            )
+            db.add(task)
+            await db.flush()
+            result.task_id = task.id
+            sig.result_ref = task.id
 
     elif body.kind == "create_event":
-        event_id = await _create_event(sig, db, user_id)
+        event_id = await _create_event(sig, db, user_id, override=payload or None)
         result.event_id = event_id
         sig.result_ref = event_id
 
+    elif body.kind == "open_meeting":
+        # Pure navigation — source_ref is already the task or meeting id.
+        # This never needed chat; it was falling into the conversation
+        # handoff below purely because no branch claimed it first.
+        if sig.source == "fireflies":
+            result.route = f"/meetings?id={sig.source_ref}"
+        elif sig.source == "project":
+            result.route = f"/tasks?id={sig.source_ref}"
+        else:
+            result.route = "/today"
+        sig.result_ref = sig.source_ref
+
     else:
-        # draft_reply, move_event, open_meeting, save_brain, discuss, …
-        conv_id = await _seed_conversation(sig, action, db, user_id)
+        # draft_reply, move_event, save_brain, discuss, …
+        conv_id = await _seed_conversation(sig, action, db, user_id, note=body.note)
         result.conversation_id = conv_id
         sig.result_ref = conv_id
 
