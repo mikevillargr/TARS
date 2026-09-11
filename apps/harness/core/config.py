@@ -39,14 +39,14 @@ class Settings(BaseSettings):
     tier3_provider: str = "anthropic"
 
     # Per-tier model overrides (blank = use sensible provider default)
-    # Anthropic defaults: haiku / sonnet / sonnet  Z.ai defaults: glm-4.5-air / glm-4.6 / glm-4.7
+    # Anthropic defaults: haiku-4-5 / sonnet-5 / sonnet-5  Z.ai defaults: glm-4.5-air / glm-4.6 / glm-4.7
     tier1_model_override: str = ""
     tier2_model_override: str = ""
     tier3_model_override: str = ""
 
     # Vision model — for analyzing images uploaded in chat
     # blank vision_provider = use tier3_provider; blank vision_model_override = use provider default
-    # Anthropic default: claude-sonnet-4-6   Z.ai default: glm-4.5-air (multimodal)
+    # Anthropic default: claude-sonnet-5   Z.ai default: glm-4.5-air (multimodal)
     vision_provider: str = ""
     vision_model_override: str = ""
 
