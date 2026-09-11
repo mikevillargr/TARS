@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.1 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.2 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1018,6 +1018,13 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.2 Fix: Contacts page (/contacts) crushed on mobile — the two-panel layout (320px
+        list + flex:1 detail) had no responsive handling, so the detail panel got
+        squeezed into whatever space was left of a narrow viewport after the fixed-width
+        sidebar. Now uses the existing useIsMobile hook (768px breakpoint, same one
+        Second Brain/Feed use): below the breakpoint only one panel renders at a time,
+        full-width — list by default, detail (with a new back button) once a contact is
+        selected. Desktop unchanged. Web-only, no schema change.
 v2.19.1 Fix: owner filter tightened to a strict allowlist; confirmed v2.19.0 also closed
         the recurring-duplicate complaint. User reported (after v2.19.0) still seeing
         misattributed and recurring cards. Traced against live production data: both were
