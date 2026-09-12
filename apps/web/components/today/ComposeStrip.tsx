@@ -28,9 +28,9 @@ import { FormShell, fieldStyle } from "@/components/today/InlineActionForm"
 import { MentionTextarea } from "@/components/ui/MentionTextarea"
 
 const PLACEHOLDER: Partial<Record<SignalActionKind, string>> = {
-  draft_reply: 'Anything to add? e.g. "yes to Thursday" — @mention someone to CC',
-  move_event: 'Anything to add? e.g. "propose next Tuesday afternoon instead"',
-  save_brain: "Add a note (optional)",
+  draft_reply: 'Anything you want in it? Try "yes to Thursday". @mention anyone to CC.',
+  move_event: 'Anything you want said? Try "propose next Tuesday afternoon".',
+  save_brain: "Why you're keeping this (optional)",
   discuss: "What do you want to ask?",
 }
 
@@ -51,7 +51,7 @@ export function ComposeStrip({ action, onCancel, onConfirm }: ComposeStripProps)
         autoFocus
         value={note}
         onChange={setNote}
-        placeholder={PLACEHOLDER[action.kind] ?? "Anything to add? (optional)"}
+        placeholder={PLACEHOLDER[action.kind] ?? "Anything you want to add? (optional)"}
         rows={2}
         className="w-full text-[0.8125rem] rounded-md px-2.5 py-1.5 outline-none resize-none"
         style={fieldStyle}

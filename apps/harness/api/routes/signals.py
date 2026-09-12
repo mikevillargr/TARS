@@ -419,6 +419,17 @@ async def _cc_from_mentions(
     return ", ".join(emails) if emails else None
 
 
+# Past-tense confirmations for the undo bar, keyed by action kind. Deliberately
+# understated: this bar appears while the card is still sliding out, so it
+# should confirm and get out of the way, not congratulate.
+_RECEIPTS = {
+    "create_reminder": "Added to To-Dos",
+    "create_task": "Added to Projects",
+    "create_event": "On your calendar",
+    "move_event": "Moved",
+}
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=List[SignalOut])
@@ -490,7 +501,12 @@ async def act_on_signal(
     # a signal's own payload is a starting draft, not a fixed instruction.
     payload = {**(action.get("payload") or {}), **(body.payload_override or {})}
 
-    result = ActResult(ok=True, message=action.get("label", "Done"))
+    # The undo bar shows this, so it has to read as a receipt, not a command.
+    # Echoing the action's own label put "Add to To-Dos" on a bar that appears
+    # AFTER the thing was added, which is why the surface felt like it was
+    # talking at Mike rather than back to him. Falls back to the label for any
+    # kind that hands off to chat, where the label already reads as an outcome.
+    result = ActResult(ok=True, message=_RECEIPTS.get(body.kind) or action.get("label", "Done"))
 
     if body.kind == "create_reminder":
         # The default landing place for signal-derived work. A signal is a

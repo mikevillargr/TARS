@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.8 |
-| Released | 2026-09-11 |
+| Version | v2.19.9 |
+| Released | 2026-09-12 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -163,6 +163,56 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.9 — 2026-09-12
+**Change: Today's voice — signal copy, blank states, and section framing**
+- The screen was functionally right but read like a queue narrating its own bookkeeping.
+  Reworked the language at both ends: the harness strings that generate signal text, and
+  the frontend copy around them. Design references pulled via Refero (Linear Changelog:
+  medium-weight headings, depth by hairline not shadow, editorial section rhythm) and
+  Mobbin (Twist / GitHub / Front empty states: short human headline plus one
+  permission-giving line, never a feature description).
+- **Blank states** — all three rewritten, and the header verdict now matches which one is
+  showing. `ALL PARKED` under a header reading "You're clear" was simply untrue, so
+  `buildReadout` now takes `blankKind`: earned → "You're clear", parked → "Parked till
+  tonight", quiet → "Nothing needs you". `NOTHING IN` (read like an error) became
+  `ALL QUIET`, and its paragraph stopped describing the feature and started answering the
+  question an empty page actually raises ("is this thing on?") — the one place TARS speaks
+  in the first person. The earned receipt row gained a `this session` label so it reads as
+  a receipt rather than debug output; "actioned/dismissed/snoozed" → "handled/let go/parked".
+  The parked line stopped scolding ("Nothing done, everything deferred") and now just says
+  where it all went, with correct singular/plural.
+- **Header** — the lead is the one line written as speech, so it gets full sentences and
+  spelled-out numbers ("Two things can't wait"); the aside stays clipped and numeric because
+  it belongs to the instrument layer. Keeping that split is what stops the header reading
+  like a status code. All-quiet phrasing shifts after 18:00 ("Nothing urgent left").
+- **Group labels** — database states became what they mean to a reader: overdue → "already
+  late", today → "before today's out".
+- **Signal text (harness)** — `signal_generator.py` strings rewritten to say what Mike did
+  rather than what the pipeline failed to do: "4 action items … were never assigned" →
+  "You took on 4 things in X and none are tracked"; "You're double-booked … — A vs. B" →
+  "You're in two places at …: A and B"; task titles now state the fact ("… was due 3 days
+  ago" / "… hasn't moved in 12 days") instead of appending an em-dashed status. Reasoning
+  prose reworded throughout; the email detector's internal caveat ("Not yet checked against
+  sent mail beyond this thread") removed from user-visible text.
+- **Email titles** — `EMAIL_EXTRACT_SYSTEM` had no tone guidance, so the model produced
+  generic corporate phrasing. Added a voice rule (plain English, second person, name real
+  people, no corporate filler, no em dashes, never narrate the system).
+- **Undo bar** — was echoing the action's own label, so a bar that appears *after* the fact
+  said "Add to To-Dos". New `_RECEIPTS` map in `api/routes/signals.py` gives past-tense
+  confirmations; chat-handoff kinds still fall back to the label, which already reads as an
+  outcome.
+- **Presentation** — group headers gained a hairline rule fading from the urgency accent to
+  the section edge, so groups read as sections of one document rather than loose labels over
+  a stack. Blank-state body copy went 14px → 15px with relaxed leading and a max-width
+  measure; it's the only warm line on the screen and was sized like a footnote.
+- Note: existing open signals keep the wording they were generated with. `dedupe_key` is
+  checked against signals in any status, so a sweep won't rewrite them — the new copy applies
+  to signals generated from here on.
+- Verified in a real browser (Chrome via Playwright) against the local stack: populated
+  board, plus all three blank states driven through real dismiss/snooze interactions with
+  the API stubbed so nothing mutated the dev DB.
+- Harness + web, no schema change.
 
 ### v2.19.8 — 2026-09-11
 **Fix: hydration mismatch on chat's boot-quote random index**
