@@ -29,9 +29,12 @@ import {
 
 const GROUP_ORDER: SignalUrgency[] = ["overdue", "time", "normal"]
 
+// Said the way a person would say it, not the way a queue would name itself.
+// "overdue" / "today" are database states; "already late" / "before today's
+// out" are what those states actually mean to the person reading them.
 const GROUP_LABEL: Record<SignalUrgency, string> = {
-  overdue: "overdue",
-  time: "today",
+  overdue: "already late",
+  time: "before today's out",
   normal: "when you can",
 }
 
@@ -43,11 +46,21 @@ const GROUP_COLOR: Record<SignalUrgency, string> = {
 
 /** Deterministic per-day pick so the line varies but never feels random. */
 const ALL_CLEAR_LINES = [
-  "Nothing needs you. Enjoy it.",
-  "Zero signals. Suspiciously quiet.",
-  "All clear. Don't get used to it.",
-  "Nothing pending. Go ride.",
+  "That's the lot. Go do something better.",
+  "Board's empty. Enjoy it while it lasts.",
+  "Nothing left with your name on it.",
+  "Cleared. Go ride.",
 ]
+
+/** Small numbers read as words in a sentence; past ten, digits are clearer. */
+const COUNT_WORDS = [
+  "Nothing", "One", "Two", "Three", "Four", "Five",
+  "Six", "Seven", "Eight", "Nine", "Ten",
+]
+
+function countWord(n: number): string {
+  return COUNT_WORDS[n] ?? String(n)
+}
 
 /**
  * The headline is a verdict, not a tally.
@@ -55,11 +68,44 @@ const ALL_CLEAR_LINES = [
  * "8 need you" makes you do the triage maths yourself. What's actually worth
  * knowing at 06:40 is whether anything is on fire — so lead with that, and let
  * the count of everything else sit in the mono layer beside it.
+ *
+ * The lead is the one line on this screen written as speech, so it gets full
+ * sentences and spelled-out numbers ("Two things can't wait"). The aside stays
+ * clipped and numeric because it belongs to the instrument layer. Keeping that
+ * split is what stops the header reading like a status code.
+ *
+ * `hour` shifts the all-quiet phrasing: "nothing's on fire" is reassurance at
+ * 07:00 and a slightly different fact at 18:00, when the day is mostly spent.
  */
-function buildReadout(urgent: number, rest: number): { lead: string; aside: string | null } {
-  if (urgent === 0 && rest === 0) return { lead: "All clear", aside: null }
-  if (urgent === 0) return { lead: "Nothing urgent", aside: `${rest} when you can` }
-  return { lead: `${urgent} can't wait`, aside: rest > 0 ? `${rest} that can` : null }
+function buildReadout(
+  urgent: number,
+  rest: number,
+  hour: number | null,
+  blank: BlankKind,
+): { lead: string; aside: string | null } {
+  // An empty list has three different verdicts. "You're clear" over a screen
+  // that says ALL PARKED is simply untrue — you deferred the lot, which is a
+  // legitimate move but not the same as being done.
+  if (urgent === 0 && rest === 0) {
+    return {
+      lead:
+        blank === "parked"
+          ? "Parked till tonight"
+          : blank === "quiet"
+            ? "Nothing needs you"
+            : "You're clear",
+      aside: null,
+    }
+  }
+  if (urgent === 0) {
+    const lead =
+      hour === null ? "Nothing urgent" : hour >= 18 ? "Nothing urgent left" : "Nothing's on fire"
+    return { lead, aside: `${rest} when you can` }
+  }
+  return {
+    lead: `${countWord(urgent)} ${urgent === 1 ? "thing" : "things"} can't wait`,
+    aside: rest > 0 ? `${rest} that can` : null,
+  }
 }
 
 /**
@@ -156,9 +202,10 @@ export default function TodayPage() {
   const urgentCount = actionSignals.filter(
     s => s.urgency === "overdue" || s.urgency === "time",
   ).length
-  const readout = buildReadout(urgentCount, actionSignals.length - urgentCount)
   const allClear = actionSignals.length === 0
 
+  // Computed before the readout, which needs it: the header verdict for an
+  // empty list depends on WHY it's empty, not just that it is.
   const touched = tally.acted + tally.dismissed + tally.snoozed
   const blankKind: BlankKind =
     tally.snoozed > 0 && tally.acted + tally.dismissed === 0
@@ -166,6 +213,13 @@ export default function TodayPage() {
       : touched > 0
         ? "earned"
         : "quiet"
+
+  const readout = buildReadout(
+    urgentCount,
+    actionSignals.length - urgentCount,
+    clock ? clock.getHours() : null,
+    blankKind,
+  )
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   //
@@ -200,7 +254,7 @@ export default function TodayPage() {
       } catch {
         setSignals(snapshot)
         setUndo(null)
-        setToast("Couldn't dismiss — put it back")
+        setToast("Couldn't dismiss that. Put it back.")
       }
     },
     [signals, removeLocally, recordTally],
@@ -217,7 +271,7 @@ export default function TodayPage() {
       } catch {
         setSignals(snapshot)
         setUndo(null)
-        setToast("Couldn't snooze — put it back")
+        setToast("Couldn't snooze that. Put it back.")
       }
     },
     [signals, removeLocally, recordTally],
@@ -257,7 +311,7 @@ export default function TodayPage() {
         setUndo({ id: signal.id, label: res.message })
       } catch (err) {
         setSignals(snapshot)
-        setToast(err instanceof Error ? err.message : "That didn't work")
+        setToast(err instanceof Error ? err.message : "That didn't go through")
       }
     },
     [signals, removeLocally, recordTally, router],
@@ -362,7 +416,7 @@ export default function TodayPage() {
                 animation: "tars-count-tick 320ms cubic-bezier(0.25, 1, 0.5, 1)",
               }}
             >
-              {loading ? "Reading your day" : readout.lead}
+              {loading ? "Catching up on your day" : readout.lead}
             </span>
             {!loading && readout.aside && (
               <span className="tars-label">{readout.aside}</span>
@@ -434,11 +488,22 @@ export default function TodayPage() {
                   if (items.length === 0) return null
                   return (
                     <section key={group} className="mb-6 last:mb-0">
-                      <div className="flex items-baseline gap-2 mb-3">
+                      {/* Label, count, then a hairline carrying the eye to the
+                          edge — the same depth-by-border rule the cards use, so
+                          the groups read as sections of one document rather
+                          than three loose labels floating over a stack. */}
+                      <div className="flex items-center gap-2 mb-3">
                         <span className="tars-label" style={{ color: GROUP_COLOR[group] }}>
                           {GROUP_LABEL[group]}
                         </span>
                         <span className="tars-label tars-label--muted">{items.length}</span>
+                        <span
+                          className="flex-1 h-px ml-1"
+                          style={{
+                            background: `linear-gradient(to right, color-mix(in srgb, ${GROUP_COLOR[group]} 28%, transparent), transparent)`,
+                          }}
+                          aria-hidden="true"
+                        />
                       </div>
                       <div className="flex flex-col gap-3">
                         {items.map(signal => (
@@ -472,33 +537,44 @@ export default function TodayPage() {
                 {blankKind === "earned" && (
                   <>
                     <span
-                      className="tars-display mb-2"
+                      className="tars-display mb-3"
                       style={{ color: "var(--c-moss)", fontFamily: "var(--font-mono), monospace" }}
                     >
                       ALL CLEAR
                     </span>
-                    <span className="text-sm" style={{ color: "var(--c-ink-muted)" }}>
+                    <span
+                      className="max-w-sm"
+                      style={{
+                        color: "var(--c-ink-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.6,
+                        textWrap: "pretty",
+                      }}
+                    >
                       {ALL_CLEAR_LINES[(clock ? clock.getDate() : 0) % ALL_CLEAR_LINES.length]}
                     </span>
+                    {/* The receipt earns its keep by being labelled. A bare row
+                        of counts reads like debug output; "this session" tells
+                        you what you're looking at. */}
                     <div
-                      className="flex items-center gap-3 mt-6 px-3 py-2 rounded-md flex-wrap justify-center"
+                      className="flex items-center gap-3 mt-7 px-3 py-2 rounded-md flex-wrap justify-center"
                       style={{ border: "1px solid var(--c-border-faint)" }}
                     >
-                      <span className="tars-label">{timeLine}</span>
+                      <span className="tars-label tars-label--muted">this session</span>
                       {tally.acted > 0 && (
                         <span className="tars-label" style={{ color: "var(--c-moss)" }}>
-                          {tally.acted} actioned
+                          {tally.acted} handled
                         </span>
                       )}
                       {tally.dismissed > 0 && (
-                        <span className="tars-label tars-label--muted">{tally.dismissed} dismissed</span>
+                        <span className="tars-label tars-label--muted">{tally.dismissed} let go</span>
                       )}
                       {tally.snoozed > 0 && (
-                        <span className="tars-label tars-label--muted">{tally.snoozed} snoozed</span>
+                        <span className="tars-label tars-label--muted">{tally.snoozed} parked</span>
                       )}
                       {tally.firstAt && tally.lastAt && tally.lastAt - tally.firstAt > 1500 && (
                         <span className="tars-label tars-label--muted">
-                          cleared in {formatSpan(tally.lastAt - tally.firstAt)}
+                          in {formatSpan(tally.lastAt - tally.firstAt)}
                         </span>
                       )}
                     </div>
@@ -508,13 +584,27 @@ export default function TodayPage() {
                 {blankKind === "parked" && (
                   <>
                     <span
-                      className="tars-display mb-2"
+                      className="tars-display mb-3"
                       style={{ color: "var(--c-amber)", fontFamily: "var(--font-mono), monospace" }}
                     >
                       ALL PARKED
                     </span>
-                    <span className="text-sm" style={{ color: "var(--c-ink-muted)" }}>
-                      Nothing done, everything deferred. {tally.snoozed} come back tonight.
+                    <span
+                      className="max-w-sm"
+                      style={{
+                        color: "var(--c-ink-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.6,
+                        textWrap: "pretty",
+                      }}
+                    >
+                      {/* Not a scolding. Deferring everything is a legitimate
+                          answer on a bad morning; the screen's job is to say
+                          where it went, not to grade the decision. */}
+                      You've pushed it all to tonight.{" "}
+                      {tally.snoozed === 1
+                        ? "It'll find you again then."
+                        : `All ${tally.snoozed} will find you again then.`}
                     </span>
                   </>
                 )}
@@ -522,21 +612,29 @@ export default function TodayPage() {
                 {blankKind === "quiet" && (
                   <>
                     <span
-                      className="tars-display mb-2"
+                      className="tars-display mb-3"
                       style={{ color: "var(--c-ink-faint)", fontFamily: "var(--font-mono), monospace" }}
                     >
-                      NOTHING IN
+                      ALL QUIET
                     </span>
                     <span
-                      className="text-sm max-w-sm"
-                      style={{ color: "var(--c-ink-muted)", textWrap: "pretty" }}
+                      className="max-w-sm"
+                      style={{
+                        color: "var(--c-ink-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.6,
+                        textWrap: "pretty",
+                      }}
                     >
-                      No signals this sweep. TARS reads your inbox, meeting
-                      transcripts, calendar, and open projects, and surfaces only
-                      what needs a decision.
+                      {/* The one place TARS speaks in the first person. With
+                          nothing to report, the screen has room for a voice,
+                          and "I'm still reading" answers the real question an
+                          empty page raises: is this thing even on? */}
+                      Nothing worth bothering you with. I&rsquo;m still reading your
+                      inbox, your meetings, your calendar, and your projects.
                     </span>
-                    <span className="tars-label tars-label--muted mt-4">
-                      next sweep {nextSweep}
+                    <span className="tars-label tars-label--muted mt-5">
+                      next look {nextSweep}
                     </span>
                   </>
                 )}
@@ -573,7 +671,7 @@ export default function TodayPage() {
               <span className="tars-label">today</span>
               {events.length === 0 ? (
                 <p className="text-[0.8125rem] mt-3" style={{ color: "var(--c-ink-faint)" }}>
-                  Nothing on the calendar.
+                  Your day&rsquo;s your own.
                 </p>
               ) : (
                 <div className="flex flex-col gap-3 mt-3">

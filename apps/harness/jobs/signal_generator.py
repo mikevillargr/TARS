@@ -184,16 +184,19 @@ async def detect_stalled_tasks(db: AsyncSession, user_id: str) -> list[Candidate
 
         if overdue:
             days = (now - t.due_at).days
+            when = "yesterday" if days == 1 else ("today" if days == 0 else f"{days} days ago")
+            title = f"{t.title} was due {when}"
             reason = (
-                f"Due date passed {days} day{'s' if days != 1 else ''} ago and the task is "
-                f"still in {t.status.replace('_', ' ')}."
+                f"This was due {when} and it's still sitting in "
+                f"{t.status.replace('_', ' ').title()}. Worth finishing it, or moving the date."
             )
             urgency = "overdue"
         else:
             days = (now - t.updated_at).days
+            title = f"{t.title} hasn't moved in {days} days"
             reason = (
-                f"Moved to In Progress {days} days ago and hasn't been touched since. "
-                f"Either it's done, or it's stuck."
+                f"You put this In Progress {days} days ago and nothing has changed since. "
+                f"Either it's quietly done, or it's stuck on something."
             )
             urgency = "normal"
 
@@ -202,7 +205,7 @@ async def detect_stalled_tasks(db: AsyncSession, user_id: str) -> list[Candidate
             source="project",
             source_label="Projects",
             source_ref=t.id,
-            title=f"{t.title} — {'overdue' if overdue else 'no movement in ' + str(days) + ' days'}",
+            title=title,
             urgency=urgency,
             reasoning=reason,
             citation=f"Projects · {t.title[:60]}",
@@ -272,7 +275,10 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
         # literally titled "4 action items from X were never assigned" is the
         # detector talking about itself, not a piece of work.
         single = item_texts[0][:180] if n == 1 else None
-        title = single or f"{n} action items from \"{meeting.title[:50]}\" were never assigned"
+        # Says what Mike did, not what the pipeline failed to do. "were never
+        # assigned" is the detector narrating its own bookkeeping; "you said
+        # you'd do these" is the thing he actually needs to react to.
+        title = single or f"You took on {n} things in \"{meeting.title[:50]}\" and none are tracked"
         batch_default = single or f"Follow up on {n} action items from \"{meeting.title[:50]}\""
         client_name = await _client_for_attendees(db, user_id, meeting.attendees)
         out.append(_candidate(
@@ -284,8 +290,13 @@ async def detect_unconverted_action_items(db: AsyncSession, user_id: str) -> lis
             urgency="normal",
             context_label=client_name,
             reasoning=(
-                f"Fireflies extracted {n} action item{'s' if n != 1 else ''} assigned to you "
-                f"from this meeting and none were converted to a task or To-Do.\n\n"
+                (
+                    "This came out of the meeting with your name on it, and it hasn't "
+                    "landed in Projects or To-Dos yet.\n\n"
+                    if n == 1
+                    else f"These {n} came out of the meeting with your name on them, and "
+                         "none of them have landed in Projects or To-Dos yet.\n\n"
+                )
                 + "\n".join(f"· {p}" for p in preview)
                 + (f"\n· …and {more} more" if more > 0 else "")
             ),
@@ -398,12 +409,13 @@ async def detect_calendar_conflicts(db: AsyncSession, user_id: str) -> list[Cand
             source="calendar",
             source_label="Calendar",
             source_ref=a_id,
-            title=f"You're double-booked {when} — {a_label} vs. {b_label}",
+            title=f"You're in two places {when}: {a_label} and {b_label}",
             urgency="time" if a_start - now < timedelta(days=2) else "normal",
             context_label=client_name,
             reasoning=(
-                f"\"{a_title}\" runs {a_start.strftime('%H:%M')}–{a_end.strftime('%H:%M')} and "
-                f"\"{b_title}\" starts {b_start.strftime('%H:%M')}, so they overlap."
+                f"\"{a_title}\" runs {a_start.strftime('%H:%M')} to {a_end.strftime('%H:%M')}, "
+                f"and \"{b_title}\" starts at {b_start.strftime('%H:%M')} while it's still going. "
+                f"One of them needs to move."
             ),
             citation=f"Calendar · {when}",
             actions=[
@@ -469,6 +481,12 @@ Return ONLY a JSON object. No prose, no code fence:
  "category": "billing" | "legal" | "banking" | "vendor" | "recruiting" | "scheduling" | "internal" | null}
 
 Rules:
+- Voice for "title": write it the way a sharp chief of staff would say it out loud. Plain
+  English, second person, and specific about the real thing and the real person: "Tell
+  Vanessa whether Thursday works", not "Respond to scheduling inquiry". No corporate filler
+  ("action required", "kindly", "please be advised", "follow up on the below"), no em
+  dashes, no trailing period, and never narrate the system itself ("email received",
+  "thread awaiting response"). Name people by first name when the thread makes it obvious.
 - actionable=false for newsletters, receipts, automated notifications, threads already
   resolved, or anything that doesn't need a response or decision from Mike. This is the
   correct, common answer — do not invent an action item to seem useful.
@@ -600,9 +618,12 @@ async def detect_actionable_emails(db: AsyncSession, user_id: str) -> list[Candi
             kind=kind,
             context_label=context_label,
             reasoning=(
-                f"From {c['from_name']} — \"{c['subject']}\".\n\n"
-                + ("Unread. " if c["unread"] else "Read, but no reply sent. ")
-                + "Not yet checked against sent mail beyond this thread."
+                f"{c['from_name']} wrote about \"{c['subject']}\".\n\n"
+                + (
+                    "You haven't opened it yet."
+                    if c["unread"]
+                    else "You've read it, but nothing has gone back to them."
+                )
             ),
             citation=f"Gmail · {c['subject'][:60]}",
             actions=_email_actions(suggested),

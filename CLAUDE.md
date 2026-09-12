@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.8 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.9 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -432,9 +432,17 @@ each needing a decision. Replaces the old prompt-cron daily digest that dumped p
 chat conversation.
 
 - Header is an instrument readout, not a greeting: `BRIEF · MON 07 SEP · 06:40` plus a verdict
-  ("2 can't wait" / "Nothing urgent" / "All clear"), never a raw count
-- Signal cards grouped by urgency (overdue / today / when you can). **Never truncated** — a
-  heavy morning should look heavy
+  ("Two things can't wait" / "Nothing's on fire" / "You're clear"), never a raw count. The
+  lead is the one line on this screen written as speech — full sentences, numbers spelled
+  out; the aside beside it stays clipped and numeric ("4 that can") because it belongs to the
+  instrument layer. Keeping that split is what stops the header reading like a status code.
+  When the list is empty the verdict tracks WHY (see blank states below), never a flat
+  "You're clear" over a screen that says ALL PARKED
+- Signal cards grouped by urgency, labelled as a person would say it rather than as the
+  queue names itself: "already late" / "before today's out" / "when you can". Each group
+  header carries a hairline rule fading from the urgency accent out to the section edge, so
+  groups read as sections of one document, not loose labels over a stack. **Never
+  truncated** — a heavy morning should look heavy
 - Each card: source badge + age, imperative title, one specifically-named primary action
   (never "Approve"), alternates behind an overflow menu, collapsible `why` with reasoning +
   citation, snooze, dismiss
@@ -481,9 +489,15 @@ chat conversation.
 - Ambient field: a state-driven backdrop, `/today` only. Moss glow tracks a sun arc across the
   day, amber peaks at golden hour, intensity scales with open signal count, ALL CLEAR collapses
   it to the boot glow. Grain seeded per-date so no two days render identically
-- Three distinct blank states: **earned** (you cleared it — shows a session receipt),
-  **parked** (everything snoozed, nothing done), **quiet** (nothing came in). Conflating them
-  makes the screen lie two-thirds of the time
+- Three distinct blank states: **earned** (`ALL CLEAR`, you cleared it, shows a labelled
+  `this session` receipt), **parked** (`ALL PARKED`, everything snoozed — states where it
+  went, never scolds; deferring is a legitimate answer on a bad morning), **quiet**
+  (`ALL QUIET`, nothing came in). Conflating them makes the screen lie two-thirds of the
+  time, and the header verdict tracks them too. The quiet state is the one place TARS speaks
+  in the first person: with nothing to report there's room for a voice, and "I'm still
+  reading your inbox…" answers the real question an empty page raises. Blank-state body copy
+  is 15px with relaxed leading and a max-width measure — it's the only warm line on the
+  screen, so it isn't sized like a footnote, and it never describes the feature
 - FYI rows (kind="fyi") render as plain text, no card weight
 - Right rail's "today" event list shows a video-call icon only on events that actually have
   one (since v2.19.6) — clicking it opens the meeting link (Zoom/Meet/Teams/etc.) in a new
@@ -491,6 +505,16 @@ chat conversation.
   `connectors/google_calendar.extract_meeting_url` (dedicated Meet field → structured
   conferencing data → a plain-text link in location/description); events with nothing to
   join (a task due date, a past Fireflies meeting) get no icon at all rather than a dead one
+- **Voice** (applies to every string that reaches this screen, in `signal_generator.py` as
+  much as in the components): say what Mike did or must do, never what the pipeline did.
+  "4 action items were never assigned" is the detector narrating its own bookkeeping;
+  "You took on 4 things in X and none are tracked" is the thing he reacts to. Second person,
+  plain English, real names, no corporate filler, no em dashes (see the repo-wide prose
+  rule), and no internal caveats leaking into user-visible text. `EMAIL_EXTRACT_SYSTEM`
+  carries the same rule for model-written titles. The undo bar is a receipt, not a command —
+  `_RECEIPTS` in `api/routes/signals.py` maps action kinds to past-tense confirmations
+  ("Added to To-Dos"); chat-handoff kinds fall back to the action label, which already reads
+  as an outcome.
 - **Generation** (`jobs/signal_generator.py`, `signal_sweep` every 4h, or
   `POST /api/signals/generate` on demand). Four detectors, split by whether the answer is a
   fact or a judgement:
@@ -1064,6 +1088,29 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.9 Change: Today's voice — signal copy, blank states, section framing. The screen was
+        functionally right but read like a queue narrating its own bookkeeping. Reworked
+        both ends: harness strings that GENERATE signal text, and the frontend copy around
+        them. References via Refero (Linear Changelog — medium-weight headings, depth by
+        hairline, editorial section rhythm) + Mobbin (Twist/GitHub/Front empty states — short
+        human headline plus one permission-giving line, never a feature description).
+        Blank states: all three rewritten, and buildReadout now takes blankKind so the header
+        verdict matches which one shows — "You're clear" over a screen saying ALL PARKED was
+        untrue (earned → "You're clear", parked → "Parked till tonight", quiet → "Nothing
+        needs you"). NOTHING IN (read like an error) → ALL QUIET, its paragraph stopped
+        describing the feature and started answering "is this thing on?" — the one place TARS
+        speaks in first person. Earned receipt gained a `this session` label; actioned/
+        dismissed/snoozed → handled/let go/parked. Parked stopped scolding. Header lead now
+        full sentences with spelled-out numbers ("Two things can't wait") while the aside
+        stays clipped and numeric — that split is what stops it reading like a status code.
+        Group labels: overdue → "already late", today → "before today's out", plus a hairline
+        rule per section header. Harness: signal_generator.py strings say what Mike did, not
+        what the pipeline failed to do; EMAIL_EXTRACT_SYSTEM gained a voice rule (it had none,
+        hence generic corporate titles); new _RECEIPTS map in api/routes/signals.py makes the
+        undo bar past-tense instead of echoing "Add to To-Dos" after the fact. Existing open
+        signals keep their old wording (dedupe_key blocks regeneration) — new copy applies
+        going forward. Verified in Chrome via Playwright incl. all three blank states driven
+        through real interactions with the API stubbed. Harness + web, no schema change.
 v2.19.8 Fix: hydration mismatch on chat's boot-quote random index. MessageArea's empty-state
         TARS quote picked its random index inside useState(() => Math.random(...)), which
         runs during server render too — client hydration could pick a different index than
