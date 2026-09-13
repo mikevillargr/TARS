@@ -12,13 +12,13 @@ opens one connection.
 
 import asyncio
 import logging
-import os
 
 from fastapi import (
     APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect,
 )
 
 from core.auth import decode_token, require_auth, verify_ws_token
+from core.config import settings
 from core.browser_jobs import get_browser_jobs
 
 log = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ async def capabilities(user_id: str = Depends(require_auth)):
     rather than assuming, so the button is enabled only where it works instead
     of being permanently greyed out or, worse, opening a dead iframe.
     """
-    container = bool(os.environ.get("BROWSER_CDP_URL"))
+    container = bool(settings.browser_cdp_url)
     return {
         "takeover": container,
         "vnc_url": "/browser-vnc/" if container else None,

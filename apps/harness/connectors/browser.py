@@ -34,6 +34,8 @@ from typing import Any, Dict, List, Optional
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import async_playwright
 
+from core.config import settings
+
 log = logging.getLogger(__name__)
 
 TOOLSET_TYPE = "browser_toolset_20260801"
@@ -799,7 +801,7 @@ def get_browser_pool() -> BrowserPool:
     if _pool is None:
         _pool = BrowserPool(
             max_contexts=MAX_CONCURRENT_SESSIONS,
-            cdp_url=os.environ.get("BROWSER_CDP_URL") or None,
+            cdp_url=settings.browser_cdp_url or None,
         )
     return _pool
 

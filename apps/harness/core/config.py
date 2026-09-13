@@ -12,6 +12,14 @@ class Settings(BaseSettings):
     )
 
     debug: bool = False
+
+    # Browser automation. Set -> the harness connects to Chromium in the
+    # tars-browser container over CDP. Unset -> it launches a headless Chromium
+    # in-process (local dev). Must live here rather than being read from
+    # os.environ: pydantic-settings loads .env into THIS object, not into the
+    # process environment, so os.environ.get would silently always be None on
+    # the server and quietly disable the container.
+    browser_cdp_url: str = ""
     allowed_origins: List[str] = ["http://localhost:3000"]
 
     database_url: str = "postgresql+asyncpg://tars:password@localhost:5432/tars"
