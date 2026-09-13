@@ -37,6 +37,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # client and the browser it drives stay in step.
 RUN pip install --no-cache-dir playwright==1.62.0
 
+# Real Google Chrome alongside the bundled Chromium. Google's sign-in blocks
+# non-Chrome branded builds, and seeding a login by hand is the whole point of
+# the VNC access, so the browser a human types a password into has to be one
+# Google will actually accept.
+RUN playwright install chrome
+
 # noVNC's landing page is a chooser; vnc.html is the client itself. Serving it
 # as index means the nginx location can point at a bare path.
 RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html

@@ -25,6 +25,9 @@ PROFILE_DIR = os.environ.get("BROWSER_PROFILE_DIR", "/profile")
 CDP_INTERNAL_PORT = int(os.environ.get("BROWSER_CDP_INTERNAL_PORT", "9221"))
 WIDTH = int(os.environ.get("BROWSER_WIDTH", "1280"))
 HEIGHT = int(os.environ.get("BROWSER_HEIGHT", "800"))
+# "chrome" = real Google Chrome (installed in the image). Set BROWSER_CHANNEL=""
+# to fall back to Playwright's bundled Chromium.
+CHANNEL = os.environ.get("BROWSER_CHANNEL", "chrome") or None
 
 
 async def main() -> None:
@@ -36,8 +39,22 @@ async def main() -> None:
         context = await pw.chromium.launch_persistent_context(
             PROFILE_DIR,
             headless=False,
+            # Real Google Chrome, not Playwright's Chromium build. Two reasons,
+            # both about a HUMAN being able to sign in here by hand: Chromium
+            # reports an empty navigator.userAgentData.brands, and Google's
+            # sign-in refuses non-Chrome branded builds with "this browser or
+            # app may not be secure". The agent never signs into anything; this
+            # is purely so the login-seeding step works.
+            channel=CHANNEL,
+            # Playwright adds --enable-automation by default, which is what sets
+            # navigator.webdriver = true. That single flag is enough for Google
+            # and Facebook to block interactive sign-in. Dropping it does not
+            # change what the agent can do; it only stops the browser announcing
+            # itself as a test harness to sites a human is logging into.
+            ignore_default_args=["--enable-automation"],
             viewport={"width": WIDTH, "height": HEIGHT},
             args=[
+                "--disable-blink-features=AutomationControlled",
                 # Chromium binds this to loopback and ignores
                 # --remote-debugging-address; that is deliberate upstream
                 # behaviour, not a flag we got wrong. A socat forwarder in this
