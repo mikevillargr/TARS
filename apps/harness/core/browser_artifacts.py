@@ -6,9 +6,12 @@ Three possible artifacts, each with a different job:
   - The **report** (markdown) is the one that matters. It is text, so it embeds,
     it is searchable in Artifacts, and TARS can read it back in a later
     conversation. It answers "what did it do at 3am" without opening anything.
-  - The **video** shows what the page actually looked like, which the report
-    cannot convey when a site misbehaves visually.
-  - The **trace** is only saved when a run FAILED. It carries a DOM snapshot per
+  - The **video** and the **trace** are saved only when a run went BADLY. Both
+    answer "why did that go wrong", and neither is worth keeping for a run that
+    worked: saving a screen recording of every routine browse buried the library
+    under tens of MB of footage nobody will ever watch. The live panel already
+    shows a run as it happens, and the report carries the action log afterwards.
+  - The trace additionally It carries a DOM snapshot per
     action and is the right tool for working out why something broke, but it
     needs Playwright's own viewer to open (`npx playwright show-trace`), so
     attaching one to every successful run would be weight nobody opens.
@@ -113,7 +116,11 @@ def _slug(task: str, domain: Optional[str] = None) -> str:
     URLs and filler are stripped first; the domain leads, because in a list of
     artifacts "which site" is the thing you scan for.
     """
-    stripped = re.sub(r"https?://\S+|\b\S+\.(com|org|net|io|ai|co)\S*", " ", task, flags=re.I)
+    # Strip URLs and any bare domain-looking token. The old TLD list missed
+    # country codes, so "shopee.ph" survived and the slug read
+    # "shopee-ph-shopee-ph-search-..." with the domain twice.
+    stripped = re.sub(r"https?://\S+", " ", task, flags=re.I)
+    stripped = re.sub(r"\b[\w-]+(\.[a-z]{2,})+\b\S*", " ", stripped, flags=re.I)
     words = [
         # Apostrophes are legal in filenames but make every later `curl`, `scp`
         # or shell move need quoting. Drop them rather than inherit the problem.
@@ -175,11 +182,13 @@ def artifacts_for_run(
     error_count = len([e for e in events if e.get("type") == "action_error"])
     failed = run.stopped_reason in ("max_turns", "refusal") or error_count >= 3
 
-    media = [("video", video_path, "webm", "video/webm")]
-    if failed and trace_path:
-        # Only on a bad run: a trace needs `npx playwright show-trace` to open,
-        # so attaching one to every success would be weight nobody opens.
-        media.append(("trace", trace_path, "zip", "application/zip"))
+    # Nothing heavy on a run that worked. The report is the record; footage and
+    # traces are diagnostics, and diagnostics for a success are just clutter.
+    media = []
+    if failed:
+        media.append(("video", video_path, "webm", "video/webm"))
+        if trace_path:
+            media.append(("trace", trace_path, "zip", "application/zip"))
 
     for kind, path, ext, _mime in media:
         if not path or not os.path.exists(path):
