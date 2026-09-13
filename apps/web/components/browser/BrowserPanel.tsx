@@ -19,6 +19,8 @@ interface Props {
 const MIN_W = 420
 const MAX_W = 980
 const DEFAULT_W = 640
+// The conversation must stay readable no matter what else is open.
+const MIN_CONTENT_W = 460
 
 function elapsed(from: number | null) {
   if (!from) return "00:00"
@@ -47,11 +49,13 @@ export function BrowserPanel({ jobId, task, open, onOpenChange }: Props) {
   const [driving, setDriving] = useState(false)
   const [vnc, setVnc] = useState<{ takeover: boolean; vnc_url: string | null } | null>(null)
   const [startedAt] = useState(() => Date.now())
-  const [width, setWidth] = useState(DEFAULT_W)
+  const [width, setWidth] = useState(DEFAULT_W)        // what the user dragged to
+  const [effectiveW, setEffectiveW] = useState<number | null>(null)  // what fits
   const [dragging, setDragging] = useState(false)
   const [, forceTick] = useState(0)
   const sidebar = useSidebar()
   const restoreSidebar = useRef<boolean | null>(null)
+  const collapsedOnce = useRef(false)
 
   useEffect(() => {
     const t = setInterval(() => forceTick((n) => n + 1), 1000)
@@ -74,26 +78,59 @@ export function BrowserPanel({ jobId, task, open, onOpenChange }: Props) {
     }
   }, [])
 
-  // Push the page aside and collapse the nav to a rail while open. Not hidden
-  // entirely — losing navigation to watch a browser run is a bad trade, and
-  // every split-view reference (Suno, Twist, VS Code) keeps a rail.
+  // Push the page aside while open, and collapse the nav ONCE so the first
+  // reveal has room. Deliberately not on every re-run: `sidebar` is a
+  // dependency, so re-collapsing here meant expanding the nav slammed it shut
+  // again and the menu felt broken.
   useEffect(() => {
     const showing = open && !!jobId && !isMobile
-    document.documentElement.style.setProperty(
-      "--browser-panel-w",
-      showing ? `${fullscreen ? window.innerWidth : width}px` : "0px",
-    )
     if (showing) {
-      if (restoreSidebar.current === null) restoreSidebar.current = sidebar.open
-      if (sidebar.open) sidebar.setOpen(false)
-    } else if (restoreSidebar.current !== null) {
+      if (!collapsedOnce.current) {
+        collapsedOnce.current = true
+        restoreSidebar.current = sidebar.open
+        if (sidebar.open) sidebar.setOpen(false)
+      }
+    } else if (collapsedOnce.current) {
+      collapsedOnce.current = false
       if (restoreSidebar.current) sidebar.setOpen(true)
       restoreSidebar.current = null
     }
+  }, [open, jobId, isMobile, sidebar])
+
+  // Keep the panel and the page from crowding each other out. If the nav is
+  // expanded back while the panel is open, the panel gives ground instead of
+  // squeezing the conversation into an unusable strip — it slides back to fit
+  // rather than fighting for the space.
+  useEffect(() => {
+    const showing = open && !!jobId && !isMobile
+    const apply = () => {
+      if (!showing) {
+        document.documentElement.style.setProperty("--browser-panel-w", "0px")
+        setEffectiveW(null)
+        return
+      }
+      if (fullscreen) {
+        document.documentElement.style.setProperty("--browser-panel-w", `${window.innerWidth}px`)
+        setEffectiveW(window.innerWidth)
+        return
+      }
+      const nav = document.querySelector('[data-slot="sidebar"]') as HTMLElement | null
+      const navW = nav ? nav.getBoundingClientRect().width : 0
+      const room = window.innerWidth - navW - MIN_CONTENT_W
+      const w = Math.max(MIN_W, Math.min(width, room))
+      document.documentElement.style.setProperty("--browser-panel-w", `${w}px`)
+      setEffectiveW(w)
+    }
+    apply()
+    window.addEventListener("resize", apply)
+    // The nav animates, so re-measure after it settles.
+    const t = setTimeout(apply, 260)
     return () => {
+      window.removeEventListener("resize", apply)
+      clearTimeout(t)
       document.documentElement.style.setProperty("--browser-panel-w", "0px")
     }
-  }, [open, jobId, isMobile, width, fullscreen, sidebar])
+  }, [open, jobId, isMobile, width, fullscreen, sidebar.open])
 
   const startResize = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
@@ -272,7 +309,7 @@ export function BrowserPanel({ jobId, task, open, onOpenChange }: Props) {
     <aside
       className="fixed right-0 top-0 z-40 flex h-full flex-col"
       style={{
-        width: fullscreen ? "100vw" : width,
+        width: fullscreen ? "100vw" : (effectiveW ?? width),
         background: "var(--c-surface)",
         borderLeft: "1px solid var(--c-border)",
         transition: dragging ? "none" : "width 220ms cubic-bezier(0.32, 0.72, 0, 1)",
