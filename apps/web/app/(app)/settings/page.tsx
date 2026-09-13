@@ -717,6 +717,8 @@ export default function SettingsPage() {
   // your place. Read on mount rather than via useSearchParams to avoid pulling
   // the whole page into a Suspense boundary for one query param.
   const [tab, setTab] = useState<TabId>("general")
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab")
     if (t && TABS.some(x => x.id === t)) setTab(t as TabId)
@@ -867,8 +869,16 @@ export default function SettingsPage() {
           </div>
           <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>
             Current: <span className="font-mono">{timezone}</span>
-            {" · "}
-            {new Date().toLocaleTimeString(undefined, { timeZone: timezone, hour: "2-digit", minute: "2-digit", timeZoneName: "short" })}
+            {/* Rendered only after mount. new Date() during render produces a
+                different instant (and locale) on the server than in the
+                browser, which is a hydration mismatch — the same class of bug
+                as the chat boot-quote in v2.19.8. */}
+            {mounted && (
+              <>
+                {" · "}
+                {new Date().toLocaleTimeString(undefined, { timeZone: timezone, hour: "2-digit", minute: "2-digit", timeZoneName: "short" })}
+              </>
+            )}
           </p>
         </section>
 
