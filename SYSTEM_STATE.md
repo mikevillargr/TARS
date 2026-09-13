@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.24.0 |
+| Version | v2.25.0 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,39 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.25.0 — 2026-09-13
+**Feature: markdown tables become sortable, exportable data**
+
+- **Every structured answer already arrives as a markdown table** — a price comparison, a
+  client breakdown, a browser run's findings — and then it is text you read and retype
+  somewhere useful. The last mile was missing: a number you were shown should be a number
+  you can work with.
+- **The renderer was upgraded, deliberately NOT a new tool.** `components/chat/DataTable.tsx`
+  replaces the plain `<table>` renderer in `MessageContent.tsx`. Because it reads the table
+  the model already writes, it works on **every message ever sent**, retroactively, and the
+  model has nothing extra to remember. A `render_table` tool would only apply to tables
+  written after it shipped, and only when the model thought to reach for it.
+- **What it does:** click-to-sort per column (numeric-aware, so `PHP 1,200` sorts above
+  `PHP 900` rather than beside it), COPY CSV and DOWNLOAD (pure client), SHEETS (creates a
+  real Google Sheet and links it), SAVE (CSV into Artifacts). Exports send the **currently
+  sorted** rows — what you export is what you were looking at.
+- **New harness routes** `POST /api/tables/to-sheet` and `POST /api/tables/to-artifact`
+  (`api/routes/tables.py`), plus `create_spreadsheet(title, values)` on the Google Workspace
+  connector (`connectors/google_drive.py`). The CSV is stored as **text, not base64**, so it
+  stays searchable and TARS can read it back later — the same reasoning as browser downloads.
+  5,000-row cap; a missing Workspace connector returns 409 with a real instruction, not a 500.
+- **Shipped doing nothing, worth recording.** The first deploy rendered every table plainly
+  with no toolbar. The walker matched elements by tag name in the *rendered children*, but
+  ReactMarkdown's `components` map overrides `thead`/`th`/`td`, so their `type` is a component
+  function rather than the string `"thead"` — it found nothing and fell into the plain
+  fallback, which looked exactly like the deploy had not landed. `tableFromNode` now reads the
+  hast `node` ReactMarkdown passes alongside `children`, which keeps real `tagName`s. Second
+  silent-fallback failure in two releases; both now log or are structurally impossible.
+- Lint caught the toolbar button being defined inside render — the identical
+  `react-hooks/static-components` bug fixed in `TableView` an hour earlier, and a concrete
+  argument for having made CI green in v2.23.0.
+- Web + harness, no schema change.
 
 ### v2.24.0 — 2026-09-13
 **Feature: chat suggestion chips do things instead of typing things**
