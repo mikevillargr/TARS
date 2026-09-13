@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.9 |
-| Released | 2026-09-12 |
+| Version | v2.19.10 |
+| Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -163,6 +163,36 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.19.10 — 2026-09-13
+**Chore: Anthropic SDK upgraded from 0.43.0 to 1.5.0**
+- `anthropic==0.43.0` shipped in December 2024 and had become a liability rather than
+  simply old. v2.18.6 through v2.18.8 was roughly two months of silently broken memory
+  extraction, root-caused to that SDK meeting a newer model response shape and worked
+  around with `extra_body` because the typed kwarg did not exist in it. New code was
+  starting to accrue the same species of workaround, so the version itself got fixed.
+- **The upgrade was a pin bump and nothing else.** An inventory against the full 0.x to
+  1.x breaking-change list found the codebase already clear of every item: 15 call sites
+  across 9 files, zero `.with_raw_response` (the awaited-async change), zero Text
+  Completions (all three `completions.create` hits are `zai_openai`, the OpenAI-compatible
+  client for Z.ai, which this does not touch), zero sampling parameters reaching the SDK,
+  and zero `httpx` objects crossing the SDK boundary, so no `httpx2` migration was needed;
+  all 14 `httpx` uses are standalone clients for Strava, Tessie and health checks. Python
+  is already 3.12, above the new 3.10 floor.
+- **Verified against the real API, not by typecheck.** New `scripts/check_model_paths.py`
+  exercises the classifier, all three tiers, streaming with token counts, and tool use.
+  Tier 2 matters more here than it appears: Z.ai is reached through the *Anthropic* SDK
+  with a `base_url` override, so GLM calls run through the upgraded client too. All checks
+  pass with no code changes.
+- **The smoke test is kept, not discarded.** The v2.18.6 failure mode was a bare `except`
+  swallowing an error and falling back to a heuristic, so nothing ever surfaced; every
+  check asserts on real output, which makes a silent fallback read as FAIL instead of as
+  plausible-looking degraded behaviour. Run it after any SDK bump, provider change, or
+  Settings model-routing change.
+- **Deploy note:** a dependency change needs `pip install -r requirements.txt` on the
+  server before `pm2 restart`. `git pull` alone leaves the old package installed, which is
+  the same deploy-hygiene gap recorded in v2.18.10.
+- Harness-only, no schema change.
 
 ### v2.19.9 — 2026-09-12
 **Change: Today's voice — signal copy, blank states, and section framing**

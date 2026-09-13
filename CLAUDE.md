@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.9 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.19.10 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -900,6 +900,11 @@ The production server has fail2ban. **Hammering repeated SSH connection attempts
 # Pull latest
 ssh tars "cd /opt/tars && git pull origin main"
 
+# Install dependencies — ONLY when requirements.txt changed, but NEVER skip it then.
+# `git pull` updates the file, not the venv; the harness keeps importing the old
+# package and the change is invisible until something breaks oddly (see v2.18.10).
+ssh tars "cd /opt/tars/apps/harness && source .venv/bin/activate && pip install -r requirements.txt"
+
 # Run migrations
 ssh tars "cd /opt/tars/apps/harness && source .venv/bin/activate && python3 -m alembic upgrade head"
 
@@ -1088,6 +1093,30 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.19.10 Chore: Anthropic SDK 0.43.0 -> 1.5.0. 0.43.0 shipped Dec 2024 and had become a
+        liability, not just old stock: v2.18.6-v2.18.8 was ~2 months of silently broken
+        memory extraction caused by it meeting a newer model response shape, worked around
+        with extra_body because the typed kwarg didn't exist in it, and new code was
+        starting to accrue the same species of workaround. The upgrade turned out to be a
+        pin bump and nothing else. Inventory against the full 0.x -> 1.x breaking-change
+        list found the codebase already clear of every item: 15 call sites across 9 files,
+        zero .with_raw_response, zero Text Completions (all 3 completions.create hits are
+        zai_openai, the OpenAI-compatible client for Z.ai, untouched by this), zero sampling
+        params reaching the SDK, zero httpx objects crossing the SDK boundary (all 14 httpx
+        uses are standalone clients for Strava/Tessie/health checks, so no httpx2
+        migration). Python already 3.12, above the new 3.10 floor. Verified against the real
+        API rather than by typecheck: new scripts/check_model_paths.py exercises classifier,
+        all three tiers, streaming with token counts, and tool use, all passing with no code
+        changes. Tier 2 matters more than it looks here, since Z.ai is reached through the
+        ANTHROPIC SDK with a base_url override, so GLM calls run through the upgraded client
+        too. The smoke test is kept rather than thrown away: the v2.18.6 failure mode was a
+        bare except swallowing an error and falling back to a heuristic so nothing ever
+        surfaced, and every check asserts on real output so a silent fallback reads as FAIL
+        instead of as plausible degraded behaviour. Run it after any SDK bump, provider
+        change, or Settings model-routing change. DEPLOY NOTE: a dependency change needs
+        `pip install -r requirements.txt` on the server before `pm2 restart` — git pull
+        alone leaves the old package installed (same deploy-hygiene gap as v2.18.10).
+        Harness-only, no schema change.
 v2.19.9 Change: Today's voice — signal copy, blank states, section framing. The screen was
         functionally right but read like a queue narrating its own bookkeeping. Reworked
         both ends: harness strings that GENERATE signal text, and the frontend copy around
