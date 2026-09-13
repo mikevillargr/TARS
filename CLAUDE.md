@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.21.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.21.1 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1134,6 +1134,21 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.21.1 Fix: harness was killing the container's browser; auto-heal; fresh tabs. Root
+        cause of "browser connection failing": the container had every process running EXCEPT
+        chrome. shutdown_browser_pool called browser.close(), which on a CDP connection
+        closes the REMOTE browser, so every `pm2 restart tars-harness` killed the container's
+        Chrome — and launch.py sat in `await stop.wait()` forever without checking, so
+        supervisor saw a healthy python process and restarted nothing. BrowserPool.close now
+        only closes a browser this process launched. AUTO-HEAL: launch.py runs a 10s watchdog
+        (is_connected plus touching a page, since is_connected lags a hard crash); if the
+        browser is gone it exits non-zero and supervisor restarts it on the same persistent
+        profile. Verified: pkill -9 chrome recovered in under 8s, harness restart no longer
+        kills it. Also: BrowserSession.start took pages[0], the OLDEST tab — fine for a fresh
+        context, wrong for the persistent profile, which is how take-over served a stale page
+        instead of the one being worked on. Manual sessions now open a NEW tab, focus it, and
+        close it on teardown; pause also raises the driven tab, since VNC shows whichever
+        window is topmost on the X display. Harness + container image, no schema change.
 v2.21.0 Feature: open a browser from chat, bound to the conversation. Fix: a human can
         sign in to Google/Facebook over VNC. (1) Sign-in was blocked because
         navigator.webdriver was true and userAgentData.brands was empty — the two signals

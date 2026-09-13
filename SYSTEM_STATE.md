@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.21.0 |
+| Version | v2.21.1 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,31 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.21.1 — 2026-09-13
+**Fix: the harness was killing the container's browser; it now self-heals; fresh tabs**
+
+- **Root cause of "browser connection failing".** The container had supervisord, Xvfb,
+  launch.py, socat, x11vnc and websockify all running and **no chrome process at all**. Two
+  compounding faults: `shutdown_browser_pool()` called `browser.close()`, which on a CDP
+  connection closes the **remote** browser — so every `pm2 restart tars-harness` took the
+  container's Chrome down with it. And nothing noticed, because `launch.py` sat in
+  `await stop.wait()` forever without ever checking the browser was still there, so
+  supervisor saw a healthy Python process and restarted nothing. `BrowserPool.close()` now
+  only closes a browser this process actually launched.
+- **Auto-heal.** `launch.py` runs a 10s watchdog: `is_connected()` plus touching a page,
+  since `is_connected()` lags a hard crash. If the browser is gone it exits non-zero,
+  supervisor restarts the program, and a fresh Chromium comes up on the same persistent
+  profile. Verified: `pkill -9 chrome` recovered to CDP 200 in under 8 seconds with no
+  intervention, and a harness restart no longer kills the browser (11 chrome procs before
+  and after).
+- **Take-over served stale pages.** `BrowserSession.start()` took `pages[0]` — the OLDEST
+  tab in the context. Harmless for a context we just created, wrong for the persistent
+  profile, which accumulates whatever was left open; that is how taking over to look at
+  Shopee produced a randonneuring page from an hour earlier. Manual sessions now always open
+  a **new** tab, focus it, and close it on teardown. `pause` also raises the tab being
+  driven, because VNC shows whichever window is on top of the X display rather than
+  necessarily the one being worked on.
 
 ### v2.21.0 — 2026-09-13
 **Feature: open a browser from chat. Fix: a human can sign in to Google/Facebook over VNC.**
