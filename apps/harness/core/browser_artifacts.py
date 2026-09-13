@@ -206,7 +206,10 @@ def artifacts_for_run(
                 Artifact(
                     user_id=user_id,
                     filename=f"{stem}.{ext}",
-                    type="transcript" if kind == "trace" else "document",
+                    # Typed by what it IS. "document" on a webm made the
+                    # Artifacts viewer treat a screen recording as text to
+                    # extract, which is how it rendered as base64 gibberish.
+                    type="transcript" if kind == "trace" else "video",
                     source="browser",
                     source_id=job_id,
                     content=encoded,

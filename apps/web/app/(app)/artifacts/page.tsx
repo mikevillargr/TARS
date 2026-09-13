@@ -129,7 +129,7 @@ function formatSize(bytes: number) {
 }
 
 function sourceLabel(source: string) {
-  return { chat: "Chat", cron: "Cron", meeting: "Meeting", upload: "Upload" }[source] ?? source
+  return { chat: "Chat", cron: "Cron", meeting: "Meeting", upload: "Upload", browser: "Browser" }[source] ?? source
 }
 
 function isBinaryArtifact(detail: ArtifactDetail | null) {
@@ -154,6 +154,20 @@ function isXlsx(detail: ArtifactDetail | null) {
 }
 
 const _IMG_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp"])
+const _VIDEO_EXTS = new Set(["webm", "mp4", "mov", "m4v"])
+
+function isVideoArtifact(detail: ArtifactDetail | null) {
+  if (!detail) return false
+  if (detail.type === "video") return true
+  const ext = detail.filename?.split(".").pop()?.toLowerCase() ?? ""
+  return _VIDEO_EXTS.has(ext)
+}
+
+/** Archives we deliberately cannot preview — a Playwright trace needs its own
+ *  viewer. Saying so beats dumping base64 into the panel. */
+function isArchiveArtifact(detail: ArtifactDetail | null) {
+  return (detail?.filename?.toLowerCase().endsWith(".zip") ?? false)
+}
 
 function isImageArtifact(detail: ArtifactDetail | null) {
   if (!detail) return false
@@ -367,7 +381,8 @@ function ArtifactModal({
         // Fetch preview for binary artifacts (DOCX / PPTX / XLSX)
         // PDF handled by iframe; images handled by <img>; code / text displayed directly
         const isImageFile = isImageArtifact(d)
-        if (d.content?.startsWith("base64:") && !d.filename?.toLowerCase().endsWith(".pdf") && !isImageFile) {
+        const skipExtract = isImageFile || isVideoArtifact(d) || isArchiveArtifact(d)
+        if (d.content?.startsWith("base64:") && !d.filename?.toLowerCase().endsWith(".pdf") && !skipExtract) {
           setPreviewLoading(true)
           try {
             const p = await fetch(`/api/proxy/artifacts/${artifactId}/preview`)
@@ -413,6 +428,8 @@ function ArtifactModal({
   const showImagePreview = isBinary && isImageArtifact(detail)
   const showPdfFrame = isBinary && isPdf(detail)
   const showExtractedPreview = isBinary && (isDocx(detail) || isPptx(detail) || isXlsx(detail))
+  const showVideo = isBinary && isVideoArtifact(detail)
+  const showArchive = isBinary && isArchiveArtifact(detail)
 
   return (
     <Dialog open={artifactId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
@@ -564,6 +581,35 @@ function ArtifactModal({
                     className="max-w-full max-h-full object-contain rounded-lg"
                     style={{ maxHeight: "70vh" }}
                   />
+                </div>
+              ) : showVideo ? (
+                /* Screen recording of a browser run — played, not transcribed */
+                <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
+                  <video
+                    src={`/api/proxy/artifacts/${detail.id}/view`}
+                    controls
+                    className="max-w-full rounded-lg"
+                    style={{ maxHeight: "70vh", background: "var(--c-surface-2)" }}
+                  />
+                </div>
+              ) : showArchive ? (
+                /* A Playwright trace. There is no honest in-app preview, so say
+                   what it is and how to open it instead of showing base64. */
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center">
+                  <span className="tars-label tars-label--muted">TRACE ARCHIVE</span>
+                  <p className="text-sm max-w-sm leading-relaxed" style={{ color: "var(--c-ink-muted)" }}>
+                    A Playwright trace from a browser run that went wrong. It holds a DOM
+                    snapshot for every action, which is the fastest way to see where the run
+                    broke. It needs Playwright&apos;s own viewer, so there is nothing useful
+                    to show here.
+                  </p>
+                  <code
+                    className="px-2 py-1 rounded text-[11px]"
+                    style={{ backgroundColor: "var(--c-surface-2)", color: "var(--c-amber)" }}
+                  >
+                    npx playwright show-trace {detail.filename}
+                  </code>
+                  <p className="tars-label tars-label--muted">DOWNLOAD IT FIRST</p>
                 </div>
               ) : showPdfFrame ? (
                 /* PDF — rendered natively by the browser */
