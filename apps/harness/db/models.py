@@ -329,6 +329,10 @@ class Artifact(Base):
     source: Mapped[str] = mapped_column(String, nullable=False)
     source_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Binary payloads live in the disk blob store (core/blob_store.py); content
+    # keeps extracted text only. Legacy rows may still hold "base64:"-prefixed
+    # payloads in content until scripts/backfill_artifact_blobs.py runs.
+    storage_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     embedding: Mapped[Optional[List[float]]] = mapped_column(Vector(768), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     parent_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("artifacts.id"), nullable=True)

@@ -6,11 +6,14 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from core.auth import require_auth
+from core.artifact_store import store_upload_as_artifact
+from core.blob_store import resolve_artifact_bytes
+from core import blob_store
 from db.session import get_db
 from db.models import Artifact
-from ingest.pipeline import ingest_file
 
 router = APIRouter()
 
@@ -76,6 +79,10 @@ class ArtifactOut(BaseModel):
     version: int
     parent_id: Optional[str]
     created_at: datetime
+    # True when the artifact has a binary payload on disk (or a legacy base64
+    # payload still awaiting backfill) — tells the client to render via
+    # /view or /preview instead of expecting displayable content.
+    has_file: bool = False
 
     class Config:
         from_attributes = True
@@ -115,6 +122,30 @@ def _classify_type(filename: str) -> str:
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
+_HAS_FILE_SQL = (Artifact.storage_path.isnot(None)) | (Artifact.content.like("base64:%"))
+
+
+def _artifact_list_query():
+    """SELECT artifacts without loading the (possibly huge) content column.
+
+    has_file is computed in SQL so the client can pick a renderer without us
+    shipping multi-MB text — or, for legacy rows, base64 — payloads.
+    """
+    return (
+        select(Artifact, _HAS_FILE_SQL.label("has_file"))
+        .options(defer(Artifact.content))
+    )
+
+
+def _to_out(rows) -> List[ArtifactOut]:
+    out: List[ArtifactOut] = []
+    for art, has_file in rows:
+        item = ArtifactOut.model_validate(art)
+        item.has_file = bool(has_file)
+        out.append(item)
+    return out
+
+
 @router.get("", response_model=List[ArtifactOut])
 async def list_artifacts(
     type: Optional[str] = None,
@@ -122,14 +153,14 @@ async def list_artifacts(
     user_id: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(Artifact).where(Artifact.user_id == user_id)
+    q = _artifact_list_query().where(Artifact.user_id == user_id)
     if type:
         q = q.where(Artifact.type == type)
     if source:
         q = q.where(Artifact.source == source)
     q = q.order_by(Artifact.created_at.desc()).limit(200)
     result = await db.execute(q)
-    return result.scalars().all()
+    return _to_out(result.all())
 
 
 @router.get("/{artifact_id}", response_model=ArtifactDetailOut)
@@ -145,19 +176,21 @@ async def get_artifact(
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
-    # Never ship the base64 payload here. The client cannot display it anyway —
-    # images and PDFs render from /view, documents from /preview — so sending
-    # it only meant waiting on a multi-MB download before anything appeared. An
-    # 11MB trace took ~20s to open a panel whose whole message is "this needs a
-    # different viewer". The marker keeps `is_binary` detection working.
-    if artifact.content and artifact.content.startswith("base64:"):
-        # Detach FIRST. This is a live ORM object, so mutating it while it is
-        # still in the session marks it dirty and a flush would persist the
-        # truncation — destroying the stored file. Expunged, it is just a value.
-        db.expunge(artifact)
-        artifact.content = "base64:"
+    has_file = bool(artifact.storage_path)
 
-    return artifact
+    # Legacy rows still carry the binary payload as "base64:" text. Never ship
+    # it here — images and PDFs render from /view, documents from /preview — so
+    # sending it only meant waiting on a multi-MB download before anything
+    # appeared. Detach FIRST: mutating a live ORM object marks it dirty and a
+    # flush would persist the truncation, destroying the stored file.
+    if artifact.content and artifact.content.startswith("base64:"):
+        has_file = True
+        db.expunge(artifact)
+        artifact.content = None
+
+    resp = ArtifactDetailOut.model_validate(artifact)
+    resp.has_file = has_file
+    return resp
 
 
 @router.get("/{artifact_id}/versions", response_model=List[ArtifactOut])
@@ -178,14 +211,14 @@ async def list_artifact_versions(
     root_id = artifact.parent_id or artifact_id
 
     versions_result = await db.execute(
-        select(Artifact)
+        _artifact_list_query()
         .where(
             Artifact.user_id == user_id,
             (Artifact.id == root_id) | (Artifact.parent_id == root_id),
         )
         .order_by(Artifact.version.desc())
     )
-    return versions_result.scalars().all()
+    return _to_out(versions_result.all())
 
 
 @router.post("", response_model=ArtifactDetailOut, status_code=201)
@@ -195,6 +228,18 @@ async def create_artifact(
     db: AsyncSession = Depends(get_db),
 ):
     artifact_type = body.type or _classify_type(body.filename)
+
+    # Clients that POST binary as a "base64:" string (e.g. the Rokid glasses
+    # bridge) get moved to the blob store here — content keeps text only.
+    content: Optional[str] = body.content
+    storage_path: Optional[str] = None
+    size_bytes = len(body.content.encode("utf-8"))
+    if content.startswith("base64:"):
+        raw = base64.b64decode(content[7:])
+        ext = body.filename.rsplit(".", 1)[-1].lower() if "." in body.filename else "bin"
+        storage_path = blob_store.store(raw, ext, user_id)
+        content = None
+        size_bytes = len(raw)
 
     # If this is a new version of an existing artifact, bump version number
     version = 1
@@ -218,17 +263,20 @@ async def create_artifact(
         type=artifact_type,
         source=body.source,
         source_id=body.source_id,
-        content=body.content,
+        content=content,
+        storage_path=storage_path,
         version=version,
         parent_id=body.parent_id,
         project_ref=body.project_ref,
         tags=body.tags,
-        size_bytes=len(body.content.encode("utf-8")),
+        size_bytes=size_bytes,
     )
     db.add(artifact)
     await db.commit()
     await db.refresh(artifact)
-    return artifact
+    resp = ArtifactDetailOut.model_validate(artifact)
+    resp.has_file = bool(storage_path)
+    return resp
 
 
 @router.delete("/{artifact_id}", status_code=204)
@@ -243,6 +291,8 @@ async def delete_artifact(
     artifact = result.scalar_one_or_none()
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
+    if artifact.storage_path:
+        blob_store.delete(artifact.storage_path)
     await db.execute(delete(Artifact).where(Artifact.id == artifact_id))
     await db.commit()
 
@@ -255,8 +305,9 @@ async def download_artifact(
 ):
     """
     Serve an artifact as a downloadable binary file.
-    Text artifacts are served as text/plain; base64-encoded binary artifacts
-    (DOCX, PPTX, PDF) are decoded and served with the correct MIME type.
+    Text artifacts are served as text/plain; binary artifacts are read from the
+    blob store (or decoded from legacy base64 content) and served with the
+    correct MIME type.
     """
     result = await db.execute(
         select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
@@ -268,9 +319,8 @@ async def download_artifact(
     filename = art.filename or "download"
     ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
 
-    if art.content and art.content.startswith("base64:"):
-        # Binary artifact — decode and serve
-        raw = base64.b64decode(art.content[7:])
+    raw = resolve_artifact_bytes(art)
+    if raw is not None:
         mime = _BINARY_MIME.get(ext, "application/octet-stream")
         return Response(
             content=raw,
@@ -308,8 +358,8 @@ async def view_artifact(
     filename = art.filename or "preview"
     ext = ("." + filename.rsplit(".", 1)[-1].lower()) if "." in filename else ""
 
-    if art.content and art.content.startswith("base64:"):
-        raw = base64.b64decode(art.content[7:])
+    raw = resolve_artifact_bytes(art)
+    if raw is not None:
         mime = _BINARY_MIME.get(ext, "application/octet-stream")
         return Response(
             content=raw,
@@ -346,10 +396,9 @@ async def preview_artifact(
     content = art.content or ""
     filename = (art.filename or "").lower()
 
-    if not content.startswith("base64:"):
+    raw = resolve_artifact_bytes(art)
+    if raw is None:
         return {"text": content[:8000], "type": "text"}
-
-    raw = base64.b64decode(content[7:])
 
     _img_exts = (".jpg", ".jpeg", ".png", ".gif", ".webp")
     if any(filename.endswith(e) for e in _img_exts):
@@ -420,105 +469,18 @@ async def ingest_artifact(
 ):
     """
     Upload any file and have it parsed into an Artifact.
-    Binary office/PDF files are stored as base64 so the original can be
-    downloaded and previewed. Text/code files are stored as extracted text.
+    Binary office/PDF/image/media payloads go to the disk blob store so the
+    original can be downloaded and previewed; text/code files are stored as
+    extracted text.
     """
-    content_bytes = await file.read()
-    filename = file.filename or "upload"
-    mime_type = file.content_type or ""
-
-    if not content_bytes:
-        raise HTTPException(status_code=400, detail="Empty file")
-
-    from ingest.pipeline import detect_mime, _artifact_type_from_ext
-
-    detected_mime = mime_type or detect_mime(filename, content_bytes)
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    artifact_type = _artifact_type_from_ext(filename)
-
-    # HEIC/HEIF photos: reject at upload time with a clear message
-    if ext in ("heic", "heif") or detected_mime in ("image/heic", "image/heif"):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "HEIC photos cannot be analyzed directly. "
-                "Please export the photo as JPEG or PNG (in your Photos app: Share → Save as JPEG) and try again."
-            ),
-        )
-
-    # BMP/TIFF: image-like but Anthropic Vision doesn't accept them
-    if ext in ("bmp", "tiff", "tif") or detected_mime in ("image/bmp", "image/tiff", "image/x-tiff", "image/x-bmp"):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"'{filename}' is in {ext.upper()} format which cannot be analyzed. "
-                "Please convert to JPEG or PNG and try again."
-            ),
-        )
-
-    # Binary formats are stored as base64 — preserves the original file for
-    # download/preview. Text extraction happens on-the-fly when injected into chat.
-    # Images are stored as base64 so Sonnet can analyze them directly via vision.
-    # Audio/video/archives are stored as base64 so the original is downloadable.
-    _BINARY_EXTS = {"pdf", "docx", "ppt", "pptx", "xls", "xlsx"}
-    _BINARY_MIMES = {
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-powerpoint",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }
-    _IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "webp"}
-    _IMAGE_MIMES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
-    # Legacy .doc: stored as base64 (no text extraction)
-    _DOC_LEGACY_EXTS = {"doc"}
-    _DOC_LEGACY_MIMES = {"application/msword"}
-    # Audio/video/archives: store raw so the original is downloadable
-    _MEDIA_EXTS = {"mp3", "wav", "m4a", "aac", "ogg", "flac",
-                   "mp4", "mov", "avi", "mkv", "webm", "m4v", "wmv",
-                   "rtf", "zip", "tar", "gz", "bz2", "7z", "rar"}
-    _MEDIA_MIMES = {
-        "audio/mpeg", "audio/wav", "audio/x-wav", "audio/mp4",
-        "audio/aac", "audio/ogg", "audio/flac",
-        "video/mp4", "video/quicktime", "video/x-msvideo",
-        "video/x-matroska", "video/webm", "video/x-ms-wmv",
-        "application/rtf", "text/rtf",
-        "application/zip", "application/x-tar",
-        "application/gzip", "application/x-bzip2",
-        "application/x-7z-compressed", "application/vnd.rar",
-    }
-
-    if (ext in _BINARY_EXTS or detected_mime in _BINARY_MIMES
-            or ext in _IMAGE_EXTS or detected_mime in _IMAGE_MIMES
-            or ext in _DOC_LEGACY_EXTS or detected_mime in _DOC_LEGACY_MIMES
-            or ext in _MEDIA_EXTS or detected_mime in _MEDIA_MIMES):
-        content = "base64:" + base64.b64encode(content_bytes).decode()
-        size_bytes = len(content_bytes)
-        # Override type for images so the UI can distinguish and render them correctly
-        if ext in _IMAGE_EXTS or detected_mime in _IMAGE_MIMES:
-            artifact_type = "image"
-    else:
-        result = await ingest_file(
-            content_bytes=content_bytes,
-            filename=filename,
-            mime_type=detected_mime,
-        )
-        content = result["content"]
-        artifact_type = result["artifact_type"]
-        size_bytes = len(content.encode("utf-8"))
-
-    artifact = Artifact(
+    artifact = await store_upload_as_artifact(
         user_id=user_id,
-        filename=filename,
-        type=artifact_type,
+        data=await file.read(),
+        filename=file.filename or "upload",
         source="upload",
-        content=content,
-        version=1,
-        size_bytes=size_bytes,
-        tags=[],
+        db=db,
+        mime_type=file.content_type or "",
     )
-    db.add(artifact)
-    await db.commit()
-    await db.refresh(artifact)
-    return artifact
+    resp = ArtifactDetailOut.model_validate(artifact)
+    resp.has_file = bool(artifact.storage_path)
+    return resp

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://tars:password@localhost:5432/tars"
     redis_url: str = "redis://localhost:6379"
 
+    # Disk-backed blob store for binary artifact payloads (created lazily on first store)
+    blob_dir: str = Field(default="/opt/tars/data/blobs", alias="tars_blob_dir")
+
     tars_username: str = "mike"
     tars_email: str = ""
     tars_password_hash: str = ""
