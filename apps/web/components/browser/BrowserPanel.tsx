@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Pause, Play, X, Maximize2, Minimize2, PanelRight } from "lucide-react"
+import { Pause, Play, X, Maximize2, Minimize2 } from "lucide-react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useSidebar } from "@/components/ui/sidebar"
 import { useBrowserJob, type FeedRow } from "@/hooks/useBrowserJob"
@@ -120,38 +120,11 @@ export function BrowserPanel({ jobId, task, open, onOpenChange }: Props) {
     if (next) setFullscreen(true)
   }
 
+  // Hidden but alive: render nothing. The chat header's Browser button is the
+  // single way back — a floating pill as well meant two controls for one
+  // action, one of them sitting over the composer.
   if (!jobId) return null
-
-  // Closed but alive: a small pill, so a run you dismissed is one click back
-  // rather than lost. Closing must never end the run.
-  if (!open && !isMobile) {
-    return (
-      <button
-        onClick={() => onOpenChange(true)}
-        className="tars-label fixed right-5 z-40 flex items-center gap-2 px-3 py-2"
-        style={{
-          // Clear of the composer: at bottom-4 it landed on the mic button.
-          bottom: 118,
-          borderRadius: 999,
-          background: "var(--c-surface)",
-          border: "1px solid var(--c-border)",
-          color: "var(--c-ink)",
-          boxShadow: "0 4px 16px color-mix(in srgb, var(--c-ink) 10%, transparent)",
-        }}
-        title="Reopen the browser panel"
-      >
-        <span
-          className={status === "running" ? "animate-pulse" : ""}
-          style={{
-            width: 6, height: 6, borderRadius: 99,
-            background: status === "running" ? "var(--c-moss)" : "var(--c-ink-faint)",
-          }}
-        />
-        <PanelRight size={13} />
-        BROWSER
-      </button>
-    )
-  }
+  if (!open && !isMobile) return null
 
   const live = status === "running"
   const actionCount = rows.filter((r) => r.kind === "action").length
