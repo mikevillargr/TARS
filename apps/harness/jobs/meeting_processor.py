@@ -168,10 +168,20 @@ async def _ai_process(
     from core.model_client import get_model_client as _get_mc_mp
     _mc_mp = _get_mc_mp()
     _p_mp = settings.tier2_provider
-    client = _mc_mp.zai if _p_mp == "zai" else _mc_mp.anthropic
-    _mp_model = settings.tier2_model_override or ("glm-4.7" if _p_mp == "zai" else "claude-haiku-4-5-20251001")
+    client = _mc_mp._client_for(_p_mp)
+    _mp_model = settings.tier2_model_override or (
+        "glm-4.7" if _p_mp == "zai"
+        else settings.kimi_model if _p_mp == "kimi"
+        else "claude-haiku-4-5-20251001"
+    )
 
-    if not (settings.zai_api_key if _p_mp == "zai" else settings.anthropic_api_key):
+    if _p_mp == "zai":
+        _mp_key = settings.zai_api_key
+    elif _p_mp == "kimi":
+        _mp_key = settings.kimi_api_key
+    else:
+        _mp_key = settings.anthropic_api_key
+    if not _mp_key:
         summary = ff_overview or "Summary unavailable."
         return summary, _parse_ff_action_items(ff_action_items)
 

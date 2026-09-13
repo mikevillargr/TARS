@@ -134,7 +134,7 @@ async def change_password(
 # ─── Model routing ────────────────────────────────────────────────────────────
 
 class TierConfig(BaseModel):
-    provider: str   # "anthropic" | "zai"
+    provider: str   # "anthropic" | "zai" | "kimi"
     model: str      # resolved effective model name
     backup_provider: str = ""   # "" = no backup configured
     backup_model: str = ""      # resolved effective backup model name
@@ -170,6 +170,10 @@ _PROVIDER_DEFAULTS = {
     ("zai",       "tier2"):  "glm-4.7",
     ("zai",       "tier3"):  "glm-5.1",
     ("zai",       "vision"): "glm-5v-turbo",  # OpenAI endpoint, now supported
+    ("kimi",      "tier1"):  "kimi-k3",
+    ("kimi",      "tier2"):  "kimi-k3",
+    ("kimi",      "tier3"):  "kimi-k3",
+    ("kimi",      "vision"): "kimi-k3",
 }
 
 
@@ -229,14 +233,14 @@ async def update_model_routing(
         if update is None:
             continue
         if update.provider is not None:
-            if update.provider not in ("anthropic", "zai"):
-                raise HTTPException(status_code=400, detail="provider must be 'anthropic' or 'zai'")
+            if update.provider not in ("anthropic", "zai", "kimi"):
+                raise HTTPException(status_code=400, detail="provider must be 'anthropic', 'zai' or 'kimi'")
             _set_env(f"{tier_key}_provider", update.provider)
         if update.model_override is not None:
             _set_env(f"{tier_key}_model_override", update.model_override)
         if update.backup_provider is not None:
-            if update.backup_provider not in ("", "anthropic", "zai"):
-                raise HTTPException(status_code=400, detail="backup_provider must be '', 'anthropic' or 'zai'")
+            if update.backup_provider not in ("", "anthropic", "zai", "kimi"):
+                raise HTTPException(status_code=400, detail="backup_provider must be '', 'anthropic', 'zai' or 'kimi'")
             _set_env(f"{tier_key}_backup_provider", update.backup_provider)
         if update.backup_model_override is not None:
             _set_env(f"{tier_key}_backup_model_override", update.backup_model_override)
@@ -284,8 +288,8 @@ async def update_category_routing(
             raise HTTPException(status_code=400, detail=f"unknown category '{cat}'")
         provider = (entry or {}).get("provider", "") if isinstance(entry, dict) else ""
         model = (entry or {}).get("model", "") if isinstance(entry, dict) else ""
-        if provider and provider not in ("anthropic", "zai"):
-            raise HTTPException(status_code=400, detail="provider must be 'anthropic' or 'zai'")
+        if provider and provider not in ("anthropic", "zai", "kimi"):
+            raise HTTPException(status_code=400, detail="provider must be 'anthropic', 'zai' or 'kimi'")
         if provider and model:
             merged[cat] = {"provider": provider, "model": model}
         else:
@@ -304,6 +308,7 @@ async def update_category_routing(
 class ApiKeysOut(BaseModel):
     anthropic: str     # masked
     zai: str           # masked
+    kimi: str          # masked
     runpod: str        # masked
     tavily: str        # masked
     fireflies: str     # masked
@@ -314,12 +319,12 @@ class ApiKeysOut(BaseModel):
 
 
 class ApiKeyUpdate(BaseModel):
-    provider: str   # "anthropic" | "zai" | "runpod" | "tavily" | "fireflies" | "github" | "tessie" | "tessie_vin"
+    provider: str   # "anthropic" | "zai" | "kimi" | "runpod" | "tavily" | "fireflies" | "github" | "tessie" | "tessie_vin"
     key: str
 
 
 class ApiKeyTestRequest(BaseModel):
-    provider: str   # "anthropic" | "zai"
+    provider: str   # "anthropic" | "zai" | "kimi"
 
 
 class ApiKeyTestResult(BaseModel):
@@ -333,6 +338,7 @@ async def get_api_keys(_user_id: str = Depends(require_auth)):
     return ApiKeysOut(
         anthropic=_mask(settings.anthropic_api_key),
         zai=_mask(settings.zai_api_key),
+        kimi=_mask(settings.kimi_api_key),
         runpod=_mask(settings.runpod_api_key),
         tavily=_mask(settings.tavily_api_key),
         fireflies=_mask(settings.fireflies_api_key),
@@ -351,6 +357,7 @@ async def update_api_key(
     env_map = {
         "anthropic":    "tars_anthropic_api_key",
         "zai":          "zai_api_key",
+        "kimi":         "tars_kimi_api_key",
         "runpod":       "runpod_api_key",
         "tavily":       "tavily_api_key",
         "fireflies":    "fireflies_api_key",
@@ -363,7 +370,7 @@ async def update_api_key(
         raise HTTPException(status_code=400, detail="Unknown provider")
 
     _set_env(env_map[body.provider], body.key)
-    if body.provider in ("anthropic", "zai", "runpod"):
+    if body.provider in ("anthropic", "zai", "kimi", "runpod"):
         from core.model_client import get_model_client
         get_model_client().reset()
 
@@ -402,8 +409,16 @@ async def test_api_key(
             return ApiKeyTestResult(ok=True, latency_ms=latency)
         except Exception as exc:
             return ApiKeyTestResult(ok=False, error=str(exc)[:200])
+    elif body.provider == "kimi":
+        if not settings.kimi_api_key:
+            return ApiKeyTestResult(ok=False, error="No Kimi key configured")
+        client = _anthropic.AsyncAnthropic(
+            api_key=settings.kimi_api_key,
+            base_url=settings.kimi_base_url,
+        )
+        model = settings.kimi_model
     else:
-        raise HTTPException(status_code=400, detail="Provider must be 'anthropic' or 'zai'")
+        raise HTTPException(status_code=400, detail="Provider must be 'anthropic', 'zai' or 'kimi'")
 
     t0 = time.monotonic()
     try:

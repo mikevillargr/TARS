@@ -1543,6 +1543,11 @@ _PROVIDER_DEFAULTS = {
     ("zai",       "tier2"): "glm-4.7",
     ("zai",       "tier3"): "glm-5.1",
     ("zai",       "vision"): "glm-5v-turbo",   # OpenAI endpoint
+    # Kimi K3 is one model for everything — long-horizon agentic + native vision
+    ("kimi",      "tier1"): "kimi-k3",
+    ("kimi",      "tier2"): "kimi-k3",
+    ("kimi",      "tier3"): "kimi-k3",
+    ("kimi",      "vision"): "kimi-k3",
 }
 
 
@@ -1615,6 +1620,7 @@ class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
         self._zai: Optional[anthropic.AsyncAnthropic] = None
+        self._kimi: Optional[anthropic.AsyncAnthropic] = None
         self._zai_openai = None   # openai.AsyncOpenAI, lazy-init
         # Circuit breaker: tier_key -> epoch when the primary went degraded.
         # In-memory on the singleton — correct for a single pm2 worker. If the
@@ -1639,6 +1645,17 @@ class ModelClient:
         return self._zai
 
     @property
+    def kimi(self):  # -> AsyncAnthropic (string to avoid shadowing the module import)
+        """Kimi (Moonshot AI) Anthropic-compatible client for kimi-k3."""
+        if not self._kimi:
+            import anthropic as _anthropic  # re-import in local scope to avoid shadowing
+            self._kimi = _anthropic.AsyncAnthropic(
+                api_key=settings.kimi_api_key,
+                base_url=settings.kimi_base_url,
+            )
+        return self._kimi
+
+    @property
     def zai_openai(self):
         """Z.ai OpenAI-compatible client for GLM-5.x and glm-5v-turbo."""
         if not self._zai_openai:
@@ -1650,12 +1667,17 @@ class ModelClient:
         return self._zai_openai
 
     def _client_for(self, provider: str):
-        return self.zai if provider == "zai" else self.anthropic
+        if provider == "zai":
+            return self.zai
+        if provider == "kimi":
+            return self.kimi
+        return self.anthropic
 
     def reset(self) -> None:
         """Clear cached clients so next call picks up updated API keys/config."""
         self._anthropic = None
         self._zai = None
+        self._kimi = None
         self._zai_openai = None
         self._degraded.clear()   # config changed — give the primary a clean slate
         logger.info("ModelClient reset — API clients will re-initialise on next request")
@@ -1912,9 +1934,14 @@ class ModelClient:
             "propose_calendar_event", "propose_task",
         }
 
-        # Use provided client (e.g. z.ai) or fall back to the default Anthropic client
+        # Use provided client (e.g. z.ai, kimi) or fall back to the default Anthropic client
         _client = client if client is not None else self.anthropic
-        _is_zai = _client is not self.anthropic  # Z.ai doesn't support cache_control
+        # Only the real Anthropic endpoint supports cache_control — Z.ai and Kimi
+        # reject it, so any non-default client gets the plain system string.
+        _supports_cache_control = _client is self.anthropic
+        # Only Z.ai's GLM models need the thinking-token budget bump below —
+        # Kimi stays on the plain path with the caller's max_tokens unchanged.
+        _is_zai = _client is self.zai
         model = model or "claude-sonnet-5"
         current_messages = list(messages)
         total_input = 0
@@ -1926,8 +1953,8 @@ class ModelClient:
             for _round in range(8):  # max 8 tool-call rounds before giving up
                 # Prompt caching: mark system prompt as ephemeral on Anthropic path
                 # so turns 2+ pay only 10% of input tokens for the (static) system prompt.
-                # Z.ai / GLM don't support cache_control — omit it there.
-                if system and not _is_zai:
+                # Z.ai / Kimi don't support cache_control — omit it there.
+                if system and _supports_cache_control:
                     system_param = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
                 else:
                     system_param = system

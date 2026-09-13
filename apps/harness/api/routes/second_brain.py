@@ -318,8 +318,12 @@ async def ai_enhance(
         try:
             from core.model_client import get_model_client as _gmc
             _p1 = settings.tier1_provider
-            client = _gmc().zai if _p1 == "zai" else _gmc().anthropic
-            _m1 = settings.tier1_model_override or ("glm-4.5-air" if _p1 == "zai" else settings.tier1_model)
+            client = _gmc()._client_for(_p1)
+            _m1 = settings.tier1_model_override or (
+                "glm-4.5-air" if _p1 == "zai"
+                else settings.kimi_model if _p1 == "kimi"
+                else settings.tier1_model
+            )
             async with client.messages.stream(
                 model=_m1,
                 max_tokens=1024,
@@ -389,12 +393,16 @@ async def ai_generate(
         _gen_model = _writing_override["model"]
     else:
         _gen_provider = settings.tier3_provider
-        _gen_model = settings.tier3_model_override or ("glm-4.7" if _gen_provider == "zai" else "claude-sonnet-5")
+        _gen_model = settings.tier3_model_override or (
+            "glm-4.7" if _gen_provider == "zai"
+            else settings.kimi_model if _gen_provider == "kimi"
+            else "claude-sonnet-5"
+        )
 
     async def generate():
         try:
             from core.model_client import get_model_client as _gmc2
-            client = _gmc2().zai if _gen_provider == "zai" else _gmc2().anthropic
+            client = _gmc2()._client_for(_gen_provider)
             async with client.messages.stream(
                 model=_gen_model,
                 max_tokens=2048,
@@ -694,8 +702,12 @@ async def auto_populate_properties(
 
     try:
         _p = _cfg.tier1_provider
-        client = _gmc().zai if _p == "zai" else _gmc().anthropic
-        _model = _cfg.tier1_model_override or ("glm-4.5-air" if _p == "zai" else _cfg.tier1_model)
+        client = _gmc()._client_for(_p)
+        _model = _cfg.tier1_model_override or (
+            "glm-4.5-air" if _p == "zai"
+            else _cfg.kimi_model if _p == "kimi"
+            else _cfg.tier1_model
+        )
         resp = await client.messages.create(
             model=_model,
             max_tokens=64,

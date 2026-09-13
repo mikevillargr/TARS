@@ -477,10 +477,7 @@ async def _extract_and_save_facts(
 
     try:
         from core.config import settings as _s
-        _provider = _s.tier1_provider or "anthropic"
-        _api_key  = _s.zai_api_key if _provider == "zai" else _s.anthropic_api_key
-        _base_url = _s.zai_base_url if _provider == "zai" else None
-        _model    = _s.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        _provider, _api_key, _base_url, _model = _tier1_client_params(_s)
         import anthropic as _anth
         _fact_client = _anth.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _fact_client.messages.create(
@@ -597,6 +594,20 @@ def _zai_kwargs(provider: str) -> dict:
     return {"extra_body": {"thinking": {"type": "disabled"}}} if provider == "zai" else {}
 
 
+def _tier1_client_params(_s) -> tuple:
+    """(provider, api_key, base_url, model) for the configured tier1 provider.
+
+    Shared by the small utility calls below (fact extraction, title generation,
+    compaction) so a new tier1 provider only has to be mapped in one place.
+    """
+    provider = _s.tier1_provider or "anthropic"
+    if provider == "zai":
+        return provider, _s.zai_api_key, _s.zai_base_url, _s.tier1_model_override or "glm-4.5-air"
+    if provider == "kimi":
+        return provider, _s.kimi_api_key, _s.kimi_base_url, _s.tier1_model_override or _s.kimi_model
+    return provider, _s.anthropic_api_key, None, _s.tier1_model_override or "claude-haiku-4-5-20251001"
+
+
 async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
     """Generate a 3-5 word conversation title from recent exchanges."""
     recent = messages[-8:]
@@ -607,10 +618,7 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
     )
     try:
         from core.config import settings as _ts
-        _provider = _ts.tier1_provider or "anthropic"
-        _api_key  = _ts.zai_api_key if _provider == "zai" else _ts.anthropic_api_key
-        _base_url = _ts.zai_base_url if _provider == "zai" else None
-        _model    = _ts.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        _provider, _api_key, _base_url, _model = _tier1_client_params(_ts)
         import anthropic as _anth_t
         _title_client = _anth_t.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _title_client.messages.create(
@@ -673,10 +681,7 @@ async def _compact_conversation(conv_id: str, db: AsyncSession) -> None:
 
         from core.config import settings as _cfg
         import anthropic as _anth
-        _provider = _cfg.tier1_provider or "anthropic"
-        _api_key  = _cfg.zai_api_key if _provider == "zai" else _cfg.anthropic_api_key
-        _base_url = _cfg.zai_base_url if _provider == "zai" else None
-        _model    = _cfg.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        _provider, _api_key, _base_url, _model = _tier1_client_params(_cfg)
         _c = _anth.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _c.messages.create(
             model=_model,
