@@ -143,6 +143,22 @@ _REF_SCRIPT = """
 }
 """
 
+# Same precedence as the ref script's name(), for the live panel's action feed.
+_LABEL_JS = """
+(el) => {
+  const pick = (v) => (v || '').replace(/\\s+/g, ' ').trim();
+  return (
+    pick(el.getAttribute('aria-label')) ||
+    pick(el.getAttribute('placeholder')) ||
+    pick(el.innerText) ||
+    pick(el.value) ||
+    pick(el.getAttribute('title')) ||
+    pick(el.getAttribute('alt')) ||
+    ''
+  ).slice(0, 60);
+}
+"""
+
 # Claude sends xdotool-style key names; Playwright wants its own vocabulary.
 _KEY_ALIASES = {
     "return": "Enter",
@@ -196,11 +212,21 @@ class BrowserSession:
         self._ctx = context
         self._allowed = [d.lower() for d in (allowed_domains or [])]
         self._enabled_optional = set(enabled_optional or [])
-        self._on_action = on_action  # async cb(name, payload) -> live panel feed
+        self._on_action = on_action  # async cb(name, args, meta) -> live panel feed
         self._tabs: Dict[str, Any] = {}
         self._tab_seq = 0
         self._active: Optional[str] = None
         self._pending_state_changes: List[dict] = []
+        # Screencast state. Frames are fanned out live and never retained:
+        # 500 stored JPEGs would be ~25MB per job for no benefit, since a
+        # replayed frame from four minutes ago tells you nothing.
+        self._on_frame = None
+        self._cdp = None
+        self._cdp_page = None
+        # Pause gates the agent loop BETWEEN turns, never mid-batch: stopping
+        # halfway through a batch would leave tool_use blocks unanswered.
+        self._resume = asyncio.Event()
+        self._resume.set()
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -210,6 +236,11 @@ class BrowserSession:
         page.set_default_timeout(DEFAULT_TIMEOUT_MS)
         self._register_tab(page)
         self._pending_state_changes.clear()
+
+    def set_action_hook(self, callback) -> None:
+        """async cb(name, args, meta). Set by the agent loop so action events
+        are emitted from one place, at the moment the box is resolvable."""
+        self._on_action = callback
 
     def _register_tab(self, page) -> str:
         self._tab_seq += 1
@@ -225,6 +256,90 @@ class BrowserSession:
         if page is None:
             raise BrowserActionError(f"Unknown tab {key!r}. Call list_tabs for current tabs.")
         return page
+
+    # -- screencast --------------------------------------------------------
+
+    async def start_screencast(self, on_frame) -> None:
+        """Stream the active tab as JPEG frames via CDP.
+
+        No X server and no VNC: Page.startScreencast pushes a frame whenever
+        the page changes, which is far cheaper than polling screenshots.
+        """
+        self._on_frame = on_frame
+        await self._attach_screencast(self._page())
+
+    async def stop_screencast(self) -> None:
+        self._on_frame = None
+        await self._detach_screencast()
+
+    async def _detach_screencast(self) -> None:
+        if self._cdp is None:
+            return
+        try:
+            await self._cdp.send("Page.stopScreencast")
+            await self._cdp.detach()
+        except Exception:  # noqa: BLE001 — page may already be gone
+            pass
+        self._cdp = None
+        self._cdp_page = None
+
+    async def _attach_screencast(self, page) -> None:
+        if self._on_frame is None or page is self._cdp_page:
+            return
+        await self._detach_screencast()
+        try:
+            cdp = await self._ctx.new_cdp_session(page)
+        except Exception as err:  # noqa: BLE001 — observability must never break a run
+            log.warning("screencast attach failed: %s", err)
+            return
+
+        def _on_frame_event(params: dict) -> None:
+            asyncio.create_task(self._emit_frame(cdp, params))
+
+        cdp.on("Page.screencastFrame", _on_frame_event)
+        await cdp.send(
+            "Page.startScreencast",
+            {"format": "jpeg", "quality": 55, "maxWidth": VIEWPORT["width"],
+             "maxHeight": VIEWPORT["height"], "everyNthFrame": 1},
+        )
+        self._cdp = cdp
+        self._cdp_page = page
+
+    async def _emit_frame(self, cdp, params: dict) -> None:
+        # The ack is mandatory. Skip it and Chromium stops sending frames after
+        # the first one, which looks exactly like a frozen page.
+        try:
+            await cdp.send("Page.screencastFrameAck", {"sessionId": params["sessionId"]})
+        except Exception:  # noqa: BLE001
+            return
+        if self._on_frame:
+            meta = params.get("metadata") or {}
+            await self._on_frame(
+                {
+                    "type": "frame",
+                    # NOT "data": TarsWebSocket treats a top-level `data` key as
+                    # the message envelope and unwraps it, so the client would
+                    # receive a bare string instead of this object.
+                    "jpeg": params.get("data"),
+                    "width": meta.get("deviceWidth", VIEWPORT["width"]),
+                    "height": meta.get("deviceHeight", VIEWPORT["height"]),
+                }
+            )
+
+    # -- pause -------------------------------------------------------------
+
+    def pause(self) -> None:
+        self._resume.clear()
+
+    def resume(self) -> None:
+        self._resume.set()
+
+    @property
+    def is_paused(self) -> bool:
+        return not self._resume.is_set()
+
+    async def wait_if_paused(self) -> None:
+        await self._resume.wait()
 
     # -- guards ------------------------------------------------------------
 
@@ -295,8 +410,40 @@ class BrowserSession:
         if handler is None:
             raise BrowserActionError(f"Error: member tool {name!r} is not supported by this executor.")
         if self._on_action:
-            await self._on_action(name, args)
-        return await handler(args)
+            await self._on_action(name, args, await self._action_meta(args))
+        result = await handler(args)
+        await self._attach_screencast(self._page())  # follows tab switches
+        return result
+
+    async def _action_meta(self, args: dict) -> dict:
+        """Where on the page this action is about to land.
+
+        Only possible because targeting is by ref: the executor can resolve the
+        element and read its box BEFORE clicking, so the panel highlights what
+        is about to be touched rather than narrating what already happened. A
+        coordinate-based agent has nothing to resolve.
+        """
+        meta: Dict[str, Any] = {}
+        try:
+            page = self._page(args.get("tab_id"))
+            meta["url"] = page.url
+            target = args.get("target") or {}
+            if target.get("type") == "ref":
+                loc = page.locator(f'[data-tars-ref="{target["ref"]}"]')
+                if await loc.count():
+                    box = await loc.first.bounding_box()
+                    if box:
+                        meta["box"] = box
+                        # inner_text() is empty for <input>, which is most of
+                        # what gets clicked. Mirror the ref script's precedence
+                        # so the panel shows the page's own word for the thing.
+                        meta["label"] = await loc.first.evaluate(_LABEL_JS) or None
+            elif target.get("type") == "coordinate":
+                meta["box"] = {"x": target["x"] - 12, "y": target["y"] - 12,
+                               "width": 24, "height": 24}
+        except Exception:  # noqa: BLE001 — a highlight must never break a run
+            pass
+        return meta
 
     # navigation & capture
 

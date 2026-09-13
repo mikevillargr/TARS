@@ -13,6 +13,7 @@ on escalation when Sonnet gets stuck — see `escalate_after`.
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional
 
@@ -116,7 +117,27 @@ async def run_browser_task(
         if on_event:
             await on_event(event)
 
+    async def _action_hook(name: str, args: dict, meta: dict) -> None:
+        action = {
+            "type": "action",
+            "name": name,
+            "input": args,
+            "turn": run.turns,
+            "at": time.time(),
+            **meta,  # url, and box/label when the target resolved to an element
+        }
+        run.actions.append({"name": name, "input": args, "turn": run.turns})
+        await emit(action)
+
+    session.set_action_hook(_action_hook)
+
     for turn in range(max_turns):
+        # Pause is honoured here and only here. Holding mid-batch would leave
+        # tool_use blocks unanswered, which breaks the turn.
+        if session.is_paused:
+            await emit({"type": "paused"})
+            await session.wait_if_paused()
+            await emit({"type": "resumed"})
         run.turns = turn + 1
         if current_model not in run.models_used:
             run.models_used.append(current_model)
@@ -156,14 +177,6 @@ async def run_browser_task(
 
         if text:
             await emit({"type": "say", "text": text})
-
-        # Record what was requested before running it, so the live panel can
-        # highlight the target element before the click lands.
-        for block in response.content:
-            if block.type == "tool_use" and getattr(block, "toolset_name", None) == "browser":
-                action = {"name": block.name, "input": block.input, "turn": run.turns}
-                run.actions.append(action)
-                await emit({"type": "action", **action})
 
         messages.append(
             {"role": "assistant", "content": [b.model_dump() for b in response.content]}

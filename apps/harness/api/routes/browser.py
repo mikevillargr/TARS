@@ -37,6 +37,34 @@ async def get_job(job_id: str, user_id: str = Depends(require_auth)):
     return {**job.snapshot(), "events": job.events}
 
 
+@router.post("/jobs/{job_id}/pause")
+async def pause_job(job_id: str, user_id: str = Depends(require_auth)):
+    """Hold the run. Takes effect between turns, not mid-batch.
+
+    On mobile this is the whole story: you can't usefully drive a 1280px
+    viewport with a thumb, so pausing hands the run back to you for later
+    rather than pretending take-over works there.
+    """
+    job = get_browser_jobs().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown browser job")
+    if job.session is None:
+        raise HTTPException(status_code=409, detail="Job is no longer running")
+    job.session.pause()
+    return job.snapshot()
+
+
+@router.post("/jobs/{job_id}/resume")
+async def resume_job(job_id: str, user_id: str = Depends(require_auth)):
+    job = get_browser_jobs().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown browser job")
+    if job.session is None:
+        raise HTTPException(status_code=409, detail="Job is no longer running")
+    job.session.resume()
+    return job.snapshot()
+
+
 @router.websocket("/ws/{job_id}")
 async def job_events(
     websocket: WebSocket, job_id: str, token: str = Query(...)

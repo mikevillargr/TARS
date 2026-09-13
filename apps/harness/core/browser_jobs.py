@@ -15,7 +15,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class BrowserJob:
     error: Optional[str] = None
     started_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
+    session: Any = None  # live BrowserSession, for pause/resume; cleared on finish
 
     def snapshot(self) -> dict:
         return {
@@ -45,6 +46,7 @@ class BrowserJob:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "event_count": len(self.events),
+            "paused": bool(self.session is not None and self.session.is_paused),
         }
 
 
@@ -60,6 +62,11 @@ class BrowserJobRegistry:
 
     def get(self, job_id: str) -> Optional[BrowserJob]:
         return self._jobs.get(job_id)
+
+    def attach_session(self, job_id: str, session: Any) -> None:
+        job = self._jobs.get(job_id)
+        if job:
+            job.session = session
 
     def active(self) -> List[dict]:
         return [j.snapshot() for j in self._jobs.values() if j.status == "running"]
@@ -85,6 +92,28 @@ class BrowserJobRegistry:
                 # A panel that can't keep up loses frames rather than stalling
                 # the run. The run is the thing that matters.
                 log.debug("browser job %s: subscriber queue full", job_id)
+
+    async def publish_frame(self, job_id: str, frame: dict) -> None:
+        """Fan out a screencast frame WITHOUT retaining it.
+
+        Frames are live-only. Storing them would put ~25MB of stale JPEG in
+        memory per job, and a replayed frame from four minutes ago tells a
+        late watcher nothing that the action feed doesn't already say.
+        """
+        job = self._jobs.get(job_id)
+        if job is None:
+            return
+        for queue in list(job.subscribers):
+            if queue.qsize() > 8:
+                continue  # a slow panel drops frames; it never stalls the run
+            try:
+                queue.put_nowait(frame)
+            except asyncio.QueueFull:
+                pass
+
+    def has_watchers(self, job_id: str) -> bool:
+        job = self._jobs.get(job_id)
+        return bool(job and job.subscribers)
 
     def subscribe(self, job_id: str) -> Optional[asyncio.Queue]:
         job = self._jobs.get(job_id)
@@ -112,6 +141,9 @@ class BrowserJobRegistry:
         job.result = result
         job.error = error
         job.finished_at = time.time()
+        # Drop the session reference so a finished job can't hold a closed
+        # browser context alive, and so pause/resume 409s instead of no-oping.
+        job.session = None
 
     def _evict(self) -> None:
         finished = sorted(

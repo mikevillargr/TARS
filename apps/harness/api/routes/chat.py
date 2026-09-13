@@ -1129,8 +1129,13 @@ async def send_message(
                             pool = get_browser_pool()
                             async with await pool.session(
                                 allowed_domains=tool_input.get("allowed_domains"),
-                                on_action=None,
                             ) as session:
+                                jobs.attach_session(job.id, session)
+
+                                async def _on_frame(frame: dict) -> None:
+                                    await jobs.publish_frame(job.id, frame)
+
+                                await session.start_screencast(_on_frame)
                                 run = await run_browser_task(
                                     task_text, session, on_event=_on_event
                                 )
