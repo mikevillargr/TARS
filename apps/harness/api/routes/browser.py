@@ -56,7 +56,16 @@ async def capabilities(user_id: str = Depends(require_auth)):
     container = bool(settings.browser_cdp_url)
     return {
         "takeover": container,
-        "vnc_url": "/browser-vnc/" if container else None,
+        # The full URL, params included, so exactly one place knows how to
+        # build it. `path` is the load-bearing one: noVNC resolves its
+        # websockify path against the SERVER ROOT, not the page, so without it
+        # the client opens wss://host/websockify, which lands on the Next.js
+        # catch-all and hangs on "Connecting..." forever.
+        "vnc_url": (
+            "/browser-vnc/?autoconnect=1&resize=scale&path=browser-vnc/websockify"
+            if container
+            else None
+        ),
     }
 
 

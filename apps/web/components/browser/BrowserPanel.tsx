@@ -268,7 +268,7 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
         {driving && vnc?.vnc_url ? (
           <div className="flex flex-col gap-1.5">
             <iframe
-              src={`${vnc.vnc_url}?autoconnect=1&resize=scale`}
+              src={vnc.vnc_url}   /* full URL incl. params comes from the harness */
               title="Browser take-over"
               className="w-full"
               style={{
