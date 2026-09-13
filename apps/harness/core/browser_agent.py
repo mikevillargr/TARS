@@ -47,28 +47,28 @@ explicitly ask for: a purchase, a deletion, an account change, or an email send.
 """
 
 
-# anthropic==0.43.0 predates this response shape, so `model_dump()` on a content
-# block emits fields the API then rejects on the way back in: a stray
-# `text: null` on thinking blocks (400 "thinking.text: Extra inputs are not
-# permitted") and a `caller` object on tool_use. Echo an explicit whitelist
-# instead. DELETE THIS once the SDK is on 1.x and model_dump round-trips cleanly.
-_ECHO_FIELDS = {
-    "thinking": ("type", "thinking", "signature"),
-    "redacted_thinking": ("type", "data"),
-    "text": ("type", "text"),
-    "tool_use": ("type", "id", "name", "input", "toolset_name"),
-}
+def _move_cache_breakpoint(messages: List[dict]) -> None:
+    """Keep one rolling cache breakpoint on the newest message.
 
+    Every turn re-sends the whole transcript, and in a browser run that
+    transcript is mostly page reads, so the accumulated history is the only
+    thing worth caching. The system prompt here is ~150 tokens, far under the
+    minimum cacheable prefix, so a breakpoint on it would do nothing.
 
-def _echo_blocks(content) -> List[dict]:
-    out = []
-    for block in content:
-        dumped = block.model_dump()
-        keep = _ECHO_FIELDS.get(dumped.get("type"))
-        out.append(
-            {k: v for k, v in dumped.items() if k in keep} if keep else dumped
-        )
-    return out
+    Only one breakpoint is kept: it moves to the end each turn so the previous
+    turn's history is served from cache and we pay full price only on the delta.
+    """
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    block.pop("cache_control", None)
+    for message in reversed(messages):
+        content = message.get("content")
+        if isinstance(content, list) and content and isinstance(content[-1], dict):
+            content[-1]["cache_control"] = {"type": "ephemeral"}
+            return
 
 
 @dataclass
@@ -82,6 +82,7 @@ class BrowserRun:
     models_used: List[str] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_read_tokens: int = 0
     escalated: bool = False
     stopped_reason: str = "end_turn"
 
@@ -93,6 +94,7 @@ async def run_browser_task(
     model: str = DRIVER_MODEL,
     escalation_model: Optional[str] = ESCALATION_MODEL,
     escalate_after: int = 3,
+    effort: str = "medium",
     max_turns: int = MAX_TURNS,
     on_event: Optional[Callable[[dict], Any]] = None,
 ) -> BrowserRun:
@@ -107,6 +109,7 @@ async def run_browser_task(
     run = BrowserRun(task=task)
     messages: List[dict] = [{"role": "user", "content": task}]
     current_model = model
+    current_effort = effort
     consecutive_failures = 0
 
     async def emit(event: dict) -> None:
@@ -118,15 +121,24 @@ async def run_browser_task(
         if current_model not in run.models_used:
             run.models_used.append(current_model)
 
-        response = await client.messages.create(
+        _move_cache_breakpoint(messages)
+        response = await client.beta.messages.create(
             model=current_model,
             max_tokens=MAX_TOKENS,
             system=SYSTEM,
             tools=[{"type": TOOLSET_TYPE}],
             messages=messages,
+            output_config={"effort": current_effort},
+            # Page reads pile up fast and go stale the moment the page changes,
+            # so clear old tool results rather than letting the transcript grow
+            # unbounded. This is the difference between a long run costing a
+            # lot and a long run hitting the context window.
+            betas=["context-management-2025-06-27"],
+            context_management={"edits": [{"type": "clear_tool_uses_20250919"}]},
         )
         run.input_tokens += response.usage.input_tokens
         run.output_tokens += response.usage.output_tokens
+        run.cache_read_tokens += getattr(response.usage, "cache_read_input_tokens", 0) or 0
 
         if response.stop_reason == "refusal":
             run.stopped_reason = "refusal"
@@ -153,7 +165,9 @@ async def run_browser_task(
                 run.actions.append(action)
                 await emit({"type": "action", **action})
 
-        messages.append({"role": "assistant", "content": _echo_blocks(response.content)})
+        messages.append(
+            {"role": "assistant", "content": [b.model_dump() for b in response.content]}
+        )
         results = await session.execute_batch(response.content)
         messages.append({"role": "user", "content": results})
 
@@ -170,6 +184,9 @@ async def run_browser_task(
             ):
                 log.info("browser agent escalating %s -> %s", current_model, escalation_model)
                 current_model = escalation_model
+                # Stuck is the one situation worth thinking harder about, so the
+                # escalation raises effort as well as swapping the driver.
+                current_effort = "high"
                 run.escalated = True
                 await emit({"type": "escalated", "model": escalation_model})
         else:
