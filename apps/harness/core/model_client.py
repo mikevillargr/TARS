@@ -403,6 +403,81 @@ WEB_SEARCH_TOOL = {
     },
 }
 
+ARCHIVE_PAGE_TOOL = {
+    "name": "archive_page",
+    "description": (
+        "Save a web page to Artifacts exactly as it renders — a print-quality PDF and a "
+        "full-page image. Use when Mike asks to archive, snapshot, keep a copy of, or "
+        "'save as PDF' a page: a client-facing report, a confirmation, a dashboard he "
+        "wants a record of. "
+        "Inherits any logged-in session, so it works on pages behind a login. "
+        "For understanding what a page SAYS, use browse_web or web_fetch instead — this "
+        "captures pixels, not answers. Only call it when a durable copy is the point."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "url": {"type": "string", "description": "Page to archive."},
+            "allowed_domains": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional navigation allowlist.",
+            },
+        },
+        "required": ["url"],
+    },
+}
+
+CREATE_SIGNAL_TOOL = {
+    "name": "create_signal",
+    "description": (
+        "Put something on Mike's Today screen that needs a decision from him. "
+        "Use this from a scheduled job when you went and looked at something and found "
+        "a thing he has to act on — a new invoice on a client portal, a booking that "
+        "needs confirming, a number that moved the wrong way. "
+        "Today is a triage surface, so only raise what actually needs HIM. Do NOT raise "
+        "'I checked and everything is fine' — nothing found is a normal, correct outcome "
+        "and a Today full of all-clear notices is a Today he stops reading. "
+        "Title it as the thing HE must do, in plain second person ('Approve the NCH "
+        "invoice for September'), never as what the job did ('Portal check completed')."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "What Mike has to do. Imperative, specific, his words not yours.",
+            },
+            "reasoning": {
+                "type": "string",
+                "description": "Why you raised it. Shown under the 'why' disclosure.",
+            },
+            "urgency": {
+                "type": "string",
+                "enum": ["normal", "time", "overdue"],
+                "description": "normal = when you can; time = before today's out; overdue = already late.",
+            },
+            "context_label": {
+                "type": "string",
+                "description": "Client or category, e.g. 'NCH Inc.' or 'Billing'. Shown as a chip.",
+            },
+            "citation": {
+                "type": "string",
+                "description": "Where you saw it — a URL or a quoted line. Grounds the claim.",
+            },
+            "dedupe_key": {
+                "type": "string",
+                "description": (
+                    "Stable identity of the THING, not of this run (e.g. the invoice "
+                    "number). A weekly job that omits this re-raises the same signal "
+                    "every week."
+                ),
+            },
+        },
+        "required": ["title"],
+    },
+}
+
 SAVE_ARTIFACT_TO_BRAIN_TOOL = {
     "name": "save_artifact_to_brain",
     "description": (

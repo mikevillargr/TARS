@@ -21,7 +21,7 @@ from core.model_client import (
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     UPDATE_CALENDAR_EVENT_TOOL, DELETE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL, BROWSE_WEB_TOOL,
-    SAVE_ARTIFACT_TO_BRAIN_TOOL,
+    SAVE_ARTIFACT_TO_BRAIN_TOOL, ARCHIVE_PAGE_TOOL, CREATE_SIGNAL_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, CONFIRM_SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
@@ -1027,6 +1027,8 @@ async def send_message(
         WEB_SEARCH_TOOL,
         BROWSE_WEB_TOOL,
         SAVE_ARTIFACT_TO_BRAIN_TOOL,
+        ARCHIVE_PAGE_TOOL,
+        CREATE_SIGNAL_TOOL,
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
@@ -1136,111 +1138,28 @@ async def send_message(
                         await bg_db.commit()
                         return f"Saved '{art.filename}' to Second Brain."
 
+                    if name == "archive_page":
+                        await _emit_progress("archive_page", "Archiving page…")
+                        from core.browser_runner import execute_archive_page
+                        return await execute_archive_page(tool_input, user_id, bg_db)
+
+                    if name == "create_signal":
+                        await _emit_progress("create_signal", "Raising on Today…")
+                        from core.signal_tool import create_signal_from_tool
+                        return await create_signal_from_tool(bg_db, user_id, tool_input, source="chat")
+
                     if name == "browse_web":
-                        # The chat model delegates rather than driving: the
-                        # browser toolset only runs on Anthropic models, so a
-                        # sub-agent owns the loop and any tier (GLM included)
-                        # can call this tool.
-                        from connectors.browser import get_browser_pool
-                        from core.browser_agent import run_browser_task
-                        from core.browser_jobs import get_browser_jobs
+                        # The chat model delegates: the browser toolset only runs
+                        # on Anthropic models, so a sub-agent owns that loop and
+                        # any tier (GLM included) can call this tool.
+                        from core.browser_runner import execute_browse_web
 
-                        task_text = tool_input.get("task", "").strip()
-                        if not task_text:
-                            return "browse_web needs a task describing what to accomplish."
+                        async def _progress(status: str, extra: dict) -> None:
+                            await _emit_progress("browse_web", status, extra=extra)
 
-                        jobs = get_browser_jobs()
-                        job = jobs.create(task_text)
-                        await _emit_progress(
-                            "browse_web", "Opening browser…", extra={"job_id": job.id}
+                        return await execute_browse_web(
+                            tool_input, user_id, bg_db, on_progress=_progress
                         )
-
-                        async def _on_event(event: dict) -> None:
-                            await jobs.publish(job.id, event)
-                            if event.get("type") == "action":
-                                target = (
-                                    event["input"].get("url")
-                                    or event["input"].get("query")
-                                    or (event["input"].get("target") or {}).get("ref")
-                                    or ""
-                                )
-                                await _emit_progress(
-                                    "browse_web",
-                                    f"{event['name']} {str(target)[:50]}".strip(),
-                                    extra={"job_id": job.id},
-                                )
-
-                        try:
-                            pool = get_browser_pool()
-                            ctx = await pool.session(
-                                allowed_domains=tool_input.get("allowed_domains"),
-                                record=True,
-                            )
-                            async with ctx as session:
-                                jobs.attach_session(job.id, session)
-
-                                async def _on_frame(frame: dict) -> None:
-                                    await jobs.publish_frame(job.id, frame)
-
-                                await session.start_screencast(_on_frame)
-                                run = await run_browser_task(
-                                    task_text, session, on_event=_on_event
-                                )
-                        except Exception as exc:  # noqa: BLE001
-                            log.exception("browse_web failed")
-                            jobs.finish(job.id, error=str(exc))
-                            return f"Browser run failed: {type(exc).__name__}: {exc}"
-
-                        jobs.finish(job.id, result=run.final_text)
-
-                        # Persist the run so it is answerable later. Never let a
-                        # recording problem turn a successful run into a failure:
-                        # the browsing already happened and the answer is good.
-                        saved: List[str] = []
-                        try:
-                            from core.browser_artifacts import artifacts_for_run
-                            from core.browser_downloads import artifacts_for_downloads
-
-                            # Files the run brought back land in Artifacts, text
-                            # extracted where possible so they are searchable
-                            # rather than an opaque blob.
-                            for artifact in await artifacts_for_downloads(
-                                run.downloads, job.id, user_id
-                            ):
-                                bg_db.add(artifact)
-                                saved.append(artifact.filename)
-
-                            for artifact in artifacts_for_run(
-                                run, job.id, job.events, user_id,
-                                video_path=ctx.video_path,
-                                trace_path=ctx.trace_path,
-                            ):
-                                bg_db.add(artifact)
-                                saved.append(artifact.filename)
-                            await bg_db.commit()
-                        except Exception:  # noqa: BLE001
-                            log.exception("browse_web: saving artifacts failed")
-                        finally:
-                            ctx.cleanup()
-                        summary = (
-                            f"[browser job {job.id} · {run.turns} turns · "
-                            f"{len(run.actions)} actions · {'/'.join(run.models_used)}"
-                            f"{' · escalated' if run.escalated else ''}"
-                            f"{' · saved to Artifacts: ' + ', '.join(saved) if saved else ''}]"
-                            f"\n\n{run.final_text}"
-                        )
-                        if run.downloads:
-                            names = ", ".join(d["filename"] for d in run.downloads)
-                            summary += (
-                                f"\n\nDownloaded and saved to Artifacts: {names}. "
-                                f"Use save_to_brain if Mike wants any of it kept in Second Brain."
-                            )
-                        if run.stopped_reason == "max_turns":
-                            summary += (
-                                "\n\n(Ran out of turns before finishing. Report this to "
-                                "Mike rather than guessing the rest.)"
-                            )
-                        return summary
 
                     if name == "create_reminder":
                         await _emit_progress("create_reminder", "Adding reminder…")

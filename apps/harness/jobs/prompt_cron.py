@@ -165,6 +165,8 @@ async def execute(job_id: str) -> str | None:
         READ_EMAIL_TOOL, SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL, LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
         CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
+        BROWSE_WEB_TOOL, SAVE_ARTIFACT_TO_BRAIN_TOOL, CREATE_SIGNAL_TOOL,
+        ARCHIVE_PAGE_TOOL,
     )
     from core.context_assembler import assemble
     from core.notifications import publish as _notify
@@ -218,6 +220,10 @@ async def execute(job_id: str) -> str | None:
         SEARCH_CONTACTS_TOOL,
         CREATE_CONTACT_TOOL,
         UPDATE_CONTACT_TOOL,
+        BROWSE_WEB_TOOL,
+        SAVE_ARTIFACT_TO_BRAIN_TOOL,
+        CREATE_SIGNAL_TOOL,
+        ARCHIVE_PAGE_TOOL,
     ]
 
     log.info("Executing prompt cron '%s' (job %s)", job_name, job_id)
@@ -226,6 +232,20 @@ async def execute(job_id: str) -> str | None:
     try:
         async with AsyncSessionLocal() as tool_db:
             async def _tool_executor(name: str, tool_input: dict) -> str:
+                if name == "browse_web":
+                    # Same path as chat, minus the live panel — nobody is
+                    # watching a job that fires at 8am.
+                    from core.browser_runner import execute_browse_web
+                    return await execute_browse_web(tool_input, user_id, tool_db)
+
+                if name == "archive_page":
+                    from core.browser_runner import execute_archive_page
+                    return await execute_archive_page(tool_input, user_id, tool_db)
+
+                if name == "create_signal":
+                    from core.signal_tool import create_signal_from_tool
+                    return await create_signal_from_tool(tool_db, user_id, tool_input, source="cron")
+
                 if name == "save_memory":
                     try:
                         from memory import mnemon

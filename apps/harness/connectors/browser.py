@@ -731,6 +731,33 @@ class BrowserSession:
             self._active = next(iter(self._tabs), None)
         return [await self.browser_state_block()]
 
+    async def archive_page(self, tab_id: Optional[str] = None) -> dict:
+        """Capture the current page as a full-page PNG and a PDF.
+
+        Not a toolset member — the browser toolset's `screenshot` is viewport-
+        only and its member list is fixed by Anthropic. This is ours, called
+        around a run rather than inside the agent loop.
+        """
+        page = self._page(tab_id)
+        out: Dict[str, Any] = {"url": page.url, "title": ""}
+        try:
+            out["title"] = (await page.title())[:200]
+        except PlaywrightError:
+            pass
+        try:
+            out["png"] = await page.screenshot(type="png", full_page=True)
+        except Exception as err:  # noqa: BLE001
+            log.warning("full-page screenshot failed: %s", err)
+        try:
+            # print_background keeps the page looking like it does on screen;
+            # without it a dashboard archives as white boxes.
+            out["pdf"] = await page.pdf(format="A4", print_background=True)
+        except Exception as err:  # noqa: BLE001
+            # PDF is Chromium-headless-only in some versions; a missing PDF is
+            # not a failed archive when we still have the image.
+            log.info("page.pdf unavailable (%s); archiving image only", err)
+        return out
+
     # -- batch execution ---------------------------------------------------
 
     async def execute_batch(self, blocks) -> List[dict]:
