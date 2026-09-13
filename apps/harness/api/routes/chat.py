@@ -41,6 +41,9 @@ from core.model_client import (
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from core.mentions import MENTION_RE as _MENTION_RE, strip_mention_markers as _strip_mention_markers
+from core.artifact_store import store_upload_as_artifact
+from core.blob_store import resolve_artifact_bytes
+from core import blob_store
 from db.session import get_db, AsyncSessionLocal
 from db.models import Conversation, Message, User, Task, Artifact, Reminder
 
@@ -900,6 +903,9 @@ async def send_message(
     # Process attachments
     image_blocks: List[Any] = []
     doc_snippets: List[str] = []
+    # artifact_created cards for uploads persisted below — emitted once the SSE
+    # stream opens (background_generate) so they hydrate like any other card.
+    saved_upload_cards: List[dict] = []
     for upload in files:
         result = await _process_attachment(upload)
         if result["kind"] == "image":
@@ -911,6 +917,29 @@ async def send_message(
             )
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
+
+        # Also persist the upload as an Artifact so it lives in the library.
+        # Best-effort: a persist failure must never break the chat send.
+        # (image_base64 camera shots are intentionally NOT persisted.)
+        try:
+            await upload.seek(0)
+            raw = await upload.read()
+            if raw:
+                saved = await store_upload_as_artifact(
+                    user_id=user_id,
+                    data=raw,
+                    filename=upload.filename or "upload",
+                    source="upload",
+                    db=db,
+                )
+                saved_upload_cards.append({
+                    "type": "artifact_created",
+                    "artifact_id": saved.id,
+                    "filename": saved.filename,
+                    "filetype": saved.filename.rsplit(".", 1)[-1].lower() if "." in saved.filename else "",
+                })
+        except Exception as exc:
+            log.warning("send_message: could not persist upload %s as artifact: %s", upload.filename, exc)
 
     # Base64 image attachment (Rokid glasses bridge sends photos this way)
     if image_base64:
@@ -933,15 +962,15 @@ async def send_message(
             select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
         )
         art_obj = art_result.scalar_one_or_none()
-        if art_obj and art_obj.content:
-            import base64 as _b64
-            art_content = art_obj.content
+        if art_obj and (art_obj.content or art_obj.storage_path):
+            art_content = art_obj.content or ""
             _art_ext = (art_obj.filename or "").rsplit(".", 1)[-1].lower() if "." in (art_obj.filename or "") else ""
             _handled_as_image = False
 
-            # Binary artifacts are stored as base64 — extract text or send as vision
-            if art_content.startswith("base64:"):
-                _raw = _b64.b64decode(art_content[7:])
+            # Binary artifacts live in the blob store (legacy rows decode from
+            # base64 content) — extract text or send as vision
+            _raw = resolve_artifact_bytes(art_obj)
+            if _raw is not None:
                 try:
                     if _art_ext in _IMAGE_EXTS_MAP:
                         # Image artifact: send directly as a vision block so Sonnet sees the actual image
@@ -950,7 +979,7 @@ async def send_message(
                             "source": {
                                 "type": "base64",
                                 "media_type": _IMAGE_EXTS_MAP[_art_ext],
-                                "data": _b64.b64encode(_raw).decode(),
+                                "data": base64.b64encode(_raw).decode(),
                             },
                         })
                         doc_snippets.append(f"[Analyzing uploaded image: {art_obj.filename}]")
@@ -1278,6 +1307,12 @@ async def send_message(
                         "filename": filename,
                         "filetype": ext,
                     })
+
+                # Uploads persisted in send_message before streaming started —
+                # surface them as cards so what Mike just dropped in is openable
+                # from the conversation itself.
+                for _upload_card in saved_upload_cards:
+                    await _emit_card(_upload_card)
 
                 async def _emit_tool_failed(tool: str, tool_input: dict, message: str) -> None:
                     """Surface a tool failure as something to act on, not just a sentence.
@@ -2470,12 +2505,13 @@ async def send_message(
                             buf = BytesIO()
                             doc.save(buf)
                             raw = buf.getvalue()
-                            b64 = base64.b64encode(raw).decode()
                             filename = fn_base + ".docx"
                             artifact = Artifact(
                                 user_id=user_id, filename=filename, type="document",
                                 source="chat", source_id=conversation_id,
-                                content="base64:" + b64, version=1,
+                                content=None,
+                                storage_path=blob_store.store(raw, "docx", user_id),
+                                version=1,
                                 size_bytes=len(raw), tags=["generated"],
                             )
                             bg_db.add(artifact)
@@ -2520,12 +2556,13 @@ async def send_message(
                             buf = BytesIO()
                             prs.save(buf)
                             raw = buf.getvalue()
-                            b64 = base64.b64encode(raw).decode()
                             filename = fn_base + ".pptx"
                             artifact = Artifact(
                                 user_id=user_id, filename=filename, type="document",
                                 source="chat", source_id=conversation_id,
-                                content="base64:" + b64, version=1,
+                                content=None,
+                                storage_path=blob_store.store(raw, "pptx", user_id),
+                                version=1,
                                 size_bytes=len(raw), tags=["generated", "presentation"],
                             )
                             bg_db.add(artifact)
@@ -2571,12 +2608,13 @@ async def send_message(
                                     story.append(Spacer(1, 0.05 * inch))
                             doc.build(story)
                             raw = buf.getvalue()
-                            b64 = base64.b64encode(raw).decode()
                             filename = fn_base + ".pdf"
                             artifact = Artifact(
                                 user_id=user_id, filename=filename, type="document",
                                 source="chat", source_id=conversation_id,
-                                content="base64:" + b64, version=1,
+                                content=None,
+                                storage_path=blob_store.store(raw, "pdf", user_id),
+                                version=1,
                                 size_bytes=len(raw), tags=["generated", "pdf"],
                             )
                             bg_db.add(artifact)
