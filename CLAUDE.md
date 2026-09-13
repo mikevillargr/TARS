@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.21.1 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.22.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1134,6 +1134,25 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.22.0 Feature: downloads -> Artifacts, scheduled browser runs, Signals from jobs, page
+        archiving. (1) Downloads captured per tab AS TABS APPEAR (portals open invoices in a
+        new tab, which a page-level handler misses), text-extracted via ingest_file so they
+        land searchable; new save_artifact_to_brain tool pushes any artifact into Second
+        Brain ON REQUEST ONLY. (2) prompt_cron gained browse_web/archive_page/
+        save_artifact_to_brain; the whole sequence moved to core/browser_runner.py so chat
+        and cron run identical code. (3) New create_signal tool puts findings on Today —
+        without it a scheduled browse only writes into a conversation nobody opens; refuses
+        "everything is fine", and dedupe_key is the identity of the THING not the run.
+        (4) New archive_page captures print-quality PDF + full-page PNG (print_background on,
+        or a dashboard archives as white boxes); NOT a toolset member, since the browser
+        toolset's screenshot is viewport-only and its member list is fixed by Anthropic.
+        ARTIFACT RULES, settled after two noise complaints: report always, video only on a
+        bad run, TRACE NEVER (internal diagnostics needing npx playwright show-trace — kept
+        on disk under BROWSER_TRACE_DIR for 7 days, path named in the report). The test: if
+        Mike cannot open it, it does not go in his library. Artifacts viewer now plays
+        browser videos and explains trace archives instead of dumping base64, and the detail
+        endpoint stopped shipping base64 payloads entirely (an 11MB trace took ~20s to open).
+        Harness + web, no schema change.
 v2.21.1 Fix: harness was killing the container's browser; auto-heal; fresh tabs. Root
         cause of "browser connection failing": the container had every process running EXCEPT
         chrome. shutdown_browser_pool called browser.close(), which on a CDP connection

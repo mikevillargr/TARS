@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.21.1 |
+| Version | v2.22.0 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,41 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.22.0 — 2026-09-13
+**Feature: downloads, scheduled browser runs, Signals from jobs, page archiving**
+
+- **Downloads land in Artifacts.** Capture is wired per tab as tabs appear, not once on the
+  first page, because portals routinely open an invoice in a NEW tab that a page-level
+  handler would miss. Text-bearing files go through `ingest_file` on the way in so they are
+  searchable rather than an opaque blob. New `save_artifact_to_brain` tool pushes any
+  artifact into Second Brain **on request only** — auto-filing every invoice would bury what
+  Mike actually curated. Refuses pure binaries with an explanation rather than creating an
+  item search can never surface.
+- **Scheduled browser runs.** `prompt_cron` now carries `browse_web`, `archive_page` and
+  `save_artifact_to_brain`, so "every Monday 08:00, check the portal for new invoices" is a
+  job you can create. The whole sequence moved into `core/browser_runner.py` so chat and cron
+  run identical code; duplicating it would have meant scheduled runs quietly missing whatever
+  the chat path gained next.
+- **Signals from jobs.** New `create_signal` tool puts something on Today. This is what makes
+  a scheduled browse useful rather than merely possible: a prompt cron writes into a
+  conversation, so noticing something at 8am depended on Mike opening that chat. Deliberately
+  conservative — the description refuses "I checked and everything is fine", and `dedupe_key`
+  is the identity of the THING rather than the run, so a weekly job does not re-raise weekly.
+  Dedupe checks ANY status, so a dismissed signal stays dismissed.
+- **Page archiving.** New `archive_page` tool captures a page as a print-quality PDF plus a
+  full-page PNG. Not a toolset member — the browser toolset's `screenshot` is viewport-only
+  and its member list is fixed by Anthropic — so it sits outside the agent loop.
+  `print_background` is on, since a dashboard archived without it is a page of white boxes.
+  Explicitly requested, never automatic.
+- **Artifact rules settled**, after two rounds of noise complaints. `report` always (~1-2KB,
+  searchable, the record); `video` only when a run went badly; **`trace` never** — it is
+  internal diagnostics needing `npx playwright show-trace`, so failed runs keep one on disk
+  under `BROWSER_TRACE_DIR` (7-day retention) and the report says where. The test that
+  settled it: if Mike cannot open it, it does not go in his library.
+- **Artifacts viewer** renders browser videos in a player and explains trace archives instead
+  of dumping base64. The detail endpoint no longer ships base64 payloads at all — an 11MB
+  trace took ~20s to open a panel saying "this needs a different viewer".
 
 ### v2.21.1 — 2026-09-13
 **Fix: the harness was killing the container's browser; it now self-heals; fresh tabs**
