@@ -27,7 +27,7 @@ import { MentionDropdown } from "@/components/ui/MentionDropdown"
 import type { MentionSuggestion } from "@/hooks/useMentionAutocomplete"
 import { ToolProgressStack } from "@/components/chat/ToolProgressLine"
 import type { ToolProgress } from "@/components/chat/ToolProgressLine"
-import { FollowUpChips } from "@/components/chat/FollowUpChips"
+import { FollowUpChips, type Suggestion } from "@/components/chat/FollowUpChips"
 import { ContextSources } from "@/components/chat/ContextSources"
 import type { ContextSource } from "@/components/chat/ContextSources"
 import { EmailThreadCard } from "@/components/chat/EmailThreadCard"
@@ -58,7 +58,7 @@ interface Message {
   model_used?: string
   tool_calls?: string[]
   tool_results?: Array<{ type: string; [k: string]: unknown }>
-  follow_ups?: string[]
+  follow_ups?: (Suggestion | string)[]   // strings are pre-v2.24 messages
   context_sources?: ContextSource[]
   created_at: string
   _attachments?: AttachmentMeta[]
@@ -2274,7 +2274,7 @@ export default function ChatPage() {
                 model_used: evt.model,
                 created_at: new Date().toISOString(),
                 ...(streamingCardsRef.current.length > 0 && { tool_results: [...streamingCardsRef.current] }),
-                ...(Array.isArray(evt.follow_ups) && evt.follow_ups.length > 0 && { follow_ups: evt.follow_ups as string[] }),
+                ...(Array.isArray(evt.follow_ups) && evt.follow_ups.length > 0 && { follow_ups: evt.follow_ups as (Suggestion | string)[] }),
                 ...(Array.isArray(evt.context_sources) && evt.context_sources.length > 0 && { context_sources: evt.context_sources as ContextSource[] }),
               }
               if (chatId === activeChatIdRef.current) {

@@ -97,35 +97,136 @@ router = APIRouter()
 _active_bg_tasks: set = set()
 
 
-async def _generate_follow_ups(history: list[dict]) -> list[str]:
-    """Generate 3 short follow-up questions using Haiku. Non-blocking — returns [] on any failure."""
+# Tools a chip may propose. Deliberately a short allowlist of things that are
+# cheap, reversible, and additive. Nothing that sends, deletes, or spends money —
+# email keeps its draft-card gate, and a one-click chip is the wrong place to
+# discover you have mailed a client.
+CHIP_ACTIONS: dict[str, dict] = {
+    "create_reminder": {
+        "label": "Add to To-Dos",
+        "field": "text",
+        "hint": "a short personal to-do",
+    },
+    "create_task": {
+        "label": "Track as a project task",
+        "field": "title",
+        "hint": "work worth tracking on the board",
+    },
+    "save_to_second_brain": {
+        "label": "Save to Second Brain",
+        "field": "content",
+        "hint": "reference material worth keeping",
+    },
+    "save_memory": {
+        "label": "Remember this",
+        "field": "content",
+        "hint": "a durable fact about Mike, in third person",
+    },
+    "create_signal": {
+        "label": "Put on Today",
+        "field": "title",
+        "hint": "something needing a decision from Mike",
+    },
+}
+
+
+async def _generate_actions(
+    history: list[dict], tool_results: list[dict] | None = None
+) -> list[dict]:
+    """Suggest what to DO next, not what to ask next.
+
+    The old version asked Haiku for "3 follow-up questions", which could only
+    ever produce things to say — TARS has ~47 tools and the generator knew about
+    none of them. Clicking one just typed it back into the composer, so even a
+    good suggestion cost a whole round trip to do what a button could do.
+
+    Now it sees the tools it may propose and what this turn actually produced,
+    and returns either an action (tool + prefilled payload, confirmed inline) or
+    a question as the fallback when nothing is genuinely actionable.
+    """
     try:
         from core.config import settings as _cfg
         from anthropic import AsyncAnthropic as _AA
+
         _ac = _AA(api_key=_cfg.anthropic_api_key)
         _last = history[-4:] if len(history) >= 4 else history
-        _exchange = "\n".join(f"{m['role'].upper()}: {(m.get('content') or '')[:250]}" for m in _last)
+        _exchange = "\n".join(
+            f"{m['role'].upper()}: {(m.get('content') or '')[:600]}" for m in _last
+        )
+        # What this turn produced. Without it, a chip cannot refer to the invoice
+        # that was just downloaded or the chart that was just drawn.
+        _produced = ""
+        if tool_results:
+            kinds = [r.get("type") for r in tool_results if r.get("type")]
+            if kinds:
+                _produced = f"\nThis turn produced: {', '.join(sorted(set(kinds)))}."
+
+        _menu = "\n".join(
+            f'- {k}: {v["label"]} — {v["hint"]} (field: {v["field"]})'
+            for k, v in CHIP_ACTIONS.items()
+        )
+
         _resp = await _ac.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=120,
+            max_tokens=400,
             messages=[{
                 "role": "user",
                 "content": (
-                    "Based on this conversation, give exactly 3 short follow-up questions "
-                    "(max 10 words each) the user might naturally ask next. "
-                    "Return only a JSON array of strings, nothing else.\n\n"
-                    f"{_exchange}\n\nJSON array:"
+                    "You suggest what Mike should DO next after this exchange.\n\n"
+                    f"Actions you may propose:\n{_menu}\n\n"
+                    "Return a JSON array of 2-3 objects. Each is either:\n"
+                    '  {"kind":"action","tool":"<one of the above>",'
+                    '"label":"<= 5 words, imperative","value":"<the field content, ready to save>"}\n'
+                    '  {"kind":"ask","label":"<a question, <= 8 words>"}\n\n'
+                    "Rules:\n"
+                    "- Prefer actions. Only use 'ask' when nothing is genuinely actionable.\n"
+                    "- Never propose an action for something already done this turn.\n"
+                    "- `value` must be finished text, not a placeholder or instruction.\n"
+                    "- Labels say what happens ('Add to To-Dos'), never 'Click here'.\n"
+                    "- Fewer, better beats three mediocre. Two is fine. One is fine.\n\n"
+                    f"{_exchange}{_produced}\n\nJSON array:"
                 ),
             }],
         )
+        # Scan for the first text block rather than indexing [0]: a thinking
+        # block at content[0] is what silently broke three call sites in v2.18.6.
+        _text = next(
+            (b.text for b in _resp.content if getattr(b, "text", None)), ""
+        ).strip()
+        if _text.startswith("```"):
+            _text = re.sub(r"^```[a-z]*\n?|```$", "", _text).strip()
+
         import json as _json2
-        _text = _resp.content[0].text.strip()
+
         _parsed = _json2.loads(_text)
-        if isinstance(_parsed, list):
-            return [str(s) for s in _parsed[:3]]
+        if not isinstance(_parsed, list):
+            return []
+
+        out: list[dict] = []
+        for item in _parsed[:3]:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("label") or "").strip()
+            if not label:
+                continue
+            if item.get("kind") == "action":
+                tool = str(item.get("tool") or "")
+                value = str(item.get("value") or "").strip()
+                if tool not in CHIP_ACTIONS or not value:
+                    continue
+                out.append({
+                    "kind": "action",
+                    "tool": tool,
+                    "label": label[:40],
+                    "value": value[:2000],
+                    "field": CHIP_ACTIONS[tool]["field"],
+                })
+            else:
+                out.append({"kind": "ask", "label": label[:80]})
+        return out
     except Exception:
-        pass
-    return []
+        # Chips are a nicety. A failure here must never disturb the reply.
+        return []
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -713,6 +814,67 @@ async def delete_conversation(
     await db.execute(sa_delete(Message).where(Message.conversation_id == conversation_id))
     await db.delete(conv)
     await db.commit()
+
+
+class ChipActionRequest(BaseModel):
+    tool: str
+    value: str
+
+
+@router.post("/chip-action")
+async def run_chip_action(
+    body: ChipActionRequest,
+    user_id: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute a suggestion chip directly.
+
+    The whole point of the rewrite: a chip used to type its text into the
+    composer and cost a full model round trip to do something a button could do.
+    These write through the same paths the tools use, so a chip-created reminder
+    is indistinguishable from one TARS created itself.
+
+    Confined to CHIP_ACTIONS — cheap, reversible, additive. Anything that sends,
+    deletes or spends keeps its existing confirmation flow.
+    """
+    if body.tool not in CHIP_ACTIONS:
+        raise HTTPException(status_code=400, detail="Unknown chip action")
+    value = (body.value or "").strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="Nothing to save")
+
+    if body.tool == "create_reminder":
+        db.add(Reminder(user_id=user_id, text=value[:500]))
+        await db.commit()
+        return {"ok": True, "message": "Added to To-Dos."}
+
+    if body.tool == "create_task":
+        db.add(Task(user_id=user_id, title=value[:300], status="inbox",
+                    priority="normal", source="chat"))
+        await db.commit()
+        return {"ok": True, "message": "Added to Projects."}
+
+    if body.tool == "save_to_second_brain":
+        from memory.second_brain import ingest_text
+        await ingest_text(db=db, user_id=user_id, content=value,
+                          title=value[:60], tags=["chat"])
+        return {"ok": True, "message": "Saved to Second Brain."}
+
+    if body.tool == "save_memory":
+        from memory import mnemon
+        await mnemon.save(db, user_id, content=value, domain="work",
+                          source="conversation", importance=3)
+        return {"ok": True, "message": "Remembered."}
+
+    if body.tool == "create_signal":
+        from core.signal_tool import create_signal_from_tool
+        msg = await create_signal_from_tool(
+            db, user_id, {"title": value, "reasoning": "Raised from chat."},
+            source="chat",
+        )
+        return {"ok": True, "message": msg}
+
+    raise HTTPException(status_code=400, detail="Unhandled chip action")
 
 
 @router.post("/conversations/{conversation_id}/messages")
@@ -3179,10 +3341,10 @@ plt.close('all')
             # stream text (which may differ if we modified it post-stream,
             # e.g. replacing a matplotlib code block with an inline image).
             # Generate follow-up suggestions (cheap Haiku call, ~400ms).
-            _follow_ups: list[str] = []
+            _follow_ups: list[dict] = []
             try:
                 _convo_so_far = messages + [{"role": "assistant", "content": assistant_content}]
-                _follow_ups = await _generate_follow_ups(_convo_so_far)
+                _follow_ups = await _generate_actions(_convo_so_far, tool_results)
             except Exception:
                 pass
             await queue.put(sse_event({
