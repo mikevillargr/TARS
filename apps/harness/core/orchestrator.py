@@ -35,9 +35,10 @@ SUBTASK_TIMEOUT_S = 300
 MAX_SUBTASKS = 8
 PROGRESS_INTERVAL_S = 1.0  # throttle chunk-progress events per subtask
 
-# Sub-agent-only read tools. Memory/Second Brain search and artifact reads have
-# no module-level dicts in model_client.py (chat injects memory via context
-# rather than tools), so these two minimal read-only schemas live here.
+# Sub-agent-only read tools. Memory/Second Brain search has no module-level
+# dict in model_client.py (chat injects memory via context rather than tools),
+# and chat's READ_ARTIFACT_TOOL is id-only while sub-agents may also look up by
+# filename — so these two minimal read-only schemas live here.
 SEARCH_MEMORY_TOOL = {
     "name": "search_memory",
     "description": (
@@ -168,41 +169,21 @@ def _scoped_tool_executor(tool_db, user_id: str):
             try:
                 from sqlalchemy import select
                 from db.models import Artifact
-                from core.blob_store import resolve_artifact_bytes
+                from core.artifact_store import read_artifact_text
 
-                q = select(Artifact).where(Artifact.user_id == user_id)
-                if tool_input.get("artifact_id"):
-                    q = q.where(Artifact.id == tool_input["artifact_id"])
-                elif tool_input.get("filename"):
-                    q = q.where(Artifact.filename == tool_input["filename"])
-                else:
-                    return "Need an artifact_id or filename."
-                art = (await tool_db.execute(
-                    q.order_by(Artifact.created_at.desc()).limit(1)
-                )).scalars().first()
-                if art is None:
-                    return "No matching artifact found."
-
-                raw = resolve_artifact_bytes(art)
-                if raw is None:
-                    return (art.content or "")[:8000] or "Artifact has no text content."
-
-                filename = (art.filename or "").lower()
-                if filename.endswith((".txt", ".md", ".csv", ".json", ".py", ".html")):
-                    return raw.decode("utf-8", errors="replace")[:8000]
-                if filename.endswith(".pdf"):
-                    from ingest.parsers import pdf as _pdf_parser
-                    return _pdf_parser.extract(raw)[:8000]
-                if filename.endswith(".xlsx") or filename.endswith(".xls"):
-                    from ingest.parsers import xlsx as _xlsx_parser
-                    return _xlsx_parser.extract(raw, filename=filename)[:8000]
-                if filename.endswith(".docx"):
-                    import docx as _docx
-                    from io import BytesIO as _BIO
-                    doc = _docx.Document(_BIO(raw))
-                    texts = [p.text for p in doc.paragraphs if p.text.strip()]
-                    return "\n\n".join(texts)[:8000]
-                return f"'{art.filename}' is a binary file with no extractable text."
+                artifact_id = tool_input.get("artifact_id")
+                if not artifact_id:
+                    filename = tool_input.get("filename")
+                    if not filename:
+                        return "Need an artifact_id or filename."
+                    artifact_id = (await tool_db.execute(
+                        select(Artifact.id)
+                        .where(Artifact.user_id == user_id, Artifact.filename == filename)
+                        .order_by(Artifact.created_at.desc()).limit(1)
+                    )).scalar_one_or_none()
+                    if not artifact_id:
+                        return "No matching artifact found."
+                return await read_artifact_text(artifact_id, user_id, tool_db)
             except Exception as exc:
                 return f"Failed to read artifact: {exc}"
 

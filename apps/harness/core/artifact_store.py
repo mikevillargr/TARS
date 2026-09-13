@@ -125,3 +125,59 @@ async def store_upload_as_artifact(
     await db.commit()
     await db.refresh(artifact)
     return artifact
+
+
+# Cap on tool-result text — enough for a document body without blowing the context.
+MAX_READ_CHARS = 8000
+_TEXT_EXTS = (".txt", ".md", ".csv", ".json", ".py", ".html")
+
+
+def _cap(text: str) -> str:
+    if len(text) > MAX_READ_CHARS:
+        return text[:MAX_READ_CHARS] + f"\n\n[... truncated — {len(text) - MAX_READ_CHARS} more chars ...]"
+    return text
+
+
+async def read_artifact_text(artifact_id: str, user_id: str, db: AsyncSession) -> str:
+    """Best-effort text of one artifact, for agent tool results.
+
+    Resolves bytes from the blob store (or a legacy "base64:" content value),
+    decodes text formats directly, and extracts PDF/DOCX/XLSX via the ingest
+    parsers. Images and binaries with no extractable text return a short note
+    instead of payload data — tool results stay text-only. Never raises: a
+    failure is a message string. Shared by the chat read_artifact tool and the
+    parallel sub-agent executor.
+    """
+    from sqlalchemy import select
+
+    art = (await db.execute(
+        select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
+    )).scalar_one_or_none()
+    if art is None:
+        return "No matching artifact found."
+
+    if art.type == "image":
+        return (
+            f"'{art.filename}' is an image ({art.size_bytes} bytes) — there is no "
+            f"text to read. Mike can view it in Artifacts; refer to it by filename."
+        )
+
+    raw = blob_store.resolve_artifact_bytes(art)
+    if raw is None:
+        return _cap(art.content or "") or "Artifact has no text content."
+
+    filename = (art.filename or "").lower()
+    if filename.endswith(_TEXT_EXTS):
+        return _cap(raw.decode("utf-8", errors="replace"))
+    if filename.endswith(".pdf"):
+        from ingest.parsers import pdf as _pdf_parser
+        return _cap(_pdf_parser.extract(raw))
+    if filename.endswith((".xlsx", ".xls")):
+        from ingest.parsers import xlsx as _xlsx_parser
+        return _cap(_xlsx_parser.extract(raw, filename=filename))
+    if filename.endswith(".docx"):
+        import docx as _docx
+        from io import BytesIO as _BIO
+        doc = _docx.Document(_BIO(raw))
+        return _cap("\n\n".join(p.text for p in doc.paragraphs if p.text.strip()))
+    return f"'{art.filename}' is a binary file with no extractable text."

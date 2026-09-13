@@ -22,6 +22,7 @@ from core.model_client import (
     UPDATE_CALENDAR_EVENT_TOOL, DELETE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL, BROWSE_WEB_TOOL,
     SAVE_ARTIFACT_TO_BRAIN_TOOL, ARCHIVE_PAGE_TOOL, CREATE_SIGNAL_TOOL,
+    SEARCH_ARTIFACTS_TOOL, READ_ARTIFACT_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, CONFIRM_SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
     GENERATE_SPREADSHEET_TOOL,
@@ -1230,6 +1231,8 @@ async def send_message(
         BROWSE_WEB_TOOL,
         SAVE_ARTIFACT_TO_BRAIN_TOOL,
         ARCHIVE_PAGE_TOOL,
+        SEARCH_ARTIFACTS_TOOL,
+        READ_ARTIFACT_TOOL,
         CREATE_SIGNAL_TOOL,
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
@@ -1400,6 +1403,84 @@ async def send_message(
                             )
                         await bg_db.commit()
                         return f"Saved '{art.filename}' to Second Brain."
+
+                    if name == "search_artifacts":
+                        await _emit_progress("search_artifacts", "Searching Artifacts…")
+                        try:
+                            _a_query = (tool_input.get("query") or "").strip()
+                            _a_tag = (tool_input.get("tag") or "").strip()
+                            _a_limit = max(1, min(int(tool_input.get("limit", 10) or 10), 50))
+                            _sq = select(Artifact).where(Artifact.user_id == user_id)
+                            if _a_query:
+                                _sq = _sq.where(Artifact.filename.ilike(f"%{_a_query}%"))
+                            if tool_input.get("type"):
+                                _sq = _sq.where(Artifact.type == tool_input["type"])
+                            if tool_input.get("source"):
+                                _sq = _sq.where(Artifact.source == tool_input["source"])
+                            # tags is a JSON array column — a portable contains()
+                            # doesn't exist across dialects, so filter in Python
+                            # (over-fetch first so the limit still lands).
+                            _sq = _sq.order_by(Artifact.created_at.desc()).limit(200 if _a_tag else _a_limit)
+                            _arts = (await bg_db.execute(_sq)).scalars().all()
+                            if _a_tag:
+                                _arts = [a for a in _arts if _a_tag in (a.tags or [])][:_a_limit]
+                            if not _arts:
+                                return "No artifacts matched."
+                            _rows = []
+                            for _a in _arts:
+                                _row = {
+                                    "id": _a.id,
+                                    "filename": _a.filename,
+                                    "type": _a.type,
+                                    "source": _a.source,
+                                    "tags": _a.tags or [],
+                                    "size_bytes": _a.size_bytes,
+                                    "created_at": _a.created_at.isoformat() if _a.created_at else None,
+                                }
+                                # content holds extracted text only; a legacy base64
+                                # payload never ships to the model.
+                                if _a.content and not _a.content.startswith("base64:"):
+                                    _row["snippet"] = " ".join(_a.content.split())[:200]
+                                _rows.append(_row)
+                            await _emit_progress("search_artifacts", f"{len(_rows)} found", done=True)
+                            return _json.dumps(_rows)
+                        except Exception as exc:
+                            log.warning("search_artifacts tool failed: %s", exc)
+                            return f"Artifact search failed: {exc}"
+
+                    if name == "read_artifact":
+                        await _emit_progress("read_artifact", "Reading artifact…")
+                        try:
+                            from core.artifact_store import read_artifact_text
+                            _aid = (tool_input.get("artifact_id") or "").strip()
+                            if not _aid:
+                                return "Need an artifact_id (from search_artifacts)."
+                            text = await read_artifact_text(_aid, user_id, bg_db)
+                            # Surface the file as an openable preview card — same
+                            # persistence path neighboring read tools use (_emit_card
+                            # appends to tool_results and streams the card).
+                            _meta = None
+                            try:
+                                _meta = (await bg_db.execute(
+                                    select(Artifact.filename).where(
+                                        Artifact.id == _aid, Artifact.user_id == user_id
+                                    )
+                                )).scalar_one_or_none()
+                                if _meta:
+                                    _ext = _meta.rsplit(".", 1)[-1].lower() if "." in _meta else ""
+                                    await _emit_card({
+                                        "type": "artifact_created",
+                                        "artifact_id": _aid,
+                                        "filename": _meta,
+                                        "filetype": _ext,
+                                    })
+                            except Exception as _ce:
+                                log.warning("read_artifact card emission failed: %s", _ce)
+                            await _emit_progress("read_artifact", f"Read: {(_meta or 'artifact')[:40]}", done=True)
+                            return text
+                        except Exception as exc:
+                            log.warning("read_artifact tool failed: %s", exc)
+                            return f"Failed to read artifact: {exc}"
 
                     if name == "archive_page":
                         await _emit_progress("archive_page", "Archiving page…")

@@ -510,6 +510,63 @@ SAVE_ARTIFACT_TO_BRAIN_TOOL = {
     },
 }
 
+SEARCH_ARTIFACTS_TOOL = {
+    "name": "search_artifacts",
+    "description": (
+        "Search Mike's Artifacts library — generated documents, browser downloads and "
+        "archives, saved email attachments (boarding passes, tickets, receipts, "
+        "invoices), files uploaded in chat — by filename. Returns compact rows: id, "
+        "filename, type, source, tags, size, date, and a text snippet when one exists. "
+        "Pass a row's id to read_artifact to open it."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Filename text to match (case-insensitive substring).",
+            },
+            "type": {
+                "type": "string",
+                "description": "Optional filter: document, spreadsheet, image, code, transcript.",
+            },
+            "source": {
+                "type": "string",
+                "description": "Optional filter: email, upload, browser, chat, cron, meeting.",
+            },
+            "tag": {
+                "type": "string",
+                "description": "Optional tag filter, e.g. boarding_pass, ticket, receipt, invoice.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results (default 10).",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+READ_ARTIFACT_TOOL = {
+    "name": "read_artifact",
+    "description": (
+        "Read the text content of one artifact by id (from search_artifacts or an "
+        "artifact card). Text formats decode directly; PDF/DOCX/XLSX are "
+        "text-extracted; images and other binaries without extractable text return a "
+        "note instead."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "artifact_id": {
+                "type": "string",
+                "description": "Artifact id from search_artifacts.",
+            },
+        },
+        "required": ["artifact_id"],
+    },
+}
+
 BROWSE_WEB_TOOL = {
     "name": "browse_web",
     "description": (
