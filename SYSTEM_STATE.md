@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.20.1 |
+| Version | v2.21.0 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,39 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.21.0 — 2026-09-13
+**Feature: open a browser from chat. Fix: a human can sign in to Google/Facebook over VNC.**
+
+- **Google and Facebook sign-in blocked the whole seeding workflow.** Confirmed the cause in
+  the running container rather than guessing: `navigator.webdriver` was `true` and
+  `navigator.userAgentData.brands` was empty, the two signals Google checks before refusing
+  with "this browser or app may not be secure". Both were artifacts of how Playwright
+  launches a browser. Fixed by dropping `--enable-automation` (`ignore_default_args`, plus
+  `--disable-blink-features=AutomationControlled`) and switching to **real Google Chrome**
+  (`channel=chrome`, installed in the image) instead of Playwright's Chromium, which reports
+  no brand. Verified after: `webdriver: false`, and accounts.google.com serves the real
+  sign-in form instead of the block. **The agent still never signs into anything** — the
+  system prompt forbids credentials and a run stops if a site asks. This only affects the
+  browser a human types their own password into. `BROWSER_CHANNEL=""` falls back to Chromium.
+- **Browser button in the chat composer** (globe, in the `+` utility tray). With no browser
+  open it starts one bound to this conversation; with one open it resurfaces the panel. Goes
+  moss while a browser is live, so it doubles as an indicator. Idempotent server-side, so
+  double-clicking cannot stack sessions.
+- **The conversation and the page know about each other.** While a conversation has a
+  browser open, the chat system prompt carries `[BROWSER OPEN]` with the live page title and
+  URL, so "what page am I looking at" is answerable and `browse_web` continues in the tab
+  already on screen. Verified end to end: navigated the container browser by hand, then asked
+  TARS with no mention of the page, and it named it correctly.
+- **Manual sessions run on the PERSISTENT profile**, not a fresh context. This is the detail
+  that makes the feature work: `pool.session()` creates an ephemeral context, so a Google
+  login typed through this button would have been discarded on close, silently undoing the
+  one thing the person was doing. New `pool.persistent_session()`; teardown only stops the
+  screencast, because closing that context would take the container's only browser down.
+  Agent runs keep using ephemeral contexts seeded from the profile's `storage_state` — still
+  right for them: isolation, and no way for a run to disturb a hand-established session.
+- Manual sessions idle out after 45 minutes; watching the panel counts as activity.
+- New: `core/browser_manual.py`, `POST/DELETE /api/browser/sessions`. No schema change.
 
 ### v2.20.1 — 2026-09-13
 **Fix: browser panel and noVNC could not connect; the panel obscured chat**

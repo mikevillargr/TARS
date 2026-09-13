@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.20.1 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.21.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1134,6 +1134,27 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.21.0 Feature: open a browser from chat, bound to the conversation. Fix: a human can
+        sign in to Google/Facebook over VNC. (1) Sign-in was blocked because
+        navigator.webdriver was true and userAgentData.brands was empty — the two signals
+        Google checks — both artifacts of how Playwright launches a browser. Dropped
+        --enable-automation via ignore_default_args, added
+        --disable-blink-features=AutomationControlled, and switched to REAL Google Chrome
+        (channel=chrome, installed in the image) since Playwright's Chromium reports no
+        brand. Verified: webdriver false, accounts.google.com serves the real form. THE
+        AGENT STILL NEVER SIGNS IN — this only affects the browser a human types a password
+        into. BROWSER_CHANNEL="" falls back to Chromium. (2) Globe button in the composer's
+        + tray opens a browser for this conversation, or resurfaces the panel if one is
+        already open; moss while live. Idempotent per conversation. (3) While a conversation
+        has a browser open, the chat system prompt carries [BROWSER OPEN] with the live page
+        title/URL, so "what am I looking at" works and browse_web continues in the tab
+        already on screen. (4) Manual sessions use the PERSISTENT profile via new
+        pool.persistent_session(), NOT an ephemeral context — otherwise a login typed
+        through the button would be discarded on close, silently undoing the thing the
+        person was doing; teardown only stops the screencast, since closing that context
+        kills the container's only browser. Agent runs keep ephemeral contexts seeded from
+        storage_state. 45-minute idle timeout. Harness + web + container image, no schema
+        change.
 v2.20.1 Fix: browser panel + noVNC could not connect; panel obscured chat. Three defects
         found right after the v2.20.0 deploy, all by reproducing in a real browser.
         (1) The live panel's WebSocket never upgraded: nginx's generic /api/ block sets
