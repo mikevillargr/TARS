@@ -19,6 +19,13 @@ import { CalloutNode } from "./extensions/CalloutNode"
 import { ToggleNode } from "./extensions/ToggleNode"
 import { MentionExtension } from "./extensions/MentionExtension"
 
+/* setCallout and insertToggle are added by our own extensions, so they are
+ * not on Tiptap's base ChainedCommands type. Naming them beats `any`. */
+type CustomChain = {
+  setCallout(kind: string): { run(): boolean }
+  insertToggle(): { run(): boolean }
+}
+
 export interface MentionRef { id: string; type: string }
 
 export interface TiptapEditorProps {
@@ -193,9 +200,9 @@ const SLASH_COMMANDS: SlashCmd[] = [
   { label: "Blockquote",        icon: Quote,         action: (e) => e?.chain().focus().toggleBlockquote().run() },
   { label: "Code block",        icon: Code,          action: (e) => e?.chain().focus().toggleCodeBlock().run() },
   { label: "Divider",           icon: Minus,         action: (e) => e?.chain().focus().setHorizontalRule().run() },
-  { label: "Callout — Note",    icon: Lightbulb,     action: (e) => (e?.chain().focus() as any)?.setCallout("note").run() },
-  { label: "Callout — Warning", icon: AlertTriangle, action: (e) => (e?.chain().focus() as any)?.setCallout("warning").run() },
-  { label: "Toggle",            icon: ToggleLeft,    action: (e) => (e?.chain().focus() as any)?.insertToggle().run() },
+  { label: "Callout — Note",    icon: Lightbulb,     action: (e) => (e?.chain().focus() as unknown as CustomChain | undefined)?.setCallout("note").run() },
+  { label: "Callout — Warning", icon: AlertTriangle, action: (e) => (e?.chain().focus() as unknown as CustomChain | undefined)?.setCallout("warning").run() },
+  { label: "Toggle",            icon: ToggleLeft,    action: (e) => (e?.chain().focus() as unknown as CustomChain | undefined)?.insertToggle().run() },
 ]
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────

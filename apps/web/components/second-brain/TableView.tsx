@@ -29,6 +29,43 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   archived:   { bg: "var(--c-surface-2)", color: "var(--c-ink-faint)" },
 }
 
+/** Hoisted out of the component body on purpose. Defined inside render it was a
+ *  NEW component type every render, so React unmounted and remounted every
+ *  header cell on each keystroke — losing focus and DOM state for no reason. */
+function Th({
+  label, colKey, sortKey, sortDir, onSort,
+}: {
+  label: string
+  colKey: SortKey
+  sortKey: SortKey
+  sortDir: "asc" | "desc"
+  onSort: (k: SortKey) => void
+}) {
+  const active = sortKey === colKey
+  return (
+    <th
+      onClick={() => onSort(colKey)}
+      style={{
+        padding: "0.5rem 0.75rem",
+        textAlign: "left",
+        cursor: "pointer",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        borderBottom: "1px solid var(--c-border)",
+        position: "sticky",
+        top: 0,
+        background: "var(--c-surface)",
+        zIndex: 1,
+      }}
+    >
+      <span className="tars-label" style={{ color: active ? "var(--c-moss)" : undefined, display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {label}
+        {active ? (sortDir === "asc" ? <ChevronUp size={9} /> : <ChevronDown size={9} />) : null}
+      </span>
+    </th>
+  )
+}
+
 export function TableView({ items, onItemClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("saved_at")
   const [sortDir, setSortDir] = useState<SortDir>("desc")
@@ -55,46 +92,20 @@ export function TableView({ items, onItemClick }: Props) {
     })
   }, [items, sortKey, sortDir])
 
-  function Th({ label, colKey }: { label: string; colKey: SortKey }) {
-    const active = sortKey === colKey
-    return (
-      <th
-        onClick={() => handleSort(colKey)}
-        style={{
-          padding: "0.5rem 0.75rem",
-          textAlign: "left",
-          cursor: "pointer",
-          userSelect: "none",
-          whiteSpace: "nowrap",
-          borderBottom: "1px solid var(--c-border)",
-          position: "sticky",
-          top: 0,
-          background: "var(--c-surface)",
-          zIndex: 1,
-        }}
-      >
-        <span className="tars-label" style={{ color: active ? "var(--c-moss)" : undefined, display: "inline-flex", alignItems: "center", gap: 4 }}>
-          {label}
-          {active ? (sortDir === "asc" ? <ChevronUp size={9} /> : <ChevronDown size={9} />) : null}
-        </span>
-      </th>
-    )
-  }
-
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8125rem" }}>
         <thead>
           <tr>
-            <Th label="Title" colKey="source_title" />
-            <Th label="Type" colKey="type" />
-            <Th label="Domain" colKey="domain" />
-            <Th label="Status" colKey="status" />
-            <Th label="Priority" colKey="priority" />
+            <Th label="Title" colKey="source_title" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <Th label="Type" colKey="type" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <Th label="Domain" colKey="domain" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <Th label="Status" colKey="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <Th label="Priority" colKey="priority" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <th style={{ padding: "0.5rem 0.75rem", textAlign: "left", borderBottom: "1px solid var(--c-border)", position: "sticky", top: 0, background: "var(--c-surface)" }}>
               <span className="tars-label">Tags</span>
             </th>
-            <Th label="Saved" colKey="saved_at" />
+            <Th label="Saved" colKey="saved_at" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
           </tr>
         </thead>
         <tbody>

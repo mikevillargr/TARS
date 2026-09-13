@@ -601,7 +601,7 @@ export default function TodayPage() {
                       {/* Not a scolding. Deferring everything is a legitimate
                           answer on a bad morning; the screen's job is to say
                           where it went, not to grade the decision. */}
-                      You've pushed it all to tonight.{" "}
+                      You&apos;ve pushed it all to tonight.{" "}
                       {tally.snoozed === 1
                         ? "It'll find you again then."
                         : `All ${tally.snoozed} will find you again then.`}

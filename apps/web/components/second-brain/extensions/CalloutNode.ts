@@ -1,4 +1,15 @@
 import { Node, mergeAttributes } from '@tiptap/core'
+import type { RawCommands } from '@tiptap/core'
+
+/* Tiptap's Commands interface is populated by module augmentation, so the
+ * command map is not statically known here. This names the one member each
+ * command actually calls instead of widening to `any`. */
+type TiptapCommandProps = {
+  commands: {
+    wrapIn(name: string, attrs?: Record<string, unknown>): boolean
+    insertContent(value: unknown): boolean
+  }
+}
 
 const EMOJI: Record<string, string> = {
   note: '💡',
@@ -56,9 +67,9 @@ export const CalloutNode = Node.create({
     return {
       setCallout:
         (calloutType: string = 'note') =>
-        ({ commands }: { commands: any }) => {
+        ({ commands }: TiptapCommandProps) => {
           return commands.wrapIn(this.name, { calloutType })
         },
-    } as any
+    } as Partial<RawCommands>
   },
 })

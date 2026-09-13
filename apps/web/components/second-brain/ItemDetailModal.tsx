@@ -593,7 +593,7 @@ export function ItemDetailModal({
               <div key={key} className="flex items-center px-3 py-2 border-b last:border-b-0" style={{ borderColor: "var(--c-border-faint)" }}>
                 <span className="tars-label w-20 shrink-0">{label}</span>
                 <select
-                  value={(editProps as any)[key] ?? ""}
+                  value={(editProps as Record<string, string | undefined>)[key] ?? ""}
                   onChange={e => setEditProps(p => ({ ...p, [key]: e.target.value || undefined }))}
                   className="flex-1 text-xs bg-transparent outline-none"
                   style={{ color: "var(--c-ink)" }}

@@ -1,4 +1,5 @@
 import { ReactRenderer } from '@tiptap/react'
+import type { SuggestionProps, SuggestionKeyDownProps } from '@tiptap/suggestion'
 import Mention from '@tiptap/extension-mention'
 import tippy, { type Instance, type Props } from 'tippy.js'
 import { MentionList, type MentionItem } from './MentionList'
@@ -6,6 +7,34 @@ import { MentionList, type MentionItem } from './MentionList'
 // Stored format: [[id|type|label]]
 // e.g. [[abc123|contact|John Doe]]
 // This survives save/reload: serialize writes it, the markdown-it rule parses it back.
+
+/* Minimal structural types for the third-party surfaces this extension touches.
+ * tiptap-markdown's serializer state and markdown-it's inline ruler are not
+ * exported as types, and tippy's suggestion props vary by version — so these
+ * describe exactly the members used here rather than claiming `any`. */
+type MdSerializerState = { write(text: string): void }
+type MentionNode = { attrs: { id?: string; type?: string; label?: string } }
+
+type MdInlineToken = { content: string }
+type MdInlineState = {
+  src: string
+  pos: number
+  push(type: string, tag: string, nesting: number): MdInlineToken
+}
+type MarkdownIt = {
+  inline: {
+    ruler: {
+      before(
+        before: string,
+        name: string,
+        rule: (state: MdInlineState, silent: boolean) => boolean,
+      ): void
+    }
+  }
+}
+
+type MentionListHandle = { onKeyDown?: (props: SuggestionKeyDownProps) => boolean }
+
 function esc(s: string) {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -47,7 +76,7 @@ export const MentionExtension = Mention
       return {
         markdown: {
           // Serialize mention node → [[id|type|label]] in stored markdown
-          serialize(state: any, node: any) {
+          serialize(state: MdSerializerState, node: MentionNode) {
             const id    = node.attrs.id    ?? ''
             const type  = node.attrs.type  ?? 'unknown'
             const label = node.attrs.label ?? node.attrs.id ?? ''
@@ -58,8 +87,8 @@ export const MentionExtension = Mention
             // Add a markdown-it inline rule that converts [[id|type|label]]
             // back to a <span data-mention …> that tiptap's DOM parser can recognize.
             // html_inline tokens from custom rules always render regardless of html:false.
-            setup(markdownit: any) {
-              markdownit.inline.ruler.before('escape', 'tars_mention', (state: any, silent: boolean) => {
+            setup(markdownit: MarkdownIt) {
+              markdownit.inline.ruler.before('escape', 'tars_mention', (state: MdInlineState, silent: boolean) => {
                 const src = state.src.slice(state.pos)
                 // Match [[id|type|label]] — label may contain anything except ]]
                 const match = src.match(/^\[\[([^\]|]+)\|([^\]|]+)\|([^\]]+?)\]\]/)
@@ -120,18 +149,24 @@ export const MentionExtension = Mention
     },
 
     render: () => {
+      /* Tiptap's clientRect may return null between renders; tippy's
+       * GetReferenceClientRect may not. Collapsing null to an empty rect keeps
+       * the popup positioned at the origin for that frame instead of throwing.
+       * The `any` this replaced was hiding the mismatch, not solving it. */
+      const rectOf = (fn: SuggestionProps["clientRect"]) => () => fn?.() ?? new DOMRect()
+
       let component: ReactRenderer | null = null
       let popup: Instance<Props>[] | null = null
 
       return {
-        onStart(props: any) {
+        onStart(props: SuggestionProps) {
           component = new ReactRenderer(MentionList, {
             props,
             editor: props.editor,
           })
           if (!props.clientRect) return
           popup = tippy('body', {
-            getReferenceClientRect: props.clientRect,
+            getReferenceClientRect: rectOf(props.clientRect),
             appendTo: () => document.body,
             content: component.element,
             showOnCreate: true,
@@ -141,18 +176,18 @@ export const MentionExtension = Mention
           })
         },
 
-        onUpdate(props: any) {
+        onUpdate(props: SuggestionProps) {
           component?.updateProps(props)
           if (!props.clientRect) return
-          popup?.[0]?.setProps({ getReferenceClientRect: props.clientRect })
+          popup?.[0]?.setProps({ getReferenceClientRect: rectOf(props.clientRect) })
         },
 
-        onKeyDown(props: any) {
+        onKeyDown(props: SuggestionKeyDownProps) {
           if (props.event.key === 'Escape') {
             popup?.[0]?.hide()
             return true
           }
-          return (component?.ref as any)?.onKeyDown(props)
+          return (component?.ref as MentionListHandle | undefined)?.onKeyDown?.(props) ?? false
         },
 
         onExit() {

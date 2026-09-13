@@ -4,7 +4,7 @@ import { NodeViewContent, NodeViewWrapper } from '@tiptap/react'
 import { ChevronRight } from 'lucide-react'
 
 interface Props {
-  node: any
+  node: { attrs: { open?: boolean; summary?: string } }
   updateAttributes: (attrs: Record<string, unknown>) => void
   selected: boolean
 }

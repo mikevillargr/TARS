@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 
 // Don't synthesize tiny fragments — wait until enough text has accumulated
 const MIN_SENTENCE_CHARS = 10
@@ -53,6 +53,12 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
     }
   }, [])
 
+  // playNext chains into itself when a clip ends. Referencing it directly
+  // inside its own initializer is a temporal-dead-zone access; going through a
+  // ref also means the chain always calls the LATEST closure rather than the
+  // one captured when playback started.
+  const playNextRef = useRef<() => void>(() => {})
+
   const playNext = useCallback(() => {
     if (stopRef.current) return
     const blob = audioQueueRef.current.shift()
@@ -70,12 +76,16 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
     const cleanup = () => {
       URL.revokeObjectURL(url)
       activeAudioRef.current = null
-      playNext()
+      playNextRef.current()
     }
     audio.onended = cleanup
     audio.onerror = cleanup
     audio.play().catch(cleanup)
   }, [checkDone])
+
+  useEffect(() => {
+    playNextRef.current = playNext
+  }, [playNext])
 
   const synth = useCallback(async (text: string) => {
     if (stopRef.current || !text.trim()) return
