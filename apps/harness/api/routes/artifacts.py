@@ -144,6 +144,19 @@ async def get_artifact(
     artifact = result.scalar_one_or_none()
     if not artifact:
         raise HTTPException(status_code=404, detail="Artifact not found")
+
+    # Never ship the base64 payload here. The client cannot display it anyway —
+    # images and PDFs render from /view, documents from /preview — so sending
+    # it only meant waiting on a multi-MB download before anything appeared. An
+    # 11MB trace took ~20s to open a panel whose whole message is "this needs a
+    # different viewer". The marker keeps `is_binary` detection working.
+    if artifact.content and artifact.content.startswith("base64:"):
+        # Detach FIRST. This is a live ORM object, so mutating it while it is
+        # still in the session marks it dirty and a flush would persist the
+        # truncation — destroying the stored file. Expunged, it is just a value.
+        db.expunge(artifact)
+        artifact.content = "base64:"
+
     return artifact
 
 
