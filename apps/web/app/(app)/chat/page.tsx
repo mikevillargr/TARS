@@ -1550,6 +1550,7 @@ export default function ChatPage() {
   const [toolProgressItems, setToolProgressItems]         = useState<ToolProgress[]>([])
   const [browserJobId, setBrowserJobId]                   = useState<string | null>(null)
   const [browserTask, setBrowserTask]                     = useState<string | undefined>()
+  const [browserPanelOpen, setBrowserPanelOpen]           = useState(true)
   const [emailThreadCards, setEmailThreadCards]           = useState<EmailThread[]>([])
   const [stravaCards, setStravaCards]                     = useState<StravaActivity[]>([])
   const [meetingCards, setMeetingCards]                   = useState<MeetingCardData[]>([])
@@ -2199,6 +2200,7 @@ export default function ChatPage() {
               if (evt.job_id && chatId === activeChatIdRef.current) {
                 setBrowserJobId(evt.job_id as string)
                 setBrowserTask(evt.task as string | undefined)
+                setBrowserPanelOpen(true)   // a new run always surfaces itself
               }
               if (chatId === activeChatIdRef.current) {
                 const prog: ToolProgress = { tool: evt.tool as string, status: evt.status as string, done: evt.done as boolean ?? false }
@@ -2955,7 +2957,8 @@ export default function ChatPage() {
     <BrowserPanel
       jobId={browserJobId}
       task={browserTask}
-      onClose={() => setBrowserJobId(null)}
+      open={browserPanelOpen}
+      onOpenChange={setBrowserPanelOpen}
     />
     </>
   )

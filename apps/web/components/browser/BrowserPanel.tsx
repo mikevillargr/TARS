@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Pause, Play, X, Maximize2, Minimize2 } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import { Pause, Play, X, Maximize2, Minimize2, PanelRight } from "lucide-react"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useSidebar } from "@/components/ui/sidebar"
 import { useBrowserJob, type FeedRow } from "@/hooks/useBrowserJob"
 import { BrowserViewport } from "./BrowserViewport"
 import { ActionFeed } from "./ActionFeed"
@@ -10,8 +11,14 @@ import { ActionFeed } from "./ActionFeed"
 interface Props {
   jobId: string | null
   task?: string
-  onClose: () => void
+  /** Closing hides the panel; it does NOT end the run. Reopen from the pill. */
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
+
+const MIN_W = 420
+const MAX_W = 980
+const DEFAULT_W = 640
 
 function elapsed(from: number | null) {
   if (!from) return "00:00"
@@ -31,7 +38,7 @@ function elapsed(from: number | null) {
  * job is watch-and-decide: the primary action holds the run so it can be picked
  * up on a real screen. Same split TARS already makes elsewhere.
  */
-export function BrowserPanel({ jobId, task, onClose }: Props) {
+export function BrowserPanel({ jobId, task, open, onOpenChange }: Props) {
   const isMobile = useIsMobile()
   const { frame, rows, status, paused, result, control, activeBox } = useBrowserJob(jobId)
   const [expanded, setExpanded] = useState(false)   // mobile detent
@@ -40,7 +47,11 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
   const [driving, setDriving] = useState(false)
   const [vnc, setVnc] = useState<{ takeover: boolean; vnc_url: string | null } | null>(null)
   const [startedAt] = useState(() => Date.now())
+  const [width, setWidth] = useState(DEFAULT_W)
+  const [dragging, setDragging] = useState(false)
   const [, forceTick] = useState(0)
+  const sidebar = useSidebar()
+  const restoreSidebar = useRef<boolean | null>(null)
 
   useEffect(() => {
     const t = setInterval(() => forceTick((n) => n + 1), 1000)
@@ -61,6 +72,43 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
     }
   }, [])
 
+  // Push the page aside and collapse the nav to a rail while open. Not hidden
+  // entirely — losing navigation to watch a browser run is a bad trade, and
+  // every split-view reference (Suno, Twist, VS Code) keeps a rail.
+  useEffect(() => {
+    const showing = open && !!jobId && !isMobile
+    document.documentElement.style.setProperty(
+      "--browser-panel-w",
+      showing ? `${fullscreen ? window.innerWidth : width}px` : "0px",
+    )
+    if (showing) {
+      if (restoreSidebar.current === null) restoreSidebar.current = sidebar.open
+      if (sidebar.open) sidebar.setOpen(false)
+    } else if (restoreSidebar.current !== null) {
+      if (restoreSidebar.current) sidebar.setOpen(true)
+      restoreSidebar.current = null
+    }
+    return () => {
+      document.documentElement.style.setProperty("--browser-panel-w", "0px")
+    }
+  }, [open, jobId, isMobile, width, fullscreen, sidebar])
+
+  const startResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    setDragging(true)
+    const move = (ev: PointerEvent) => {
+      const next = Math.min(MAX_W, Math.max(MIN_W, window.innerWidth - ev.clientX))
+      setWidth(next)
+    }
+    const up = () => {
+      setDragging(false)
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+    }
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+  }, [])
+
   const toggleDrive = async () => {
     const next = !driving
     setDriving(next)
@@ -71,6 +119,37 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
   }
 
   if (!jobId) return null
+
+  // Closed but alive: a small pill, so a run you dismissed is one click back
+  // rather than lost. Closing must never end the run.
+  if (!open && !isMobile) {
+    return (
+      <button
+        onClick={() => onOpenChange(true)}
+        className="tars-label fixed right-5 z-40 flex items-center gap-2 px-3 py-2"
+        style={{
+          // Clear of the composer: at bottom-4 it landed on the mic button.
+          bottom: 118,
+          borderRadius: 999,
+          background: "var(--c-surface)",
+          border: "1px solid var(--c-border)",
+          color: "var(--c-ink)",
+          boxShadow: "0 4px 16px color-mix(in srgb, var(--c-ink) 10%, transparent)",
+        }}
+        title="Reopen the browser panel"
+      >
+        <span
+          className={status === "running" ? "animate-pulse" : ""}
+          style={{
+            width: 6, height: 6, borderRadius: 99,
+            background: status === "running" ? "var(--c-moss)" : "var(--c-ink-faint)",
+          }}
+        />
+        <PanelRight size={13} />
+        BROWSER
+      </button>
+    )
+  }
 
   const live = status === "running"
   const actionCount = rows.filter((r) => r.kind === "action").length
@@ -199,7 +278,7 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
                 </button>
               ) : (
                 <button
-                  onClick={onClose}
+                  onClick={() => onOpenChange(false)}
                   className="tars-label px-3 py-2"
                   style={{ borderRadius: 6, border: "1px solid var(--c-border)" }}
                 >
@@ -218,11 +297,28 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
     <aside
       className="fixed right-0 top-0 z-40 flex h-full flex-col"
       style={{
-        width: fullscreen ? "100vw" : 640,
+        width: fullscreen ? "100vw" : width,
         background: "var(--c-surface)",
         borderLeft: "1px solid var(--c-border)",
+        transition: dragging ? "none" : "width 220ms cubic-bezier(0.32, 0.72, 0, 1)",
       }}
     >
+      {!fullscreen && (
+        <div
+          onPointerDown={startResize}
+          className="group absolute left-0 top-0 h-full"
+          style={{ width: 7, marginLeft: -3, cursor: "col-resize", touchAction: "none" }}
+          title="Drag to resize"
+        >
+          <div
+            className="mx-auto h-full transition-colors"
+            style={{
+              width: 1,
+              background: dragging ? "var(--c-moss)" : "transparent",
+            }}
+          />
+        </div>
+      )}
       <header
         className="flex items-center gap-2.5 px-4 py-3"
         style={{ borderBottom: "1px solid var(--c-border-faint)" }}
@@ -250,7 +346,12 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
         >
           {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
         </button>
-        <button onClick={onClose} title="Close" className="p-1.5" style={{ borderRadius: 4, color: "var(--c-ink-muted)" }}>
+        <button
+          onClick={() => onOpenChange(false)}
+          title="Hide (the run keeps going)"
+          className="p-1.5"
+          style={{ borderRadius: 4, color: "var(--c-ink-muted)" }}
+        >
           <X size={14} />
         </button>
       </header>

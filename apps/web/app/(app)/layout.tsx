@@ -386,7 +386,17 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
         {/* Page content — safe-area-aware bottom padding so content clears the tab bar + home indicator */}
         {/* min-w-0 + overflow-x-hidden enforce a hard horizontal boundary for every (app) page */}
-        <div className="tars-ambient flex-1 min-w-0 overflow-hidden flex flex-col pb-safe-tab lg:pb-0" style={{ maxWidth: "100%" }}>{children}</div>
+        {/* --browser-panel-w is set by BrowserPanel while it is open. The panel
+            PUSHES rather than overlays: an observation surface you have to
+            close to read the conversation that produced it defeats itself. */}
+        <div
+          className="tars-ambient flex-1 min-w-0 overflow-hidden flex flex-col pb-safe-tab lg:pb-0"
+          style={{
+            maxWidth: "100%",
+            paddingRight: "var(--browser-panel-w, 0px)",
+            transition: "padding-right 220ms cubic-bezier(0.32, 0.72, 0, 1)",
+          }}
+        >{children}</div>
       </main>
 
       {/* Bottom tab bar — sits outside <main> so it overlays correctly */}
