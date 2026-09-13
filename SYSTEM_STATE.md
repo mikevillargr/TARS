@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.2 |
+| Version | v2.27.3 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,43 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.3 — 2026-09-14
+**Feature: Kimi (Moonshot AI) added as a third model provider + new `research` task category**
+
+- **New provider `kimi`.** `ModelClient` gains a lazy `kimi` client — `AsyncAnthropic`
+  pointed at `KIMI_BASE_URL` (default `https://api.kimi.com/coding`) with `TARS_KIMI_API_KEY`
+  (env alias follows the `TARS_ANTHROPIC_API_KEY` pattern). `_PROVIDER_DEFAULTS` maps all four
+  tier keys (tier1/2/3/vision) to `kimi-k3` — one model everywhere, K3 has native vision.
+  Wired through `_client_for`, `reset()`, `_probe`, and `_stream_with_fallback` (both already
+  provider-agnostic). Per-tier backups work unchanged (`tierN_backup_provider="kimi"`).
+- **Endpoint scoping in `_stream_anthropic`.** The old `_is_zai = client is not anthropic`
+  test would have lumped Kimi into Z.ai's quirks. Split into two explicit checks:
+  `cache_control: ephemeral` is sent ONLY on the real Anthropic client (Kimi and Z.ai both
+  get the plain system string), and the 8192 thinking-budget bump stays Z.ai-only — Kimi
+  keeps the caller's `max_tokens`.
+- **New `research` category** in the router (`CATEGORIES`, `_RESEARCH_RE` fast-path —
+  deep dive / research report / "in depth" / "compare options" / "write a report on" /
+  literature review / multi-part long prompts — checked before writing/analysis so those
+  prompts no longer land in `analysis`). Research classifies tier3 via the existing
+  `_TIER3_RE` deep-dive signals; the two-token classifier prompt can also emit `research`.
+- **Classifier + utility-call provider mapping.** The tier1 classifier
+  (`router.classify_full`) and the small utility calls in `chat.py` (fact extraction, title
+  generation, compaction — now share one `_tier1_client_params` helper), `second_brain.py`
+  (inline-edit, generate, auto-triage), `ingest/parsers/image.py`, and
+  `jobs/meeting_processor.py` all map `kimi` → kimi key/base_url/`KIMI_MODEL` instead of
+  falling through to the Anthropic key with a Claude model name.
+- **Settings API + UI.** Provider whitelists (`/settings/model-routing` PATCH, backups,
+  category routing) accept `kimi`; the duplicated `_PROVIDER_DEFAULTS` in
+  `api/routes/settings.py` gained kimi rows. API-keys endpoints manage and test a Kimi key
+  (`ApiKeysOut.kimi`, env_map → `tars_kimi_api_key`, test branch pings kimi-k3 via the
+  Anthropic-compatible endpoint). Settings page: `Provider` union, `KIMI_MODELS`,
+  `PROVIDER_DEFAULTS`, provider picker options, and a Research row in Task-Category Routing.
+- **No built-in category defaults** — `category_routing_json` stays `{}` (pure user config).
+  Recommended mapping documented in CLAUDE.md §4: `research → kimi/kimi-k3` when a Kimi key
+  is configured.
+- Web + harness, no schema change. `.env.example` gains `TARS_KIMI_API_KEY` and the
+  previously undocumented `ZAI_API_KEY`.
 
 ### v2.27.2 — 2026-09-14
 **Feature: Gmail attachment sync with a smart filter — reference-worthy email attachments land in Artifacts**

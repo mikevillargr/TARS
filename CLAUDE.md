@@ -157,6 +157,7 @@ Claude Haiku classifier (~200ms, Anthropic API)
 | Classifier + Tier 1 | Claude Haiku | Fast, cheap, always available via Anthropic API |
 | Tier 2 workhorse | Z.ai GLM-4.7 (default) | Configurable via Settings UI per-tier |
 | Tier 3 frontier | Claude Sonnet | Tool use, long context, client-facing work |
+| Kimi (Moonshot AI) | kimi-k3 | Third provider (`provider="kimi"`), Anthropic-compatible endpoint (`KIMI_BASE_URL`, default `https://api.kimi.com/coding`). One model for all tiers + vision (K3 has native vision). Selectable per-tier/per-backup/per-category in Settings; recommended as the `research` category model. Env key: `TARS_KIMI_API_KEY`. |
 | Embeddings | nomic-embed-text | pgvector semantic search |
 | Speech-to-text | faster-whisper — **open source** (MIT, [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)), self-hosted CPU int8 | `POST /transcribe` (`api/routes/transcribe.py`); model size via `WHISPER_MODEL` env (default "small"); lazy-loaded singleton, ~500MB RAM |
 | Text-to-speech | Kokoro TTS — **open source** ([hexgrad/Kokoro-82M](https://github.com/hexgrad/Kokoro-82M) model, Apache-2.0, run via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)), embedded in harness process | Sentence-by-sentence streaming via `/api/proxy/tts`; voice + speed configurable in Settings |
@@ -172,7 +173,7 @@ mid-stream (after tools may have side-effected). `.env`: `{tier}_backup_provider
 `_stream_pair` / `_probe` (`core/model_client.py`).
 
 ### Task-category forced routing — since v2.8.0
-Routing stays complexity-based, but every request is **also** classified into one of six task
+Routing stays complexity-based, but every request is **also** classified into one of seven task
 categories so a specific model can be forced per category, independent of tier:
 
 | Category | Covers |
@@ -181,7 +182,8 @@ categories so a specific model can be forced per category, independent of tier:
 | `writing` | drafting docs/reports/proposals/emails/memos/summaries, decks |
 | `coding` | code generation, debugging, technical Q&A |
 | `data_viz` | charts, plots, graphs, visualizing data |
-| `analysis` | strategy, deep analysis, research synthesis, client deliverables |
+| `analysis` | strategy, deep analysis, client deliverables |
+| `research` | deep dives, research reports, literature reviews, in-depth multi-source investigation (since v2.27.3) |
 | `general` | conversational / anything else |
 
 Detection is regex fast-path + the existing tier-1 classifier (now two-token: `tier category`)
@@ -189,6 +191,10 @@ in `router.classify_full`. Settings → Task-Category Routing maps a category to
 provider+model that **overrides the tier's model** while the classified tier still governs tool
 access and context budget. Stored as `category_routing_json` in `.env`; image/vision requests are
 excluded (vision routing owns model choice).
+
+There are **no built-in category defaults** — `category_routing_json` starts as `{}` (pure user
+config). Recommended mapping when `TARS_KIMI_API_KEY` is set:
+`research → {"provider": "kimi", "model": "kimi-k3"}` (set it in Settings → Task-Category Routing).
 
 ---
 
@@ -904,6 +910,11 @@ GITHUB_REPO=https://github.com/mikevillargr/TARS
 
 # Z.ai (Tier 2 — GLM models)
 ZAI_API_KEY=your_zai_api_key_here
+
+# Kimi / Moonshot AI (optional third provider — Anthropic-compatible endpoint)
+TARS_KIMI_API_KEY=your_kimi_api_key_here
+# KIMI_BASE_URL=https://api.kimi.com/coding   (default)
+# KIMI_MODEL=kimi-k3                          (default)
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
