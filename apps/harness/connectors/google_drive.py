@@ -260,6 +260,31 @@ class GoogleWorkspaceClient:
         }
 
     # ── write: Sheets ────────────────────────────────────────────────────────────
+    def create_spreadsheet(self, title: str, values: list[list]) -> dict:
+        """Create a new Sheet and fill it with a 2-D array.
+
+        Two calls rather than one: the create API takes grid data in a much
+        more awkward shape, and values().update handles type coercion (dates,
+        numbers, currency) through USER_ENTERED for free.
+        """
+        created = self.sheets.spreadsheets().create(
+            body={"properties": {"title": title[:100]}},
+            fields="spreadsheetId,spreadsheetUrl",
+        ).execute()
+        file_id = created["spreadsheetId"]
+        if values:
+            self.sheets.spreadsheets().values().update(
+                spreadsheetId=file_id,
+                range="A1",
+                valueInputOption="USER_ENTERED",
+                body={"values": values},
+            ).execute()
+        return {
+            "file_id": file_id,
+            "url": created.get("spreadsheetUrl", f"https://docs.google.com/spreadsheets/d/{file_id}"),
+            "rows": len(values),
+        }
+
     def update_sheet(self, file_id: str, range_a1: str, values: list[list]) -> dict:
         """Overwrite a range (A1 notation) with a 2-D array of values."""
         self.sheets.spreadsheets().values().update(

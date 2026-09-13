@@ -14,6 +14,7 @@ from api.routes import auth, health, chat, tasks, meetings, calendar
 from api.routes import second_brain, artifacts
 from api.routes import links as links_route
 from api.routes import browser as browser_route
+from api.routes import tables as tables_route
 from api.routes import cron, connectors, memory, contacts
 from api.routes import settings as settings_route
 from api.routes import tesla as tesla_route
@@ -186,3 +187,4 @@ app.include_router(signals_route.router, prefix="/api/signals")
 app.include_router(analytics_route.router, prefix="/api")
 app.include_router(feed_route.router, prefix="/api/feed")
 app.include_router(browser_route.router, prefix="/api")
+app.include_router(tables_route.router, prefix="/api")
