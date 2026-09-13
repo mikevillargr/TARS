@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.23.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.24.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1134,6 +1134,23 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.24.0 Feature: chat suggestion chips DO things instead of typing things. The old prompt
+        was "give exactly 3 short follow-up questions", so chips could only ever be
+        QUESTIONS — TARS has ~47 tools and the generator knew about none of them — and
+        clicking one just typed it into the composer, costing a full round trip to do what a
+        button could do. The generator now sees the tools it may propose and what the turn
+        produced (tool_results kinds), returning either {kind:"action",tool,label,value} or
+        {kind:"ask",label} when nothing is genuinely actionable; it is told fewer and better
+        beats three mediocre. CHIP_ACTIONS is a short allowlist — create_reminder,
+        create_task, save_to_second_brain, save_memory, create_signal — all cheap,
+        reversible, additive; nothing that sends/deletes/spends, since a one-click chip is
+        the wrong place to discover you have mailed a client. Every action expands an
+        EDITABLE confirm first (same step as Today's InlineActionForm) and writes via new
+        POST /api/chat/chip-action, through the same paths the tools use. Pre-v2.24 messages
+        stored plain strings and still render as question chips. NOTE: shipped broken once —
+        chat.py imports re as _re, so re.sub raised NameError into a bare except and returned
+        [] on every turn, indistinguishable from "no suggestions" (the v2.18.6 shape, same
+        file); the except now logs. Harness + web, no schema change.
 v2.23.0 Feature: Settings reorganised into six tabs. Fix: CI green, browser self-knowledge.
         (1) Settings was 11 sections in one 1,621-line scroll; card-sorted into General /
         Models / Usage / Voice / Knowledge / Security, grouped by what you are trying to DO

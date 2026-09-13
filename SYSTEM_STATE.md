@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.23.0 |
+| Version | v2.24.0 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,40 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.24.0 — 2026-09-13
+**Feature: chat suggestion chips do things instead of typing things**
+
+- **The chips after each response were fragments with no action context.** The entire
+  generation prompt was *"give exactly 3 short follow-up questions the user might naturally
+  ask next"*, and three faults compounded: they could only ever be QUESTIONS (TARS has ~47
+  tools and the generator knew about none of them); the generator saw four messages
+  truncated to 250 chars and nothing about what the turn produced, so after a run that
+  downloaded an invoice it could not refer to the invoice; and clicking simply typed the
+  string into the composer, so even a good suggestion cost a full model round trip to do
+  what a button could do.
+- **Now capability-aware.** The generator sees the tools it may propose and what the turn
+  produced, returning either an action (tool + prefilled value) or a question as the
+  fallback when nothing is genuinely actionable. It is told fewer and better beats three
+  mediocre — three forced suggestions is how the old ones got padded. Observed: a meeting
+  summary yields "Send revised Q3 proposal" → To-Do and "Confirm NCH budget Monday" → Today
+  signal; a factual answer yields a single question; a browser download yields a reminder
+  carrying the amount and due date read off the invoice.
+- **`CHIP_ACTIONS` is a short allowlist** — reminder, task, Second Brain, memory, Today
+  signal. Cheap, reversible, additive. Nothing that sends, deletes or spends: email keeps
+  its draft-card gate, because a one-click chip is the wrong place to discover you have
+  mailed a client.
+- **Every action expands an editable confirm first**, the same intermediate step Today's
+  `InlineActionForm` uses. A suggestion is a guess about intent, and a one-click write on a
+  guess is how you get a To-Do you did not mean. `POST /api/chat/chip-action` writes through
+  the same paths the tools use, so a chip-created reminder is indistinguishable from one
+  TARS made itself. Messages persisted before this release stored plain strings and still
+  render as question chips.
+- **Shipped broken once, worth recording.** The first deploy returned zero chips on every
+  turn: `chat.py` imports `re` as `_re`, so the `re.sub` that strips the model's ```json
+  fence raised `NameError` straight into a bare `except` and returned `[]` — indistinguishable
+  from "the model had no suggestions". That is the v2.18.6 silent-failure shape, in the same
+  file. The `except` now logs.
 
 ### v2.23.0 — 2026-09-13
 **Feature: Settings reorganised into tabs. Fix: CI green again, browser self-knowledge**
