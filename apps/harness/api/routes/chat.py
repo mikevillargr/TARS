@@ -24,6 +24,7 @@ from core.model_client import (
     SAVE_ARTIFACT_TO_BRAIN_TOOL, ARCHIVE_PAGE_TOOL, CREATE_SIGNAL_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, CONFIRM_SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
+    GENERATE_SPREADSHEET_TOOL,
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
     CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
     SEARCH_PLACES_TOOL, SAVE_PLACE_TOOL, GET_SAVED_PLACES_TOOL,
@@ -1232,6 +1233,7 @@ async def send_message(
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
+        GENERATE_SPREADSHEET_TOOL,
         LOOKUP_CONTACT_TOOL,
         SEARCH_CONTACTS_TOOL,
         CREATE_CONTACT_TOOL,
@@ -2481,35 +2483,34 @@ async def send_message(
                             log.warning("web_search tool failed: %s", exc)
                             return f"Web search failed: {exc}"
 
+                    async def _maybe_save_to_brain(artifact, text: str) -> str:
+                        """Shared save_to_brain handling for the generate_* tools.
+
+                        The artifact payload is a blob-stored binary, so the text the
+                        binary was built from is passed in directly rather than
+                        re-extracting it from the file.
+                        """
+                        if not tool_input.get("save_to_brain"):
+                            return ""
+                        try:
+                            from core.browser_downloads import save_artifact_to_brain as _save_brain
+                            item_id = await _save_brain(bg_db, artifact, user_id, text=text, tags=["generated"])
+                            if item_id:
+                                await bg_db.commit()
+                                return " Also saved to Second Brain."
+                            return ""
+                        except Exception as exc:
+                            log.warning("save_to_brain failed for %s: %s", artifact.filename, exc)
+                            return " (Second Brain save failed.)"
+
                     if name == "generate_document":
                         try:
                             import re as _re
-                            from io import BytesIO
-                            import docx as _docx
+                            from core import docgen
                             title = tool_input.get("title", "Document")
                             content_md = tool_input.get("content", "")
                             fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
-                            doc = _docx.Document()
-                            doc.add_heading(title, 0)
-                            for line in content_md.split("\n"):
-                                s = line.strip()
-                                if not s:
-                                    continue
-                                if s.startswith("### "):
-                                    doc.add_heading(s[4:], level=3)
-                                elif s.startswith("## "):
-                                    doc.add_heading(s[3:], level=2)
-                                elif s.startswith("# "):
-                                    doc.add_heading(s[2:], level=1)
-                                elif s.startswith("- ") or s.startswith("* "):
-                                    doc.add_paragraph(s[2:], style="List Bullet")
-                                elif _re.match(r"^\d+\.", s):
-                                    doc.add_paragraph(_re.sub(r"^\d+\.\s*", "", s), style="List Number")
-                                else:
-                                    doc.add_paragraph(s)
-                            buf = BytesIO()
-                            doc.save(buf)
-                            raw = buf.getvalue()
+                            raw = docgen.build_docx(title, content_md)
                             filename = fn_base + ".docx"
                             artifact = Artifact(
                                 user_id=user_id, filename=filename, type="document",
@@ -2523,7 +2524,8 @@ async def send_message(
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
                             await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "docx"})
-                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
+                            extra = await _maybe_save_to_brain(artifact, content_md)
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts." + extra
                         except Exception as exc:
                             log.warning("generate_document failed: %s", exc)
                             return f"Failed to generate document: {exc}"
@@ -2574,7 +2576,14 @@ async def send_message(
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
                             await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pptx"})
-                            return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts."
+                            brain_text = "\n\n".join(
+                                [f"# {title}"] + ([subtitle] if subtitle else []) + [
+                                    "## " + s.get("title", "") + "\n" + "\n".join("- " + str(b) for b in s.get("bullets", []))
+                                    for s in slides_data
+                                ]
+                            )
+                            extra = await _maybe_save_to_brain(artifact, brain_text)
+                            return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts." + extra
                         except Exception as exc:
                             log.warning("generate_presentation failed: %s", exc)
                             return f"Failed to generate presentation: {exc}"
@@ -2582,37 +2591,11 @@ async def send_message(
                     if name == "generate_pdf":
                         try:
                             import re as _re
-                            from io import BytesIO
-                            from reportlab.lib.pagesizes import A4
-                            from reportlab.lib.styles import getSampleStyleSheet
-                            from reportlab.lib.units import inch
-                            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                            from core import docgen
                             title = tool_input.get("title", "Document")
                             content_md = tool_input.get("content", "")
                             fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
-                            buf = BytesIO()
-                            doc = SimpleDocTemplate(buf, pagesize=A4,
-                                rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
-                            styles = getSampleStyleSheet()
-                            story = [Paragraph(title, styles["Title"]), Spacer(1, 0.2 * inch)]
-                            for line in content_md.split("\n"):
-                                s = line.strip()
-                                if not s:
-                                    story.append(Spacer(1, 0.08 * inch))
-                                    continue
-                                if s.startswith("### "):
-                                    story.append(Paragraph(s[4:], styles["Heading3"]))
-                                elif s.startswith("## "):
-                                    story.append(Paragraph(s[3:], styles["Heading2"]))
-                                elif s.startswith("# "):
-                                    story.append(Paragraph(s[2:], styles["Heading1"]))
-                                elif s.startswith("- ") or s.startswith("* "):
-                                    story.append(Paragraph("&#8226; " + s[2:], styles["Normal"]))
-                                else:
-                                    story.append(Paragraph(s, styles["Normal"]))
-                                    story.append(Spacer(1, 0.05 * inch))
-                            doc.build(story)
-                            raw = buf.getvalue()
+                            raw = docgen.build_pdf(title, content_md)
                             filename = fn_base + ".pdf"
                             artifact = Artifact(
                                 user_id=user_id, filename=filename, type="document",
@@ -2626,10 +2609,47 @@ async def send_message(
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
                             await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pdf"})
-                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
+                            extra = await _maybe_save_to_brain(artifact, content_md)
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts." + extra
                         except Exception as exc:
                             log.warning("generate_pdf failed: %s", exc)
                             return f"Failed to generate PDF: {exc}"
+
+                    if name == "generate_spreadsheet":
+                        try:
+                            import re as _re
+                            from core import docgen
+                            title = tool_input.get("title", "Spreadsheet")
+                            sheets_data = tool_input.get("sheets", [])
+                            fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+                            raw = docgen.build_xlsx(title, sheets_data)
+                            filename = fn_base + ".xlsx"
+                            artifact = Artifact(
+                                user_id=user_id, filename=filename, type="spreadsheet",
+                                source="chat", source_id=conversation_id,
+                                content=None,
+                                storage_path=blob_store.store(raw, "xlsx", user_id),
+                                version=1,
+                                size_bytes=len(raw), tags=["generated", "spreadsheet"],
+                            )
+                            bg_db.add(artifact)
+                            await bg_db.commit()
+                            await bg_db.refresh(artifact)
+                            await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "xlsx"})
+                            brain_parts = [f"# {title}"]
+                            for s in sheets_data:
+                                brain_parts.append(f"\n## {s.get('name', 'Sheet')}")
+                                headers = [str(h) for h in (s.get("headers") or [])]
+                                if headers:
+                                    brain_parts.append(" | ".join(headers))
+                                for row in (s.get("rows") or []):
+                                    brain_parts.append(" | ".join(str(v) for v in row))
+                            extra = await _maybe_save_to_brain(artifact, "\n".join(brain_parts))
+                            n_rows = sum(len(s.get("rows") or []) for s in sheets_data)
+                            return f"Generated '{filename}' with {len(sheets_data)} sheet(s), {n_rows} rows ({len(raw):,} bytes). Saved to Artifacts." + extra
+                        except Exception as exc:
+                            log.warning("generate_spreadsheet failed: %s", exc)
+                            return f"Failed to generate spreadsheet: {exc}"
 
                     # ── Places tools ──────────────────────────────────────────────────
                     if name == "search_places":

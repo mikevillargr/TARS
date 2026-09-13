@@ -94,6 +94,8 @@ DOCUMENTS & FILES — always use the tool, never write inline:
 • generate_document — Word (.docx): reports, proposals, memos, briefs, plans, analyses.
 • generate_presentation — PowerPoint (.pptx): slide decks, pitch decks.
 • generate_pdf — PDF (.pdf): when Mike specifically requests PDF.
+• generate_spreadsheet — Excel (.xlsx): tables, trackers, budgets, any tabular data.
+All four accept save_to_brain=true to also file the text content in Second Brain — only when Mike asks to keep/remember it.
 Write complete content in the tool call. Charts are NEVER documents — use generate_chart instead.
 
 CONTACTS (local mirror of Google Contacts, synced weekly):

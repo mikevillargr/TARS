@@ -93,24 +93,31 @@ async def save_artifact_to_brain(
     user_id: str,
     note: str = "",
     tags: Optional[List[str]] = None,
+    text: Optional[str] = None,
 ) -> Optional[str]:
     """Push an artifact's text into Second Brain. Returns the item id.
 
     Only text-bearing artifacts: a blob-stored (or legacy base64) payload has
     nothing to embed, so saving one would create an item that can never be
-    found by search.
+    found by search. Callers that already hold the text the binary was built
+    from (chat generation tools with the source markdown) can pass it as
+    `text` instead of extracting it back out of the blob.
     """
-    content = artifact.content or ""
-    if artifact.storage_path or content.startswith("base64:"):
-        return None
+    if text is not None:
+        content = text
+    else:
+        content = artifact.content or ""
+        if artifact.storage_path or content.startswith("base64:"):
+            return None
     from memory import second_brain
 
+    # The "browser" tag only makes sense for artifacts that came from a browser run
     item = await second_brain.ingest_document(
         db=db,
         user_id=user_id,
         content=content,
         title=artifact.filename,
         personal_note=note,
-        tags=(tags or []) + ["browser"],
+        tags=(tags or []) + (["browser"] if artifact.source == "browser" else []),
     )
     return item.id

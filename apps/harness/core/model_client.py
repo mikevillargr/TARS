@@ -616,6 +616,10 @@ GENERATE_DOCUMENT_TOOL = {
                 "type": "string",
                 "description": "Optional base filename (no extension). Defaults to slugified title.",
             },
+            "save_to_brain": {
+                "type": "boolean",
+                "description": "Also save the document's text content to Second Brain. Default false.",
+            },
         },
         "required": ["title", "content"],
     },
@@ -659,6 +663,10 @@ GENERATE_PRESENTATION_TOOL = {
                 "type": "string",
                 "description": "Optional base filename (no extension).",
             },
+            "save_to_brain": {
+                "type": "boolean",
+                "description": "Also save the presentation's text content to Second Brain. Default false.",
+            },
         },
         "required": ["title", "slides"],
     },
@@ -686,8 +694,61 @@ GENERATE_PDF_TOOL = {
                 "type": "string",
                 "description": "Optional base filename (no extension).",
             },
+            "save_to_brain": {
+                "type": "boolean",
+                "description": "Also save the document's text content to Second Brain. Default false.",
+            },
         },
         "required": ["title", "content"],
+    },
+}
+
+GENERATE_SPREADSHEET_TOOL = {
+    "name": "generate_spreadsheet",
+    "description": (
+        "Generate an Excel spreadsheet (XLSX) with one or more sheets and save it to Artifacts. "
+        "Use when Mike asks to create, build, or generate a spreadsheet, workbook, table, tracker, "
+        "budget, or any tabular data he wants as a file. Each sheet has a name, a header row, and "
+        "data rows. Returns the artifact ID and filename so Mike can download it."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Workbook title — used as the default filename.",
+            },
+            "sheets": {
+                "type": "array",
+                "description": "One or more worksheets.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Sheet tab name."},
+                        "headers": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Column header row.",
+                        },
+                        "rows": {
+                            "type": "array",
+                            "items": {"type": "array", "items": {"type": "string"}},
+                            "description": "Data rows, one string per cell, aligned with headers.",
+                        },
+                    },
+                    "required": ["name", "headers", "rows"],
+                },
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional base filename (no extension). Defaults to slugified title.",
+            },
+            "save_to_brain": {
+                "type": "boolean",
+                "description": "Also save a text version of the data to Second Brain. Default false.",
+            },
+        },
+        "required": ["title", "sheets"],
     },
 }
 
