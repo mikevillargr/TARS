@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.22.0 |
+| Version | v2.23.0 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,53 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.23.0 — 2026-09-13
+**Feature: Settings reorganised into tabs. Fix: CI green again, browser self-knowledge**
+
+- **Settings was 11 sections in one 1,621-line scroll.** Card-sorted into six tabs, grouped
+  by what you are trying to DO rather than by which API backs them:
+
+  | Tab | Sections |
+  |---|---|
+  | General | Profile, Timezone, App Installation |
+  | Models | Model Routing, Task-Category Routing |
+  | Usage | Token Usage |
+  | Voice | Voice |
+  | Knowledge | Domains, Feed |
+  | Security | Password, API Keys |
+
+  Two groupings are deliberate: the routing sections answer one question ("which model
+  handles this"), so splitting them would be filing by implementation; and Usage sits
+  immediately after Models because it is the evidence you retune on. Layout is a left nav
+  column rather than horizontal tabs — researched via Refero, where Cursor, Cohere, fal.ai
+  and OpenAI all do the same: it survives more sections without wrapping and keeps the whole
+  map visible. Deep-linkable via `?tab=`; sections hide with `display` rather than
+  unmounting, so state survives switching away and back.
+- **Fixed a hydration mismatch on Settings** (React #418, production only). Pre-existing, not
+  from the tab work: the timezone section rendered `new Date().toLocaleTimeString(...)`
+  during render, so the server produced one instant in its locale and the browser another.
+  Only visible in production because dev shares the browser's clock and locale. Same class
+  as the chat boot-quote in v2.19.8, same fix: render after mount.
+- **CI is green for the first time since ~2026-06-29.** 25 lint errors across 9 files, all
+  fixed rather than suppressed — no disabled rules, no new eslint-disable comments. Two were
+  real bugs: `TableView` defined its header component INSIDE render, so React remounted all
+  six header cells on every keystroke; and `useTtsPlayback`'s `playNext` referenced itself
+  inside its own initializer (a temporal-dead-zone access), now chaining through a ref so it
+  always calls the latest closure. The 17 `any`s were Tiptap/markdown-it/tippy interop,
+  replaced with Tiptap's own exported types where they exist and minimal structural types
+  elsewhere. Removing one `any` surfaced a latent bug it had hidden: Tiptap's `clientRect`
+  may return null, tippy's `GetReferenceClientRect` may not, so the mention popup would have
+  thrown on a null frame. 100 warnings remain and do not fail the build.
+- **The models now know what the browser can do.** All four browser tools were already
+  offered in chat and cron, but the capabilities block in the context assembler never
+  mentioned browsing — so TARS could call the tools yet answered questions about itself
+  wrongly (it told Mike a login would not carry over, which had stopped being true). Added
+  BROWSER and TODAY sections covering when to browse versus search, that sessions persist and
+  it never types credentials, that downloads save themselves, archiving, filing to Second
+  Brain, and the rule against raising all-clear Signals. The browser sub-agent was also told
+  downloads are captured automatically, so it clicks the export instead of reading a table
+  off the screen and retyping it.
 
 ### v2.22.0 — 2026-09-13
 **Feature: downloads, scheduled browser runs, Signals from jobs, page archiving**

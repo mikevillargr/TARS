@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.22.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.23.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1134,6 +1134,30 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.23.0 Feature: Settings reorganised into six tabs. Fix: CI green, browser self-knowledge.
+        (1) Settings was 11 sections in one 1,621-line scroll; card-sorted into General /
+        Models / Usage / Voice / Knowledge / Security, grouped by what you are trying to DO
+        rather than which API backs them. The two routing sections stay together because
+        they answer one question, and Usage sits next to them because it is the evidence you
+        retune on. Left NAV COLUMN not horizontal tabs (Refero: Cursor, Cohere, fal.ai,
+        OpenAI all do this) — survives more sections without wrapping. Deep-linkable via
+        ?tab=; sections hide with display rather than unmounting so state survives.
+        (2) Fixed a production-only hydration mismatch (React #418) on Settings —
+        PRE-EXISTING, not from the tab work: the timezone section rendered
+        new Date().toLocaleTimeString() during render, so server and browser disagreed. Same
+        class and fix as the v2.19.8 chat boot-quote: render after mount.
+        (3) CI GREEN for the first time since ~2026-06-29 — 25 lint errors fixed, none
+        suppressed. Two were real bugs: TableView defined its header component inside render
+        (React remounted all six header cells per keystroke), and useTtsPlayback's playNext
+        referenced itself in its own initializer (TDZ access), now chained through a ref.
+        The 17 `any`s were Tiptap/markdown-it/tippy interop; removing one surfaced a latent
+        bug it had hidden (tiptap clientRect may return null, tippy's GetReferenceClientRect
+        may not). 100 warnings remain and do not fail the build.
+        (4) The capabilities block in context_assembler never mentioned browsing, so TARS
+        could CALL the browser tools but answered questions about itself wrongly. Added
+        BROWSER + TODAY sections; the sub-agent was also told downloads are captured, so it
+        clicks the export instead of retyping a table off the screen. Web + harness, no
+        schema change.
 v2.22.0 Feature: downloads -> Artifacts, scheduled browser runs, Signals from jobs, page
         archiving. (1) Downloads captured per tab AS TABS APPEAR (portals open invoices in a
         new tab, which a page-level handler misses), text-extracted via ingest_file so they
