@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.4 |
+| Version | v2.27.5 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -87,6 +87,9 @@ governs tool access and context budget. Unset categories use normal tier routing
 `category_routing_json` in `.env` (live-reloaded via `ModelClient.reset()`). Image/vision
 requests are excluded — vision routing owns model choice.
 
+The same per-call forced provider/model hook is reused by `orchestrate_parallel` (since
+v2.27.5) for per-subtask model selection — see Version History.
+
 ---
 
 ## Active Components (13)
@@ -94,7 +97,7 @@ requests are excluded — vision routing owns model choice.
 | # | Component | Route | Status |
 |---|---|---|---|
 | 1 | Today | /today | Live — landing screen. AI-inferred signals needing a decision, grouped by urgency, with named actions, swipe-to-dismiss, snooze, undo, and a state-driven ambient backdrop. Replaces the old prompt-cron daily digest. Populated by the `signal_sweep` job every 4 hours (stalled tasks, unconverted meeting action items grouped by meeting, calendar conflicts, and Tier 2 extraction of commitments from transcripts), or on demand via `POST /api/signals/generate`. |
-| 2 | Chat | /chat | Live |
+| 2 | Chat | /chat | Live — `orchestrate_parallel` tool (Tier 2/3, since v2.27.5) fans independent research/analysis streams out to parallel read-only sub-agents with per-subtask provider/model; live `ParallelRunCard` renders the run |
 | 3 | Projects | /tasks | Live — renamed from "Tasks" |
 | 3b | To-Dos | /reminders | Live — quick personal checklist (renamed from "Reminders"); groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
 | 4 | Meetings | /meetings | Live |
@@ -164,6 +167,41 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.5 — 2026-09-14
+**Feature: parallel sub-agent orchestration (`orchestrate_parallel` chat tool)**
+
+- **`core/orchestrator.py` (new).** `run_parallel(subtasks, user_id, db, on_event)` fans one
+  chat turn out to up to 8 independent headless sub-agents (mixture of experts):
+  `asyncio.gather` under a 4-wide semaphore, 5-minute per-subtask timeout
+  (`asyncio.wait_for`) — timeouts/errors become `{status: "failed", output: "<reason>"}`
+  entries and never block the other subtasks. Each subtask streams through
+  `ModelClient.stream` at Tier 2 budget with a role-prefixed headless system prompt; an
+  optional per-subtask `provider`/`model` rides the existing `forced_provider`/`forced_model`
+  hook (a provider-only pick resolves that provider's Tier 2 default from
+  `_PROVIDER_DEFAULTS`). Sub-agents never message each other — the main turn synthesises.
+- **Scoped read-only tool set** for sub-agents: `web_search` (Tavily), `browse_web`
+  (browser runner, no live panel), `search_memory` (Mnemon + Second Brain — new minimal
+  schema; chat normally injects memory via context rather than a tool), `read_artifact`
+  (blob-store bytes + text/pdf/docx/xlsx extraction — new minimal schema). No state-changing
+  tools, which keeps the model client's pre-content fallback invariant safe. Each subtask
+  opens its own DB session — AsyncSession is not concurrency-safe, so the caller's session is
+  never shared across the gather.
+- **Chat wiring.** `ORCHESTRATE_PARALLEL_TOOL` schema in `model_client.py`; registered in the
+  chat tool list for Tier 2/3 only (Tier 1 turns are quick Q&A). Dispatch in chat's
+  `_tool_executor` wires `on_event` straight into the SSE queue: `parallel_started`,
+  `subtask_progress` (throttled ~1/sec/subtask, rolling preview), `subtask_done`. The tool
+  result returned to the model truncates each subtask output to 4k chars; a persisted
+  `parallel_run` summary card in the message's `tool_results` records per-subtask status,
+  model, and token totals for analytics and reload. Prompt guidance added to
+  `context_assembler.py` (Tier 2/3 capabilities block only).
+- **Frontend.** New `components/chat/ParallelRunCard.tsx` — collapsible card with per-subtask
+  status dot (running/done/failed), role chip, model badge, and rolling one-line preview;
+  expanded while running, collapses to an outcome summary when the run settles. Live state
+  keyed by `run_id` in the chat page's streaming state; after the turn the card re-renders
+  from the persisted `parallel_run` tool_result via `InlineMessageCards`.
+- No schema changes, no new dependencies. This is a chat tool — unrelated to the retired
+  Agent Jobs feature.
 
 ### v2.27.4 — 2026-09-14
 **Feature: shared docgen builders, `generate_spreadsheet` chat tool, save_to_brain piping**

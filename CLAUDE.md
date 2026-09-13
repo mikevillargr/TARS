@@ -196,6 +196,11 @@ There are **no built-in category defaults** — `category_routing_json` starts a
 config). Recommended mapping when `TARS_KIMI_API_KEY` is set:
 `research → {"provider": "kimi", "model": "kimi-k3"}` (set it in Settings → Task-Category Routing).
 
+The same `forced_provider`/`forced_model` per-call hook also powers per-subtask model selection
+in `orchestrate_parallel` (since v2.27.5) — the chat model can pin each parallel sub-agent to a
+specific provider/model (e.g. kimi for long-horizon research, zai for quick lookups) while the
+sub-agent's Tier 2 budget still governs tools and max_tokens.
+
 ---
 
 ## 5. Memory Architecture
@@ -616,6 +621,20 @@ chat conversation.
   text that came off the page itself). Take-over swaps the viewport for noVNC and pauses the
   agent; it is offered only where it can work (`GET /api/browser/capabilities`), and never on
   mobile, where the primary action is PAUSE FOR ME instead.
+- **Parallel sub-agent orchestration** (since v2.27.5) — the `orchestrate_parallel` chat tool
+  (Tier 2/3 only) fans one turn out to up to 8 independent headless sub-agents
+  (`core/orchestrator.py run_parallel`: `asyncio.gather` under a 4-wide semaphore, 5-minute
+  per-subtask timeout so a slow/failing sub-agent never blocks the rest). Each subtask gets its
+  own role-prefixed system prompt, an optional per-subtask provider/model (the same
+  `forced_provider`/`forced_model` hook task-category routing uses — a provider-only pick
+  resolves that provider's Tier 2 default), and a **read-only** tool set (`web_search`,
+  `browse_web`, `search_memory`, `read_artifact`) — no state-changing tools, which keeps the
+  pre-content fallback invariant safe. Sub-agents never message each other; the main turn
+  synthesises from the aggregated tool result (each output truncated to 4k chars). Live SSE
+  events — `parallel_started`, `subtask_progress` (throttled ~1/s per subtask),
+  `subtask_done` — drive a `ParallelRunCard` (status dot, role chip, model badge, rolling
+  one-line preview) that collapses to a summary when the run settles; a `parallel_run` summary
+  card with per-subtask token/model totals persists in `tool_results` for reload.
 
 **3. Projects** (route: /tasks)
 - Kanban: Inbox / Todo / In Progress / Done / Snoozed
