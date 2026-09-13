@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.5 |
+| Version | v2.27.6 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -97,14 +97,14 @@ v2.27.5) for per-subtask model selection — see Version History.
 | # | Component | Route | Status |
 |---|---|---|---|
 | 1 | Today | /today | Live — landing screen. AI-inferred signals needing a decision, grouped by urgency, with named actions, swipe-to-dismiss, snooze, undo, and a state-driven ambient backdrop. Replaces the old prompt-cron daily digest. Populated by the `signal_sweep` job every 4 hours (stalled tasks, unconverted meeting action items grouped by meeting, calendar conflicts, and Tier 2 extraction of commitments from transcripts), or on demand via `POST /api/signals/generate`. |
-| 2 | Chat | /chat | Live — `orchestrate_parallel` tool (Tier 2/3, since v2.27.5) fans independent research/analysis streams out to parallel read-only sub-agents with per-subtask provider/model; live `ParallelRunCard` renders the run |
+| 2 | Chat | /chat | Live — `orchestrate_parallel` tool (Tier 2/3, since v2.27.5) fans independent research/analysis streams out to parallel read-only sub-agents with per-subtask provider/model; live `ParallelRunCard` renders the run. `search_artifacts`/`read_artifact` (all tiers, since v2.27.6) give the agent retrieval over the Artifacts library |
 | 3 | Projects | /tasks | Live — renamed from "Tasks" |
 | 3b | To-Dos | /reminders | Live — quick personal checklist (renamed from "Reminders"); groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
 | 4 | Meetings | /meetings | Live |
 | 5 | Calendar | /calendar | Live |
 | 6 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
 | 7 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval; **export** to DOCX, PDF, or Google Doc via item detail modal |
-| 8 | Artifacts | /artifacts | Live — sources include email attachments (`source="email"`, since v2.27.2); chat generation tools include `generate_spreadsheet` (XLSX) and optional `save_to_brain` piping (since v2.27.4) |
+| 8 | Artifacts | /artifacts | Live — sources include email attachments (`source="email"`, since v2.27.2); chat generation tools include `generate_spreadsheet` (XLSX) and optional `save_to_brain` piping (since v2.27.4); agent retrieval via `search_artifacts`/`read_artifact` (since v2.27.6) |
 | 9 | Cron Manager | /cron | Live |
 | 10 | Connectors | /connectors | Live |
 | 11 | Mnemon | /memory | Live |
@@ -167,6 +167,33 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.6 — 2026-09-14
+**Feature: chat agent artifact retrieval (`search_artifacts` / `read_artifact`)**
+
+- **Shared reader helper.** `core/artifact_store.py read_artifact_text(artifact_id,
+  user_id, db)` is the single agent read path over the library: blob-store bytes (or a
+  legacy "base64:" content value) → direct decode for txt/md/csv/json/py/html, ingest-parser
+  extraction for PDF/DOCX/XLSX, capped at 8k chars with a truncation note. Images return a
+  short "it's an image, view it in Artifacts" note (tool results stay text-only); other
+  binaries return "no extractable text". Never raises — failures come back as message
+  strings. The parallel sub-agent executor (`core/orchestrator.py`) refactored to call it,
+  keeping its filename-lookup fallback; no behavior change for sub-agents beyond the added
+  truncation note.
+- **New chat tools (all tiers, read-only).** `SEARCH_ARTIFACTS_TOOL` (filename ILIKE match
+  plus optional type/source/tag filters — tag filtering done in Python since the JSON tags
+  column has no portable contains(); newest first, limit default 10) returns compact JSON
+  rows: id, filename, type, source, tags, size_bytes, created_at, plus a ~200-char snippet
+  only when `content` holds extracted text — base64 payloads never reach the model.
+  `READ_ARTIFACT_TOOL` (id-only) returns the helper's text and also emits an
+  `artifact_created` preview card so the file is openable from the conversation (recorded
+  in `tool_results` like neighboring read tools' cards). Schemas in `model_client.py`;
+  dispatch in chat's `_tool_executor`.
+- **Prompt awareness.** The capabilities block (`context_assembler.py`) now tells every
+  tier: the Artifacts library holds generated docs, browser downloads, auto-saved email
+  attachments (source `email`, tagged `boarding_pass`/`ticket`/`receipt`/`invoice`/
+  `document`), and chat uploads (source `upload`) — retrievable via the two new tools.
+- Harness only, no schema change, no new dependencies.
 
 ### v2.27.5 — 2026-09-14
 **Feature: parallel sub-agent orchestration (`orchestrate_parallel` chat tool)**

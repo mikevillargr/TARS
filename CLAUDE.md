@@ -635,6 +635,18 @@ chat conversation.
   `subtask_done` — drive a `ParallelRunCard` (status dot, role chip, model badge, rolling
   one-line preview) that collapses to a summary when the run settles; a `parallel_run` summary
   card with per-subtask token/model totals persists in `tool_results` for reload.
+- **Artifact retrieval** (since v2.27.6) — the main chat agent can search and open the
+  whole Artifacts library. `search_artifacts` (all tiers, read-only) matches on filename
+  with optional type/source/tag filters and returns compact rows (id, filename, type,
+  source, tags, size, date, ~200-char text snippet when `content` holds extracted text —
+  base64 payloads never ship to the model). `read_artifact` opens one by id through the
+  shared `core/artifact_store.py read_artifact_text` helper (blob bytes → decode /
+  PDF/DOCX/XLSX extraction, capped at 8k chars with a truncation note; images return an
+  "it's an image" note, text-only). Reading also emits an `artifact_created` preview card
+  so the file is openable from the conversation. The system prompt tells the model the
+  library covers generated docs, browser downloads, email attachments (source `email`,
+  category-tagged), and chat uploads (source `upload`) — so "find my boarding pass" is a
+  tool call, not a dead end.
 
 **3. Projects** (route: /tasks)
 - Kanban: Inbox / Todo / In Progress / Done / Snoozed
@@ -737,6 +749,13 @@ Chat generation tools (all save via the blob store and emit an `artifact_created
   `browser_downloads.save_artifact_to_brain(..., text=…)` — blob-stored artifacts
   carry no `content`, so the text override is required; re-extracting from the
   binary is deliberately avoided
+
+Agent retrieval (since v2.27.6): the chat agent finds files with `search_artifacts`
+(filename match + type/source/tag filters) and opens them with `read_artifact`, both
+backed by `core/artifact_store.py read_artifact_text` — blob bytes decoded directly for
+text formats, extracted via the ingest parsers for PDF/DOCX/XLSX, capped at 8k chars;
+images and pure binaries return a note instead of payload data. Parallel sub-agents use
+the same helper (by id or filename).
 
 Features:
 - Grid and list view toggle
