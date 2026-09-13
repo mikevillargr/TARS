@@ -6,12 +6,16 @@ Three possible artifacts, each with a different job:
   - The **report** (markdown) is the one that matters. It is text, so it embeds,
     it is searchable in Artifacts, and TARS can read it back in a later
     conversation. It answers "what did it do at 3am" without opening anything.
-  - The **video** and the **trace** are saved only when a run went BADLY. Both
-    answer "why did that go wrong", and neither is worth keeping for a run that
-    worked: saving a screen recording of every routine browse buried the library
-    under tens of MB of footage nobody will ever watch. The live panel already
-    shows a run as it happens, and the report carries the action log afterwards.
-  - The trace additionally It carries a DOM snapshot per
+  - The **video**, only when a run went BADLY. A screen recording of every
+    routine browse buried the library under footage nobody will ever watch, and
+    the live panel already shows a run while it happens.
+
+A Playwright **trace** is deliberately NOT an artifact. Artifacts is a library of
+things TARS produced for Mike; a trace is internal diagnostics that needs
+`npx playwright show-trace` to open, weighs ~10MB, and is of no use to anyone who
+is not debugging the executor. Failed runs keep one on disk under
+BROWSER_TRACE_DIR with short retention, and the report says where — so it is
+there when it is wanted and invisible when it is not. The old It carries a DOM snapshot per
     action and is the right tool for working out why something broke, but it
     needs Playwright's own viewer to open (`npx playwright show-trace`), so
     attaching one to every successful run would be weight nobody opens.
@@ -21,6 +25,8 @@ import base64
 import logging
 import os
 import re
+import shutil
+import time
 import urllib.parse
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -41,7 +47,7 @@ def _clock(ts: Optional[float]) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S")
 
 
-def build_report(run, job_id: str, events: List[dict]) -> str:
+def build_report(run, job_id: str, events: List[dict], trace_path: Optional[str] = None) -> str:
     """A readable account of the run, in the same two voices as the live panel."""
     started = events[0].get("at") if events and events[0].get("at") else None
     lines = [
@@ -91,6 +97,16 @@ def build_report(run, job_id: str, events: List[dict]) -> str:
         for d in run.downloads:
             kb = (d.get("size_bytes") or 0) / 1024
             lines.append(f"- `{d.get('filename')}` ({kb:.0f} KB)")
+
+    if trace_path:
+        lines += [
+            "",
+            "## Diagnosing this run",
+            "",
+            f"A Playwright trace was kept on the server for {TRACE_RETENTION_DAYS} days:",
+            "",
+            f"```\nnpx playwright show-trace {trace_path}\n```",
+        ]
 
     if run.final_text:
         lines += ["", "## Result", "", run.final_text]
@@ -148,6 +164,33 @@ def _domain_of(events: List[dict]) -> Optional[str]:
     return None
 
 
+TRACE_DIR = os.environ.get("BROWSER_TRACE_DIR", "/var/tmp/tars-browser-traces")
+TRACE_RETENTION_DAYS = 7
+
+
+def retain_trace(trace_path: Optional[str], job_id: str, failed: bool) -> Optional[str]:
+    """Keep a failed run's trace on disk, out of the artifact library.
+
+    Returns the retained path, or None. Successful runs discard theirs: the
+    trace only earns its ~10MB when something actually needs diagnosing.
+    """
+    if not failed or not trace_path or not os.path.exists(trace_path):
+        return None
+    try:
+        os.makedirs(TRACE_DIR, exist_ok=True)
+        cutoff = time.time() - TRACE_RETENTION_DAYS * 86400
+        for name in os.listdir(TRACE_DIR):
+            old = os.path.join(TRACE_DIR, name)
+            if os.path.isfile(old) and os.path.getmtime(old) < cutoff:
+                os.remove(old)
+        dest = os.path.join(TRACE_DIR, f"{job_id}.zip")
+        shutil.copy2(trace_path, dest)
+        return dest
+    except Exception as err:  # noqa: BLE001
+        log.warning("could not retain trace for %s: %s", job_id, err)
+        return None
+
+
 def artifacts_for_run(
     run,
     job_id: str,
@@ -161,7 +204,11 @@ def artifacts_for_run(
     stem = f"{_slug(run.task, _domain_of(events))}-{job_id[:8]}"
     out: List[Artifact] = []
 
-    report = build_report(run, job_id, events)
+    error_count = len([e for e in events if e.get("type") == "action_error"])
+    failed = run.stopped_reason in ("max_turns", "refusal") or error_count >= 3
+
+    kept_trace = retain_trace(trace_path, job_id, failed)
+    report = build_report(run, job_id, events, trace_path=kept_trace)
     out.append(
         Artifact(
             user_id=user_id,
@@ -175,20 +222,12 @@ def artifacts_for_run(
         )
     )
 
-    # A stale ref is the NORMAL recoverable error here — pages re-render and the
-    # agent re-reads and carries on — so "any error" would attach a ~10MB trace
-    # to almost every real run. Reserve it for runs that actually went badly:
-    # they never finished, or they were still thrashing when they did.
-    error_count = len([e for e in events if e.get("type") == "action_error"])
-    failed = run.stopped_reason in ("max_turns", "refusal") or error_count >= 3
 
     # Nothing heavy on a run that worked. The report is the record; footage and
     # traces are diagnostics, and diagnostics for a success are just clutter.
     media = []
     if failed:
         media.append(("video", video_path, "webm", "video/webm"))
-        if trace_path:
-            media.append(("trace", trace_path, "zip", "application/zip"))
 
     for kind, path, ext, _mime in media:
         if not path or not os.path.exists(path):
