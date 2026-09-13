@@ -21,11 +21,16 @@ async def execute_browse_web(
     db: AsyncSession,
     *,
     on_progress: Optional[Callable[[str, dict], Any]] = None,
+    on_artifact: Optional[Callable[[str, str], Any]] = None,
 ) -> str:
     """Run one browse_web tool call and return what the model should see.
 
     `on_progress(status, extra)` is optional: chat uses it to drive the live
     panel, cron passes nothing because there is nobody watching at 8am.
+
+    `on_artifact(artifact_id, filename)` is the same idea for files: chat turns
+    each one into a preview card, so a downloaded invoice is readable where it
+    landed rather than being a filename in a sentence. Cron passes nothing.
     """
     from connectors.browser import get_browser_pool
     from core.browser_agent import run_browser_task
@@ -80,17 +85,25 @@ async def execute_browse_web(
     # Persist afterwards. A recording or storage problem must never turn a
     # successful run into a failure: the browsing happened and the answer is good.
     saved: List[str] = []
+    created = []
     try:
         for artifact in await artifacts_for_downloads(run.downloads, job.id, user_id):
             db.add(artifact)
             saved.append(artifact.filename)
+            created.append(artifact)
         for artifact in artifacts_for_run(
             run, job.id, jobs.get(job.id).events if jobs.get(job.id) else [], user_id,
             video_path=ctx.video_path, trace_path=ctx.trace_path,
         ):
             db.add(artifact)
             saved.append(artifact.filename)
+            created.append(artifact)
         await db.commit()
+        # Only after the commit: an id that never persisted would render a card
+        # whose preview 404s.
+        if on_artifact:
+            for artifact in created:
+                await on_artifact(artifact.id, artifact.filename)
     except Exception:  # noqa: BLE001
         log.exception("browse_web: saving artifacts failed")
     finally:
@@ -116,7 +129,11 @@ async def execute_browse_web(
 
 
 async def execute_archive_page(
-    tool_input: dict, user_id: str, db: AsyncSession
+    tool_input: dict,
+    user_id: str,
+    db: AsyncSession,
+    *,
+    on_artifact: Optional[Callable[[str, str], Any]] = None,
 ) -> str:
     """Archive a page as a PDF and a full-page image, both into Artifacts.
 
@@ -146,23 +163,27 @@ async def execute_archive_page(
 
     stem = _re.sub(r"[^a-z0-9]+", "-", (captured.get("title") or url).lower()).strip("-")[:60] or "page"
     saved = []
+    created = []
     for key, ext in (("pdf", "pdf"), ("png", "png")):
         raw = captured.get(key)
         if not raw:
             continue
-        db.add(
-            Artifact(
-                user_id=user_id,
-                filename=f"{stem}.{ext}",
-                type="image" if ext == "png" else "document",
-                source="browser",
-                content="base64:" + base64.b64encode(raw).decode(),
-                size_bytes=len(raw),
-                tags=["browser", "archive"],
-            )
+        artifact = Artifact(
+            user_id=user_id,
+            filename=f"{stem}.{ext}",
+            type="image" if ext == "png" else "document",
+            source="browser",
+            content="base64:" + base64.b64encode(raw).decode(),
+            size_bytes=len(raw),
+            tags=["browser", "archive"],
         )
+        db.add(artifact)
+        created.append(artifact)
         saved.append(f"{stem}.{ext}")
     await db.commit()
+    if on_artifact:
+        for artifact in created:
+            await on_artifact(artifact.id, artifact.filename)
 
     if not saved:
         return f"Reached {captured.get('url')} but could not capture anything."

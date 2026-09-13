@@ -15,6 +15,7 @@ import {
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from "@/lib/api-client"
 import { EmailDraftCard, type EmailDraft } from "@/components/chat/EmailDraftCard"
+import { ArtifactPreviewCard, type ArtifactRef } from "@/components/chat/ArtifactPreviewCard"
 import { BrowserPanel } from "@/components/browser/BrowserPanel"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
@@ -385,60 +386,11 @@ function CalendarDeleteChip({ suggestion, onDismiss }: { suggestion: CalendarDel
 // (v2.19.5) so /today's in-card draft resolution can reuse it verbatim.
 
 // ─── Artifact notification card ──────────────────────────────────
-interface ArtifactNotification {
-  artifact_id: string
-  filename: string
-  filetype: "docx" | "pptx" | "pdf"
-}
-
-const ARTIFACT_TYPE_ICON: Record<string, React.ElementType> = {
-  docx: FileText,
-  pptx: Layout,
-  pdf:  File,
-}
-const ARTIFACT_TYPE_LABEL: Record<string, string> = {
-  docx: "Word Document",
-  pptx: "PowerPoint",
-  pdf:  "PDF",
-}
-
-function ArtifactCard({ n, onDismiss }: { n: ArtifactNotification; onDismiss: () => void }) {
-  const Icon = ARTIFACT_TYPE_ICON[n.filetype] ?? FileText
-
-  return (
-    <div className="flex items-center gap-3 rounded-xl px-3.5 py-2.5 max-w-sm" style={{ border: "1px solid var(--c-border)", backgroundColor: "var(--c-surface)" }}>
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}>
-        <Icon size={16} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: "var(--c-ink)" }}>{n.filename}</p>
-        <p className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{ARTIFACT_TYPE_LABEL[n.filetype] ?? n.filetype.toUpperCase()} · Saved to Artifacts</p>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <a
-          href={`/api/proxy/artifacts/${n.artifact_id}/download`}
-          download={n.filename}
-          className="p-1.5 rounded-lg transition-colors"
-          style={{ color: "var(--c-ink-faint)", backgroundColor: "var(--c-surface-2)" }}
-          title="Download"
-        >
-          <Download size={14} />
-        </a>
-        <Link
-          href={`/artifacts?open=${n.artifact_id}`}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors"
-          style={{ backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }}
-        >
-          <ExternalLink size={12} />
-          Open
-        </Link>
-        <button onClick={onDismiss} className="p-1" style={{ color: "var(--c-ink-faint)" }} title="Dismiss">
-          <X size={11} />
-        </button>
-      </div>
-    </div>
-  )
-}
+// The card itself now lives in components/chat/ArtifactPreviewCard.tsx, where
+// it can expand to show the file instead of only naming it. `filetype` widened
+// from the doc-generation trio to any extension once browser runs, downloads
+// and table saves started emitting these too.
+type ArtifactNotification = ArtifactRef
 
 // ─── Chart image card ─────────────────────────────────────────────
 function ChartImageCard({ title, imageBase64, onDismiss, onAsk }: {
@@ -990,7 +942,7 @@ function InlineMessageCards({
           return <TaskSuggestChip key={key} suggestion={evt as unknown as TaskSuggestion} onDismiss={() => dismiss(key)} />
         }
         if (evt.type === "artifact_created") {
-          return <ArtifactCard key={key} n={{ artifact_id: e.artifact_id as string, filename: e.filename as string, filetype: e.filetype as ArtifactNotification["filetype"] }} onDismiss={() => dismiss(key)} />
+          return <ArtifactPreviewCard key={key} artifact={{ artifact_id: e.artifact_id as string, filename: e.filename as string, filetype: e.filetype as string | undefined }} onDismiss={() => dismiss(key)} />
         }
         if (evt.type === "chart_image" && e.image_base64) {
           return <ChartImageCard key={key} title={typeof e.title === "string" ? e.title : "Chart"} imageBase64={e.image_base64 as string} onDismiss={() => dismiss(key)} onAsk={onAsk} />
@@ -1454,9 +1406,9 @@ const MessageArea = memo(function MessageArea({
             />
           ))}
           {artifactNotifications.map((n) => (
-            <ArtifactCard
+            <ArtifactPreviewCard
               key={n.artifact_id}
-              n={n}
+              artifact={n}
               onDismiss={() => setArtifactNotifications(prev => prev.filter(x => x.artifact_id !== n.artifact_id))}
             />
           ))}
