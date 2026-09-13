@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.24.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.25.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -563,6 +563,15 @@ chat conversation.
 - Kokoro TTS: responses are streamed sentence-by-sentence via `/api/proxy/tts`; `useTtsPlayback` hook manages synthesis queue and audio playback
 - Voice input: `useVoiceInput` hook handles microphone recording, VAD silence detection, and transcription
 - Voice mode toggle: enables TTS for all responses in the current conversation (persisted per-session)
+- **Data tables** (since v2.25.0) — every markdown table TARS writes renders as
+  `DataTable`: click-to-sort per column (numeric-aware), COPY CSV, DOWNLOAD, SHEETS (creates
+  a real Google Sheet), SAVE (CSV into Artifacts as **text**, so it stays searchable).
+  Exports carry the currently sorted rows. Deliberately a **renderer, not a tool** — it reads
+  the table the model already writes, so it works on every message retroactively and the
+  model has nothing extra to remember. Parse the hast `node`, never the rendered children:
+  ReactMarkdown's `components` map overrides `thead`/`th`/`td`, so in the children their
+  `type` is a function, not a tag name. Backed by `POST /api/tables/to-sheet` and
+  `/to-artifact`.
 - **Browser observation panel** (since v2.20.0) — when the model calls `browse_web`, the
   progress events carry a `job_id` and a live panel opens: CDP screencast of the real page
   plus an action feed. Desktop is a 640px drawer (the normal right panel is too narrow for a
@@ -1134,6 +1143,23 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.25.0 Feature: markdown tables become sortable, exportable data. Every structured answer
+        already arrived as a markdown table you read and then RETYPED somewhere useful. The
+        renderer was upgraded rather than a render_table tool added — reading the table the
+        model already writes means it works on every message ever sent, retroactively, and
+        the model has nothing extra to remember; a tool would only apply to tables written
+        after it shipped and only when the model thought to reach for it. DataTable.tsx:
+        click-to-sort (numeric-aware, so "PHP 1,200" sorts above "PHP 900" rather than
+        beside it), COPY CSV + DOWNLOAD client-side, SHEETS (real Google Sheet via new
+        create_spreadsheet on the Workspace connector), SAVE (CSV into Artifacts as TEXT not
+        base64, so it stays searchable — same reasoning as browser downloads). Exports carry
+        the CURRENTLY SORTED rows. New POST /api/tables/to-sheet + /to-artifact, 5,000-row
+        cap, missing Workspace connector returns a 409 with a real instruction. SHIPPED
+        DOING NOTHING once: the walker matched tag names in the RENDERED CHILDREN, but
+        ReactMarkdown's components map overrides thead/th/td so their `type` is a function,
+        never the string — every table fell silently into the plain fallback, indistinguish-
+        able from the deploy not landing. tableFromNode now reads the hast `node`. Second
+        silent-fallback failure in two releases. Web + harness, no schema change.
 v2.24.0 Feature: chat suggestion chips DO things instead of typing things. The old prompt
         was "give exactly 3 short follow-up questions", so chips could only ever be
         QUESTIONS — TARS has ~47 tools and the generator knew about none of them — and
