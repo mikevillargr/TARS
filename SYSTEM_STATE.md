@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.19.10 |
+| Version | v2.20.0 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -33,6 +33,7 @@
 |---|---|---|
 | Next.js frontend | tars-web | 3000 |
 | FastAPI harness | tars-harness | 8000 |
+| Browser container | tars-browser (Docker) | 9222 CDP / 6080 noVNC — both loopback-only |
 | Postgres + pgvector | Docker | 5432 |
 | Redis | Docker | 6379 |
 | Nginx (reverse proxy + SSL) | system | 80/443 |
@@ -163,6 +164,71 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.20.0 — 2026-09-13
+**Feature: browser automation. TARS can drive a real browser, and you can watch it.**
+
+- **What it is.** A `browse_web` tool in chat. Describe an outcome ("go to the portal, set
+  the range to last 30 days, tell me total sessions") and a sub-agent drives a real Chromium
+  to do it. For tasks that need clicking, typing, form filling or a logged-in portal with no
+  API. Not for reading a page you can already name: `web_search` and `save_to_second_brain`
+  are far faster and cheaper, and Gmail / Calendar / Drive / Contacts / Strava all have real
+  connectors that beat a browser.
+- **Anthropic's browser-use toolset** (`browser_toolset_20260801`), not computer use. Claude
+  targets elements through the page's accessibility tree rather than pixel coordinates:
+  `read_page` / `find` tag elements with `data-tars-ref` and hand back a `[ref_N]` tree, so a
+  click resolves through a normal locator and a stale reference is a clean, recoverable error
+  instead of a misclick.
+- **The chat model delegates, it does not drive.** It calls `browse_web(task=...)` and a
+  sub-agent owns the toolset loop. The toolset only runs on Anthropic models, so if the chat
+  model drove it directly the feature would vanish whenever tier 1/2 is on GLM. As a
+  delegation, any tier can call it.
+- **Sonnet 5 by default, Opus 5 on escalation** after 3 consecutive failed turns (which also
+  raises effort to high). Most runs are the same steps against the same site; the expensive
+  part was never the clicking. Haiku 4.5 does not support the toolset and GLM cannot run it
+  at all.
+- **Cost control.** Context editing (`clear_tool_uses`) plus a rolling cache breakpoint on
+  the newest message. Measured on an identical task: 38,813 input tokens -> 6,992 with 17,844
+  from cache, about 77% cheaper per run.
+- **Observation panel.** Live CDP screencast plus an action feed, in chat. The signature
+  detail is the highlight: because targeting is by ref, the executor resolves the element and
+  reads its box BEFORE acting, so the panel shows what is about to be touched rather than
+  narrating history. Hovering a feed row re-highlights its element. Design researched via
+  Refero, primary reference Axiom (observability console: monospace as the content face, 2px
+  radius, single accent for active only). One rule governs the surface: **mono is TARS
+  talking, Inter is the web page talking.**
+- **Mobile is watch-and-decide, not a shrunken desktop.** Two-detent bottom sheet: peek
+  answers "is it still working", expanded gives viewport plus a stacked feed. Take-over is
+  deliberately absent, because driving a 1280px viewport with a thumb is miserable; the
+  primary action is PAUSE FOR ME, which holds the run to pick up on a real screen.
+- **The browser lives in its own container** (`tars-browser`), and the harness connects over
+  CDP. Two reasons: blast radius (page content is untrusted and prompt injection is the real
+  risk, so a compromised page gets a container with no credentials beyond the profile volume,
+  not the harness host holding Postgres creds, OAuth tokens and the Anthropic key), and
+  session lifetime (a login done by hand must survive `pm2 restart tars-harness`).
+- **Logins are seeded by hand, never by the agent.** The system prompt forbids entering
+  credentials; if a site asks for a login the run stops and says so. You log in once over
+  noVNC at `/browser-vnc/`, pasting from your vault through the noVNC clipboard so the
+  password never lives on the server. Runs then get a fresh isolated context seeded with that
+  profile's `storage_state`, inheriting the login without being able to disturb it.
+- **Take-over.** `/browser-vnc/` is gated in nginx by `auth_request` against
+  `GET /api/browser/vnc-auth`, which validates the same `tars_token` cookie as the rest of the
+  app. Taking the wheel pauses the agent; handing back resumes it. Only offered where it can
+  work (`GET /api/browser/capabilities`), since local dev has no display to attach to.
+- **Every run leaves a record in Artifacts** (`source="browser"`): a markdown report always
+  (task, outcome, turns, models, token accounting, full action log, result — text, so it
+  embeds and is searchable), the video, and a Playwright trace **only when the run failed**,
+  since a trace needs `npx playwright show-trace` to open.
+- **Security posture.** CDP is unauthenticated and grants total control of a browser holding
+  live logins, so it is bound to 127.0.0.1 and never proxied. The optional toolset members
+  (`javascript_exec`, `file_upload`, `read_console`, `read_network`) are off by default. All
+  navigation is scheme-checked (http/https only) and optionally domain-allowlisted.
+- New: `connectors/browser.py`, `core/browser_agent.py`, `core/browser_jobs.py`,
+  `core/browser_artifacts.py`, `api/routes/browser.py`, `components/browser/*`,
+  `hooks/useBrowserJob.ts`, `infrastructure/docker/Dockerfile.browser`. New env
+  `BROWSER_CDP_URL`. New dependency `playwright==1.62.0`. **No schema change** — browser jobs
+  are in-memory by design (their live audience is the panel, their durable record is an
+  Artifact), so there is no migration.
 
 ### v2.19.10 — 2026-09-13
 **Chore: Anthropic SDK upgraded from 0.43.0 to 1.5.0**

@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.19.10 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.20.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -563,6 +563,17 @@ chat conversation.
 - Kokoro TTS: responses are streamed sentence-by-sentence via `/api/proxy/tts`; `useTtsPlayback` hook manages synthesis queue and audio playback
 - Voice input: `useVoiceInput` hook handles microphone recording, VAD silence detection, and transcription
 - Voice mode toggle: enables TTS for all responses in the current conversation (persisted per-session)
+- **Browser observation panel** (since v2.20.0) — when the model calls `browse_web`, the
+  progress events carry a `job_id` and a live panel opens: CDP screencast of the real page
+  plus an action feed. Desktop is a 640px drawer (the normal right panel is too narrow for a
+  16:10 viewport to be readable); mobile is a two-detent bottom sheet. The element the agent
+  is ABOUT to touch is highlighted before the click lands — possible only because targeting
+  is by ref, so the executor can resolve the box first; a pixel-based agent has nothing to
+  draw. One typographic rule governs the surface: **mono is TARS talking, Inter is the web
+  page talking** (verbs, timestamps and counts are the instrument layer; the only Inter is
+  text that came off the page itself). Take-over swaps the viewport for noVNC and pauses the
+  agent; it is offered only where it can work (`GET /api/browser/capabilities`), and never on
+  mobile, where the primary action is PAUSE FOR ME instead.
 
 **3. Projects** (route: /tasks)
 - Kanban: Inbox / Todo / In Progress / Done / Snoozed
@@ -710,6 +721,8 @@ tars/
 │   │   │   │   └── settings/
 │   │   │   └── api/            # thin proxy to harness
 │   │   ├── components/
+│   │   │   ├── browser/        # BrowserPanel, BrowserViewport, ActionFeed —
+│   │   │   │                   # the live observation surface (opens in Chat)
 │   │   │   ├── today/          # SignalCard, InlineActionForm, ComposeStrip,
 │   │   │   │                   # DraftReplyResolver, AmbientField
 │   │   │   ├── shell/          # sidebar, topbar, right panel
@@ -725,6 +738,7 @@ tars/
 │   │   ├── context/
 │   │   │   └── NotificationContext.tsx  # global WS notification state
 │   │   ├── hooks/
+│   │   │   ├── useBrowserJob.ts         # live browser run: frames + action feed
 │   │   │   ├── useNotifications.ts      # WebSocket notification hook
 │   │   │   ├── useTtsPlayback.ts        # Kokoro TTS synthesis queue + audio playback
 │   │   │   └── useVoiceInput.ts         # Microphone recording, VAD, transcription
@@ -738,6 +752,9 @@ tars/
 │   │   ├── api/routes/         # one file per component
 │   │   │   └── rokid.py        # WebSocket bridge: /api/rokid/ws — SSE→glasses protocol
 │   │   ├── core/
+│   │   │   ├── browser_agent.py    # sub-agent loop driving the browser toolset
+│   │   │   ├── browser_jobs.py     # in-memory live run registry (no DB table)
+│   │   │   ├── browser_artifacts.py # run report / video / trace -> Artifacts
 │   │   │   ├── router.py       # tier classification
 │   │   │   ├── context_assembler.py
 │   │   │   ├── model_client.py # Ollama + Anthropic unified
@@ -752,6 +769,7 @@ tars/
 │   │   │   └── chunker.py
 │   │   ├── connectors/
 │   │   │   ├── base.py         # Connector interface
+│   │   │   ├── browser.py      # browser-use toolset executor (Playwright/CDP)
 │   │   │   ├── gmail.py
 │   │   │   ├── google_calendar.py
 │   │   │   ├── fireflies.py
@@ -793,6 +811,9 @@ tars/
 │
 ├── infrastructure/
 │   ├── docker/
+│   │   ├── browser/            # Dockerfile.browser support: launch.py,
+│   │   │                       # supervisord.conf, README (login seeding)
+│   │   ├── Dockerfile.browser  # Chromium + Xvfb + x11vnc + noVNC
 │   │   ├── docker-compose.yml
 │   │   ├── docker-compose.prod.yml
 │   │   ├── Dockerfile.web
@@ -914,7 +935,22 @@ ssh tars "pm2 restart tars-harness"
 # Build and deploy web
 ssh tars "cd /opt/tars/apps/web && npm run build && cp -r .next/static .next/standalone/apps/web/.next/ && mkdir -p .next/standalone/apps/web/public && cp -r public/* .next/standalone/apps/web/public/ && pm2 restart tars-web"
 ```
+```bash
+# Browser container — ONLY when infrastructure/docker/Dockerfile.browser or its
+# support files changed. The harness connects to this over CDP; it does not
+# launch a browser itself in production.
+ssh tars "cd /opt/tars && docker compose -f infrastructure/docker/docker-compose.yml build browser && docker compose -f infrastructure/docker/docker-compose.yml up -d browser"
+
+# Nginx — ONLY when infrastructure/nginx/nginx.conf changed.
+ssh tars "cp /opt/tars/infrastructure/nginx/nginx.conf /etc/nginx/nginx.conf && nginx -t && systemctl reload nginx"
+```
+
 Note: `ssh tars` is an alias in `~/.ssh/config` on the dev machine. Never use the raw IP directly.
+
+**The harness does NOT need `playwright install chromium` on the server.** It only ever
+connects to the container over CDP, and `connect_over_cdp` needs the driver that ships with
+the pip package, not browser binaries. Installing them would waste ~150MB and a pile of
+system deps for nothing.
 
 ---
 
@@ -1093,6 +1129,35 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.20.0 Feature: browser automation — TARS can drive a real browser, and you can watch it.
+        New `browse_web` chat tool: describe an OUTCOME and a sub-agent drives a real
+        Chromium via Anthropic's browser-use toolset (browser_toolset_20260801), NOT computer
+        use — Claude targets elements through the accessibility tree rather than pixels, so a
+        stale reference is a clean recoverable error instead of a misclick. The chat model
+        DELEGATES rather than drives: the toolset only runs on Anthropic models, so driving
+        it directly would make the feature vanish whenever tier 1/2 is on GLM. Sonnet 5
+        default, Opus 5 escalation after 3 consecutive failed turns (also raising effort);
+        the expensive part was never the clicking. Context editing + a rolling cache
+        breakpoint cut an identical task from 38,813 input tokens to 6,992 plus 17,844
+        cached, ~77% cheaper. Live observation panel in Chat (CDP screencast + action feed);
+        the element about to be touched is highlighted BEFORE the click, which only works
+        because targeting is by ref. Design via Refero, primary reference Axiom; one rule
+        governs the surface — mono is TARS talking, Inter is the web page talking. Mobile is
+        watch-and-decide with no take-over (a thumb cannot drive a 1280px viewport), so its
+        primary action holds the run for a real screen. Chromium lives in its own container
+        and the harness connects over CDP: blast radius (untrusted page content + prompt
+        injection gets a container with no credentials beyond the profile volume, not the
+        harness host) and session lifetime (a hand-done login survives pm2 restart). The
+        agent NEVER enters credentials — you seed logins once over noVNC at /browser-vnc/,
+        gated by nginx auth_request against GET /api/browser/vnc-auth; runs get a fresh
+        isolated context seeded with that profile's storage_state. Every run lands in
+        Artifacts (source="browser"): markdown report always, video, and a Playwright trace
+        only on failure. CDP is unauthenticated so it is loopback-bound and never proxied;
+        optional toolset members (javascript_exec, file_upload, read_console, read_network)
+        are off by default; navigation is scheme-checked and optionally domain-allowlisted.
+        Harness + web + infrastructure. New dep playwright==1.62.0, new env BROWSER_CDP_URL.
+        NO schema change — browser jobs are in-memory by design (live audience is the panel,
+        durable record is an Artifact), so there is no migration.
 v2.19.10 Chore: Anthropic SDK 0.43.0 -> 1.5.0. 0.43.0 shipped Dec 2024 and had become a
         liability, not just old stock: v2.18.6-v2.18.8 was ~2 months of silently broken
         memory extraction caused by it meeting a newer model response shape, worked around
