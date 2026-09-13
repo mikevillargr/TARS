@@ -37,6 +37,10 @@ TOOLSET_TYPE = "browser_toolset_20260801"
 TOOLSET_NAME = "browser"
 
 VIEWPORT = {"width": 1280, "height": 800}
+# One Chromium process, N contexts. Bounded by CPU, not RAM: the process costs
+# ~250-400MB, each context ~50-100MB. The KVM4 has 4 vCPU shared with Postgres,
+# Redis, whisper and Kokoro, and concurrent page loads are what actually hurt.
+MAX_CONCURRENT_SESSIONS = 3
 DEFAULT_TIMEOUT_MS = 15_000
 MAX_PAGE_TEXT_CHARS = 40_000
 
@@ -585,6 +589,29 @@ class BrowserPool:
         if self._pw:
             await self._pw.stop()
             self._pw = None
+
+
+_pool: Optional[BrowserPool] = None
+
+
+def get_browser_pool() -> BrowserPool:
+    """Process-wide pool, lazily launched.
+
+    Lazy on purpose: most harness processes never run a browser job, and paying
+    ~300MB for a Chromium that never gets used would be a poor trade on a 16GB
+    box already running Postgres, Redis, whisper and Kokoro.
+    """
+    global _pool
+    if _pool is None:
+        _pool = BrowserPool(max_contexts=MAX_CONCURRENT_SESSIONS)
+    return _pool
+
+
+async def shutdown_browser_pool() -> None:
+    global _pool
+    if _pool is not None:
+        await _pool.close()
+        _pool = None
 
 
 class BrowserSessionCtx:

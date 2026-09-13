@@ -20,7 +20,7 @@ from core.model_client import (
     PROPOSE_CALENDAR_EVENT_TOOL, PROPOSE_TASK_TOOL,
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     UPDATE_CALENDAR_EVENT_TOOL, DELETE_CALENDAR_EVENT_TOOL,
-    SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL,
+    SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL, BROWSE_WEB_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, CONFIRM_SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
@@ -1006,6 +1006,7 @@ async def send_message(
         READ_MEETING_TOOL,
         SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL,
+        BROWSE_WEB_TOOL,
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
@@ -1060,9 +1061,19 @@ async def send_message(
                     tool_results.append(event)
                     await queue.put(sse_event(event))
 
-                async def _emit_progress(tool: str, status: str, done: bool = False) -> None:
-                    """Emit a live tool-progress indicator to the client (not persisted)."""
-                    await queue.put(sse_event({"type": "tool_progress", "tool": tool, "status": status, "done": done}))
+                async def _emit_progress(
+                    tool: str, status: str, done: bool = False, extra: dict = None
+                ) -> None:
+                    """Emit a live tool-progress indicator to the client (not persisted).
+
+                    `extra` rides along for tools that need the client to act on
+                    the progress event rather than just display it — browse_web
+                    sends a job_id so the observation panel knows what to watch.
+                    """
+                    payload = {"type": "tool_progress", "tool": tool, "status": status, "done": done}
+                    if extra:
+                        payload.update(extra)
+                    await queue.put(sse_event(payload))
 
                 async def _tool_executor(name: str, tool_input: dict) -> str:
                     if name == "create_task":
@@ -1079,6 +1090,68 @@ async def send_message(
                         await bg_db.commit()
                         priority = tool_input.get("priority", "normal")
                         return f"Task created: '{tool_input['title']}' added to inbox (priority: {priority})."
+
+                    if name == "browse_web":
+                        # The chat model delegates rather than driving: the
+                        # browser toolset only runs on Anthropic models, so a
+                        # sub-agent owns the loop and any tier (GLM included)
+                        # can call this tool.
+                        from connectors.browser import get_browser_pool
+                        from core.browser_agent import run_browser_task
+                        from core.browser_jobs import get_browser_jobs
+
+                        task_text = tool_input.get("task", "").strip()
+                        if not task_text:
+                            return "browse_web needs a task describing what to accomplish."
+
+                        jobs = get_browser_jobs()
+                        job = jobs.create(task_text)
+                        await _emit_progress(
+                            "browse_web", "Opening browser…", extra={"job_id": job.id}
+                        )
+
+                        async def _on_event(event: dict) -> None:
+                            await jobs.publish(job.id, event)
+                            if event.get("type") == "action":
+                                target = (
+                                    event["input"].get("url")
+                                    or event["input"].get("query")
+                                    or (event["input"].get("target") or {}).get("ref")
+                                    or ""
+                                )
+                                await _emit_progress(
+                                    "browse_web",
+                                    f"{event['name']} {str(target)[:50]}".strip(),
+                                    extra={"job_id": job.id},
+                                )
+
+                        try:
+                            pool = get_browser_pool()
+                            async with await pool.session(
+                                allowed_domains=tool_input.get("allowed_domains"),
+                                on_action=None,
+                            ) as session:
+                                run = await run_browser_task(
+                                    task_text, session, on_event=_on_event
+                                )
+                        except Exception as exc:  # noqa: BLE001
+                            log.exception("browse_web failed")
+                            jobs.finish(job.id, error=str(exc))
+                            return f"Browser run failed: {type(exc).__name__}: {exc}"
+
+                        jobs.finish(job.id, result=run.final_text)
+                        summary = (
+                            f"[browser job {job.id} · {run.turns} turns · "
+                            f"{len(run.actions)} actions · {'/'.join(run.models_used)}"
+                            f"{' · escalated' if run.escalated else ''}]\n\n"
+                            f"{run.final_text}"
+                        )
+                        if run.stopped_reason == "max_turns":
+                            summary += (
+                                "\n\n(Ran out of turns before finishing. Report this to "
+                                "Mike rather than guessing the rest.)"
+                            )
+                        return summary
 
                     if name == "create_reminder":
                         await _emit_progress("create_reminder", "Adding reminder…")
