@@ -93,6 +93,7 @@ class BrowserRun:
     cache_read_tokens: int = 0
     escalated: bool = False
     stopped_reason: str = "end_turn"
+    downloads: List[dict] = field(default_factory=list)
 
 
 async def run_browser_task(
@@ -183,6 +184,7 @@ async def run_browser_task(
         if response.stop_reason != "tool_use":
             run.final_text = text
             run.stopped_reason = response.stop_reason or "end_turn"
+            run.downloads = list(session.downloads)
             await emit({"type": "done", "text": text})
             return run
 
@@ -216,6 +218,7 @@ async def run_browser_task(
         else:
             consecutive_failures = 0
 
+    run.downloads = list(session.downloads)
     run.stopped_reason = "max_turns"
     run.final_text = run.final_text or "Ran out of turns before finishing."
     await emit({"type": "exhausted"})

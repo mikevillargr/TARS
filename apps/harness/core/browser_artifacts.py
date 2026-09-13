@@ -83,6 +83,12 @@ def build_report(run, job_id: str, events: List[dict]) -> str:
         elif kind == "resumed":
             lines.append(f"- `{when}` resumed")
 
+    if getattr(run, "downloads", None):
+        lines += ["", "## Files it brought back", ""]
+        for d in run.downloads:
+            kb = (d.get("size_bytes") or 0) / 1024
+            lines.append(f"- `{d.get('filename')}` ({kb:.0f} KB)")
+
     if run.final_text:
         lines += ["", "## Result", "", run.final_text]
 

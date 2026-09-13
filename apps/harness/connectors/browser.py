@@ -232,8 +232,40 @@ class BrowserSession:
         # halfway through a batch would leave tool_use blocks unanswered.
         self._resume = asyncio.Event()
         self._resume.set()
+        # Files the page handed us during this session.
+        self.downloads: List[dict] = []
+        self._download_dir = tempfile.mkdtemp(prefix="tars-dl-")
 
     # -- lifecycle ---------------------------------------------------------
+
+    def _wire_downloads(self, page) -> None:
+        """Catch files the page hands us.
+
+        Wired per page as tabs appear rather than once, because a portal that
+        opens an invoice in a new tab would escape a handler bound only to the
+        first one.
+        """
+        def _on_download(download) -> None:
+            asyncio.create_task(self._save_download(download))
+
+        page.on("download", _on_download)
+
+    async def _save_download(self, download) -> None:
+        try:
+            target = os.path.join(self._download_dir, download.suggested_filename or "download")
+            await download.save_as(target)
+            size = os.path.getsize(target)
+            self.downloads.append(
+                {
+                    "path": target,
+                    "filename": os.path.basename(target),
+                    "url": download.url,
+                    "size_bytes": size,
+                }
+            )
+            log.info("browser download: %s (%d bytes)", os.path.basename(target), size)
+        except Exception as err:  # noqa: BLE001 — a failed download is not a failed run
+            log.warning("download failed: %s", err)
 
     async def start(self, fresh: bool = False) -> None:
         """`fresh=True` always opens a NEW tab and focuses it.
@@ -250,6 +282,7 @@ class BrowserSession:
             page = pages[0]
         page.set_default_timeout(DEFAULT_TIMEOUT_MS)
         self._owns_page = fresh
+        self._wire_downloads(page)
         self._register_tab(page)
         self._pending_state_changes.clear()
         if fresh:
@@ -673,6 +706,7 @@ class BrowserSession:
     async def _m_new_tab(self, a: dict):
         page = await self._ctx.new_page()
         page.set_default_timeout(DEFAULT_TIMEOUT_MS)
+        self._wire_downloads(page)
         tab_id = self._register_tab(page)
         self._pending_state_changes.append({"type": "tab_opened", "tab_id": tab_id})
         return [await self.browser_state_block()]

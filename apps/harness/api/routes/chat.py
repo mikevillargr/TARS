@@ -21,6 +21,7 @@ from core.model_client import (
     CREATE_TASK_TOOL, CREATE_CALENDAR_EVENT_TOOL,
     UPDATE_CALENDAR_EVENT_TOOL, DELETE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL, BROWSE_WEB_TOOL,
+    SAVE_ARTIFACT_TO_BRAIN_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, CONFIRM_SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
@@ -1025,6 +1026,7 @@ async def send_message(
         SYNC_MEETINGS_TOOL,
         WEB_SEARCH_TOOL,
         BROWSE_WEB_TOOL,
+        SAVE_ARTIFACT_TO_BRAIN_TOOL,
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
@@ -1109,6 +1111,31 @@ async def send_message(
                         priority = tool_input.get("priority", "normal")
                         return f"Task created: '{tool_input['title']}' added to inbox (priority: {priority})."
 
+                    if name == "save_artifact_to_brain":
+                        await _emit_progress("save_artifact_to_brain", "Saving to Second Brain…")
+                        from sqlalchemy import select as _sel
+                        from core.browser_downloads import save_artifact_to_brain as _save
+                        from db.models import Artifact as _Art
+
+                        q = _sel(_Art).where(_Art.user_id == user_id)
+                        if tool_input.get("artifact_id"):
+                            q = q.where(_Art.id == tool_input["artifact_id"])
+                        elif tool_input.get("filename"):
+                            q = q.where(_Art.filename == tool_input["filename"])
+                        else:
+                            return "Need an artifact_id or filename."
+                        art = (await bg_db.execute(q.order_by(_Art.created_at.desc()).limit(1))).scalars().first()
+                        if art is None:
+                            return "No matching artifact found."
+                        item_id = await _save(bg_db, art, user_id, note=tool_input.get("note", ""))
+                        if item_id is None:
+                            return (
+                                f"'{art.filename}' is a binary file with no extractable text, "
+                                f"so there is nothing for Second Brain to index. It stays in Artifacts."
+                            )
+                        await bg_db.commit()
+                        return f"Saved '{art.filename}' to Second Brain."
+
                     if name == "browse_web":
                         # The chat model delegates rather than driving: the
                         # browser toolset only runs on Anthropic models, so a
@@ -1172,6 +1199,16 @@ async def send_message(
                         saved: List[str] = []
                         try:
                             from core.browser_artifacts import artifacts_for_run
+                            from core.browser_downloads import artifacts_for_downloads
+
+                            # Files the run brought back land in Artifacts, text
+                            # extracted where possible so they are searchable
+                            # rather than an opaque blob.
+                            for artifact in await artifacts_for_downloads(
+                                run.downloads, job.id, user_id
+                            ):
+                                bg_db.add(artifact)
+                                saved.append(artifact.filename)
 
                             for artifact in artifacts_for_run(
                                 run, job.id, job.events, user_id,
@@ -1192,6 +1229,12 @@ async def send_message(
                             f"{' · saved to Artifacts: ' + ', '.join(saved) if saved else ''}]"
                             f"\n\n{run.final_text}"
                         )
+                        if run.downloads:
+                            names = ", ".join(d["filename"] for d in run.downloads)
+                            summary += (
+                                f"\n\nDownloaded and saved to Artifacts: {names}. "
+                                f"Use save_to_brain if Mike wants any of it kept in Second Brain."
+                            )
                         if run.stopped_reason == "max_turns":
                             summary += (
                                 "\n\n(Ran out of turns before finishing. Report this to "

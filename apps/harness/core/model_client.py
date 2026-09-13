@@ -403,6 +403,38 @@ WEB_SEARCH_TOOL = {
     },
 }
 
+SAVE_ARTIFACT_TO_BRAIN_TOOL = {
+    "name": "save_artifact_to_brain",
+    "description": (
+        "Keep a file from Artifacts in Second Brain so it becomes searchable knowledge "
+        "and can be recalled in later conversations. Use it when Mike says to save, keep "
+        "or remember a file — most often something a browser run just downloaded, but it "
+        "works for any artifact. "
+        "Only works on text-bearing files (PDF, DOCX, CSV, markdown, code); a pure binary "
+        "like an image or a video has nothing to embed and will be refused. "
+        "Do NOT call this on every download. Artifacts already keeps everything; Second "
+        "Brain is for what Mike chose to keep."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "artifact_id": {
+                "type": "string",
+                "description": "Artifact id. Use the filename if you don't have the id.",
+            },
+            "filename": {
+                "type": "string",
+                "description": "Filename, if you don't have the artifact id.",
+            },
+            "note": {
+                "type": "string",
+                "description": "Why it matters — shown as the personal note on the item.",
+            },
+        },
+        "required": [],
+    },
+}
+
 BROWSE_WEB_TOOL = {
     "name": "browse_web",
     "description": (
