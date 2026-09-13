@@ -162,9 +162,12 @@ def artifacts_for_run(
         )
     )
 
-    failed = run.stopped_reason in ("max_turns", "refusal") or bool(
-        [e for e in events if e.get("type") == "action_error"]
-    )
+    # A stale ref is the NORMAL recoverable error here — pages re-render and the
+    # agent re-reads and carries on — so "any error" would attach a ~10MB trace
+    # to almost every real run. Reserve it for runs that actually went badly:
+    # they never finished, or they were still thrashing when they did.
+    error_count = len([e for e in events if e.get("type") == "action_error"])
+    failed = run.stopped_reason in ("max_turns", "refusal") or error_count >= 3
 
     media = [("video", video_path, "webm", "video/webm")]
     if failed and trace_path:

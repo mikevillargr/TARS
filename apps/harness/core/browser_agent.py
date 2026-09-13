@@ -114,6 +114,10 @@ async def run_browser_task(
     consecutive_failures = 0
 
     async def emit(event: dict) -> None:
+        # Stamp centrally: an unstamped event falls back to the run start time
+        # in the report and sorts to the top, which made recovered errors look
+        # like they happened before the action that caused them.
+        event.setdefault("at", time.time())
         if on_event:
             await on_event(event)
 

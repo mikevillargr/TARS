@@ -947,10 +947,15 @@ ssh tars "cp /opt/tars/infrastructure/nginx/nginx.conf /etc/nginx/nginx.conf && 
 
 Note: `ssh tars` is an alias in `~/.ssh/config` on the dev machine. Never use the raw IP directly.
 
-**The harness does NOT need `playwright install chromium` on the server.** It only ever
-connects to the container over CDP, and `connect_over_cdp` needs the driver that ships with
-the pip package, not browser binaries. Installing them would waste ~150MB and a pile of
-system deps for nothing.
+**Server-side Playwright: ffmpeg yes, chromium no.**
+- The harness does NOT need `playwright install chromium`. It only connects to the container
+  over CDP, and `connect_over_cdp` needs the driver shipped with the pip package, not browser
+  binaries. Installing them would waste ~150MB and a pile of system deps for nothing.
+- The harness DOES need `playwright install ffmpeg` (~5MB, no system deps). Video recording
+  is muxed driver-side, not in the browser, so ffmpeg lives on the harness host even though
+  Chromium lives in the container. Missing it fails the run with
+  `Executable doesn't exist at .../ffmpeg-*/ffmpeg-linux` at `new_page`.
+  Found the hard way on the v2.20.0 deploy.
 
 ---
 

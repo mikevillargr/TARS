@@ -223,6 +223,9 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
   live logins, so it is bound to 127.0.0.1 and never proxied. The optional toolset members
   (`javascript_exec`, `file_upload`, `read_console`, `read_network`) are off by default. All
   navigation is scheme-checked (http/https only) and optionally domain-allowlisted.
+- **Deploy note:** the harness host needs `playwright install ffmpeg` (~5MB). Video is muxed
+  driver-side, so ffmpeg belongs to the harness even though Chromium lives in the container.
+  It does NOT need `playwright install chromium`.
 - New: `connectors/browser.py`, `core/browser_agent.py`, `core/browser_jobs.py`,
   `core/browser_artifacts.py`, `api/routes/browser.py`, `components/browser/*`,
   `hooks/useBrowserJob.ts`, `infrastructure/docker/Dockerfile.browser`. New env
