@@ -704,6 +704,21 @@ is the single read path (blob first, legacy "base64:" content as fallback until
 `has_file` boolean (SQL: `storage_path IS NOT NULL OR content LIKE 'base64:%'`) so
 the client picks a renderer without the payload ever being loaded or shipped.
 
+Chat generation tools (all save via the blob store and emit an `artifact_created` card):
+- `generate_document` (DOCX) and `generate_pdf` (PDF) are built by the shared
+  markdown→file builders in `core/docgen.py` (since v2.27.4 — inline **bold** /
+  *italic* / `code`, styled headings/lists; the same builders power Second Brain
+  export, `second_brain.py` `/items/{id}/export?format=docx|pdf|gdoc`)
+- `generate_presentation` (PPTX) — python-pptx, title slide + bullet slides
+- `generate_spreadsheet` (XLSX, since v2.27.4) — `docgen.build_xlsx(title, sheets)`
+  via openpyxl: multi-sheet, bold frozen header row, content-sized column widths;
+  artifact `type="spreadsheet"`
+- All four accept optional `save_to_brain` (default false): the source text the
+  binary was built from is filed into Second Brain via
+  `browser_downloads.save_artifact_to_brain(..., text=…)` — blob-stored artifacts
+  carry no `content`, so the text override is required; re-extracting from the
+  binary is deliberately avoided
+
 Features:
 - Grid and list view toggle
 - Filter by type (Document / Code / Report / Spreadsheet / Transcript), source (Chat / Cron / Email / Meeting / Upload), date, project/client tag

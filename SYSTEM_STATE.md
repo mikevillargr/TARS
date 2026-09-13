@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.3 |
+| Version | v2.27.4 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -101,7 +101,7 @@ requests are excluded — vision routing owns model choice.
 | 5 | Calendar | /calendar | Live |
 | 6 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
 | 7 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval; **export** to DOCX, PDF, or Google Doc via item detail modal |
-| 8 | Artifacts | /artifacts | Live — sources include email attachments (`source="email"`, since v2.27.2) |
+| 8 | Artifacts | /artifacts | Live — sources include email attachments (`source="email"`, since v2.27.2); chat generation tools include `generate_spreadsheet` (XLSX) and optional `save_to_brain` piping (since v2.27.4) |
 | 9 | Cron Manager | /cron | Live |
 | 10 | Connectors | /connectors | Live |
 | 11 | Mnemon | /memory | Live |
@@ -164,6 +164,35 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.4 — 2026-09-14
+**Feature: shared docgen builders, `generate_spreadsheet` chat tool, save_to_brain piping**
+
+- **`core/docgen.py` (new).** The rich markdown→file builders that were locked inside
+  the Second Brain export route are now shared: `build_docx(title, content,
+  personal_note)` (inline **bold** / *italic* / `code`, styled headings/lists) and
+  `build_pdf(...)` (styled reportlab layout). `second_brain.py`
+  `/items/{id}/export?format=docx|pdf|gdoc` imports them — zero behavior change for
+  exports. Adds `build_xlsx(title, sheets)` (openpyxl): multi-sheet workbooks with a
+  bold frozen header row and content-sized column widths.
+- **Chat generation tools upgraded.** `generate_document` and `generate_pdf` handlers
+  switch to the shared builders (previously weaker near-duplicates — they gain inline
+  formatting and better styling for free; tool schemas' core args unchanged).
+  `generate_presentation` build logic unchanged.
+- **New `generate_spreadsheet` tool** — args `title`, `sheets` (array of
+  `{name, headers[], rows[][]}`), optional `filename`. Saves via the blob store as
+  `type="spreadsheet"` and emits the standard `artifact_created` card. Prompt guidance
+  in `context_assembler.py` mentions it; Rokid `_TOOL_LABELS` gains labels for all
+  four generation tools.
+- **`save_to_brain` on all four generation tools** (bool, default false): when true,
+  the source text the binary was built from is filed into Second Brain via
+  `browser_downloads.save_artifact_to_brain(..., text=…)`. That function gains a `text`
+  override because blob-stored (`storage_path`) artifacts carry no `content` and would
+  otherwise be skipped; the "browser" tag is now only applied when the artifact's
+  source is actually `browser`. No conversation↔artifact `Link` row — the Link model's
+  valid types don't include `conversation`, and `source="chat"` + `source_id` on the
+  Artifact already records provenance.
+- Harness only, no schema change, no new dependencies (openpyxl was already installed).
 
 ### v2.27.3 — 2026-09-14
 **Feature: Kimi (Moonshot AI) added as a third model provider + new `research` task category**
