@@ -1263,6 +1263,22 @@ async def send_message(
                         payload.update(extra)
                     await queue.put(sse_event(payload))
 
+                async def _emit_artifact(artifact_id: str, filename: str) -> None:
+                    """Surface a file TARS just made as a preview card.
+
+                    Anything that writes to Artifacts mid-turn should call this.
+                    Naming the file in prose ("saved: report.md") tells Mike a
+                    file exists; it does not let him judge whether it is any
+                    good without leaving the conversation that produced it.
+                    """
+                    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+                    await _emit_card({
+                        "type": "artifact_created",
+                        "artifact_id": artifact_id,
+                        "filename": filename,
+                        "filetype": ext,
+                    })
+
                 async def _tool_executor(name: str, tool_input: dict) -> str:
                     if name == "create_task":
                         await _emit_progress("create_task", "Creating task…")
@@ -1307,7 +1323,9 @@ async def send_message(
                     if name == "archive_page":
                         await _emit_progress("archive_page", "Archiving page…")
                         from core.browser_runner import execute_archive_page
-                        return await execute_archive_page(tool_input, user_id, bg_db)
+                        return await execute_archive_page(
+                            tool_input, user_id, bg_db, on_artifact=_emit_artifact
+                        )
 
                     if name == "create_signal":
                         await _emit_progress("create_signal", "Raising on Today…")
@@ -1324,7 +1342,8 @@ async def send_message(
                             await _emit_progress("browse_web", status, extra=extra)
 
                         return await execute_browse_web(
-                            tool_input, user_id, bg_db, on_progress=_progress
+                            tool_input, user_id, bg_db,
+                            on_progress=_progress, on_artifact=_emit_artifact,
                         )
 
                     if name == "create_reminder":
