@@ -38,6 +38,7 @@ from core.model_client import (
     GET_TOKEN_REPORT_TOOL,
     GET_FEED_ITEM_TOOL,
     REQUEST_ESCALATION_TOOL,
+    ORCHESTRATE_PARALLEL_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
@@ -1260,6 +1261,9 @@ async def send_message(
         GET_TOKEN_REPORT_TOOL,
         GET_FEED_ITEM_TOOL,
         *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
+        # Parallel sub-agent orchestration is Tier 2/3 only — Tier 1 turns are
+        # quick Q&A; fanning out a sub-agent fleet from one is never the right call.
+        *([ORCHESTRATE_PARALLEL_TOOL] if effective_tier != ModelTier.TIER1 else []),
     ]
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -2482,6 +2486,83 @@ async def send_message(
                         except Exception as exc:
                             log.warning("web_search tool failed: %s", exc)
                             return f"Web search failed: {exc}"
+
+                    if name == "orchestrate_parallel":
+                        subtasks = tool_input.get("subtasks") or []
+                        if not subtasks:
+                            return "No subtasks provided."
+                        await _emit_progress(
+                            "orchestrate_parallel",
+                            f"Running {len(subtasks)} sub-agent{'s' if len(subtasks) != 1 else ''} in parallel…",
+                        )
+
+                        # Live run events (parallel_started / subtask_progress /
+                        # subtask_done) stream straight into the SSE queue so the
+                        # client can render the run as it happens.
+                        _run_meta: dict = {}
+
+                        async def _on_parallel_event(evt: dict) -> None:
+                            if evt.get("type") == "parallel_started":
+                                _run_meta.update(evt)
+                            await queue.put(sse_event(evt))
+
+                        from core.orchestrator import run_parallel
+                        try:
+                            results = await run_parallel(
+                                subtasks, user_id=user_id, db=bg_db,
+                                on_event=_on_parallel_event,
+                            )
+                        except Exception as exc:
+                            log.warning("orchestrate_parallel failed: %s", exc)
+                            return f"Parallel orchestration failed: {exc}"
+
+                        total_tokens = sum(r.get("tokens") or 0 for r in results)
+                        total_input = sum(r.get("input_tokens") or 0 for r in results)
+                        done_count = sum(1 for r in results if r.get("status") == "done")
+
+                        # Persist a summary card (survives reload via tool_results);
+                        # token/model totals ride along so analytics stay meaningful.
+                        await _emit_card({
+                            "type": "parallel_run",
+                            "run_id": _run_meta.get("run_id", ""),
+                            "subtasks": [
+                                {
+                                    "index": r.get("index"),
+                                    "title": r.get("title"),
+                                    "role": r.get("role"),
+                                    "status": r.get("status"),
+                                    "preview": (r.get("output") or "")[-160:].strip(),
+                                    "model": r.get("model_used") or None,
+                                    "tokens": r.get("tokens") or 0,
+                                }
+                                for r in results
+                            ],
+                            "total_tokens": total_tokens,
+                            "total_input_tokens": total_input,
+                        })
+                        await _emit_progress(
+                            "orchestrate_parallel",
+                            f"{done_count}/{len(results)} sub-agents done",
+                            done=True,
+                        )
+
+                        # Aggregated tool result: truncated outputs only — full
+                        # sub-agent transcripts would blow the synthesis context.
+                        parts = [
+                            f"Parallel run complete: {done_count}/{len(results)} subtasks succeeded "
+                            f"({total_tokens} output tokens total)."
+                        ]
+                        for r in results:
+                            header = (
+                                f"\n## Subtask {r.get('index', 0) + 1}: {r.get('title')}"
+                                f" — {r.get('status')}"
+                                + (f" (model: {r['model_used']}, {r.get('tokens', 0)} tokens)" if r.get("model_used") else "")
+                            )
+                            output = (r.get("output") or "").strip()
+                            if len(output) > 4000:
+                                output = output[:4000] + "\n\n[... truncated ...]"
+                            parts.append(f"{header}\n{output}")
+                        return "\n".join(parts)
 
                     async def _maybe_save_to_brain(artifact, text: str) -> str:
                         """Shared save_to_brain handling for the generate_* tools.

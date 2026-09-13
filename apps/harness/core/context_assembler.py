@@ -132,6 +132,11 @@ ESCALATION:
 
 """
 
+# Tier 2/3 only — Tier 1 turns are quick Q&A and don't get the tool.
+_PARALLEL_BLOCK = """PARALLEL SUB-AGENTS:
+• orchestrate_parallel — when Mike's ask splits into multiple INDEPENDENT research/analysis streams, fan out: one subtask per stream, each with a role (researcher, analyst, critic) and self-contained prompt (sub-agents see none of this conversation). Pick the best provider/model per subtask based on what's configured and the task type: kimi for long-horizon research, anthropic for writing/analysis, zai for quick lookups. Omit provider/model to use the default. Sub-agents are read-only (search/read tools) and never write state — do the writing, saving, and synthesis yourself from their outputs.
+"""
+
 SYSTEM_TEMPLATE = """You are TARS, Mike Villar's personal AI operating system.
 {system_state_section}
 
@@ -404,6 +409,8 @@ async def assemble(
 
     is_lightweight = (tier == ModelTier.TIER1)
     capabilities_section = _CAPABILITIES_BLOCK  # all tiers — tool support is available everywhere
+    if not is_lightweight:
+        capabilities_section += _PARALLEL_BLOCK  # orchestrate_parallel is Tier 2/3 only
 
     mnemon_context = "No relevant memories."
     second_brain_context = "No relevant knowledge."

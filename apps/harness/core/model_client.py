@@ -1389,6 +1389,65 @@ REQUEST_ESCALATION_TOOL = {
     },
 }
 
+ORCHESTRATE_PARALLEL_TOOL = {
+    "name": "orchestrate_parallel",
+    "description": (
+        "Fan a request out to multiple independent sub-agents that run in PARALLEL "
+        "(mixture of experts), then synthesise their outputs yourself. "
+        "Use when Mike's ask naturally splits into several independent research or "
+        "analysis streams — e.g. comparing options, researching multiple companies/"
+        "topics at once, or getting a researcher + analyst + critic pass on the same "
+        "question. Do NOT use for a single lookup, for sequential work where one step "
+        "depends on another, or for anything that writes state (sub-agents are "
+        "read-only: web_search, browse_web, memory search, artifact reads). "
+        "Give each subtask a role and pick the best provider/model for it based on "
+        "what's configured and the task type: kimi for long-horizon research, "
+        "anthropic for writing/analysis, zai for quick lookups. Omit provider/model "
+        "to use the default tier model. Max 8 subtasks; each times out after 5 "
+        "minutes without blocking the others."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "subtasks": {
+                "type": "array",
+                "description": "One entry per independent stream of work.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Short label for the subtask (shown in the UI).",
+                        },
+                        "prompt": {
+                            "type": "string",
+                            "description": (
+                                "Complete, self-contained instructions for the sub-agent. "
+                                "It sees none of the conversation — include all needed context."
+                            ),
+                        },
+                        "role": {
+                            "type": "string",
+                            "description": "Persona for the sub-agent, e.g. 'researcher', 'analyst', 'critic'.",
+                        },
+                        "provider": {
+                            "type": "string",
+                            "enum": ["anthropic", "zai", "kimi"],
+                            "description": "Optional. Provider for this subtask; omit to use the default tier model.",
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "Optional. Model name; required only when pinning a specific model. If provider is set without model, that provider's default is used.",
+                        },
+                    },
+                    "required": ["title", "prompt"],
+                },
+            },
+        },
+        "required": ["subtasks"],
+    },
+}
+
 READ_GOOGLE_DOC_TOOL = {
     "name": "read_google_doc",
     "description": (
