@@ -1279,6 +1279,41 @@ async def send_message(
                         "filetype": ext,
                     })
 
+                async def _emit_tool_failed(tool: str, tool_input: dict, message: str) -> None:
+                    """Surface a tool failure as something to act on, not just a sentence.
+
+                    A failed tool call used to become prose in the model's reply — recovery
+                    meant retyping the whole request. Retry re-asks the model with the
+                    specific thing to try again, rather than blindly replaying the same call:
+                    the right fix for a stale browser ref, a rate limit, or a bad chart spec
+                    is not always "do the identical thing again", and the model is the one
+                    that can tell the difference.
+
+                    Deliberately scoped to a handful of tools where failures are plausible
+                    and a request is nontrivial to retype (browse_web, archive_page,
+                    generate_chart, sync_meetings) — not a blanket wrapper over every tool.
+                    """
+                    await _emit_card({
+                        "type": "tool_failed",
+                        "tool": tool,
+                        "message": message[:500],
+                        "retry_prompt": _retry_prompt(tool, tool_input),
+                    })
+
+                def _retry_prompt(tool: str, tool_input: dict) -> str:
+                    if tool == "browse_web":
+                        task = tool_input.get("task", "").strip()
+                        return f"Try that browser task again: {task}" if task else "Try that browser task again."
+                    if tool == "archive_page":
+                        url = tool_input.get("url", "").strip()
+                        return f"Try archiving {url} again." if url else "Try that archive again."
+                    if tool == "generate_chart":
+                        title = tool_input.get("title", "").strip()
+                        return f"Try generating that chart again ({title})." if title else "Try generating that chart again."
+                    if tool == "sync_meetings":
+                        return "Try syncing meetings again."
+                    return "That failed — try it again."
+
                 async def _tool_executor(name: str, tool_input: dict) -> str:
                     if name == "create_task":
                         await _emit_progress("create_task", "Creating task…")
@@ -1323,8 +1358,13 @@ async def send_message(
                     if name == "archive_page":
                         await _emit_progress("archive_page", "Archiving page…")
                         from core.browser_runner import execute_archive_page
+
+                        async def _archive_failure(message: str) -> None:
+                            await _emit_tool_failed("archive_page", tool_input, message)
+
                         return await execute_archive_page(
-                            tool_input, user_id, bg_db, on_artifact=_emit_artifact
+                            tool_input, user_id, bg_db,
+                            on_artifact=_emit_artifact, on_failure=_archive_failure,
                         )
 
                     if name == "create_signal":
@@ -1341,9 +1381,13 @@ async def send_message(
                         async def _progress(status: str, extra: dict) -> None:
                             await _emit_progress("browse_web", status, extra=extra)
 
+                        async def _failure(message: str) -> None:
+                            await _emit_tool_failed("browse_web", tool_input, message)
+
                         return await execute_browse_web(
                             tool_input, user_id, bg_db,
                             on_progress=_progress, on_artifact=_emit_artifact,
+                            on_failure=_failure,
                         )
 
                     if name == "create_reminder":
@@ -1372,17 +1416,29 @@ async def send_message(
                             .order_by(Reminder.due_at.nullslast(), Reminder.created_at.desc())
                         )
                         reminders = result.scalars().all()
+                        await _emit_card({
+                            "type": "reminders_list",
+                            "reminders": [
+                                {
+                                    "id": r.id, "text": r.text, "done": r.done,
+                                    "due_at": r.due_at.isoformat() if r.due_at else None,
+                                }
+                                for r in reminders
+                            ],
+                        })
                         if not reminders:
-                            return "No pending reminders."
+                            return "No pending reminders. (Shown as a card — don't also list them in prose.)"
                         lines = []
-                        from datetime import datetime as _dt2, timezone as _tz
-                        now = _dt2.now(_tz.utc)
                         for r in reminders:
                             due = ""
                             if r.due_at:
                                 due = f" (due {r.due_at.strftime('%b %-d')})"
                             lines.append(f"• {r.text}{due}")
-                        return f"{len(reminders)} pending reminder(s):\n" + "\n".join(lines)
+                        return (
+                            f"{len(reminders)} pending reminder(s), shown as a checklist card — "
+                            "don't repeat them as a bulleted list in your reply, just reference "
+                            "them briefly if relevant:\n" + "\n".join(lines)
+                        )
 
                     if name == "get_token_report":
                         try:
@@ -2222,6 +2278,7 @@ async def send_message(
                                 return f"All {skipped} recent Fireflies meetings are already up to date."
                         except Exception as exc:
                             log.warning("sync_meetings tool failed: %s", exc)
+                            await _emit_tool_failed("sync_meetings", tool_input, str(exc))
                             return f"Failed to sync meetings: {exc}"
 
                     if name == "read_meeting":
@@ -3143,6 +3200,7 @@ plt.close('all')
                             )
                             if _result.returncode != 0:
                                 err = _result.stderr.strip().split("\n")[-1]
+                                await _emit_tool_failed("generate_chart", tool_input, err)
                                 return f"Chart generation failed: {err}"
 
                             with open(_output_path, "rb") as _imgf:
@@ -3156,9 +3214,11 @@ plt.close('all')
                             return f"Chart '{title}' generated and displayed."
 
                         except _subprocess.TimeoutExpired:
+                            await _emit_tool_failed("generate_chart", tool_input, "Timed out (30s limit).")
                             return "Chart generation timed out (30s limit)."
                         except Exception as exc:
                             log.warning("generate_chart failed: %s", exc)
+                            await _emit_tool_failed("generate_chart", tool_input, str(exc))
                             return f"Chart generation failed: {exc}"
                         finally:
                             if _os.path.exists(_output_path):

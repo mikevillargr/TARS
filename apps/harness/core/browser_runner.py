@@ -22,6 +22,7 @@ async def execute_browse_web(
     *,
     on_progress: Optional[Callable[[str, dict], Any]] = None,
     on_artifact: Optional[Callable[[str, str], Any]] = None,
+    on_failure: Optional[Callable[[str], Any]] = None,
 ) -> str:
     """Run one browse_web tool call and return what the model should see.
 
@@ -31,6 +32,9 @@ async def execute_browse_web(
     `on_artifact(artifact_id, filename)` is the same idea for files: chat turns
     each one into a preview card, so a downloaded invoice is readable where it
     landed rather than being a filename in a sentence. Cron passes nothing.
+
+    `on_failure(message)` lets chat turn a failed run into a one-click retry
+    instead of a sentence Mike has to notice and manually retype around.
     """
     from connectors.browser import get_browser_pool
     from core.browser_agent import run_browser_task
@@ -78,7 +82,10 @@ async def execute_browse_web(
     except Exception as exc:  # noqa: BLE001
         log.exception("browse_web failed")
         jobs.finish(job.id, error=str(exc))
-        return f"Browser run failed: {type(exc).__name__}: {exc}"
+        message = f"{type(exc).__name__}: {exc}"
+        if on_failure:
+            await on_failure(message)
+        return f"Browser run failed: {message}"
 
     jobs.finish(job.id, result=run.final_text)
 
@@ -134,6 +141,7 @@ async def execute_archive_page(
     db: AsyncSession,
     *,
     on_artifact: Optional[Callable[[str, str], Any]] = None,
+    on_failure: Optional[Callable[[str], Any]] = None,
 ) -> str:
     """Archive a page as a PDF and a full-page image, both into Artifacts.
 
@@ -159,7 +167,10 @@ async def execute_archive_page(
             captured = await session.archive_page()
     except Exception as exc:  # noqa: BLE001
         log.exception("archive_page failed")
-        return f"Could not archive {url}: {type(exc).__name__}: {exc}"
+        message = f"{type(exc).__name__}: {exc}"
+        if on_failure:
+            await on_failure(message)
+        return f"Could not archive {url}: {message}"
 
     stem = _re.sub(r"[^a-z0-9]+", "-", (captured.get("title") or url).lower()).strip("-")[:60] or "page"
     saved = []
