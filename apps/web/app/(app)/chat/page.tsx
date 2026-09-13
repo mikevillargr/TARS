@@ -16,6 +16,8 @@ import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from "@/lib/api-client"
 import { EmailDraftCard, type EmailDraft } from "@/components/chat/EmailDraftCard"
 import { ArtifactPreviewCard, type ArtifactRef } from "@/components/chat/ArtifactPreviewCard"
+import { ToolFailedCard, type ToolFailure } from "@/components/chat/ToolFailedCard"
+import { RemindersListCard, type ReminderRow } from "@/components/chat/RemindersListCard"
 import { BrowserPanel } from "@/components/browser/BrowserPanel"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
@@ -742,6 +744,11 @@ interface PlaceResultSet {
   places: PlaceResult[]
 }
 
+interface ReminderListSet {
+  key: string
+  reminders: ReminderRow[]
+}
+
 import dynamic from "next/dynamic"
 
 const PlaceMap = dynamic(
@@ -974,6 +981,12 @@ function InlineMessageCards({
         }
         if (evt.type === "meeting_card") {
           return <MeetingCard key={key} meeting={e as unknown as MeetingCardData} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "tool_failed") {
+          return <ToolFailedCard key={key} failure={e as unknown as ToolFailure} onRetry={onAsk} onDismiss={() => dismiss(key)} />
+        }
+        if (evt.type === "reminders_list" && Array.isArray(e.reminders)) {
+          return <RemindersListCard key={key} reminders={e.reminders as ReminderRow[]} onDismiss={() => dismiss(key)} />
         }
         return null
       })}
@@ -1243,6 +1256,8 @@ interface MessageAreaProps {
   emailThreadCards: EmailThread[]
   stravaCards: StravaActivity[]
   meetingCards: MeetingCardData[]
+  toolFailures: ToolFailure[]
+  reminderLists: ReminderListSet[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setCalendarUpdateSuggestions: React.Dispatch<React.SetStateAction<CalendarUpdateSuggestion[]>>
   setCalendarDeleteSuggestions: React.Dispatch<React.SetStateAction<CalendarDeleteSuggestion[]>>
@@ -1254,6 +1269,8 @@ interface MessageAreaProps {
   setEmailThreadCards: React.Dispatch<React.SetStateAction<EmailThread[]>>
   setStravaCards: React.Dispatch<React.SetStateAction<StravaActivity[]>>
   setMeetingCards: React.Dispatch<React.SetStateAction<MeetingCardData[]>>
+  setToolFailures: React.Dispatch<React.SetStateAction<ToolFailure[]>>
+  setReminderLists: React.Dispatch<React.SetStateAction<ReminderListSet[]>>
   onAsk: (q: string) => void
   quoteIndex: number | null
   messagesEndRef: React.RefObject<HTMLDivElement | null>
@@ -1274,6 +1291,8 @@ const MessageArea = memo(function MessageArea({
   emailThreadCards,
   stravaCards,
   meetingCards,
+  toolFailures,
+  reminderLists,
   setCalendarSuggestions,
   setCalendarUpdateSuggestions,
   setCalendarDeleteSuggestions,
@@ -1285,6 +1304,8 @@ const MessageArea = memo(function MessageArea({
   setEmailThreadCards,
   setStravaCards,
   setMeetingCards,
+  setToolFailures,
+  setReminderLists,
   onAsk,
   quoteIndex,
   messagesEndRef,
@@ -1294,7 +1315,8 @@ const MessageArea = memo(function MessageArea({
     || artifactNotifications.length > 0 || contactResults.length > 0 || placeResults.length > 0
     || emailDrafts.length > 0
     || toolProgressItems.length > 0 || emailThreadCards.length > 0
-    || stravaCards.length > 0 || meetingCards.length > 0
+    || stravaCards.length > 0 || meetingCards.length > 0 || toolFailures.length > 0
+    || reminderLists.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-24 md:p-6 md:pb-28 space-y-6">
       {allMessages.length === 0 ? (
@@ -1456,6 +1478,21 @@ const MessageArea = memo(function MessageArea({
               onDismiss={() => setMeetingCards(prev => prev.filter((_, j) => j !== i))}
             />
           ))}
+          {toolFailures.map((f, i) => (
+            <ToolFailedCard
+              key={`tool-failed-${i}`}
+              failure={f}
+              onRetry={onAsk}
+              onDismiss={() => setToolFailures(prev => prev.filter((_, j) => j !== i))}
+            />
+          ))}
+          {reminderLists.map((set) => (
+            <RemindersListCard
+              key={set.key}
+              reminders={set.reminders}
+              onDismiss={() => setReminderLists(prev => prev.filter(x => x.key !== set.key))}
+            />
+          ))}
         </div>
       )}
       <div ref={messagesEndRef} className="shrink-0" style={{ height: 160 }} />
@@ -1532,6 +1569,8 @@ export default function ChatPage() {
   const [emailThreadCards, setEmailThreadCards]           = useState<EmailThread[]>([])
   const [stravaCards, setStravaCards]                     = useState<StravaActivity[]>([])
   const [meetingCards, setMeetingCards]                   = useState<MeetingCardData[]>([])
+  const [toolFailures, setToolFailures]                   = useState<ToolFailure[]>([])
+  const [reminderLists, setReminderLists]                 = useState<ReminderListSet[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   // Conversations with unread async messages (e.g. agent completions)
@@ -2210,6 +2249,19 @@ export default function ChatPage() {
                 streamingCardsRef.current.push({ type: "meeting_card", ...card })
                 setMeetingCards(prev => [...prev, card])
               }
+            } else if (evt.type === "tool_failed") {
+              if (chatId === activeChatIdRef.current) {
+                const failure = { tool: evt.tool, message: evt.message, retry_prompt: evt.retry_prompt } as ToolFailure
+                streamingCardsRef.current.push({ type: "tool_failed", ...failure })
+                setToolFailures(prev => [...prev, failure])
+              }
+            } else if (evt.type === "reminders_list") {
+              if (chatId === activeChatIdRef.current && Array.isArray(evt.reminders)) {
+                const reminders = evt.reminders as ReminderRow[]
+                const key = `reminders-${Date.now()}-${Math.random()}`
+                streamingCardsRef.current.push({ type: "reminders_list", reminders })
+                setReminderLists(prev => [...prev, { key, reminders }])
+              }
             } else if (evt.type === "done") {
               // Flush any remaining text in the TTS buffer
               if (isTtsEnabled) tts.flushBuffer()
@@ -2244,6 +2296,8 @@ export default function ChatPage() {
                 setEmailThreadCards([])
                 setStravaCards([])
                 setMeetingCards([])
+                setToolFailures([])
+                setReminderLists([])
               }
               // Refresh conversation list to pick up the title (generated async after done)
               apiGet<Conversation[]>("/chat/conversations").then(setConversations).catch(console.error)
@@ -2679,6 +2733,8 @@ export default function ChatPage() {
           emailThreadCards={emailThreadCards}
           stravaCards={stravaCards}
           meetingCards={meetingCards}
+          toolFailures={toolFailures}
+          reminderLists={reminderLists}
           setCalendarSuggestions={setCalendarSuggestions}
           setCalendarUpdateSuggestions={setCalendarUpdateSuggestions}
           setCalendarDeleteSuggestions={setCalendarDeleteSuggestions}
@@ -2690,6 +2746,8 @@ export default function ChatPage() {
           setEmailThreadCards={setEmailThreadCards}
           setStravaCards={setStravaCards}
           setMeetingCards={setMeetingCards}
+          setToolFailures={setToolFailures}
+          setReminderLists={setReminderLists}
           onAsk={handleAsk}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
