@@ -415,7 +415,13 @@ BROWSE_WEB_TOOL = {
         "those have real connectors that are more reliable than a browser. "
         "Describe the OUTCOME you want in `task`, not a list of clicks — a sub-agent works "
         "out the steps and can recover when a page differs from what it expected. "
-        "It never enters credentials: if a site needs a login it stops and says so. "
+        "SESSIONS DO PERSIST. The browser keeps a logged-in profile, and every run "
+        "inherits it, so if Mike has signed into a site (in the browser he opened from "
+        "this chat, or by taking over) you ARE authenticated there on the next run. "
+        "Never tell him a login will not carry over, and never claim each run starts "
+        "from a blank browser. "
+        "You still never type credentials yourself: if a site shows a login form, say so "
+        "and let him sign in, then try again. "
         "Runs can take a minute or more."
     ),
     "input_schema": {
