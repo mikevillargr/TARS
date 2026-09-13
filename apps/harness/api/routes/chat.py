@@ -984,6 +984,24 @@ async def send_message(
     except Exception:
         pass  # Non-blocking
 
+    # A browser this conversation has open. Without this, "what am I looking
+    # at" is unanswerable and browse_web would open a second browser next to
+    # the one already on screen.
+    try:
+        from core.browser_manual import for_conversation as _open_browser
+        _manual = _open_browser(conversation_id)
+        if _manual and _manual.url and _manual.url != "about:blank":
+            system_prompt = (
+                f"[BROWSER OPEN]\nMike has a browser open in this conversation, "
+                f"currently on: {_manual.title or 'untitled'} — {_manual.url}\n"
+                f"He may be driving it himself. If he asks about 'this page' or "
+                f"'what I'm looking at', that is the page he means. If he asks you "
+                f"to do something there, use browse_web and say which page you are "
+                f"acting on.\n\n"
+            ) + system_prompt
+    except Exception:
+        pass  # Non-blocking
+
 
     # All tiers/providers get the full tool set, including generate_chart.
     # generate_chart runs the matplotlib code server-side (see _tool_executor)

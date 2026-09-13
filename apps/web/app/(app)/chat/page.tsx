@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef, Suspense, useMemo, mem
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
-  Send, Paperclip, Camera, Mic, Plus, User,
+  Send, Paperclip, Camera, Mic, Plus, User, Globe,
   Terminal, ChevronLeft, PanelLeft, Maximize2,
   Minimize2, X, Calendar, CheckSquare, Loader2, Menu,
   Square, Trash2, FileText, File, Layout, Download, ExternalLink,
@@ -1551,6 +1551,32 @@ export default function ChatPage() {
   const [browserJobId, setBrowserJobId]                   = useState<string | null>(null)
   const [browserTask, setBrowserTask]                     = useState<string | undefined>()
   const [browserPanelOpen, setBrowserPanelOpen]           = useState(true)
+  const [browserOpening, setBrowserOpening]               = useState(false)
+
+  // Open a browser for THIS conversation, or just resurface the one it already
+  // has. Idempotent server-side, so double-clicking cannot stack up sessions.
+  const openBrowser = useCallback(async () => {
+    if (browserJobId) { setBrowserPanelOpen(true); return }
+    setBrowserOpening(true)
+    try {
+      const res = await fetch("/api/proxy/browser/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation_id: activeChatIdRef.current }),
+      })
+      if (!res.ok) {
+        const { detail } = await res.json().catch(() => ({ detail: "" }))
+        alert(detail || "Could not open a browser.")
+        return
+      }
+      const data = await res.json()
+      setBrowserJobId(data.job_id)
+      setBrowserTask("Browser opened from this conversation")
+      setBrowserPanelOpen(true)
+    } finally {
+      setBrowserOpening(false)
+    }
+  }, [browserJobId])
   const [emailThreadCards, setEmailThreadCards]           = useState<EmailThread[]>([])
   const [stravaCards, setStravaCards]                     = useState<StravaActivity[]>([])
   const [meetingCards, setMeetingCards]                   = useState<MeetingCardData[]>([])
@@ -2845,6 +2871,21 @@ export default function ChatPage() {
                     >
                       <Camera size={16} />
                     </label>
+                    <button
+                      title={browserJobId ? "Show the browser for this chat" : "Open a browser for this chat"}
+                      onClick={openBrowser}
+                      disabled={browserOpening}
+                      className="p-1.5 rounded-lg transition-colors"
+                      style={{
+                        color: browserJobId ? "var(--c-moss)" : "var(--c-ink-faint)",
+                        backgroundColor: browserJobId ? "var(--c-moss-soft)" : "transparent",
+                        opacity: browserOpening ? 0.5 : 1,
+                      }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.backgroundColor = browserJobId ? "var(--c-moss-soft)" : "var(--c-surface-2)"}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = browserJobId ? "var(--c-moss-soft)" : "transparent"}
+                    >
+                      <Globe size={16} />
+                    </button>
                     <button
                       title={voiceMode ? "Voice mode on — click to mute" : "Voice mode off — click to enable"}
                       onClick={() => setVoiceMode(v => !v)}

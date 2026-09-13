@@ -12,6 +12,9 @@ opens one connection.
 
 import asyncio
 import logging
+from typing import Optional
+
+from pydantic import BaseModel
 
 from fastapi import (
     APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect,
@@ -20,6 +23,7 @@ from fastapi import (
 from core.auth import decode_token, require_auth, verify_ws_token
 from core.config import settings
 from core.browser_jobs import get_browser_jobs
+from core.browser_manual import for_conversation, get_manual, open_manual_session
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +71,42 @@ async def capabilities(user_id: str = Depends(require_auth)):
             else None
         ),
     }
+
+
+class OpenSessionRequest(BaseModel):
+    conversation_id: Optional[str] = None
+
+
+@router.post("/sessions")
+async def open_session(
+    body: OpenSessionRequest, user_id: str = Depends(require_auth)
+):
+    """Open a browser a human drives, bound to a conversation.
+
+    Idempotent per conversation: asking twice returns the browser you already
+    have open rather than stacking up sessions against the pool's slot limit.
+    """
+    if not settings.browser_cdp_url:
+        raise HTTPException(
+            status_code=409,
+            detail="Manual browser needs the browser container (BROWSER_CDP_URL unset).",
+        )
+    manual = await open_manual_session(body.conversation_id)
+    return {
+        "job_id": manual.job_id,
+        "conversation_id": manual.conversation_id,
+        "manual": True,
+        "url": manual.url,
+    }
+
+
+@router.delete("/sessions/{job_id}")
+async def close_session(job_id: str, user_id: str = Depends(require_auth)):
+    manual = get_manual(job_id)
+    if manual is None:
+        raise HTTPException(status_code=404, detail="No such manual browser")
+    manual.close()
+    return {"ok": True}
 
 
 @router.get("/jobs")
@@ -131,6 +171,9 @@ async def job_events(
         return
 
     await websocket.accept()
+    manual = get_manual(job_id)
+    if manual:
+        manual.touch()   # watching counts as activity against the idle timeout
     queue = jobs.subscribe(job_id)
     if queue is None:
         await websocket.close(code=4404)

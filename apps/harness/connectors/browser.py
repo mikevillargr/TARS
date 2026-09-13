@@ -746,6 +746,26 @@ class BrowserPool:
                 log.info("browser pool: chromium launched (max %d contexts)", self._max)
         return self._browser
 
+    async def persistent_session(self, **kwargs) -> "BrowserSession":
+        """A BrowserSession over the container's PERSISTENT profile context.
+
+        For human-driven sessions only. A login typed here has to survive, and
+        an ephemeral context throws it away on close — which would silently undo
+        the one thing the person was doing.
+
+        The caller must never close this context: it is the container's only
+        browser, and closing it takes the whole thing down. Stop the screencast
+        instead.
+        """
+        if not self._cdp_url:
+            raise RuntimeError("persistent_session requires the browser container")
+        browser = await self._ensure()
+        if not browser.contexts:
+            raise RuntimeError("container browser has no persistent context")
+        session = BrowserSession(browser.contexts[0], **kwargs)
+        await session.start()
+        return session
+
     async def profile_storage_state(self) -> Optional[dict]:
         """Cookies and storage from the container's persistent profile.
 
