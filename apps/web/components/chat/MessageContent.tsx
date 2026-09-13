@@ -7,7 +7,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { Copy, Check, BookOpen, Code2, Image } from "lucide-react"
 import { apiPost } from "@/lib/api-client"
-import { DataTable, tableFromMarkdown } from "@/components/chat/DataTable"
+import { DataTable, tableFromNode } from "@/components/chat/DataTable"
 import { UrlPreviewCard } from "./UrlPreviewCard"
 import { WIRE_RE } from "@/lib/mentions"
 
@@ -438,8 +438,8 @@ export function MessageContent({ content }: { content: string }) {
           // and Sheets export. Parsing what it already writes means this works
           // on every message ever sent, not just ones written after a new tool
           // shipped — and the model has nothing extra to remember.
-          table: ({ children }) => {
-            const data = tableFromMarkdown(children)
+          table: ({ children, node }) => {
+            const data = tableFromNode(node)
             if (data) return <DataTable headers={data.headers} rows={data.rows} />
             // Anything that will not parse cleanly keeps the plain rendering
             // rather than disappearing.

@@ -203,47 +203,49 @@ export function DataTable({
   )
 }
 
-/** Bridge from ReactMarkdown's <table> children to real data. */
-export function tableFromMarkdown(children: ReactNode): { headers: string[]; rows: Row[] } | null {
-  const sections: { tag: string; rows: ReactNode[] }[] = []
-  const walk = (node: ReactNode) => {
-    if (Array.isArray(node)) return node.forEach(walk)
-    const el = node as { type?: unknown; props?: { children?: ReactNode } }
-    const tag = typeof el?.type === "string" ? el.type : ""
-    if (tag === "thead" || tag === "tbody") {
-      const rows: ReactNode[] = []
-      const collect = (n: ReactNode) => {
-        if (Array.isArray(n)) return n.forEach(collect)
-        const e = n as { type?: unknown }
-        if (typeof e?.type === "string" && e.type === "tr") rows.push(n)
-      }
-      collect(el.props?.children)
-      sections.push({ tag, rows })
-    } else if (el?.props?.children !== undefined) {
-      walk(el.props.children)
-    }
-  }
-  walk(children)
+/** Bridge from ReactMarkdown's hast node to real data.
+ *
+ *  Reads the `node` ReactMarkdown passes alongside `children`, NOT the rendered
+ *  children. The components map overrides thead/th/td, so in the children those
+ *  elements' `type` is a component function rather than the string "thead" —
+ *  walking them by tag name silently found nothing and every table fell back to
+ *  the plain renderer. The hast node keeps real tagNames regardless.
+ */
+interface HastNode {
+  type?: string
+  tagName?: string
+  value?: string
+  children?: HastNode[]
+}
 
-  const cellsOf = (tr: ReactNode): string[] => {
-    const out: string[] = []
-    const collect = (n: ReactNode) => {
-      if (Array.isArray(n)) return n.forEach(collect)
-      const e = n as { type?: unknown; props?: { children?: ReactNode } }
-      const t = typeof e?.type === "string" ? e.type : ""
-      if (t === "th" || t === "td") out.push(cellText(e.props?.children).trim())
-      else if (e?.props?.children !== undefined) collect(e.props.children)
-    }
-    collect((tr as { props?: { children?: ReactNode } })?.props?.children)
-    return out
-  }
+function textOf(node: HastNode | undefined): string {
+  if (!node) return ""
+  if (node.type === "text") return node.value ?? ""
+  return (node.children ?? []).map(textOf).join("")
+}
 
-  const head = sections.find(s => s.tag === "thead")
-  const body = sections.find(s => s.tag === "tbody")
-  if (!head?.rows.length || !body?.rows.length) return null
+function findAll(node: HastNode | undefined, tag: string): HastNode[] {
+  if (!node) return []
+  const out: HastNode[] = []
+  if (node.tagName === tag) out.push(node)
+  for (const c of node.children ?? []) out.push(...findAll(c, tag))
+  return out
+}
 
-  const headers = cellsOf(head.rows[0])
-  const rows = body.rows.map(cellsOf).filter(r => r.length > 0)
+export function tableFromNode(node: unknown): { headers: string[]; rows: Row[] } | null {
+  const root = node as HastNode | undefined
+  if (!root) return null
+  const head = findAll(root, "thead")[0]
+  const body = findAll(root, "tbody")[0]
+  if (!head || !body) return null
+
+  const rowCells = (tr: HastNode) =>
+    [...findAll(tr, "th"), ...findAll(tr, "td")].map(c => textOf(c).trim())
+
+  const headerRow = findAll(head, "tr")[0]
+  if (!headerRow) return null
+  const headers = rowCells(headerRow)
+  const rows = findAll(body, "tr").map(rowCells).filter(r => r.some(c => c !== ""))
   if (headers.length === 0 || rows.length === 0) return null
   return { headers, rows }
 }
