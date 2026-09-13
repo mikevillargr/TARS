@@ -194,7 +194,7 @@ async def _generate_actions(
             (b.text for b in _resp.content if getattr(b, "text", None)), ""
         ).strip()
         if _text.startswith("```"):
-            _text = re.sub(r"^```[a-z]*\n?|```$", "", _text).strip()
+            _text = _re.sub(r"^```[a-z]*\n?|```$", "", _text).strip()
 
         import json as _json2
 
@@ -224,8 +224,12 @@ async def _generate_actions(
             else:
                 out.append({"kind": "ask", "label": label[:80]})
         return out
-    except Exception:
-        # Chips are a nicety. A failure here must never disturb the reply.
+    except Exception as err:  # noqa: BLE001
+        # Chips are a nicety and must never disturb the reply — but log it.
+        # A bare silent except here hid a NameError (re vs _re) that returned
+        # empty chips on every turn and looked exactly like "the model had no
+        # suggestions". Same failure mode as v2.18.6.
+        log.warning("chip suggestion generation failed: %s: %s", type(err).__name__, err)
         return []
 
 
