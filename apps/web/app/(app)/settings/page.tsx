@@ -162,6 +162,22 @@ const COMMON_TIMEZONES = [
   "Pacific/Auckland",
 ]
 
+type TabId = "general" | "models" | "usage" | "voice" | "knowledge" | "security"
+
+/** Card-sorted from the 11 sections that used to be one scroll.
+ *  Grouped by what you are trying to DO, not by which API backs it — the two
+ *  routing sections belong together because they answer one question ("which
+ *  model handles this"), and Usage sits next to them because it is the evidence
+ *  you change routing on. */
+const TABS: { id: TabId; label: string; blurb: string }[] = [
+  { id: "general",   label: "General",   blurb: "You, your timezone, and this device" },
+  { id: "models",    label: "Models",    blurb: "Which model handles what" },
+  { id: "usage",     label: "Usage",     blurb: "What it is costing" },
+  { id: "voice",     label: "Voice",     blurb: "How TARS sounds" },
+  { id: "knowledge", label: "Knowledge", blurb: "Domains and feed behaviour" },
+  { id: "security",  label: "Security",  blurb: "Password and API keys" },
+]
+
 export default function SettingsPage() {
   const [name, setName]         = useState("Mike Villar")
   const [timezone, setTimezone] = useState("Asia/Manila")
@@ -697,6 +713,21 @@ export default function SettingsPage() {
     pf: "Portuguese — Female",       pm: "Portuguese — Male",
     zf: "Chinese — Female",          zm: "Chinese — Male",
   }
+  // Deep-linkable, so "open Settings on Models" is a URL and a reload keeps
+  // your place. Read on mount rather than via useSearchParams to avoid pulling
+  // the whole page into a Suspense boundary for one query param.
+  const [tab, setTab] = useState<TabId>("general")
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab")
+    if (t && TABS.some(x => x.id === t)) setTab(t as TabId)
+  }, [])
+  const selectTab = (id: TabId) => {
+    setTab(id)
+    const u = new URL(window.location.href)
+    u.searchParams.set("tab", id)
+    window.history.replaceState(null, "", u)
+  }
+
   const voiceOptions = voiceList.length === 0
     ? <option value={ttsVoice}>{ttsVoice}</option>
     : (() => {
@@ -715,14 +746,52 @@ export default function SettingsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ backgroundColor: "var(--c-canvas)" }}>
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5">
         {/* Page heading */}
         <h1 className="text-xl font-semibold" style={{ fontFamily: "var(--font-heading), serif", color: "var(--c-ink)" }}>
           Settings
         </h1>
 
+        {/* Left nav on desktop, scrolling chips on mobile. Every reference
+            (Cursor, Cohere, fal, OpenAI) puts settings nav in a column rather
+            than horizontal tabs — it survives more sections without wrapping
+            and keeps the whole map visible while you read one part of it. */}
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          <nav
+            className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible w-full lg:w-52 shrink-0 lg:sticky"
+            style={{ top: "1.5rem" }}
+          >
+            {TABS.map(t => {
+              const active = t.id === tab
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => selectTab(t.id)}
+                  className="text-left px-3 py-2 rounded-lg transition-colors shrink-0"
+                  style={{
+                    backgroundColor: active ? "var(--c-moss-soft)" : "transparent",
+                    color: active ? "var(--c-moss)" : "var(--c-ink-muted)",
+                  }}
+                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" }}
+                  onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" }}
+                >
+                  <span className="text-sm font-medium block whitespace-nowrap">{t.label}</span>
+                  {/* The blurb is what stops a label like "General" being a
+                      guess about what is inside. Desktop only — on mobile the
+                      chips have to stay one line. */}
+                  <span className="hidden lg:block text-[11px] leading-tight mt-0.5"
+                        style={{ color: active ? "var(--c-moss)" : "var(--c-ink-faint)", opacity: active ? 0.75 : 1 }}>
+                    {t.blurb}
+                  </span>
+                </button>
+              )
+            })}
+          </nav>
+
+          <div className="flex-1 min-w-0 w-full max-w-2xl flex flex-col gap-6">
+
         {/* ── Profile ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "general" ? undefined : "none" }}>
           <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             Profile
           </h2>
@@ -757,7 +826,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Timezone ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "general" ? undefined : "none" }}>
           <div className="flex items-center justify-between">
             <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Timezone
@@ -804,7 +873,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Model Routing ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "models" ? undefined : "none" }}>
           <div className="flex items-center justify-between">
             <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Model Routing
@@ -870,7 +939,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Task-Category Routing ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "models" ? undefined : "none" }}>
           <div className="flex items-center justify-between">
             <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Task-Category Routing
@@ -909,7 +978,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Voice ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "voice" ? undefined : "none" }}>
           <div className="flex items-center justify-between">
             <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Voice
@@ -988,7 +1057,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Security ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "security" ? undefined : "none" }}>
           <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             Security
           </h2>
@@ -1062,7 +1131,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Domains ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "knowledge" ? undefined : "none" }}>
           <div className="flex items-center justify-between">
             <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Domains
@@ -1214,7 +1283,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── Feed ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "knowledge" ? undefined : "none" }}>
           <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             Feed
           </h2>
@@ -1246,7 +1315,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── API Keys ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "security" ? undefined : "none" }}>
           <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             API Keys
           </h2>
@@ -1325,7 +1394,7 @@ export default function SettingsPage() {
 
         {/* ── App Installation ── */}
         {/* ── Token Usage ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "usage" ? undefined : "none" }}>
           <div className="flex items-center justify-between">
             <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
               Token Usage
@@ -1482,7 +1551,7 @@ export default function SettingsPage() {
         </section>
 
         {/* ── App Installation ── */}
-        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem" }}>
+        <section className="card flex flex-col gap-4" style={{ padding: "1.25rem", display: tab === "general" ? undefined : "none" }}>
           <h2 className="text-[0.65rem] font-semibold font-mono uppercase tracking-wider" style={{ color: "var(--c-ink-faint)" }}>
             App Installation
           </h2>
@@ -1554,6 +1623,8 @@ export default function SettingsPage() {
             </>
           )}
         </section>
+          </div>
+        </div>
       </div>
 
       {/* ── Model/category picker sheet ── */}
