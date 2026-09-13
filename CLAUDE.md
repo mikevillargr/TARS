@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.25.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.26.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -572,6 +572,14 @@ chat conversation.
   ReactMarkdown's `components` map overrides `thead`/`th`/`td`, so in the children their
   `type` is a function, not a tag name. Backed by `POST /api/tables/to-sheet` and
   `/to-artifact`.
+- **Artifact preview cards** (since v2.26.0) — a file TARS makes expands in the card
+  instead of being a filename with a download button. Markdown/text render as prose (so a
+  report's own table arrives sortable), CSV as a data table, images inline, and
+  docx/pptx/pdf/xlsx as the text extract from the existing `GET /artifacts/{id}/preview`,
+  labelled so it is never mistaken for the document. A true binary gets an honest "no
+  preview" rather than decoded noise. `browse_web` and `archive_page` emit these through an
+  `on_artifact` callback (chat passes one, cron does not — same shape as `on_progress`),
+  fired only after the commit so the preview cannot 404.
 - **Browser observation panel** (since v2.20.0) — when the model calls `browse_web`, the
   progress events carry a `job_id` and a live panel opens: CDP screencast of the real page
   plus an action feed. Desktop is a 640px drawer (the normal right panel is too narrow for a
@@ -1143,6 +1151,25 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.26.0 Feature: a file TARS made can be read where it was made. The artifact card was a
+        receipt — filename, download, link out — so judging a report meant leaving chat,
+        opening Artifacts, finding it, opening it: four steps to answer "is this right?"
+        about something produced two seconds earlier in front of you. It now expands in
+        place (ArtifactPreviewCard.tsx): markdown/text as prose (a report's own table
+        arrives sortable via v2.25.0's renderer), CSV as a real data table, images inline,
+        docx/pptx/pdf/xlsx as the text extract labelled TEXT EXTRACT so it is never taken
+        for the document. NO NEW BACKEND — GET /artifacts/{id}/preview already did every
+        bit of this extraction and only the Artifacts page was calling it. A true binary
+        gets an honest "no preview" rather than decoded noise (the v2.22.0 rule: if Mike
+        cannot read it, do not claim he can); images sit on their own bordered surface
+        because a page archive is usually a screenshot of something mostly white, which
+        against the canvas reads as a failed load. browse_web + archive_page now emit these
+        cards via a new on_artifact callback so a downloaded invoice is readable where it
+        landed instead of being a filename in a sentence — same shape as on_progress, chat
+        passes one and cron does not, fired only AFTER the commit since an unpersisted id
+        renders a card whose preview 404s. Verified in a real browser BEFORE deploy across
+        every branch, then again in production against a real .docx — the two prior
+        releases each shipped inert once. Web + harness, no schema change.
 v2.25.0 Feature: markdown tables become sortable, exportable data. Every structured answer
         already arrived as a markdown table you read and then RETYPED somewhere useful. The
         renderer was upgraded rather than a render_table tool added — reading the table the
