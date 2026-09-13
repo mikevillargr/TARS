@@ -29,7 +29,25 @@ services:
       timeout: 3s
       retries: 5
 
+  # Optional locally: `docker compose up -d browser` then set
+  # BROWSER_CDP_URL=http://127.0.0.1:9222. Without it the harness launches its
+  # own headless Chromium in-process, so day-to-day dev needs no Docker.
+  browser:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.browser
+    restart: unless-stopped
+    shm_size: 1gb   # Chromium crashes on heavy pages with Docker's 64MB default
+    volumes:
+      - browser_profile:/profile
+    ports:
+      - "127.0.0.1:9222:9222"   # CDP — loopback ONLY, it is unauthenticated
+      - "127.0.0.1:6080:6080"   # noVNC — loopback ONLY, nginx gates it in prod
+    environment:
+      BROWSER_WIDTH: "1280"
+      BROWSER_HEIGHT: "800"
 
 volumes:
   postgres_data:
   redis_data:
+  browser_profile:

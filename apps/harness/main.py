@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import auth, health, chat, tasks, meetings, calendar
 from api.routes import second_brain, artifacts
 from api.routes import links as links_route
+from api.routes import browser as browser_route
 from api.routes import cron, connectors, memory, contacts
 from api.routes import settings as settings_route
 from api.routes import tesla as tesla_route
@@ -122,6 +123,14 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Chromium is lazily launched and only exists if a browser job ran, but
+    # if one did, it must not outlive the process as an orphan.
+    try:
+        from connectors.browser import shutdown_browser_pool
+        await shutdown_browser_pool()
+    except Exception as e:  # noqa: BLE001
+        log.warning("Browser pool shutdown failed: %s", e)
+
     keepalive_task.cancel()
     for t in cron_tasks:
         t.cancel()
@@ -176,3 +185,4 @@ app.include_router(reminders_route.router, prefix="/api/reminders")
 app.include_router(signals_route.router, prefix="/api/signals")
 app.include_router(analytics_route.router, prefix="/api")
 app.include_router(feed_route.router, prefix="/api/feed")
+app.include_router(browser_route.router, prefix="/api")

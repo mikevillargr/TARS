@@ -15,6 +15,7 @@ import {
 import { useSidebar } from "@/components/ui/sidebar"
 import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from "@/lib/api-client"
 import { EmailDraftCard, type EmailDraft } from "@/components/chat/EmailDraftCard"
+import { BrowserPanel } from "@/components/browser/BrowserPanel"
 import { MessageContent } from "@/components/chat/MessageContent"
 import { MessageActions } from "@/components/chat/MessageActions"
 import { ThinkingBlock } from "@/components/chat/message-thread"
@@ -1547,6 +1548,8 @@ export default function ChatPage() {
   const [emailDrafts, setEmailDrafts]                     = useState<EmailDraft[]>([])
   // New card state
   const [toolProgressItems, setToolProgressItems]         = useState<ToolProgress[]>([])
+  const [browserJobId, setBrowserJobId]                   = useState<string | null>(null)
+  const [browserTask, setBrowserTask]                     = useState<string | undefined>()
   const [emailThreadCards, setEmailThreadCards]           = useState<EmailThread[]>([])
   const [stravaCards, setStravaCards]                     = useState<StravaActivity[]>([])
   const [meetingCards, setMeetingCards]                   = useState<MeetingCardData[]>([])
@@ -2191,6 +2194,12 @@ export default function ChatPage() {
                 setEmailDrafts(prev => [...prev, draft])
               }
             } else if (evt.type === "tool_progress") {
+              // browse_web rides job_id along on its progress events so the
+              // observation panel knows what to watch without a second channel.
+              if (evt.job_id && chatId === activeChatIdRef.current) {
+                setBrowserJobId(evt.job_id as string)
+                setBrowserTask(evt.task as string | undefined)
+              }
               if (chatId === activeChatIdRef.current) {
                 const prog: ToolProgress = { tool: evt.tool as string, status: evt.status as string, done: evt.done as boolean ?? false }
                 setToolProgressItems(prev => {
@@ -2943,6 +2952,11 @@ export default function ChatPage() {
       </div>
     </div>
 
+    <BrowserPanel
+      jobId={browserJobId}
+      task={browserTask}
+      onClose={() => setBrowserJobId(null)}
+    />
     </>
   )
 }

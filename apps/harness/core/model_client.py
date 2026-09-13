@@ -403,6 +403,45 @@ WEB_SEARCH_TOOL = {
     },
 }
 
+BROWSE_WEB_TOOL = {
+    "name": "browse_web",
+    "description": (
+        "Drive a real browser to DO something on a website, when reading is not enough. "
+        "Use for tasks that need clicking, typing, form filling, navigating a logged-in "
+        "portal, or pulling a report that has no API. "
+        "Do NOT use this to read a page you can already name — web_search finds sources "
+        "and save_to_second_brain ingests a URL, and both are far faster and cheaper. "
+        "Do NOT use it for anything Gmail, Calendar, Drive, Contacts, or Strava related; "
+        "those have real connectors that are more reliable than a browser. "
+        "Describe the OUTCOME you want in `task`, not a list of clicks — a sub-agent works "
+        "out the steps and can recover when a page differs from what it expected. "
+        "It never enters credentials: if a site needs a login it stops and says so. "
+        "Runs can take a minute or more."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "task": {
+                "type": "string",
+                "description": (
+                    "What to accomplish, in plain English, including the starting URL. "
+                    "Example: 'Go to example.com/reports, set the date range to last 30 "
+                    "days, and tell me the total sessions figure.'"
+                ),
+            },
+            "allowed_domains": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Optional. Restrict navigation to these domains (subdomains included). "
+                    "Set it whenever the task is confined to one site."
+                ),
+            },
+        },
+        "required": ["task"],
+    },
+}
+
 SAVE_TO_SECOND_BRAIN_TOOL = {
     "name": "save_to_second_brain",
     "description": (

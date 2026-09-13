@@ -1,0 +1,56 @@
+# Chromium in a box, with a display someone can attach to.
+#
+# The harness does NOT launch a browser itself in this setup. It connects over
+# CDP to the Chromium living here. Two reasons that split is worth a container:
+#
+#   1. Blast radius. Page content is untrusted and prompt injection is the real
+#      risk of browser automation. A compromised page gets a container with no
+#      credentials on disk beyond the profile volume, not the harness host that
+#      holds Postgres creds, OAuth tokens and the Anthropic key.
+#   2. Session lifetime. Logging into a client portal by hand is tedious enough
+#      that it must survive a harness restart. The profile is a volume here, so
+#      `pm2 restart tars-harness` does not sign you out of everything.
+#
+# Base image is Playwright's own, so the Chromium revision matches exactly what
+# the harness's Playwright speaks CDP to. Debian's chromium package would drift.
+FROM mcr.microsoft.com/playwright/python:v1.62.0-noble
+
+ENV BROWSER_WIDTH=1280 \
+    BROWSER_HEIGHT=800 \
+    BROWSER_PROFILE_DIR=/profile \
+    BROWSER_CDP_PORT=9222 \
+    DISPLAY=:99 \
+    PIP_BREAK_SYSTEM_PACKAGES=1
+
+# Xvfb already ships in the Playwright image; x11vnc and noVNC do not.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        x11vnc \
+        novnc \
+        websockify \
+        supervisor \
+        socat \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# The image provides the browsers (/ms-playwright) and their system deps, but
+# NOT the Python package. Pinned to the same minor as apps/harness, so the CDP
+# client and the browser it drives stay in step.
+RUN pip install --no-cache-dir playwright==1.62.0
+
+# noVNC's landing page is a chooser; vnc.html is the client itself. Serving it
+# as index means the nginx location can point at a bare path.
+RUN ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html
+
+COPY infrastructure/docker/browser/launch.py /opt/browser/launch.py
+COPY infrastructure/docker/browser/supervisord.conf /etc/supervisor/conf.d/browser.conf
+
+RUN mkdir -p /profile
+
+# 9222 CDP, via the socat forwarder (Chromium itself binds loopback only)
+# 6080 noVNC over websocket (published, but behind nginx auth in production)
+EXPOSE 9222 6080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD curl -fsS http://localhost:9222/json/version || exit 1
+
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/browser.conf"]
