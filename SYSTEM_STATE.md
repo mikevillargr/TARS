@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.25.0 |
+| Version | v2.26.0 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,41 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.26.0 — 2026-09-13
+**Feature: a file TARS made can be read where it was made**
+
+- **The artifact card was a receipt** — filename, download button, link out. Finding out
+  whether the report was any good meant leaving chat, opening Artifacts, finding it and
+  opening it: four steps to answer "is this right?" about something produced two seconds
+  earlier, in front of you.
+- **It now expands in place** (`components/chat/ArtifactPreviewCard.tsx`). Markdown and text
+  render as prose — so a report's own table arrives sortable, through the renderer added in
+  v2.25.0. CSV renders as a real data table. Images render. `docx`/`pptx`/`pdf`/`xlsx` show
+  the text extract, labelled `TEXT EXTRACT · FORMATTING NOT SHOWN` so it is never mistaken
+  for the document itself.
+- **No new backend.** `GET /api/artifacts/{id}/preview` already did every bit of this
+  extraction; only the Artifacts page was calling it. The gap was entirely in chat.
+- **A true binary gets an honest "no preview"** rather than decoded noise — the same test the
+  browser artifacts settled on in v2.22.0: if Mike cannot read it, do not put it in front of
+  him claiming he can. Images sit on their own bordered surface, because a page archive is
+  usually a screenshot of something mostly white, which against the canvas reads as an image
+  that failed to load.
+- **`browse_web` and `archive_page` now emit these cards** through a new `on_artifact`
+  callback, so a downloaded invoice is readable where it landed instead of being a filename
+  inside a sentence. Same shape as the existing `on_progress`: chat passes a callback, cron
+  passes nothing, because nobody is watching at 8am. Fired only after the commit — an id that
+  never persisted would render a card whose preview 404s.
+- Expanded from the click rather than an effect on `open`: expanding *is* the event, and
+  routing it through a render pass only adds a cascading render (the lint rule flagged it).
+- **Verified before deploy this time**, in Chrome against seeded artifacts covering every
+  branch — markdown table, CSV with quoted fields, PNG, unreadable zip — then again in
+  production against a real `.docx`. Zero console errors in both. The two previous releases
+  each shipped inert once; this one was driven in a browser first.
+- Reference: Manus, the closest analogue (an agent that writes files inside a chat). Its
+  inline file card expands rather than opening a panel — which matters here specifically,
+  because the right-panel slot is already contested by the browser observation panel.
+- Web + harness, no schema change.
 
 ### v2.25.0 — 2026-09-13
 **Feature: markdown tables become sortable, exportable data**
