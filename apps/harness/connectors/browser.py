@@ -26,6 +26,8 @@ import base64
 import logging
 import os
 import re
+import tempfile
+import shutil
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
@@ -762,8 +764,12 @@ class BrowserPool:
             log.warning("could not read profile storage state: %s", err)
             return None
 
-    async def session(self, *, storage_state=None, **kwargs) -> "BrowserSessionCtx":
-        return BrowserSessionCtx(self, storage_state=storage_state, kwargs=kwargs)
+    async def session(
+        self, *, storage_state=None, record: bool = False, **kwargs
+    ) -> "BrowserSessionCtx":
+        return BrowserSessionCtx(
+            self, storage_state=storage_state, record=record, kwargs=kwargs
+        )
 
     async def close(self):
         if self._browser:
@@ -806,13 +812,22 @@ async def shutdown_browser_pool() -> None:
 
 
 class BrowserSessionCtx:
-    """Async context manager yielding a started BrowserSession, slot-limited."""
+    """Async context manager yielding a started BrowserSession, slot-limited.
 
-    def __init__(self, pool: BrowserPool, *, storage_state, kwargs):
+    When `record=True` the run is captured to a temp dir. Both files only exist
+    after the context closes (Playwright finalises them on close), so read
+    `video_path` / `trace_path` after the `async with` block, not inside it.
+    """
+
+    def __init__(self, pool: BrowserPool, *, storage_state, record: bool, kwargs):
         self._pool = pool
         self._storage_state = storage_state
+        self._record = record
         self._kwargs = kwargs
         self._ctx = None
+        self._tmpdir: Optional[str] = None
+        self.video_path: Optional[str] = None
+        self.trace_path: Optional[str] = None
 
     async def __aenter__(self) -> BrowserSession:
         await self._pool._sem.acquire()
@@ -822,10 +837,17 @@ class BrowserSessionCtx:
             if state is None:
                 # Inherit whatever the container's profile is logged into.
                 state = await self._pool.profile_storage_state()
-            self._ctx = await browser.new_context(
-                viewport=VIEWPORT,
-                storage_state=state,
-            )
+
+            opts: Dict[str, Any] = {"viewport": VIEWPORT, "storage_state": state}
+            if self._record:
+                self._tmpdir = tempfile.mkdtemp(prefix="tars-browser-")
+                opts["record_video_dir"] = self._tmpdir
+                opts["record_video_size"] = VIEWPORT
+
+            self._ctx = await browser.new_context(**opts)
+            if self._record:
+                await self._ctx.tracing.start(screenshots=True, snapshots=True)
+
             session = BrowserSession(self._ctx, **self._kwargs)
             await session.start()
             return session
@@ -836,6 +858,30 @@ class BrowserSessionCtx:
     async def __aexit__(self, *exc):
         try:
             if self._ctx:
-                await self._ctx.close()
+                if self._record and self._tmpdir:
+                    self.trace_path = os.path.join(self._tmpdir, "trace.zip")
+                    try:
+                        await self._ctx.tracing.stop(path=self.trace_path)
+                    except Exception as err:  # noqa: BLE001
+                        log.warning("trace stop failed: %s", err)
+                        self.trace_path = None
+                    # Grab the video handle before close; the file is written
+                    # during close, so the path resolves afterwards.
+                    videos = [p.video for p in self._ctx.pages if p.video]
+                    await self._ctx.close()
+                    for video in videos:
+                        try:
+                            self.video_path = await video.path()
+                            break
+                        except Exception as err:  # noqa: BLE001
+                            log.warning("video path failed: %s", err)
+                else:
+                    await self._ctx.close()
         finally:
             self._pool._sem.release()
+
+    def cleanup(self) -> None:
+        """Remove the temp recordings. Call once the bytes have been persisted."""
+        if self._tmpdir:
+            shutil.rmtree(self._tmpdir, ignore_errors=True)
+            self._tmpdir = None

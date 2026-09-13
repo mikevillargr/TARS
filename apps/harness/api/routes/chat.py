@@ -1127,9 +1127,11 @@ async def send_message(
 
                         try:
                             pool = get_browser_pool()
-                            async with await pool.session(
+                            ctx = await pool.session(
                                 allowed_domains=tool_input.get("allowed_domains"),
-                            ) as session:
+                                record=True,
+                            )
+                            async with ctx as session:
                                 jobs.attach_session(job.id, session)
 
                                 async def _on_frame(frame: dict) -> None:
@@ -1145,11 +1147,32 @@ async def send_message(
                             return f"Browser run failed: {type(exc).__name__}: {exc}"
 
                         jobs.finish(job.id, result=run.final_text)
+
+                        # Persist the run so it is answerable later. Never let a
+                        # recording problem turn a successful run into a failure:
+                        # the browsing already happened and the answer is good.
+                        saved: List[str] = []
+                        try:
+                            from core.browser_artifacts import artifacts_for_run
+
+                            for artifact in artifacts_for_run(
+                                run, job.id, job.events, user_id,
+                                video_path=ctx.video_path,
+                                trace_path=ctx.trace_path,
+                            ):
+                                bg_db.add(artifact)
+                                saved.append(artifact.filename)
+                            await bg_db.commit()
+                        except Exception:  # noqa: BLE001
+                            log.exception("browse_web: saving artifacts failed")
+                        finally:
+                            ctx.cleanup()
                         summary = (
                             f"[browser job {job.id} · {run.turns} turns · "
                             f"{len(run.actions)} actions · {'/'.join(run.models_used)}"
-                            f"{' · escalated' if run.escalated else ''}]\n\n"
-                            f"{run.final_text}"
+                            f"{' · escalated' if run.escalated else ''}"
+                            f"{' · saved to Artifacts: ' + ', '.join(saved) if saved else ''}]"
+                            f"\n\n{run.final_text}"
                         )
                         if run.stopped_reason == "max_turns":
                             summary += (

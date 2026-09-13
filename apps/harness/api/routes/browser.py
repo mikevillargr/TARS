@@ -12,6 +12,7 @@ opens one connection.
 
 import asyncio
 import logging
+import os
 
 from fastapi import (
     APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect,
@@ -41,6 +42,22 @@ async def vnc_auth(request: Request):
     if not token or not decode_token(token):
         raise HTTPException(status_code=401, detail="Not authenticated")
     return {"ok": True}
+
+
+@router.get("/capabilities")
+async def capabilities(user_id: str = Depends(require_auth)):
+    """What this deployment can actually do.
+
+    Take-over needs the browser container: in local dev the harness launches a
+    headless in-process Chromium with no display to attach to. The client asks
+    rather than assuming, so the button is enabled only where it works instead
+    of being permanently greyed out or, worse, opening a dead iframe.
+    """
+    container = bool(os.environ.get("BROWSER_CDP_URL"))
+    return {
+        "takeover": container,
+        "vnc_url": "/browser-vnc/" if container else None,
+    }
 
 
 @router.get("/jobs")

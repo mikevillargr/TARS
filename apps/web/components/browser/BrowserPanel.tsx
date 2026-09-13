@@ -37,6 +37,8 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
   const [expanded, setExpanded] = useState(false)   // mobile detent
   const [fullscreen, setFullscreen] = useState(false) // desktop
   const [hovered, setHovered] = useState<FeedRow | null>(null)
+  const [driving, setDriving] = useState(false)
+  const [vnc, setVnc] = useState<{ takeover: boolean; vnc_url: string | null } | null>(null)
   const [startedAt] = useState(() => Date.now())
   const [, forceTick] = useState(0)
 
@@ -44,6 +46,29 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
     const t = setInterval(() => forceTick((n) => n + 1), 1000)
     return () => clearInterval(t)
   }, [])
+
+  // Take-over needs the browser container; local dev runs a headless Chromium
+  // with no display to attach to. Ask rather than assume, so the control is
+  // absent where it cannot work instead of opening a dead iframe.
+  useEffect(() => {
+    let alive = true
+    fetch("/api/proxy/browser/capabilities")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => alive && d && setVnc(d))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const toggleDrive = async () => {
+    const next = !driving
+    setDriving(next)
+    // Taking the wheel means the agent stops; giving it back means it resumes.
+    // Both of us driving at once is the one state that must not exist.
+    await control(next ? "pause" : "resume")
+    if (next) setFullscreen(true)
+  }
 
   if (!jobId) return null
 
@@ -240,7 +265,26 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
       )}
 
       <div className="px-4 py-3">
-        <BrowserViewport frame={frame} active={highlightRow} url={lastUrl} />
+        {driving && vnc?.vnc_url ? (
+          <div className="flex flex-col gap-1.5">
+            <iframe
+              src={`${vnc.vnc_url}?autoconnect=1&resize=scale`}
+              title="Browser take-over"
+              className="w-full"
+              style={{
+                aspectRatio: "16 / 10",
+                borderRadius: 2,
+                border: "1px solid var(--c-amber)",
+                background: "var(--c-surface-2)",
+              }}
+            />
+            <span className="tars-label" style={{ color: "var(--c-amber)" }}>
+              YOU HAVE THE WHEEL · AGENT HELD
+            </span>
+          </div>
+        ) : (
+          <BrowserViewport frame={frame} active={highlightRow} url={lastUrl} />
+        )}
       </div>
 
       <div
@@ -264,18 +308,18 @@ export function BrowserPanel({ jobId, task, onClose }: Props) {
         </span>
         <span className="tars-label tars-label--muted">{elapsed(startedAt)}</span>
         <div className="flex-1" />
-        {live && (
+        {live && vnc?.takeover && (
           <button
+            onClick={toggleDrive}
             className="tars-label px-3 py-1.5"
             style={{
               borderRadius: 6,
-              border: "1px solid var(--c-border)",
-              color: "var(--c-ink)",
+              border: `1px solid ${driving ? "var(--c-amber)" : "var(--c-border)"}`,
+              color: driving ? "var(--c-amber)" : "var(--c-ink)",
             }}
-            title="Interactive control lands with the noVNC container"
-            disabled
+            title={driving ? "Hand control back to the agent" : "Drive the browser yourself"}
           >
-            TAKE OVER
+            {driving ? "HAND BACK" : "TAKE OVER"}
           </button>
         )}
       </footer>
