@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.26.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.27.0 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -580,6 +580,20 @@ chat conversation.
   preview" rather than decoded noise. `browse_web` and `archive_page` emit these through an
   `on_artifact` callback (chat passes one, cron does not — same shape as `on_progress`),
   fired only after the commit so the preview cannot 404.
+- **Failed-tool retry** (since v2.27.0) — a failed `browse_web`, `archive_page`,
+  `generate_chart`, or `sync_meetings` call surfaces a `ToolFailedCard` (rose accent) with a
+  RETRY button, instead of becoming a sentence Mike has to notice and manually retype
+  around. Retry does not blindly replay the call — it hands the model a plain-language "try
+  that again" through the same `onAsk` path the suggestion chips use, since the right fix
+  for a stale ref/rate limit/bad chart spec is sometimes not "do the identical thing again."
+  Deliberately scoped to these four tools, not a blanket wrapper — most tool failures
+  already recover in place (an email draft's own Send button just works again).
+- **Inline To-Dos** (since v2.27.0) — `list_reminders` also emits a `reminders_list` card
+  rendering the list as real checkboxes (`RemindersListCard.tsx`), PATCHing
+  `/api/reminders/{id}` on click with an optimistic toggle that reverts on failure. Same
+  overdue-in-rose logic as the To-Dos page (§8.3b), so a reminder reads identically wherever
+  you check it off. The text returned to the model says the list is already shown as a card
+  so the model doesn't restate it as a redundant bullet list.
 - **Browser observation panel** (since v2.20.0) — when the model calls `browse_web`, the
   progress events carry a `job_id` and a live panel opens: CDP screencast of the real page
   plus an action feed. Desktop is a 640px drawer (the normal right panel is too narrow for a
@@ -1151,6 +1165,27 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.27.0 Feature: retry a failed tool call, and To-Dos become checkboxes. (1) A failed
+        browse_web/archive_page/generate_chart/sync_meetings call used to become a
+        sentence in TARS's reply — recovering meant remembering the original request and
+        retyping it in full. New ToolFailedCard surfaces the failure with a RETRY button
+        that does NOT blindly replay the call — it hands the model a plain-language "try
+        that again" naming the specific thing that failed, via the same onAsk path the
+        suggestion chips already use, so the model can act on WHY it failed (stale ref
+        wants a fresh attempt, rate limit wants a pause, bad chart spec wants different
+        code) instead of mechanically repeating whatever didn't work. Scoped to those four
+        tools deliberately, not a blanket wrapper — most failures already recover in place
+        (an email draft's Send button just works again). New on_failure callback on
+        execute_browse_web/execute_archive_page, same shape as on_progress/on_artifact.
+        (2) list_reminders returned a bulleted sentence — readable, not actionable, so
+        checking one off meant leaving chat for To-Dos. It now ALSO emits a reminders_list
+        card (RemindersListCard.tsx) with real checkboxes, PATCHing /api/reminders/{id} on
+        click with an optimistic toggle that reverts on failure; overdue-in-rose logic
+        copied from the To-Dos page itself. The text still returned to the model says the
+        list is already a card so it doesn't restate it as prose underneath — verified live
+        in production: a real chat turn triggered list_reminders, rendered the card with a
+        real reminder, and the model correctly skipped the redundant bullet list. Web +
+        harness, no schema change.
 v2.26.0 Feature: a file TARS made can be read where it was made. The artifact card was a
         receipt — filename, download, link out — so judging a report meant leaving chat,
         opening Artifacts, finding it, opening it: four steps to answer "is this right?"
