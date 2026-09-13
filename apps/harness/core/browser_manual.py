@@ -95,9 +95,11 @@ class ManualSession:
                         )
                         break
             finally:
-                # Stop watching, but NEVER close the context: it is the
-                # container's only browser and closing it kills everything.
+                # Stop watching and close the tab WE opened. Never the context:
+                # it is the container's only browser and closing it kills
+                # everything, which is exactly the bug that took Chrome down.
                 await session.stop_screencast()
+                await session.close_own_page()
         except Exception as err:  # noqa: BLE001
             log.exception("manual browser %s failed", self.job_id)
             jobs.finish(self.job_id, error=str(err))

@@ -28,6 +28,7 @@ HEIGHT = int(os.environ.get("BROWSER_HEIGHT", "800"))
 # "chrome" = real Google Chrome (installed in the image). Set BROWSER_CHANNEL=""
 # to fall back to Playwright's bundled Chromium.
 CHANNEL = os.environ.get("BROWSER_CHANNEL", "chrome") or None
+WATCHDOG_S = int(os.environ.get("BROWSER_WATCHDOG_S", "10"))
 
 
 async def main() -> None:
@@ -81,7 +82,31 @@ async def main() -> None:
             await context.new_page()
         await context.pages[0].goto("about:blank")
 
-        await stop.wait()
+        # Watchdog. Chromium can die under us — a crash, an OOM, or something
+        # outside closing it over CDP — and simply awaiting a stop event meant
+        # this process stayed happily alive with no browser behind it. Supervisor
+        # saw a running program and never restarted anything, so the container
+        # looked healthy while being useless.
+        #
+        # Exiting non-zero is the heal: supervisor restarts this program, which
+        # launches a fresh Chromium on the same persistent profile.
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=WATCHDOG_S)
+                break
+            except asyncio.TimeoutError:
+                pass
+            if not context.browser or not context.browser.is_connected():
+                log.error("chromium is gone — exiting so supervisor restarts it")
+                raise SystemExit(1)
+            try:
+                # is_connected() can lag a hard crash; touching a page is the
+                # cheap proof that the browser is actually answering.
+                _ = context.pages[0].url if context.pages else None
+            except Exception as err:  # noqa: BLE001
+                log.error("chromium not responding (%s) — exiting for restart", err)
+                raise SystemExit(1)
+
         log.info("shutting down")
         await context.close()
 

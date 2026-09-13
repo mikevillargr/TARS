@@ -235,12 +235,46 @@ class BrowserSession:
 
     # -- lifecycle ---------------------------------------------------------
 
-    async def start(self) -> None:
+    async def start(self, fresh: bool = False) -> None:
+        """`fresh=True` always opens a NEW tab and focuses it.
+
+        Reusing pages[0] is fine for a context we just created, but on the
+        container's persistent profile it hands you the OLDEST tab lying around
+        — which is how taking over to look at Shopee served up a page about
+        randonneuring from an hour earlier.
+        """
         pages = self._ctx.pages
-        page = pages[0] if pages else await self._ctx.new_page()
+        if fresh or not pages:
+            page = await self._ctx.new_page()
+        else:
+            page = pages[0]
         page.set_default_timeout(DEFAULT_TIMEOUT_MS)
+        self._owns_page = fresh
         self._register_tab(page)
         self._pending_state_changes.clear()
+        if fresh:
+            await self.focus()
+
+    async def focus(self) -> None:
+        """Raise the active tab on the X display.
+
+        VNC shows whatever window is on top, which is not necessarily the tab
+        this session is driving. Without this, taking over can show you a
+        different page than the one being worked on.
+        """
+        try:
+            await self._page().bring_to_front()
+        except Exception as err:  # noqa: BLE001 — never break a run over focus
+            log.debug("bring_to_front failed: %s", err)
+
+    async def close_own_page(self) -> None:
+        """Close the tab we opened, leaving the context (and browser) alone."""
+        if not getattr(self, "_owns_page", False):
+            return
+        try:
+            await self._page().close()
+        except Exception as err:  # noqa: BLE001
+            log.debug("closing own page failed: %s", err)
 
     def set_action_hook(self, callback) -> None:
         """async cb(name, args, meta). Set by the agent loop so action events
@@ -763,7 +797,9 @@ class BrowserPool:
         if not browser.contexts:
             raise RuntimeError("container browser has no persistent context")
         session = BrowserSession(browser.contexts[0], **kwargs)
-        await session.start()
+        # Always a fresh tab: the persistent context accumulates whatever was
+        # left open, and silently inheriting a stale one is worse than useless.
+        await session.start(fresh=True)
         return session
 
     async def profile_storage_state(self) -> Optional[dict]:
@@ -794,8 +830,17 @@ class BrowserPool:
         )
 
     async def close(self):
+        """Release our end. NEVER close a browser we merely connected to.
+
+        On a CDP connection `browser.close()` closes the REMOTE browser, so
+        calling it here took the container's Chrome down with the harness —
+        meaning every `pm2 restart tars-harness` silently killed the browser and
+        left a container that looked alive but had none. Only close a browser
+        this process actually launched.
+        """
         if self._browser:
-            await self._browser.close()
+            if not self._cdp_url:
+                await self._browser.close()
             self._browser = None
         if self._pw:
             await self._pw.stop()

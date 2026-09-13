@@ -137,6 +137,10 @@ async def pause_job(job_id: str, user_id: str = Depends(require_auth)):
     if job.session is None:
         raise HTTPException(status_code=409, detail="Job is no longer running")
     job.session.pause()
+    # Taking over means you are about to look at this. Raise the tab being
+    # driven so VNC shows that page and not whichever window happens to be on
+    # top of the X display.
+    await job.session.focus()
     return job.snapshot()
 
 
