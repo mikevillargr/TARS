@@ -63,7 +63,9 @@ export function BrowserPanel({ jobId, task, open, onOpenChange }: Props) {
   // absent where it cannot work instead of opening a dead iframe.
   useEffect(() => {
     let alive = true
-    fetch("/api/proxy/browser/capabilities")
+    // no-store: a cached capabilities response is how a client ends up with a
+    // stale vnc_url and silently connects to the wrong websockify path.
+    fetch("/api/proxy/browser/capabilities", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => alive && d && setVnc(d))
       .catch(() => {})
