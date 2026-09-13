@@ -347,7 +347,8 @@ Artifact {
   type          // "document" | "code" | "report" | "spreadsheet" | "transcript"
   source        // "chat" | "cron" | "meeting" | "upload" ("agent_job" is legacy — Agent Jobs retired 2026-09)
   source_id     // FK to originating message/job/meeting
-  content       // file content or storage path
+  content       // extracted TEXT only — never a binary payload
+  storage_path  // blob store path (relative to TARS_BLOB_DIR) for binary payloads; NULL for text artifacts
   embedding     // pgvector for semantic search
   version       // integer, increments on regeneration
   parent_id     // FK to original artifact if this is a revision
@@ -356,6 +357,10 @@ Artifact {
   size_bytes
   created_at
 }
+// Binary payloads (PDF/DOCX/images/media/archives) live on disk in the blob store
+// (core/blob_store.py, dir = TARS_BLOB_DIR) — since v2.27.1 they are no longer stored
+// as "base64:" strings in content. resolve_artifact_bytes() reads blob first and falls
+// back to decoding legacy base64 rows; scripts/backfill_artifact_blobs.py migrates them.
 
 FeedSource {
   id, user_id
@@ -671,9 +676,21 @@ A generated output library. Every file TARS produces is automatically saved, ver
 
 Sources that populate Artifacts automatically:
 - Chat responses containing generated files
+- Files uploaded in chat (since v2.27.1 — each `files[]` upload is persisted with
+  `source="upload"` and surfaced as an `artifact_created` card; inline camera shots are not)
 - Cron job reports
 - Meeting exported summaries and transcripts
-- Manual uploads for files you want TARS to work on
+- Manual uploads for files you want TARS to work on (Upload button in the page header
+  since v2.27.1, POST /artifacts/ingest)
+
+Binary payloads (PDF, DOCX, images, media, archives) live in the disk blob store —
+`core/blob_store.py`, rooted at `TARS_BLOB_DIR` (default /opt/tars/data/blobs), one
+`<user_id>/<uuid4>.<ext>` file per payload. The `artifacts.content` column holds
+extracted text only; `storage_path` points at the blob. `resolve_artifact_bytes()`
+is the single read path (blob first, legacy "base64:" content as fallback until
+`scripts/backfill_artifact_blobs.py` has run). List/detail responses carry a
+`has_file` boolean (SQL: `storage_path IS NOT NULL OR content LIKE 'base64:%'`) so
+the client picks a renderer without the payload ever being loaded or shipped.
 
 Features:
 - Grid and list view toggle
@@ -786,6 +803,8 @@ tars/
 │   │   │   ├── browser_agent.py    # sub-agent loop driving the browser toolset
 │   │   │   ├── browser_jobs.py     # in-memory live run registry (no DB table)
 │   │   │   ├── browser_artifacts.py # run report / video / trace -> Artifacts
+│   │   │   ├── blob_store.py   # disk blob store for binary artifact payloads
+│   │   │   ├── artifact_store.py # store_upload_as_artifact — shared ingest/blob write path
 │   │   │   ├── router.py       # tier classification
 │   │   │   ├── context_assembler.py
 │   │   │   ├── model_client.py # Ollama + Anthropic unified
@@ -886,6 +905,9 @@ ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
 # Database (set during server bootstrap)
 DATABASE_URL=postgresql://tars:password@postgres:5432/tars
 REDIS_URL=redis://redis:6379
+
+# Blob store — disk directory for binary artifact payloads (created lazily on first write)
+TARS_BLOB_DIR=/opt/tars/data/blobs
 
 # Auth (generate password hash during bootstrap)
 TARS_USERNAME=mike

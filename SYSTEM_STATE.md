@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.0 |
+| Version | v2.27.1 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,37 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.1 — 2026-09-13
+**Change: binary artifacts move to a disk blob store; chat uploads are persisted**
+
+- **Blob store.** Binary artifact payloads (PDFs, DOCX, images, media, archives) used to
+  live in the `artifacts.content` Postgres Text column as `"base64:"`-prefixed strings —
+  multi-MB rows that made every Artifacts list/detail load slow. New `core/blob_store.py`
+  writes payloads to `TARS_BLOB_DIR` (default `/opt/tars/data/blobs`, created lazily on
+  first store) as `<user_id>/<uuid4>.<ext>`; the row keeps extracted text only plus a new
+  nullable `artifacts.storage_path` column (migration `5be03b800395`).
+  `resolve_artifact_bytes()` is the single read path — blob first, legacy base64 content
+  as fallback — used by `/download`, `/view`, `/preview`, and chat artifact injection.
+- **Backfill.** `scripts/backfill_artifact_blobs.py` moves existing base64 rows to the
+  blob store in committed batches of 50 (safe to re-run; `--dry-run` supported).
+  Verified locally: 4 legacy webm artifacts migrated, content nulled, blobs readable.
+- **All writers repointed.** `POST /artifacts/ingest` (now via the shared
+  `core/artifact_store.store_upload_as_artifact`), the chat generate_document/
+  presentation/pdf tools, browser downloads, failed-run video, archive_page captures,
+  and `POST /api/artifacts` base64 bodies (Rokid glasses bridge) all store to disk.
+  Deleting an artifact removes its blob.
+- **`has_file`.** Artifact list/detail payloads carry a `has_file` boolean computed in
+  SQL (`storage_path IS NOT NULL OR content LIKE 'base64:%'`) with the `content` column
+  deferred — the client picks a renderer without the payload ever being loaded. The
+  Artifacts page uses it instead of sniffing for the `base64:` prefix.
+- **Chat uploads persist.** Files attached in chat are now also saved as Artifacts
+  (`source="upload"`) and surfaced as `artifact_created` cards in the stream; failures
+  to persist are logged, never break the send. Inline camera shots (`image_base64`) are
+  deliberately not persisted.
+- **Artifacts page Upload button** in the header — hidden file input →
+  `POST /artifacts/ingest` → list refresh.
+- Web + harness. Schema: `artifacts.storage_path` (nullable String).
 
 ### v2.27.0 — 2026-09-13
 **Feature: retry a failed tool call, and To-Dos become checkboxes**
