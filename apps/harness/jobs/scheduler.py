@@ -69,10 +69,11 @@ def update_interval(name: str, interval_sec: int) -> JobState:
 # last_synced_at on the connector regardless of each sync fn's internal
 # early-returns (no-new-data, etc.). Only connected rows are stamped.
 _JOB_CONNECTOR_NAMES = {
-    "fireflies_sync":     "Fireflies",
-    "google_people_sync": "Google Contacts",
-    "strava_sync":        "Strava",
-    "garmin_sync":        "Garmin Connect",
+    "fireflies_sync":        "Fireflies",
+    "google_people_sync":    "Google Contacts",
+    "strava_sync":           "Strava",
+    "garmin_sync":           "Garmin Connect",
+    "gmail_attachment_sync": "Gmail",
 }
 
 
@@ -333,6 +334,12 @@ async def _generate_signals() -> None:
     log.info("signal_sweep: %s", result)
 
 
+async def _sync_gmail_attachments() -> None:
+    """Save reference-worthy incoming Gmail attachments as Artifacts."""
+    from jobs.gmail_attachment_sync import run_sync
+    await run_sync()
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 _ONE_HOUR    = 60 * 60
@@ -465,6 +472,15 @@ def build_tasks() -> list[asyncio.Task]:
                 run_immediately=True,
             ),
             _generate_signals,
+        ),
+        (
+            JobState(
+                name="gmail_attachment_sync",
+                description="Save reference-worthy Gmail attachments (boarding passes, tickets, receipts, invoices, documents) as Artifacts (every hour; first run seeds without downloading)",
+                interval_sec=_ONE_HOUR,
+                run_immediately=True,
+            ),
+            _sync_gmail_attachments,
         ),
     ]
 
