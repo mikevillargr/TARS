@@ -345,8 +345,8 @@ Artifact {
   id, user_id
   filename
   type          // "document" | "code" | "report" | "spreadsheet" | "transcript"
-  source        // "chat" | "cron" | "meeting" | "upload" ("agent_job" is legacy — Agent Jobs retired 2026-09)
-  source_id     // FK to originating message/job/meeting
+  source        // "chat" | "cron" | "meeting" | "upload" | "email" ("agent_job" is legacy — Agent Jobs retired 2026-09)
+  source_id     // FK to originating message/job/meeting (Gmail message id for source="email")
   content       // extracted TEXT only — never a binary payload
   storage_path  // blob store path (relative to TARS_BLOB_DIR) for binary payloads; NULL for text artifacts
   embedding     // pgvector for semantic search
@@ -410,8 +410,8 @@ class Connector:
 ### Initial Connectors at Launch
 | Connector | Capabilities |
 |---|---|
-| Gmail | read, webhook |
-| Gmail (Personal) | read, write (send/reply) — separate account slot, same OAuth credentials, state=personal |
+| Gmail | read, webhook — also syncs reference-worthy attachments to Artifacts via the hourly `gmail_attachment_sync` job (smart filter; since v2.27.2) |
+| Gmail (Personal) | read, write (send/reply) — separate account slot, same OAuth credentials, state=personal; same attachment sync |
 | Google Calendar | read, write |
 | Google Calendar (Personal) | read, write (create/update/delete) — separate account slot |
 | Google Workspace | search Drive + read & write Docs/Sheets/Slides by link (Drive export → existing parsers) |
@@ -678,6 +678,12 @@ Sources that populate Artifacts automatically:
 - Chat responses containing generated files
 - Files uploaded in chat (since v2.27.1 — each `files[]` upload is persisted with
   `source="upload"` and surfaced as an `artifact_created` card; inline camera shots are not)
+- Email attachments (since v2.27.2 — the hourly `gmail_attachment_sync` job keeps
+  boarding passes, tickets, receipts, invoices, and real documents with
+  `source="email"`, tagged with the category; a smart filter — cheap size/filename
+  pre-filter, then a Tier-1 keep/junk verdict — drops logos, signatures, and
+  marketing images. Boarding passes and tickets also raise a `fyi` Signal on
+  /today, and each save pushes an `attachment_saved` notification with a toast)
 - Cron job reports
 - Meeting exported summaries and transcripts
 - Manual uploads for files you want TARS to work on (Upload button in the page header
@@ -694,7 +700,7 @@ the client picks a renderer without the payload ever being loaded or shipped.
 
 Features:
 - Grid and list view toggle
-- Filter by type (Document / Code / Report / Spreadsheet / Transcript), source (Chat / Cron / Meeting / Upload), date, project/client tag
+- Filter by type (Document / Code / Report / Spreadsheet / Transcript), source (Chat / Cron / Email / Meeting / Upload), date, project/client tag
 - Semantic search across filenames and file content
 - File cards: type icon, filename, source badge, date generated, size
 - Right panel detail: full preview for text/markdown/code, Download button, "Open in Chat" button (loads file as context in new chat session), version history timeline, tags, project reference
@@ -706,7 +712,7 @@ Features:
 Two-type system. Connector Jobs (interval-based sync) and Prompt Jobs (wall-clock scheduled, Asia/Manila timezone).
 
 Connector Jobs tab:
-- System sync jobs (Fireflies, Google Contacts)
+- System sync jobs (Fireflies, Google Contacts, Gmail attachment sync since v2.27.2)
 - Interval selector, manual Test button, last/next run times
 
 Prompt Jobs tab:
@@ -1187,6 +1193,19 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.27.2 Feature: Gmail attachment sync — reference-worthy email attachments land in
+        Artifacts. GmailClient gains list_attachments (recursive MIME walk) and
+        get_attachment (gmail.readonly already covers it); new hourly scheduler job
+        gmail_attachment_sync sweeps both Gmail slots for has:attachment newer_than:2d,
+        seeds the dedupe set without downloading on first run, pre-filters tiny images
+        and logo/signature filenames for free, then asks Tier 1 for a strict-JSON
+        keep/junk verdict (failure = keep=false, logged). Kept files save via
+        store_upload_as_artifact as source="email" with tags=[category] and
+        source_id=message id; boarding passes/tickets also raise a fyi Signal
+        (dedupe_key email-attachment:<msg>:<att>). Each save publishes the new
+        attachment_saved WS event → subtle toast with an Open link to
+        /artifacts?open=<id>. Artifacts source filter gains Email. Web + harness,
+        no schema change.
 v2.27.0 Feature: retry a failed tool call, and To-Dos become checkboxes. (1) A failed
         browse_web/archive_page/generate_chart/sync_meetings call used to become a
         sentence in TARS's reply — recovering meant remembering the original request and

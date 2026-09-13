@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.1 |
-| Released | 2026-09-13 |
+| Version | v2.27.2 |
+| Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -101,7 +101,7 @@ requests are excluded — vision routing owns model choice.
 | 5 | Calendar | /calendar | Live |
 | 6 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
 | 7 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval; **export** to DOCX, PDF, or Google Doc via item detail modal |
-| 8 | Artifacts | /artifacts | Live |
+| 8 | Artifacts | /artifacts | Live — sources include email attachments (`source="email"`, since v2.27.2) |
 | 9 | Cron Manager | /cron | Live |
 | 10 | Connectors | /connectors | Live |
 | 11 | Mnemon | /memory | Live |
@@ -117,7 +117,7 @@ the repo root for the historical runbook and known orphaned remnants.
 
 | Connector | Capabilities | Status |
 |---|---|---|
-| Gmail | read, webhook | Live |
+| Gmail | read, webhook — also syncs reference-worthy attachments to Artifacts (hourly `gmail_attachment_sync`, since v2.27.2) | Live |
 | Gmail (Personal) | read, write (send/reply) | Built, not yet connected — OAuth consent screen blocks personal @gmail.com accounts (likely "Internal" user type); needs Google Cloud Console fix before connecting |
 | Google Calendar | read, write | Live |
 | Google Calendar (Personal) | read, write (create/update/delete) | Live — connect via Connectors page |
@@ -164,6 +164,37 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.2 — 2026-09-14
+**Feature: Gmail attachment sync with a smart filter — reference-worthy email attachments land in Artifacts**
+
+- **Attachments were silently dropped.** The Gmail connector only walked text body
+  parts; boarding passes, tickets, receipts, and invoices never entered the system.
+  `GmailClient` gains `list_attachments(message)` (recursive MIME walk for parts with
+  `body.attachmentId` + filename) and `get_attachment(message_id, attachment_id)`
+  (`messages().attachments().get`, base64url-decode — the existing `gmail.readonly`
+  scope covers it, no OAuth change).
+- **New hourly scheduler job `gmail_attachment_sync`** (`jobs/gmail_attachment_sync.py`,
+  registered in `jobs/scheduler.py`) sweeps both Gmail account slots for
+  `has:attachment newer_than:2d`. First run seeds the dedupe set
+  (`conn.config["processed_attachment_ids"]`, capped at 2000) with current matches
+  WITHOUT downloading — no backlog import on deploy. Sync failures leave the id
+  unprocessed so the next run retries (bounded by the 2-day window).
+- **Smart filter, cheap first.** Images <50KB and `logo|signature|banner|icon|spacer|pixel`
+  filenames are skipped with no model call; everything else gets a Tier-1 strict-JSON
+  verdict (`{keep, category}` — boarding_pass/ticket/receipt/invoice/document/junk)
+  from filename/mime/size/subject/sender. Any model or parse failure defaults to
+  keep=false (safe) and is logged.
+- **Kept files become Artifacts** (`source="email"`, `tags=[category]`,
+  `source_id`=Gmail message id) via the shared `store_upload_as_artifact` blob-store
+  path. Each save publishes a new `attachment_saved` WebSocket event — the app shell
+  shows a subtle auto-dismissing toast with an Open link to `/artifacts?open=<id>`.
+- **Boarding passes and tickets also raise a `fyi` Signal** on /today
+  (`source="gmail"`, `urgency="time"`, `source_ref`=artifact id,
+  `dedupe_key=email-attachment:<msg>:<att>`).
+- Artifacts page source filter gains **Email**. Per-attachment errors are contained —
+  one bad message never aborts the batch.
+- Web + harness, no schema change.
 
 ### v2.27.1 — 2026-09-13
 **Change: binary artifacts move to a disk blob store; chat uploads are persisted**
