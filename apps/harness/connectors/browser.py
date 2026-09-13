@@ -24,6 +24,7 @@ Contract rules that are easy to get wrong, all enforced in `execute_batch`:
 import asyncio
 import base64
 import logging
+import os
 import re
 import urllib.parse
 from typing import Any, Dict, List, Optional
@@ -710,9 +711,17 @@ class BrowserPool:
     launching more browsers.
     """
 
-    def __init__(self, max_contexts: int = 3, headless: bool = True):
+    def __init__(
+        self,
+        max_contexts: int = 3,
+        headless: bool = True,
+        cdp_url: Optional[str] = None,
+    ):
         self._max = max_contexts
         self._headless = headless
+        # When set, connect to the browser container instead of launching one.
+        # Local dev launches its own; production points at tars-browser.
+        self._cdp_url = cdp_url
         self._pw = None
         self._browser = None
         self._sem = asyncio.Semaphore(max_contexts)
@@ -720,11 +729,38 @@ class BrowserPool:
 
     async def _ensure(self):
         async with self._lock:
-            if self._browser is None:
+            if self._browser is not None and self._browser.is_connected():
+                return self._browser
+            if self._pw is None:
                 self._pw = await async_playwright().start()
+            if self._cdp_url:
+                # Reconnects transparently if the container restarted.
+                self._browser = await self._pw.chromium.connect_over_cdp(self._cdp_url)
+                log.info("browser pool: connected over CDP to %s", self._cdp_url)
+            else:
                 self._browser = await self._pw.chromium.launch(headless=self._headless)
                 log.info("browser pool: chromium launched (max %d contexts)", self._max)
         return self._browser
+
+    async def profile_storage_state(self) -> Optional[dict]:
+        """Cookies and storage from the container's persistent profile.
+
+        Runs get a fresh, isolated context rather than sharing the profile
+        directly: a persistent profile is one context, so sharing it would
+        serialise every run and let one job's navigation yank another's page.
+        Seeding the fresh context with this state gives isolation AND the
+        logged-in sessions a human established by hand over VNC.
+        """
+        if not self._cdp_url:
+            return None
+        try:
+            browser = await self._ensure()
+            if not browser.contexts:
+                return None
+            return await browser.contexts[0].storage_state()
+        except Exception as err:  # noqa: BLE001 — never block a run on this
+            log.warning("could not read profile storage state: %s", err)
+            return None
 
     async def session(self, *, storage_state=None, **kwargs) -> "BrowserSessionCtx":
         return BrowserSessionCtx(self, storage_state=storage_state, kwargs=kwargs)
@@ -742,15 +778,23 @@ _pool: Optional[BrowserPool] = None
 
 
 def get_browser_pool() -> BrowserPool:
-    """Process-wide pool, lazily launched.
+    """Process-wide pool, lazily started.
 
     Lazy on purpose: most harness processes never run a browser job, and paying
     ~300MB for a Chromium that never gets used would be a poor trade on a 16GB
     box already running Postgres, Redis, whisper and Kokoro.
+
+    `BROWSER_CDP_URL` switches between the two deployments. Set (production),
+    the browser lives in the tars-browser container and this only connects to
+    it. Unset (local dev), Playwright launches a headless Chromium in-process,
+    so development needs no Docker.
     """
     global _pool
     if _pool is None:
-        _pool = BrowserPool(max_contexts=MAX_CONCURRENT_SESSIONS)
+        _pool = BrowserPool(
+            max_contexts=MAX_CONCURRENT_SESSIONS,
+            cdp_url=os.environ.get("BROWSER_CDP_URL") or None,
+        )
     return _pool
 
 
@@ -774,9 +818,13 @@ class BrowserSessionCtx:
         await self._pool._sem.acquire()
         try:
             browser = await self._pool._ensure()
+            state = self._storage_state
+            if state is None:
+                # Inherit whatever the container's profile is logged into.
+                state = await self._pool.profile_storage_state()
             self._ctx = await browser.new_context(
                 viewport=VIEWPORT,
-                storage_state=self._storage_state,
+                storage_state=state,
             )
             session = BrowserSession(self._ctx, **self._kwargs)
             await session.start()

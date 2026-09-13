@@ -13,14 +13,34 @@ opens one connection.
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect,
+)
 
-from core.auth import require_auth, verify_ws_token
+from core.auth import decode_token, require_auth, verify_ws_token
 from core.browser_jobs import get_browser_jobs
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/browser", tags=["browser"])
+
+
+@router.get("/vnc-auth")
+async def vnc_auth(request: Request):
+    """Gate for nginx's `auth_request` on /browser-vnc/.
+
+    Reads the `tars_token` cookie rather than a Bearer header: nginx forwards
+    the browser's cookies, and noVNC is a plain page load with no chance to set
+    an Authorization header. 200 lets the request through, 401 blocks it.
+
+    This is the only door to interactive control of a browser holding live
+    client-portal logins, so it validates the same session as the rest of the
+    app and nothing weaker.
+    """
+    token = request.cookies.get("tars_token")
+    if not token or not decode_token(token):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"ok": True}
 
 
 @router.get("/jobs")
