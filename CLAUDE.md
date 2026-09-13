@@ -1,6 +1,6 @@
 # TARS — Master Specification
 > Personal AI Operating System for Mike Villar
-> Last updated: September 2026 — v2.20.0 (post-sessions 1–9+, live on production;
+> Last updated: September 2026 — v2.20.1 (post-sessions 1–9+, live on production;
 > Today screen + Signals, signal generation live)
 > Status: **Live** — running at tarsmv.duckdns.org on Hostinger KVM4 (72.60.234.180)
 
@@ -1134,6 +1134,29 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.20.1 Fix: browser panel + noVNC could not connect; panel obscured chat. Three defects
+        found right after the v2.20.0 deploy, all by reproducing in a real browser.
+        (1) The live panel's WebSocket never upgraded: nginx's generic /api/ block sets
+        `Connection ''` for SSE, which silently strips a WS upgrade — which is exactly why
+        /api/notifications/stream and /api/agent-jobs/*/stream already have their own
+        locations. ANY FUTURE HARNESS WEBSOCKET ROUTE NEEDS ITS OWN NGINX LOCATION.
+        (2) noVNC hung on "Connecting..." because it resolves its websockify path against the
+        SERVER ROOT, not the page, so it opened wss://host/websockify and hit the Next.js
+        catch-all. Fixed twice over: capabilities now returns a vnc_url carrying
+        ?path=browser-vnc/websockify, AND nginx serves /websockify at root behind the same
+        auth gate — the latter matters because a stale bundle, or opening /browser-vnc/
+        directly as the login-seeding procedure instructs, passes no param.
+        (3) The panel overlaid the chat it was reporting on; it now PUSHES via
+        --browser-panel-w with the left nav collapsing to a rail, and closing HIDES rather
+        than ending the run (onClose used to clear the job id, losing the run permanently).
+        Reopen pill above the composer, drag-to-resize 420-980px. Refero research: Suno,
+        Twist, fal.ai, Rork all push or split, none overlay. Also: trace artifacts were
+        attaching on ANY action error (~10MB on nearly every run, since a stale ref is the
+        NORMAL recoverable error) — now only for runs that never finished or hit 3+ errors;
+        non-action events gained timestamps; and BROWSER_CDP_URL moved from os.environ to a
+        real Settings field, because pydantic-settings loads .env into the Settings object
+        and NOT the process environment, so on the server it was always None and the harness
+        would have ignored the container completely. Harness + web + nginx, no schema change.
 v2.20.0 Feature: browser automation — TARS can drive a real browser, and you can watch it.
         New `browse_web` chat tool: describe an OUTCOME and a sub-agent drives a real
         Chromium via Anthropic's browser-use toolset (browser_toolset_20260801), NOT computer

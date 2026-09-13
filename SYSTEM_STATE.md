@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.20.0 |
+| Version | v2.20.1 |
 | Released | 2026-09-13 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -164,6 +164,42 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.20.1 — 2026-09-13
+**Fix: browser panel and noVNC could not connect; the panel obscured chat**
+
+Three defects found immediately after the v2.20.0 deploy, all by reproducing in a real
+browser rather than by reading code.
+
+- **The live panel's WebSocket never upgraded.** nginx's generic `/api/` block sets
+  `Connection ''` for SSE, which silently strips a WebSocket upgrade. That is why
+  `/api/notifications/stream` and `/api/agent-jobs/*/stream` already have their own
+  locations; `/api/browser/ws/` was falling into the generic block. Added a dedicated
+  location. **Any future WebSocket route in the harness needs the same treatment.**
+- **noVNC hung on "Connecting..." forever.** It resolves its websockify path against the
+  SERVER ROOT, not the page it was served from, so it opened `wss://host/websockify`, which
+  lands on the Next.js catch-all. Fixed twice over: the `vnc_url` from
+  `GET /api/browser/capabilities` now carries `?path=browser-vnc/websockify` (one place
+  knows how to build the URL), and nginx additionally serves `/websockify` at the root
+  behind the same auth gate. The second half matters because a client without the param —
+  a stale cached bundle, or anyone opening `/browser-vnc/` directly as the login-seeding
+  procedure instructs — would otherwise still fail.
+- **The panel overlaid the chat it was reporting on.** It now PUSHES: it sets
+  `--browser-panel-w` and the `(app)` layout content reflows into the remaining width, so
+  the thread and composer stay usable. The left nav collapses to a rail while open (not
+  hidden — losing navigation to watch a browser run is a bad trade) and restores on close.
+  Closing now HIDES rather than ending the run, which was the real defect underneath:
+  `onClose` cleared the job id, so dismissing the panel lost the run permanently. A
+  `BROWSER` pill above the composer puts it one click back. Drag-to-resize, 420-980px.
+  Design researched via Refero: Suno, Twist, fal.ai and Rork all push or split, none overlay.
+- Also: the trace artifact was attaching on ANY action error, which meant a ~10MB artifact on
+  almost every real run, since a stale ref is the NORMAL recoverable error. Reserved for runs
+  that never finished or were still thrashing (3+ errors). Non-action events gained
+  timestamps, which had made recovered errors sort above the action that caused them.
+- Also: `BROWSER_CDP_URL` was read from `os.environ`, but pydantic-settings loads `.env` into
+  the Settings object, not the process environment — so on the server it was always None and
+  the harness would have ignored the container entirely and tried to launch a Chromium that
+  is deliberately not installed there. Now a real Settings field.
 
 ### v2.20.0 — 2026-09-13
 **Feature: browser automation. TARS can drive a real browser, and you can watch it.**
