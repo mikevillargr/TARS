@@ -2681,6 +2681,22 @@ export default function ChatPage() {
           </div>
 
           <button
+            onClick={openBrowser}
+            disabled={browserOpening}
+            className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0"
+            style={browserJobId
+              ? { backgroundColor: "var(--c-moss-soft)", color: "var(--c-moss)" }
+              : { color: "var(--c-ink-faint)", opacity: browserOpening ? 0.5 : 1 }
+            }
+            title={browserJobId ? "Show the browser for this chat" : "Open a browser for this chat"}
+            onMouseEnter={e => { if (!browserJobId) { (e.currentTarget as HTMLElement).style.color = "var(--c-ink)"; (e.currentTarget as HTMLElement).style.backgroundColor = "var(--c-surface-2)" } }}
+            onMouseLeave={e => { if (!browserJobId) { (e.currentTarget as HTMLElement).style.color = "var(--c-ink-faint)"; (e.currentTarget as HTMLElement).style.backgroundColor = "transparent" } }}
+          >
+            <Globe size={14} />
+            Browser
+          </button>
+
+          <button
             onClick={toggleFocus}
             className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors shrink-0"
             style={isFocusMode
@@ -2871,21 +2887,6 @@ export default function ChatPage() {
                     >
                       <Camera size={16} />
                     </label>
-                    <button
-                      title={browserJobId ? "Show the browser for this chat" : "Open a browser for this chat"}
-                      onClick={openBrowser}
-                      disabled={browserOpening}
-                      className="p-1.5 rounded-lg transition-colors"
-                      style={{
-                        color: browserJobId ? "var(--c-moss)" : "var(--c-ink-faint)",
-                        backgroundColor: browserJobId ? "var(--c-moss-soft)" : "transparent",
-                        opacity: browserOpening ? 0.5 : 1,
-                      }}
-                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.backgroundColor = browserJobId ? "var(--c-moss-soft)" : "var(--c-surface-2)"}
-                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.backgroundColor = browserJobId ? "var(--c-moss-soft)" : "transparent"}
-                    >
-                      <Globe size={16} />
-                    </button>
                     <button
                       title={voiceMode ? "Voice mode on — click to mute" : "Voice mode off — click to enable"}
                       onClick={() => setVoiceMode(v => !v)}
