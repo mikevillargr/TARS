@@ -3,22 +3,30 @@
 import { useEffect, useRef, useCallback } from "react"
 import { TarsWebSocket, getWsToken } from "@/lib/websocket"
 
-export interface TarsNotification {
-  type: "new_message"
-  conversation_id: string
-  message_id: string
-  preview: string
-  created_at: string
-}
+export type TarsNotification =
+  | {
+      type: "new_message"
+      conversation_id: string
+      message_id: string
+      preview: string
+      created_at: string
+    }
+  | {
+      type: "attachment_saved"
+      artifact_id: string
+      filename: string
+      category: string
+    }
 
 type Handler = (n: TarsNotification) => void
 
 /**
  * Subscribe to real-time TARS notifications.
  *
- * Phase 1 (now): new_message events from agent job completions.
- * Phase 2: extend with calendar reminders, task due alerts, meeting
- *          starting events — the backend publishes to the same channel.
+ * Event types:
+ *   new_message       — agent job completions (chat unread dot, chime)
+ *   attachment_saved  — gmail_attachment_sync saved an email attachment
+ *                       as an Artifact (subtle toast with an Open link)
  *
  * Reconnects automatically on disconnect and on tab focus (mobile/desktop).
  */
@@ -41,6 +49,10 @@ export function useNotifications(onNotification: Handler) {
       wsRef.current = ws
 
       ws.on("new_message", (msg: unknown) => {
+        handlerRef.current(msg as TarsNotification)
+      })
+
+      ws.on("attachment_saved", (msg: unknown) => {
         handlerRef.current(msg as TarsNotification)
       })
 

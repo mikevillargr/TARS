@@ -132,7 +132,7 @@ function formatSize(bytes: number) {
 }
 
 function sourceLabel(source: string) {
-  return { chat: "Chat", cron: "Cron", meeting: "Meeting", upload: "Upload", browser: "Browser" }[source] ?? source
+  return { chat: "Chat", cron: "Cron", email: "Email", meeting: "Meeting", upload: "Upload", browser: "Browser" }[source] ?? source
 }
 
 function isBinaryArtifact(detail: ArtifactDetail | null) {
@@ -816,7 +816,7 @@ function DeepLinkHandler({ onOpen }: { onOpen: (id: string) => void }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TYPE_FILTERS  = ["All Types", "document", "image", "code", "report", "spreadsheet", "transcript"]
-const SOURCE_FILTERS = ["All Sources", "chat", "cron", "meeting", "upload"]
+const SOURCE_FILTERS = ["All Sources", "chat", "cron", "email", "meeting", "upload"]
 
 export default function ArtifactsPage() {
   const [artifacts, setArtifacts]   = useState<Artifact[]>([])
