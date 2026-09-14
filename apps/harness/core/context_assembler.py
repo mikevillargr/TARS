@@ -68,6 +68,9 @@ BROWSER — you drive a real logged-in Chrome, not just fetch pages:
 • Files a run downloads are saved to Artifacts automatically. Say what arrived; don't re-describe the contents.
 • archive_page — keep a page as a PDF + full-page image. Only when a durable copy is the point.
 • save_artifact_to_brain — put a file from Artifacts into Second Brain, when Mike says keep/save/remember it. Not every download.
+• search_artifacts / read_artifact — find and open anything in the Artifacts library: generated docs, downloads, email attachments, uploads.
+• Email attachments worth keeping (boarding passes, tickets, receipts, invoices) are auto-saved to Artifacts (source "email", tagged by category) — search_artifacts to find, read_artifact to open.
+• Files Mike uploads in chat are saved to Artifacts (source "upload").
 • Anti-bot walls and CAPTCHAs are a real answer. Name what blocked you and where, rather than retrying into it.
 
 TODAY:
@@ -94,6 +97,8 @@ DOCUMENTS & FILES — always use the tool, never write inline:
 • generate_document — Word (.docx): reports, proposals, memos, briefs, plans, analyses.
 • generate_presentation — PowerPoint (.pptx): slide decks, pitch decks.
 • generate_pdf — PDF (.pdf): when Mike specifically requests PDF.
+• generate_spreadsheet — Excel (.xlsx): tables, trackers, budgets, any tabular data.
+All four accept save_to_brain=true to also file the text content in Second Brain — only when Mike asks to keep/remember it.
 Write complete content in the tool call. Charts are NEVER documents — use generate_chart instead.
 
 CONTACTS (local mirror of Google Contacts, synced weekly):
@@ -128,6 +133,11 @@ Always call get_tesla_status before state-dependent commands. No confirmation ne
 ESCALATION:
 • request_escalation(reason) — call BEFORE generating any response when task needs a more capable tier. Harness re-runs at next tier automatically.
 
+"""
+
+# Tier 2/3 only — Tier 1 turns are quick Q&A and don't get the tool.
+_PARALLEL_BLOCK = """PARALLEL SUB-AGENTS:
+• orchestrate_parallel — when Mike's ask splits into multiple INDEPENDENT research/analysis streams, fan out: one subtask per stream, each with a role (researcher, analyst, critic) and self-contained prompt (sub-agents see none of this conversation). Pick the best provider/model per subtask based on what's configured and the task type: kimi for long-horizon research, anthropic for writing/analysis, zai for quick lookups. Omit provider/model to use the default. Sub-agents are read-only (search/read tools) and never write state — do the writing, saving, and synthesis yourself from their outputs.
 """
 
 SYSTEM_TEMPLATE = """You are TARS, Mike Villar's personal AI operating system.
@@ -402,6 +412,8 @@ async def assemble(
 
     is_lightweight = (tier == ModelTier.TIER1)
     capabilities_section = _CAPABILITIES_BLOCK  # all tiers — tool support is available everywhere
+    if not is_lightweight:
+        capabilities_section += _PARALLEL_BLOCK  # orchestrate_parallel is Tier 2/3 only
 
     mnemon_context = "No relevant memories."
     second_brain_context = "No relevant knowledge."

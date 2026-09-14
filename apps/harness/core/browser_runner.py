@@ -148,10 +148,10 @@ async def execute_archive_page(
     Explicitly requested, never automatic. Saving a PDF of every page a run
     touched is exactly the noise that buried the library the first time.
     """
-    import base64
     import re as _re
 
     from connectors.browser import get_browser_pool
+    from core import blob_store
     from db.models import Artifact
 
     url = (tool_input.get("url") or "").strip()
@@ -184,7 +184,8 @@ async def execute_archive_page(
             filename=f"{stem}.{ext}",
             type="image" if ext == "png" else "document",
             source="browser",
-            content="base64:" + base64.b64encode(raw).decode(),
+            content=None,
+            storage_path=blob_store.store(raw, ext, user_id),
             size_bytes=len(raw),
             tags=["browser", "archive"],
         )

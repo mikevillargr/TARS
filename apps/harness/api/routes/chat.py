@@ -22,8 +22,10 @@ from core.model_client import (
     UPDATE_CALENDAR_EVENT_TOOL, DELETE_CALENDAR_EVENT_TOOL,
     SAVE_MEMORY_TOOL, SAVE_TO_SECOND_BRAIN_TOOL, BROWSE_WEB_TOOL,
     SAVE_ARTIFACT_TO_BRAIN_TOOL, ARCHIVE_PAGE_TOOL, CREATE_SIGNAL_TOOL,
+    SEARCH_ARTIFACTS_TOOL, READ_ARTIFACT_TOOL,
     READ_EMAIL_TOOL, SEND_EMAIL_TOOL, CONFIRM_SEND_EMAIL_TOOL, READ_MEETING_TOOL, SYNC_MEETINGS_TOOL, WEB_SEARCH_TOOL,
     GENERATE_DOCUMENT_TOOL, GENERATE_PRESENTATION_TOOL, GENERATE_PDF_TOOL,
+    GENERATE_SPREADSHEET_TOOL,
     LOOKUP_CONTACT_TOOL, SEARCH_CONTACTS_TOOL,
     CREATE_CONTACT_TOOL, UPDATE_CONTACT_TOOL,
     SEARCH_PLACES_TOOL, SAVE_PLACE_TOOL, GET_SAVED_PLACES_TOOL,
@@ -37,10 +39,14 @@ from core.model_client import (
     GET_TOKEN_REPORT_TOOL,
     GET_FEED_ITEM_TOOL,
     REQUEST_ESCALATION_TOOL,
+    ORCHESTRATE_PARALLEL_TOOL,
 )
 from core.context_assembler import assemble
 from core.streaming import sse_event, sse_done
 from core.mentions import MENTION_RE as _MENTION_RE, strip_mention_markers as _strip_mention_markers
+from core.artifact_store import store_upload_as_artifact
+from core.blob_store import resolve_artifact_bytes
+from core import blob_store
 from db.session import get_db, AsyncSessionLocal
 from db.models import Conversation, Message, User, Task, Artifact, Reminder
 
@@ -474,10 +480,7 @@ async def _extract_and_save_facts(
 
     try:
         from core.config import settings as _s
-        _provider = _s.tier1_provider or "anthropic"
-        _api_key  = _s.zai_api_key if _provider == "zai" else _s.anthropic_api_key
-        _base_url = _s.zai_base_url if _provider == "zai" else None
-        _model    = _s.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        _provider, _api_key, _base_url, _model = _tier1_client_params(_s)
         import anthropic as _anth
         _fact_client = _anth.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _fact_client.messages.create(
@@ -594,6 +597,20 @@ def _zai_kwargs(provider: str) -> dict:
     return {"extra_body": {"thinking": {"type": "disabled"}}} if provider == "zai" else {}
 
 
+def _tier1_client_params(_s) -> tuple:
+    """(provider, api_key, base_url, model) for the configured tier1 provider.
+
+    Shared by the small utility calls below (fact extraction, title generation,
+    compaction) so a new tier1 provider only has to be mapped in one place.
+    """
+    provider = _s.tier1_provider or "anthropic"
+    if provider == "zai":
+        return provider, _s.zai_api_key, _s.zai_base_url, _s.tier1_model_override or "glm-4.5-air"
+    if provider == "kimi":
+        return provider, _s.kimi_api_key, _s.kimi_base_url, _s.tier1_model_override or _s.kimi_model
+    return provider, _s.anthropic_api_key, None, _s.tier1_model_override or "claude-haiku-4-5-20251001"
+
+
 async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
     """Generate a 3-5 word conversation title from recent exchanges."""
     recent = messages[-8:]
@@ -604,10 +621,7 @@ async def _generate_title(messages: list, client: ModelClient) -> Optional[str]:
     )
     try:
         from core.config import settings as _ts
-        _provider = _ts.tier1_provider or "anthropic"
-        _api_key  = _ts.zai_api_key if _provider == "zai" else _ts.anthropic_api_key
-        _base_url = _ts.zai_base_url if _provider == "zai" else None
-        _model    = _ts.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        _provider, _api_key, _base_url, _model = _tier1_client_params(_ts)
         import anthropic as _anth_t
         _title_client = _anth_t.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _title_client.messages.create(
@@ -670,10 +684,7 @@ async def _compact_conversation(conv_id: str, db: AsyncSession) -> None:
 
         from core.config import settings as _cfg
         import anthropic as _anth
-        _provider = _cfg.tier1_provider or "anthropic"
-        _api_key  = _cfg.zai_api_key if _provider == "zai" else _cfg.anthropic_api_key
-        _base_url = _cfg.zai_base_url if _provider == "zai" else None
-        _model    = _cfg.tier1_model_override or ("glm-4.5-air" if _provider == "zai" else "claude-haiku-4-5-20251001")
+        _provider, _api_key, _base_url, _model = _tier1_client_params(_cfg)
         _c = _anth.AsyncAnthropic(api_key=_api_key, **( {"base_url": _base_url} if _base_url else {}))
         resp = await _c.messages.create(
             model=_model,
@@ -900,6 +911,9 @@ async def send_message(
     # Process attachments
     image_blocks: List[Any] = []
     doc_snippets: List[str] = []
+    # artifact_created cards for uploads persisted below — emitted once the SSE
+    # stream opens (background_generate) so they hydrate like any other card.
+    saved_upload_cards: List[dict] = []
     for upload in files:
         result = await _process_attachment(upload)
         if result["kind"] == "image":
@@ -911,6 +925,29 @@ async def send_message(
             )
         else:
             doc_snippets.append(f"[Attached: {result['filename']}]\n{result['text']}")
+
+        # Also persist the upload as an Artifact so it lives in the library.
+        # Best-effort: a persist failure must never break the chat send.
+        # (image_base64 camera shots are intentionally NOT persisted.)
+        try:
+            await upload.seek(0)
+            raw = await upload.read()
+            if raw:
+                saved = await store_upload_as_artifact(
+                    user_id=user_id,
+                    data=raw,
+                    filename=upload.filename or "upload",
+                    source="upload",
+                    db=db,
+                )
+                saved_upload_cards.append({
+                    "type": "artifact_created",
+                    "artifact_id": saved.id,
+                    "filename": saved.filename,
+                    "filetype": saved.filename.rsplit(".", 1)[-1].lower() if "." in saved.filename else "",
+                })
+        except Exception as exc:
+            log.warning("send_message: could not persist upload %s as artifact: %s", upload.filename, exc)
 
     # Base64 image attachment (Rokid glasses bridge sends photos this way)
     if image_base64:
@@ -933,15 +970,15 @@ async def send_message(
             select(Artifact).where(Artifact.id == artifact_id, Artifact.user_id == user_id)
         )
         art_obj = art_result.scalar_one_or_none()
-        if art_obj and art_obj.content:
-            import base64 as _b64
-            art_content = art_obj.content
+        if art_obj and (art_obj.content or art_obj.storage_path):
+            art_content = art_obj.content or ""
             _art_ext = (art_obj.filename or "").rsplit(".", 1)[-1].lower() if "." in (art_obj.filename or "") else ""
             _handled_as_image = False
 
-            # Binary artifacts are stored as base64 — extract text or send as vision
-            if art_content.startswith("base64:"):
-                _raw = _b64.b64decode(art_content[7:])
+            # Binary artifacts live in the blob store (legacy rows decode from
+            # base64 content) — extract text or send as vision
+            _raw = resolve_artifact_bytes(art_obj)
+            if _raw is not None:
                 try:
                     if _art_ext in _IMAGE_EXTS_MAP:
                         # Image artifact: send directly as a vision block so Sonnet sees the actual image
@@ -950,7 +987,7 @@ async def send_message(
                             "source": {
                                 "type": "base64",
                                 "media_type": _IMAGE_EXTS_MAP[_art_ext],
-                                "data": _b64.b64encode(_raw).decode(),
+                                "data": base64.b64encode(_raw).decode(),
                             },
                         })
                         doc_snippets.append(f"[Analyzing uploaded image: {art_obj.filename}]")
@@ -1194,10 +1231,13 @@ async def send_message(
         BROWSE_WEB_TOOL,
         SAVE_ARTIFACT_TO_BRAIN_TOOL,
         ARCHIVE_PAGE_TOOL,
+        SEARCH_ARTIFACTS_TOOL,
+        READ_ARTIFACT_TOOL,
         CREATE_SIGNAL_TOOL,
         GENERATE_DOCUMENT_TOOL,
         GENERATE_PRESENTATION_TOOL,
         GENERATE_PDF_TOOL,
+        GENERATE_SPREADSHEET_TOOL,
         LOOKUP_CONTACT_TOOL,
         SEARCH_CONTACTS_TOOL,
         CREATE_CONTACT_TOOL,
@@ -1224,6 +1264,9 @@ async def send_message(
         GET_TOKEN_REPORT_TOOL,
         GET_FEED_ITEM_TOOL,
         *([REQUEST_ESCALATION_TOOL] if effective_tier != ModelTier.TIER3 else []),
+        # Parallel sub-agent orchestration is Tier 2/3 only — Tier 1 turns are
+        # quick Q&A; fanning out a sub-agent fleet from one is never the right call.
+        *([ORCHESTRATE_PARALLEL_TOOL] if effective_tier != ModelTier.TIER1 else []),
     ]
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -1278,6 +1321,12 @@ async def send_message(
                         "filename": filename,
                         "filetype": ext,
                     })
+
+                # Uploads persisted in send_message before streaming started —
+                # surface them as cards so what Mike just dropped in is openable
+                # from the conversation itself.
+                for _upload_card in saved_upload_cards:
+                    await _emit_card(_upload_card)
 
                 async def _emit_tool_failed(tool: str, tool_input: dict, message: str) -> None:
                     """Surface a tool failure as something to act on, not just a sentence.
@@ -1354,6 +1403,84 @@ async def send_message(
                             )
                         await bg_db.commit()
                         return f"Saved '{art.filename}' to Second Brain."
+
+                    if name == "search_artifacts":
+                        await _emit_progress("search_artifacts", "Searching Artifacts…")
+                        try:
+                            _a_query = (tool_input.get("query") or "").strip()
+                            _a_tag = (tool_input.get("tag") or "").strip()
+                            _a_limit = max(1, min(int(tool_input.get("limit", 10) or 10), 50))
+                            _sq = select(Artifact).where(Artifact.user_id == user_id)
+                            if _a_query:
+                                _sq = _sq.where(Artifact.filename.ilike(f"%{_a_query}%"))
+                            if tool_input.get("type"):
+                                _sq = _sq.where(Artifact.type == tool_input["type"])
+                            if tool_input.get("source"):
+                                _sq = _sq.where(Artifact.source == tool_input["source"])
+                            # tags is a JSON array column — a portable contains()
+                            # doesn't exist across dialects, so filter in Python
+                            # (over-fetch first so the limit still lands).
+                            _sq = _sq.order_by(Artifact.created_at.desc()).limit(200 if _a_tag else _a_limit)
+                            _arts = (await bg_db.execute(_sq)).scalars().all()
+                            if _a_tag:
+                                _arts = [a for a in _arts if _a_tag in (a.tags or [])][:_a_limit]
+                            if not _arts:
+                                return "No artifacts matched."
+                            _rows = []
+                            for _a in _arts:
+                                _row = {
+                                    "id": _a.id,
+                                    "filename": _a.filename,
+                                    "type": _a.type,
+                                    "source": _a.source,
+                                    "tags": _a.tags or [],
+                                    "size_bytes": _a.size_bytes,
+                                    "created_at": _a.created_at.isoformat() if _a.created_at else None,
+                                }
+                                # content holds extracted text only; a legacy base64
+                                # payload never ships to the model.
+                                if _a.content and not _a.content.startswith("base64:"):
+                                    _row["snippet"] = " ".join(_a.content.split())[:200]
+                                _rows.append(_row)
+                            await _emit_progress("search_artifacts", f"{len(_rows)} found", done=True)
+                            return _json.dumps(_rows)
+                        except Exception as exc:
+                            log.warning("search_artifacts tool failed: %s", exc)
+                            return f"Artifact search failed: {exc}"
+
+                    if name == "read_artifact":
+                        await _emit_progress("read_artifact", "Reading artifact…")
+                        try:
+                            from core.artifact_store import read_artifact_text
+                            _aid = (tool_input.get("artifact_id") or "").strip()
+                            if not _aid:
+                                return "Need an artifact_id (from search_artifacts)."
+                            text = await read_artifact_text(_aid, user_id, bg_db)
+                            # Surface the file as an openable preview card — same
+                            # persistence path neighboring read tools use (_emit_card
+                            # appends to tool_results and streams the card).
+                            _meta = None
+                            try:
+                                _meta = (await bg_db.execute(
+                                    select(Artifact.filename).where(
+                                        Artifact.id == _aid, Artifact.user_id == user_id
+                                    )
+                                )).scalar_one_or_none()
+                                if _meta:
+                                    _ext = _meta.rsplit(".", 1)[-1].lower() if "." in _meta else ""
+                                    await _emit_card({
+                                        "type": "artifact_created",
+                                        "artifact_id": _aid,
+                                        "filename": _meta,
+                                        "filetype": _ext,
+                                    })
+                            except Exception as _ce:
+                                log.warning("read_artifact card emission failed: %s", _ce)
+                            await _emit_progress("read_artifact", f"Read: {(_meta or 'artifact')[:40]}", done=True)
+                            return text
+                        except Exception as exc:
+                            log.warning("read_artifact tool failed: %s", exc)
+                            return f"Failed to read artifact: {exc}"
 
                     if name == "archive_page":
                         await _emit_progress("archive_page", "Archiving page…")
@@ -2441,48 +2568,126 @@ async def send_message(
                             log.warning("web_search tool failed: %s", exc)
                             return f"Web search failed: {exc}"
 
+                    if name == "orchestrate_parallel":
+                        subtasks = tool_input.get("subtasks") or []
+                        if not subtasks:
+                            return "No subtasks provided."
+                        await _emit_progress(
+                            "orchestrate_parallel",
+                            f"Running {len(subtasks)} sub-agent{'s' if len(subtasks) != 1 else ''} in parallel…",
+                        )
+
+                        # Live run events (parallel_started / subtask_progress /
+                        # subtask_done) stream straight into the SSE queue so the
+                        # client can render the run as it happens.
+                        _run_meta: dict = {}
+
+                        async def _on_parallel_event(evt: dict) -> None:
+                            if evt.get("type") == "parallel_started":
+                                _run_meta.update(evt)
+                            await queue.put(sse_event(evt))
+
+                        from core.orchestrator import run_parallel
+                        try:
+                            results = await run_parallel(
+                                subtasks, user_id=user_id, db=bg_db,
+                                on_event=_on_parallel_event,
+                            )
+                        except Exception as exc:
+                            log.warning("orchestrate_parallel failed: %s", exc)
+                            return f"Parallel orchestration failed: {exc}"
+
+                        total_tokens = sum(r.get("tokens") or 0 for r in results)
+                        total_input = sum(r.get("input_tokens") or 0 for r in results)
+                        done_count = sum(1 for r in results if r.get("status") == "done")
+
+                        # Persist a summary card (survives reload via tool_results);
+                        # token/model totals ride along so analytics stay meaningful.
+                        await _emit_card({
+                            "type": "parallel_run",
+                            "run_id": _run_meta.get("run_id", ""),
+                            "subtasks": [
+                                {
+                                    "index": r.get("index"),
+                                    "title": r.get("title"),
+                                    "role": r.get("role"),
+                                    "status": r.get("status"),
+                                    "preview": (r.get("output") or "")[-160:].strip(),
+                                    "model": r.get("model_used") or None,
+                                    "tokens": r.get("tokens") or 0,
+                                }
+                                for r in results
+                            ],
+                            "total_tokens": total_tokens,
+                            "total_input_tokens": total_input,
+                        })
+                        await _emit_progress(
+                            "orchestrate_parallel",
+                            f"{done_count}/{len(results)} sub-agents done",
+                            done=True,
+                        )
+
+                        # Aggregated tool result: truncated outputs only — full
+                        # sub-agent transcripts would blow the synthesis context.
+                        parts = [
+                            f"Parallel run complete: {done_count}/{len(results)} subtasks succeeded "
+                            f"({total_tokens} output tokens total)."
+                        ]
+                        for r in results:
+                            header = (
+                                f"\n## Subtask {r.get('index', 0) + 1}: {r.get('title')}"
+                                f" — {r.get('status')}"
+                                + (f" (model: {r['model_used']}, {r.get('tokens', 0)} tokens)" if r.get("model_used") else "")
+                            )
+                            output = (r.get("output") or "").strip()
+                            if len(output) > 4000:
+                                output = output[:4000] + "\n\n[... truncated ...]"
+                            parts.append(f"{header}\n{output}")
+                        return "\n".join(parts)
+
+                    async def _maybe_save_to_brain(artifact, text: str) -> str:
+                        """Shared save_to_brain handling for the generate_* tools.
+
+                        The artifact payload is a blob-stored binary, so the text the
+                        binary was built from is passed in directly rather than
+                        re-extracting it from the file.
+                        """
+                        if not tool_input.get("save_to_brain"):
+                            return ""
+                        try:
+                            from core.browser_downloads import save_artifact_to_brain as _save_brain
+                            item_id = await _save_brain(bg_db, artifact, user_id, text=text, tags=["generated"])
+                            if item_id:
+                                await bg_db.commit()
+                                return " Also saved to Second Brain."
+                            return ""
+                        except Exception as exc:
+                            log.warning("save_to_brain failed for %s: %s", artifact.filename, exc)
+                            return " (Second Brain save failed.)"
+
                     if name == "generate_document":
                         try:
                             import re as _re
-                            from io import BytesIO
-                            import docx as _docx
+                            from core import docgen
                             title = tool_input.get("title", "Document")
                             content_md = tool_input.get("content", "")
                             fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
-                            doc = _docx.Document()
-                            doc.add_heading(title, 0)
-                            for line in content_md.split("\n"):
-                                s = line.strip()
-                                if not s:
-                                    continue
-                                if s.startswith("### "):
-                                    doc.add_heading(s[4:], level=3)
-                                elif s.startswith("## "):
-                                    doc.add_heading(s[3:], level=2)
-                                elif s.startswith("# "):
-                                    doc.add_heading(s[2:], level=1)
-                                elif s.startswith("- ") or s.startswith("* "):
-                                    doc.add_paragraph(s[2:], style="List Bullet")
-                                elif _re.match(r"^\d+\.", s):
-                                    doc.add_paragraph(_re.sub(r"^\d+\.\s*", "", s), style="List Number")
-                                else:
-                                    doc.add_paragraph(s)
-                            buf = BytesIO()
-                            doc.save(buf)
-                            raw = buf.getvalue()
-                            b64 = base64.b64encode(raw).decode()
+                            raw = docgen.build_docx(title, content_md)
                             filename = fn_base + ".docx"
                             artifact = Artifact(
                                 user_id=user_id, filename=filename, type="document",
                                 source="chat", source_id=conversation_id,
-                                content="base64:" + b64, version=1,
+                                content=None,
+                                storage_path=blob_store.store(raw, "docx", user_id),
+                                version=1,
                                 size_bytes=len(raw), tags=["generated"],
                             )
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
                             await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "docx"})
-                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
+                            extra = await _maybe_save_to_brain(artifact, content_md)
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts." + extra
                         except Exception as exc:
                             log.warning("generate_document failed: %s", exc)
                             return f"Failed to generate document: {exc}"
@@ -2520,19 +2725,27 @@ async def send_message(
                             buf = BytesIO()
                             prs.save(buf)
                             raw = buf.getvalue()
-                            b64 = base64.b64encode(raw).decode()
                             filename = fn_base + ".pptx"
                             artifact = Artifact(
                                 user_id=user_id, filename=filename, type="document",
                                 source="chat", source_id=conversation_id,
-                                content="base64:" + b64, version=1,
+                                content=None,
+                                storage_path=blob_store.store(raw, "pptx", user_id),
+                                version=1,
                                 size_bytes=len(raw), tags=["generated", "presentation"],
                             )
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
                             await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pptx"})
-                            return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts."
+                            brain_text = "\n\n".join(
+                                [f"# {title}"] + ([subtitle] if subtitle else []) + [
+                                    "## " + s.get("title", "") + "\n" + "\n".join("- " + str(b) for b in s.get("bullets", []))
+                                    for s in slides_data
+                                ]
+                            )
+                            extra = await _maybe_save_to_brain(artifact, brain_text)
+                            return f"Generated '{filename}' with {len(slides_data) + 1} slides ({len(raw):,} bytes). Saved to Artifacts." + extra
                         except Exception as exc:
                             log.warning("generate_presentation failed: %s", exc)
                             return f"Failed to generate presentation: {exc}"
@@ -2540,53 +2753,65 @@ async def send_message(
                     if name == "generate_pdf":
                         try:
                             import re as _re
-                            from io import BytesIO
-                            from reportlab.lib.pagesizes import A4
-                            from reportlab.lib.styles import getSampleStyleSheet
-                            from reportlab.lib.units import inch
-                            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+                            from core import docgen
                             title = tool_input.get("title", "Document")
                             content_md = tool_input.get("content", "")
                             fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
-                            buf = BytesIO()
-                            doc = SimpleDocTemplate(buf, pagesize=A4,
-                                rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
-                            styles = getSampleStyleSheet()
-                            story = [Paragraph(title, styles["Title"]), Spacer(1, 0.2 * inch)]
-                            for line in content_md.split("\n"):
-                                s = line.strip()
-                                if not s:
-                                    story.append(Spacer(1, 0.08 * inch))
-                                    continue
-                                if s.startswith("### "):
-                                    story.append(Paragraph(s[4:], styles["Heading3"]))
-                                elif s.startswith("## "):
-                                    story.append(Paragraph(s[3:], styles["Heading2"]))
-                                elif s.startswith("# "):
-                                    story.append(Paragraph(s[2:], styles["Heading1"]))
-                                elif s.startswith("- ") or s.startswith("* "):
-                                    story.append(Paragraph("&#8226; " + s[2:], styles["Normal"]))
-                                else:
-                                    story.append(Paragraph(s, styles["Normal"]))
-                                    story.append(Spacer(1, 0.05 * inch))
-                            doc.build(story)
-                            raw = buf.getvalue()
-                            b64 = base64.b64encode(raw).decode()
+                            raw = docgen.build_pdf(title, content_md)
                             filename = fn_base + ".pdf"
                             artifact = Artifact(
                                 user_id=user_id, filename=filename, type="document",
                                 source="chat", source_id=conversation_id,
-                                content="base64:" + b64, version=1,
+                                content=None,
+                                storage_path=blob_store.store(raw, "pdf", user_id),
+                                version=1,
                                 size_bytes=len(raw), tags=["generated", "pdf"],
                             )
                             bg_db.add(artifact)
                             await bg_db.commit()
                             await bg_db.refresh(artifact)
                             await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "pdf"})
-                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts."
+                            extra = await _maybe_save_to_brain(artifact, content_md)
+                            return f"Generated '{filename}' ({len(raw):,} bytes). Saved to Artifacts." + extra
                         except Exception as exc:
                             log.warning("generate_pdf failed: %s", exc)
                             return f"Failed to generate PDF: {exc}"
+
+                    if name == "generate_spreadsheet":
+                        try:
+                            import re as _re
+                            from core import docgen
+                            title = tool_input.get("title", "Spreadsheet")
+                            sheets_data = tool_input.get("sheets", [])
+                            fn_base = tool_input.get("filename") or _re.sub(r"[^\w\s\-]", "", title).strip().replace(" ", "_")[:50]
+                            raw = docgen.build_xlsx(title, sheets_data)
+                            filename = fn_base + ".xlsx"
+                            artifact = Artifact(
+                                user_id=user_id, filename=filename, type="spreadsheet",
+                                source="chat", source_id=conversation_id,
+                                content=None,
+                                storage_path=blob_store.store(raw, "xlsx", user_id),
+                                version=1,
+                                size_bytes=len(raw), tags=["generated", "spreadsheet"],
+                            )
+                            bg_db.add(artifact)
+                            await bg_db.commit()
+                            await bg_db.refresh(artifact)
+                            await _emit_card({"type": "artifact_created", "artifact_id": artifact.id, "filename": filename, "filetype": "xlsx"})
+                            brain_parts = [f"# {title}"]
+                            for s in sheets_data:
+                                brain_parts.append(f"\n## {s.get('name', 'Sheet')}")
+                                headers = [str(h) for h in (s.get("headers") or [])]
+                                if headers:
+                                    brain_parts.append(" | ".join(headers))
+                                for row in (s.get("rows") or []):
+                                    brain_parts.append(" | ".join(str(v) for v in row))
+                            extra = await _maybe_save_to_brain(artifact, "\n".join(brain_parts))
+                            n_rows = sum(len(s.get("rows") or []) for s in sheets_data)
+                            return f"Generated '{filename}' with {len(sheets_data)} sheet(s), {n_rows} rows ({len(raw):,} bytes). Saved to Artifacts." + extra
+                        except Exception as exc:
+                            log.warning("generate_spreadsheet failed: %s", exc)
+                            return f"Failed to generate spreadsheet: {exc}"
 
                     # ── Places tools ──────────────────────────────────────────────────
                     if name == "search_places":

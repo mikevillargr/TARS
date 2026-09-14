@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://tars:password@localhost:5432/tars"
     redis_url: str = "redis://localhost:6379"
 
+    # Disk-backed blob store for binary artifact payloads (created lazily on first store)
+    blob_dir: str = Field(default="/opt/tars/data/blobs", alias="tars_blob_dir")
+
     tars_username: str = "mike"
     tars_email: str = ""
     tars_password_hash: str = ""
@@ -41,13 +44,20 @@ class Settings(BaseSettings):
     zai_base_url: str = "https://api.z.ai/api/anthropic"          # GLM-4.x
     zai_openai_base_url: str = "https://api.z.ai/api/paas/v4/"    # GLM-5.x + vision
 
-    # Per-tier provider selection: "anthropic" | "zai"
+    # Kimi (Moonshot AI) — Anthropic-compatible endpoint. TARS_KIMI_API_KEY
+    # follows the Anthropic alias pattern to avoid env-var collisions.
+    kimi_api_key: str = Field(default="", alias="tars_kimi_api_key")
+    kimi_base_url: str = "https://api.kimi.com/coding"
+    kimi_model: str = "kimi-k3"
+
+    # Per-tier provider selection: "anthropic" | "zai" | "kimi"
     tier1_provider: str = "anthropic"
     tier2_provider: str = "anthropic"
     tier3_provider: str = "anthropic"
 
     # Per-tier model overrides (blank = use sensible provider default)
     # Anthropic defaults: haiku-4-5 / sonnet-5 / sonnet-5  Z.ai defaults: glm-4.5-air / glm-4.6 / glm-4.7
+    # Kimi default: kimi-k3 (all tiers)
     tier1_model_override: str = ""
     tier2_model_override: str = ""
     tier3_model_override: str = ""

@@ -17,6 +17,7 @@ import { apiGet, apiPost, apiPatch, apiDelete, apiUpload } from "@/lib/api-clien
 import { EmailDraftCard, type EmailDraft } from "@/components/chat/EmailDraftCard"
 import { ArtifactPreviewCard, type ArtifactRef } from "@/components/chat/ArtifactPreviewCard"
 import { ToolFailedCard, type ToolFailure } from "@/components/chat/ToolFailedCard"
+import { ParallelRunCard, type ParallelRun } from "@/components/chat/ParallelRunCard"
 import { RemindersListCard, type ReminderRow } from "@/components/chat/RemindersListCard"
 import { BrowserPanel } from "@/components/browser/BrowserPanel"
 import { MessageContent } from "@/components/chat/MessageContent"
@@ -988,6 +989,15 @@ function InlineMessageCards({
         if (evt.type === "reminders_list" && Array.isArray(e.reminders)) {
           return <RemindersListCard key={key} reminders={e.reminders as ReminderRow[]} onDismiss={() => dismiss(key)} />
         }
+        if (evt.type === "parallel_run" && Array.isArray(e.subtasks)) {
+          return (
+            <ParallelRunCard
+              key={key}
+              run={{ run_id: (e.run_id as string) || key, subtasks: e.subtasks as ParallelRun["subtasks"] }}
+              onDismiss={() => dismiss(key)}
+            />
+          )
+        }
         return null
       })}
     </div>
@@ -1258,6 +1268,7 @@ interface MessageAreaProps {
   meetingCards: MeetingCardData[]
   toolFailures: ToolFailure[]
   reminderLists: ReminderListSet[]
+  parallelRuns: ParallelRun[]
   setCalendarSuggestions: React.Dispatch<React.SetStateAction<CalendarSuggestion[]>>
   setCalendarUpdateSuggestions: React.Dispatch<React.SetStateAction<CalendarUpdateSuggestion[]>>
   setCalendarDeleteSuggestions: React.Dispatch<React.SetStateAction<CalendarDeleteSuggestion[]>>
@@ -1271,6 +1282,7 @@ interface MessageAreaProps {
   setMeetingCards: React.Dispatch<React.SetStateAction<MeetingCardData[]>>
   setToolFailures: React.Dispatch<React.SetStateAction<ToolFailure[]>>
   setReminderLists: React.Dispatch<React.SetStateAction<ReminderListSet[]>>
+  setParallelRuns: React.Dispatch<React.SetStateAction<ParallelRun[]>>
   onAsk: (q: string) => void
   quoteIndex: number | null
   messagesEndRef: React.RefObject<HTMLDivElement | null>
@@ -1293,6 +1305,7 @@ const MessageArea = memo(function MessageArea({
   meetingCards,
   toolFailures,
   reminderLists,
+  parallelRuns,
   setCalendarSuggestions,
   setCalendarUpdateSuggestions,
   setCalendarDeleteSuggestions,
@@ -1306,6 +1319,7 @@ const MessageArea = memo(function MessageArea({
   setMeetingCards,
   setToolFailures,
   setReminderLists,
+  setParallelRuns,
   onAsk,
   quoteIndex,
   messagesEndRef,
@@ -1316,7 +1330,7 @@ const MessageArea = memo(function MessageArea({
     || emailDrafts.length > 0
     || toolProgressItems.length > 0 || emailThreadCards.length > 0
     || stravaCards.length > 0 || meetingCards.length > 0 || toolFailures.length > 0
-    || reminderLists.length > 0
+    || reminderLists.length > 0 || parallelRuns.length > 0
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-24 md:p-6 md:pb-28 space-y-6">
       {allMessages.length === 0 ? (
@@ -1493,6 +1507,13 @@ const MessageArea = memo(function MessageArea({
               onDismiss={() => setReminderLists(prev => prev.filter(x => x.key !== set.key))}
             />
           ))}
+          {parallelRuns.map((run) => (
+            <ParallelRunCard
+              key={run.run_id}
+              run={run}
+              onDismiss={() => setParallelRuns(prev => prev.filter(x => x.run_id !== run.run_id))}
+            />
+          ))}
         </div>
       )}
       <div ref={messagesEndRef} className="shrink-0" style={{ height: 160 }} />
@@ -1571,6 +1592,7 @@ export default function ChatPage() {
   const [meetingCards, setMeetingCards]                   = useState<MeetingCardData[]>([])
   const [toolFailures, setToolFailures]                   = useState<ToolFailure[]>([])
   const [reminderLists, setReminderLists]                 = useState<ReminderListSet[]>([])
+  const [parallelRuns, setParallelRuns]                   = useState<ParallelRun[]>([])
   const [isConvListCollapsed, setConvListCollapsed] = useState(false)
   const [mobileConvOpen, setMobileConvOpen]         = useState(false)
   // Conversations with unread async messages (e.g. agent completions)
@@ -1738,6 +1760,7 @@ export default function ChatPage() {
     setArtifactNotifications([])
     setContactResults([])
     setPlaceResults([])
+    setParallelRuns([])
     // Clear unread badge when switching to a conversation
     if (activeChatId) {
       setUnreadConvIds(prev => {
@@ -1819,6 +1842,7 @@ export default function ChatPage() {
     setArtifactNotifications([])
     setContactResults([])
     setPlaceResults([])
+    setParallelRuns([])
   }, [])
 
   // If the last message is from the user and recent, the server is still generating —
@@ -2262,6 +2286,53 @@ export default function ChatPage() {
                 streamingCardsRef.current.push({ type: "reminders_list", reminders })
                 setReminderLists(prev => [...prev, { key, reminders }])
               }
+            } else if (evt.type === "parallel_started") {
+              if (chatId === activeChatIdRef.current && Array.isArray(evt.subtasks)) {
+                const run: ParallelRun = {
+                  run_id: evt.run_id as string,
+                  subtasks: (evt.subtasks as Array<Record<string, unknown>>).map((s) => ({
+                    index: s.index as number,
+                    title: s.title as string,
+                    role: (s.role as string | null) ?? null,
+                    model: (s.model as string | null) ?? null,
+                    status: "running" as const,
+                  })),
+                }
+                setParallelRuns(prev => [...prev.filter(r => r.run_id !== run.run_id), run])
+              }
+            } else if (evt.type === "subtask_progress" || evt.type === "subtask_done") {
+              if (chatId === activeChatIdRef.current) {
+                const runId = evt.run_id as string
+                const idx = evt.index as number
+                setParallelRuns(prev => prev.map(r => {
+                  if (r.run_id !== runId) return r
+                  return {
+                    ...r,
+                    subtasks: r.subtasks.map(s => {
+                      if (s.index !== idx) return s
+                      if (evt.type === "subtask_done") {
+                        return {
+                          ...s,
+                          status: (evt.status as ParallelRun["subtasks"][number]["status"]) ?? "done",
+                          preview: (evt.preview as string) || s.preview,
+                          model: (evt.model as string) || s.model,
+                        }
+                      }
+                      return { ...s, preview: (evt.preview as string) || s.preview }
+                    }),
+                  }
+                }))
+              }
+            } else if (evt.type === "parallel_run") {
+              // Persisted summary card emitted when the orchestrate tool returns —
+              // lands in finalMsg.tool_results so it re-renders after reload.
+              if (chatId === activeChatIdRef.current && Array.isArray(evt.subtasks)) {
+                streamingCardsRef.current.push({
+                  type: "parallel_run",
+                  run_id: evt.run_id,
+                  subtasks: evt.subtasks,
+                })
+              }
             } else if (evt.type === "done") {
               // Flush any remaining text in the TTS buffer
               if (isTtsEnabled) tts.flushBuffer()
@@ -2298,6 +2369,7 @@ export default function ChatPage() {
                 setMeetingCards([])
                 setToolFailures([])
                 setReminderLists([])
+                setParallelRuns([])
               }
               // Refresh conversation list to pick up the title (generated async after done)
               apiGet<Conversation[]>("/chat/conversations").then(setConversations).catch(console.error)
@@ -2735,6 +2807,7 @@ export default function ChatPage() {
           meetingCards={meetingCards}
           toolFailures={toolFailures}
           reminderLists={reminderLists}
+          parallelRuns={parallelRuns}
           setCalendarSuggestions={setCalendarSuggestions}
           setCalendarUpdateSuggestions={setCalendarUpdateSuggestions}
           setCalendarDeleteSuggestions={setCalendarDeleteSuggestions}
@@ -2748,6 +2821,7 @@ export default function ChatPage() {
           setMeetingCards={setMeetingCards}
           setToolFailures={setToolFailures}
           setReminderLists={setReminderLists}
+          setParallelRuns={setParallelRuns}
           onAsk={handleAsk}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}

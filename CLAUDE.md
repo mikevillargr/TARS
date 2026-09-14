@@ -157,6 +157,7 @@ Claude Haiku classifier (~200ms, Anthropic API)
 | Classifier + Tier 1 | Claude Haiku | Fast, cheap, always available via Anthropic API |
 | Tier 2 workhorse | Z.ai GLM-4.7 (default) | Configurable via Settings UI per-tier |
 | Tier 3 frontier | Claude Sonnet | Tool use, long context, client-facing work |
+| Kimi (Moonshot AI) | kimi-k3 | Third provider (`provider="kimi"`), Anthropic-compatible endpoint (`KIMI_BASE_URL`, default `https://api.kimi.com/coding`). One model for all tiers + vision (K3 has native vision). Selectable per-tier/per-backup/per-category in Settings; recommended as the `research` category model. Env key: `TARS_KIMI_API_KEY`. |
 | Embeddings | nomic-embed-text | pgvector semantic search |
 | Speech-to-text | faster-whisper — **open source** (MIT, [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)), self-hosted CPU int8 | `POST /transcribe` (`api/routes/transcribe.py`); model size via `WHISPER_MODEL` env (default "small"); lazy-loaded singleton, ~500MB RAM |
 | Text-to-speech | Kokoro TTS — **open source** ([hexgrad/Kokoro-82M](https://github.com/hexgrad/Kokoro-82M) model, Apache-2.0, run via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)), embedded in harness process | Sentence-by-sentence streaming via `/api/proxy/tts`; voice + speed configurable in Settings |
@@ -172,7 +173,7 @@ mid-stream (after tools may have side-effected). `.env`: `{tier}_backup_provider
 `_stream_pair` / `_probe` (`core/model_client.py`).
 
 ### Task-category forced routing — since v2.8.0
-Routing stays complexity-based, but every request is **also** classified into one of six task
+Routing stays complexity-based, but every request is **also** classified into one of seven task
 categories so a specific model can be forced per category, independent of tier:
 
 | Category | Covers |
@@ -181,7 +182,8 @@ categories so a specific model can be forced per category, independent of tier:
 | `writing` | drafting docs/reports/proposals/emails/memos/summaries, decks |
 | `coding` | code generation, debugging, technical Q&A |
 | `data_viz` | charts, plots, graphs, visualizing data |
-| `analysis` | strategy, deep analysis, research synthesis, client deliverables |
+| `analysis` | strategy, deep analysis, client deliverables |
+| `research` | deep dives, research reports, literature reviews, in-depth multi-source investigation (since v2.27.3) |
 | `general` | conversational / anything else |
 
 Detection is regex fast-path + the existing tier-1 classifier (now two-token: `tier category`)
@@ -189,6 +191,15 @@ in `router.classify_full`. Settings → Task-Category Routing maps a category to
 provider+model that **overrides the tier's model** while the classified tier still governs tool
 access and context budget. Stored as `category_routing_json` in `.env`; image/vision requests are
 excluded (vision routing owns model choice).
+
+There are **no built-in category defaults** — `category_routing_json` starts as `{}` (pure user
+config). Recommended mapping when `TARS_KIMI_API_KEY` is set:
+`research → {"provider": "kimi", "model": "kimi-k3"}` (set it in Settings → Task-Category Routing).
+
+The same `forced_provider`/`forced_model` per-call hook also powers per-subtask model selection
+in `orchestrate_parallel` (since v2.27.5) — the chat model can pin each parallel sub-agent to a
+specific provider/model (e.g. kimi for long-horizon research, zai for quick lookups) while the
+sub-agent's Tier 2 budget still governs tools and max_tokens.
 
 ---
 
@@ -345,9 +356,10 @@ Artifact {
   id, user_id
   filename
   type          // "document" | "code" | "report" | "spreadsheet" | "transcript"
-  source        // "chat" | "cron" | "meeting" | "upload" ("agent_job" is legacy — Agent Jobs retired 2026-09)
-  source_id     // FK to originating message/job/meeting
-  content       // file content or storage path
+  source        // "chat" | "cron" | "meeting" | "upload" | "email" ("agent_job" is legacy — Agent Jobs retired 2026-09)
+  source_id     // FK to originating message/job/meeting (Gmail message id for source="email")
+  content       // extracted TEXT only — never a binary payload
+  storage_path  // blob store path (relative to TARS_BLOB_DIR) for binary payloads; NULL for text artifacts
   embedding     // pgvector for semantic search
   version       // integer, increments on regeneration
   parent_id     // FK to original artifact if this is a revision
@@ -356,6 +368,10 @@ Artifact {
   size_bytes
   created_at
 }
+// Binary payloads (PDF/DOCX/images/media/archives) live on disk in the blob store
+// (core/blob_store.py, dir = TARS_BLOB_DIR) — since v2.27.1 they are no longer stored
+// as "base64:" strings in content. resolve_artifact_bytes() reads blob first and falls
+// back to decoding legacy base64 rows; scripts/backfill_artifact_blobs.py migrates them.
 
 FeedSource {
   id, user_id
@@ -405,8 +421,8 @@ class Connector:
 ### Initial Connectors at Launch
 | Connector | Capabilities |
 |---|---|
-| Gmail | read, webhook |
-| Gmail (Personal) | read, write (send/reply) — separate account slot, same OAuth credentials, state=personal |
+| Gmail | read, webhook — also syncs reference-worthy attachments to Artifacts via the hourly `gmail_attachment_sync` job (smart filter; since v2.27.2) |
+| Gmail (Personal) | read, write (send/reply) — separate account slot, same OAuth credentials, state=personal; same attachment sync |
 | Google Calendar | read, write |
 | Google Calendar (Personal) | read, write (create/update/delete) — separate account slot |
 | Google Workspace | search Drive + read & write Docs/Sheets/Slides by link (Drive export → existing parsers) |
@@ -605,6 +621,32 @@ chat conversation.
   text that came off the page itself). Take-over swaps the viewport for noVNC and pauses the
   agent; it is offered only where it can work (`GET /api/browser/capabilities`), and never on
   mobile, where the primary action is PAUSE FOR ME instead.
+- **Parallel sub-agent orchestration** (since v2.27.5) — the `orchestrate_parallel` chat tool
+  (Tier 2/3 only) fans one turn out to up to 8 independent headless sub-agents
+  (`core/orchestrator.py run_parallel`: `asyncio.gather` under a 4-wide semaphore, 5-minute
+  per-subtask timeout so a slow/failing sub-agent never blocks the rest). Each subtask gets its
+  own role-prefixed system prompt, an optional per-subtask provider/model (the same
+  `forced_provider`/`forced_model` hook task-category routing uses — a provider-only pick
+  resolves that provider's Tier 2 default), and a **read-only** tool set (`web_search`,
+  `browse_web`, `search_memory`, `read_artifact`) — no state-changing tools, which keeps the
+  pre-content fallback invariant safe. Sub-agents never message each other; the main turn
+  synthesises from the aggregated tool result (each output truncated to 4k chars). Live SSE
+  events — `parallel_started`, `subtask_progress` (throttled ~1/s per subtask),
+  `subtask_done` — drive a `ParallelRunCard` (status dot, role chip, model badge, rolling
+  one-line preview) that collapses to a summary when the run settles; a `parallel_run` summary
+  card with per-subtask token/model totals persists in `tool_results` for reload.
+- **Artifact retrieval** (since v2.27.6) — the main chat agent can search and open the
+  whole Artifacts library. `search_artifacts` (all tiers, read-only) matches on filename
+  with optional type/source/tag filters and returns compact rows (id, filename, type,
+  source, tags, size, date, ~200-char text snippet when `content` holds extracted text —
+  base64 payloads never ship to the model). `read_artifact` opens one by id through the
+  shared `core/artifact_store.py read_artifact_text` helper (blob bytes → decode /
+  PDF/DOCX/XLSX extraction, capped at 8k chars with a truncation note; images return an
+  "it's an image" note, text-only). Reading also emits an `artifact_created` preview card
+  so the file is openable from the conversation. The system prompt tells the model the
+  library covers generated docs, browser downloads, email attachments (source `email`,
+  category-tagged), and chat uploads (source `upload`) — so "find my boarding pass" is a
+  tool call, not a dead end.
 
 **3. Projects** (route: /tasks)
 - Kanban: Inbox / Todo / In Progress / Done / Snoozed
@@ -671,13 +713,53 @@ A generated output library. Every file TARS produces is automatically saved, ver
 
 Sources that populate Artifacts automatically:
 - Chat responses containing generated files
+- Files uploaded in chat (since v2.27.1 — each `files[]` upload is persisted with
+  `source="upload"` and surfaced as an `artifact_created` card; inline camera shots are not)
+- Email attachments (since v2.27.2 — the hourly `gmail_attachment_sync` job keeps
+  boarding passes, tickets, receipts, invoices, and real documents with
+  `source="email"`, tagged with the category; a smart filter — cheap size/filename
+  pre-filter, then a Tier-1 keep/junk verdict — drops logos, signatures, and
+  marketing images. Boarding passes and tickets also raise a `fyi` Signal on
+  /today, and each save pushes an `attachment_saved` notification with a toast)
 - Cron job reports
 - Meeting exported summaries and transcripts
-- Manual uploads for files you want TARS to work on
+- Manual uploads for files you want TARS to work on (Upload button in the page header
+  since v2.27.1, POST /artifacts/ingest)
+
+Binary payloads (PDF, DOCX, images, media, archives) live in the disk blob store —
+`core/blob_store.py`, rooted at `TARS_BLOB_DIR` (default /opt/tars/data/blobs), one
+`<user_id>/<uuid4>.<ext>` file per payload. The `artifacts.content` column holds
+extracted text only; `storage_path` points at the blob. `resolve_artifact_bytes()`
+is the single read path (blob first, legacy "base64:" content as fallback until
+`scripts/backfill_artifact_blobs.py` has run). List/detail responses carry a
+`has_file` boolean (SQL: `storage_path IS NOT NULL OR content LIKE 'base64:%'`) so
+the client picks a renderer without the payload ever being loaded or shipped.
+
+Chat generation tools (all save via the blob store and emit an `artifact_created` card):
+- `generate_document` (DOCX) and `generate_pdf` (PDF) are built by the shared
+  markdown→file builders in `core/docgen.py` (since v2.27.4 — inline **bold** /
+  *italic* / `code`, styled headings/lists; the same builders power Second Brain
+  export, `second_brain.py` `/items/{id}/export?format=docx|pdf|gdoc`)
+- `generate_presentation` (PPTX) — python-pptx, title slide + bullet slides
+- `generate_spreadsheet` (XLSX, since v2.27.4) — `docgen.build_xlsx(title, sheets)`
+  via openpyxl: multi-sheet, bold frozen header row, content-sized column widths;
+  artifact `type="spreadsheet"`
+- All four accept optional `save_to_brain` (default false): the source text the
+  binary was built from is filed into Second Brain via
+  `browser_downloads.save_artifact_to_brain(..., text=…)` — blob-stored artifacts
+  carry no `content`, so the text override is required; re-extracting from the
+  binary is deliberately avoided
+
+Agent retrieval (since v2.27.6): the chat agent finds files with `search_artifacts`
+(filename match + type/source/tag filters) and opens them with `read_artifact`, both
+backed by `core/artifact_store.py read_artifact_text` — blob bytes decoded directly for
+text formats, extracted via the ingest parsers for PDF/DOCX/XLSX, capped at 8k chars;
+images and pure binaries return a note instead of payload data. Parallel sub-agents use
+the same helper (by id or filename).
 
 Features:
 - Grid and list view toggle
-- Filter by type (Document / Code / Report / Spreadsheet / Transcript), source (Chat / Cron / Meeting / Upload), date, project/client tag
+- Filter by type (Document / Code / Report / Spreadsheet / Transcript), source (Chat / Cron / Email / Meeting / Upload), date, project/client tag
 - Semantic search across filenames and file content
 - File cards: type icon, filename, source badge, date generated, size
 - Right panel detail: full preview for text/markdown/code, Download button, "Open in Chat" button (loads file as context in new chat session), version history timeline, tags, project reference
@@ -689,7 +771,7 @@ Features:
 Two-type system. Connector Jobs (interval-based sync) and Prompt Jobs (wall-clock scheduled, Asia/Manila timezone).
 
 Connector Jobs tab:
-- System sync jobs (Fireflies, Google Contacts)
+- System sync jobs (Fireflies, Google Contacts, Gmail attachment sync since v2.27.2)
 - Interval selector, manual Test button, last/next run times
 
 Prompt Jobs tab:
@@ -786,6 +868,8 @@ tars/
 │   │   │   ├── browser_agent.py    # sub-agent loop driving the browser toolset
 │   │   │   ├── browser_jobs.py     # in-memory live run registry (no DB table)
 │   │   │   ├── browser_artifacts.py # run report / video / trace -> Artifacts
+│   │   │   ├── blob_store.py   # disk blob store for binary artifact payloads
+│   │   │   ├── artifact_store.py # store_upload_as_artifact — shared ingest/blob write path
 │   │   │   ├── router.py       # tier classification
 │   │   │   ├── context_assembler.py
 │   │   │   ├── model_client.py # Ollama + Anthropic unified
@@ -880,12 +964,20 @@ GITHUB_REPO=https://github.com/mikevillargr/TARS
 # Z.ai (Tier 2 — GLM models)
 ZAI_API_KEY=your_zai_api_key_here
 
+# Kimi / Moonshot AI (optional third provider — Anthropic-compatible endpoint)
+TARS_KIMI_API_KEY=your_kimi_api_key_here
+# KIMI_BASE_URL=https://api.kimi.com/coding   (default)
+# KIMI_MODEL=kimi-k3                          (default)
+
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
 
 # Database (set during server bootstrap)
 DATABASE_URL=postgresql://tars:password@postgres:5432/tars
 REDIS_URL=redis://redis:6379
+
+# Blob store — disk directory for binary artifact payloads (created lazily on first write)
+TARS_BLOB_DIR=/opt/tars/data/blobs
 
 # Auth (generate password hash during bootstrap)
 TARS_USERNAME=mike
@@ -1165,6 +1257,19 @@ v2.11.3 Feature: multi-account Google — personal Gmail, Calendar, and Drive. T
         slots (gmail_personal, gcal_personal, google_workspace_personal). OAuth reuses existing
         credentials with state=personal — no Google Cloud Console changes needed. Context assembler,
         read_email tool, and Calendar UI all fan out across both accounts. No DB migration.
+v2.27.2 Feature: Gmail attachment sync — reference-worthy email attachments land in
+        Artifacts. GmailClient gains list_attachments (recursive MIME walk) and
+        get_attachment (gmail.readonly already covers it); new hourly scheduler job
+        gmail_attachment_sync sweeps both Gmail slots for has:attachment newer_than:2d,
+        seeds the dedupe set without downloading on first run, pre-filters tiny images
+        and logo/signature filenames for free, then asks Tier 1 for a strict-JSON
+        keep/junk verdict (failure = keep=false, logged). Kept files save via
+        store_upload_as_artifact as source="email" with tags=[category] and
+        source_id=message id; boarding passes/tickets also raise a fyi Signal
+        (dedupe_key email-attachment:<msg>:<att>). Each save publishes the new
+        attachment_saved WS event → subtle toast with an Open link to
+        /artifacts?open=<id>. Artifacts source filter gains Email. Web + harness,
+        no schema change.
 v2.27.0 Feature: retry a failed tool call, and To-Dos become checkboxes. (1) A failed
         browse_web/archive_page/generate_chart/sync_meetings call used to become a
         sentence in TARS's reply — recovering meant remembering the original request and

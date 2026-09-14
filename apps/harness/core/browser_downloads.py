@@ -14,19 +14,21 @@ Two destinations, deliberately different:
     he actually curated.
 """
 
-import base64
 import logging
 import os
 from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core import blob_store
 from db.models import Artifact
 from ingest.pipeline import detect_mime, ingest_file
 
 log = logging.getLogger(__name__)
 
-# Same ceiling as run media: base64 inflates ~33% into a Text column.
+# Same ceiling as run media. Kept even though payloads now land on disk rather
+# than in a Text column — the cap stops a pathological download filling the
+# blob store, not Postgres rows.
 MAX_DOWNLOAD_BYTES = 12 * 1024 * 1024
 
 
@@ -52,8 +54,9 @@ async def artifacts_for_downloads(
             mime = detect_mime(name, raw)
             artifact_type = "document"
             content: Optional[str] = None
+            storage_path: Optional[str] = None
             # Try to extract text so the file is searchable in Artifacts instead
-            # of being an opaque base64 blob. Binary or unparseable falls back.
+            # of being an opaque blob. Binary or unparseable falls back.
             try:
                 parsed = await ingest_file(content_bytes=raw, filename=name, mime_type=mime)
                 if parsed.get("content"):
@@ -63,7 +66,8 @@ async def artifacts_for_downloads(
                 log.debug("download %s not text-extractable: %s", name, err)
 
             if content is None:
-                content = "base64:" + base64.b64encode(raw).decode()
+                ext = name.rsplit(".", 1)[-1].lower() if "." in name else "bin"
+                storage_path = blob_store.store(raw, ext, user_id)
 
             out.append(
                 Artifact(
@@ -73,6 +77,7 @@ async def artifacts_for_downloads(
                     source="browser",
                     source_id=job_id,
                     content=content,
+                    storage_path=storage_path,
                     size_bytes=size,
                     tags=["browser", "download"],
                 )
@@ -88,23 +93,31 @@ async def save_artifact_to_brain(
     user_id: str,
     note: str = "",
     tags: Optional[List[str]] = None,
+    text: Optional[str] = None,
 ) -> Optional[str]:
     """Push an artifact's text into Second Brain. Returns the item id.
 
-    Only text-bearing artifacts: a base64 blob has nothing to embed, so saving
-    one would create an item that can never be found by search.
+    Only text-bearing artifacts: a blob-stored (or legacy base64) payload has
+    nothing to embed, so saving one would create an item that can never be
+    found by search. Callers that already hold the text the binary was built
+    from (chat generation tools with the source markdown) can pass it as
+    `text` instead of extracting it back out of the blob.
     """
-    content = artifact.content or ""
-    if content.startswith("base64:"):
-        return None
+    if text is not None:
+        content = text
+    else:
+        content = artifact.content or ""
+        if artifact.storage_path or content.startswith("base64:"):
+            return None
     from memory import second_brain
 
+    # The "browser" tag only makes sense for artifacts that came from a browser run
     item = await second_brain.ingest_document(
         db=db,
         user_id=user_id,
         content=content,
         title=artifact.filename,
         personal_note=note,
-        tags=(tags or []) + ["browser"],
+        tags=(tags or []) + (["browser"] if artifact.source == "browser" else []),
     )
     return item.id

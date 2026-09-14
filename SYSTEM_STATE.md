@@ -9,8 +9,8 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.0 |
-| Released | 2026-09-13 |
+| Version | v2.27.6 |
+| Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
 
@@ -87,6 +87,9 @@ governs tool access and context budget. Unset categories use normal tier routing
 `category_routing_json` in `.env` (live-reloaded via `ModelClient.reset()`). Image/vision
 requests are excluded — vision routing owns model choice.
 
+The same per-call forced provider/model hook is reused by `orchestrate_parallel` (since
+v2.27.5) for per-subtask model selection — see Version History.
+
 ---
 
 ## Active Components (13)
@@ -94,14 +97,14 @@ requests are excluded — vision routing owns model choice.
 | # | Component | Route | Status |
 |---|---|---|---|
 | 1 | Today | /today | Live — landing screen. AI-inferred signals needing a decision, grouped by urgency, with named actions, swipe-to-dismiss, snooze, undo, and a state-driven ambient backdrop. Replaces the old prompt-cron daily digest. Populated by the `signal_sweep` job every 4 hours (stalled tasks, unconverted meeting action items grouped by meeting, calendar conflicts, and Tier 2 extraction of commitments from transcripts), or on demand via `POST /api/signals/generate`. |
-| 2 | Chat | /chat | Live |
+| 2 | Chat | /chat | Live — `orchestrate_parallel` tool (Tier 2/3, since v2.27.5) fans independent research/analysis streams out to parallel read-only sub-agents with per-subtask provider/model; live `ParallelRunCard` renders the run. `search_artifacts`/`read_artifact` (all tiers, since v2.27.6) give the agent retrieval over the Artifacts library |
 | 3 | Projects | /tasks | Live — renamed from "Tasks" |
 | 3b | To-Dos | /reminders | Live — quick personal checklist (renamed from "Reminders"); groups: Overdue/Today/Tomorrow/Upcoming/Someday/Done |
 | 4 | Meetings | /meetings | Live |
 | 5 | Calendar | /calendar | Live |
 | 6 | Feed | /feed | Live — three-panel RSS/YouTube/Reddit/podcast reader; save items to Second Brain; "Chat with TARS" sends article to new conversation |
 | 7 | Second Brain | /second-brain | Live — items can be **starred** (pinned); starred items sort first and get a relevance boost in retrieval; **export** to DOCX, PDF, or Google Doc via item detail modal |
-| 8 | Artifacts | /artifacts | Live |
+| 8 | Artifacts | /artifacts | Live — sources include email attachments (`source="email"`, since v2.27.2); chat generation tools include `generate_spreadsheet` (XLSX) and optional `save_to_brain` piping (since v2.27.4); agent retrieval via `search_artifacts`/`read_artifact` (since v2.27.6) |
 | 9 | Cron Manager | /cron | Live |
 | 10 | Connectors | /connectors | Live |
 | 11 | Mnemon | /memory | Live |
@@ -117,7 +120,7 @@ the repo root for the historical runbook and known orphaned remnants.
 
 | Connector | Capabilities | Status |
 |---|---|---|
-| Gmail | read, webhook | Live |
+| Gmail | read, webhook — also syncs reference-worthy attachments to Artifacts (hourly `gmail_attachment_sync`, since v2.27.2) | Live |
 | Gmail (Personal) | read, write (send/reply) | Built, not yet connected — OAuth consent screen blocks personal @gmail.com accounts (likely "Internal" user type); needs Google Cloud Console fix before connecting |
 | Google Calendar | read, write | Live |
 | Google Calendar (Personal) | read, write (create/update/delete) | Live — connect via Connectors page |
@@ -164,6 +167,196 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.6 — 2026-09-14
+**Feature: chat agent artifact retrieval (`search_artifacts` / `read_artifact`)**
+
+- **Shared reader helper.** `core/artifact_store.py read_artifact_text(artifact_id,
+  user_id, db)` is the single agent read path over the library: blob-store bytes (or a
+  legacy "base64:" content value) → direct decode for txt/md/csv/json/py/html, ingest-parser
+  extraction for PDF/DOCX/XLSX, capped at 8k chars with a truncation note. Images return a
+  short "it's an image, view it in Artifacts" note (tool results stay text-only); other
+  binaries return "no extractable text". Never raises — failures come back as message
+  strings. The parallel sub-agent executor (`core/orchestrator.py`) refactored to call it,
+  keeping its filename-lookup fallback; no behavior change for sub-agents beyond the added
+  truncation note.
+- **New chat tools (all tiers, read-only).** `SEARCH_ARTIFACTS_TOOL` (filename ILIKE match
+  plus optional type/source/tag filters — tag filtering done in Python since the JSON tags
+  column has no portable contains(); newest first, limit default 10) returns compact JSON
+  rows: id, filename, type, source, tags, size_bytes, created_at, plus a ~200-char snippet
+  only when `content` holds extracted text — base64 payloads never reach the model.
+  `READ_ARTIFACT_TOOL` (id-only) returns the helper's text and also emits an
+  `artifact_created` preview card so the file is openable from the conversation (recorded
+  in `tool_results` like neighboring read tools' cards). Schemas in `model_client.py`;
+  dispatch in chat's `_tool_executor`.
+- **Prompt awareness.** The capabilities block (`context_assembler.py`) now tells every
+  tier: the Artifacts library holds generated docs, browser downloads, auto-saved email
+  attachments (source `email`, tagged `boarding_pass`/`ticket`/`receipt`/`invoice`/
+  `document`), and chat uploads (source `upload`) — retrievable via the two new tools.
+- Harness only, no schema change, no new dependencies.
+
+### v2.27.5 — 2026-09-14
+**Feature: parallel sub-agent orchestration (`orchestrate_parallel` chat tool)**
+
+- **`core/orchestrator.py` (new).** `run_parallel(subtasks, user_id, db, on_event)` fans one
+  chat turn out to up to 8 independent headless sub-agents (mixture of experts):
+  `asyncio.gather` under a 4-wide semaphore, 5-minute per-subtask timeout
+  (`asyncio.wait_for`) — timeouts/errors become `{status: "failed", output: "<reason>"}`
+  entries and never block the other subtasks. Each subtask streams through
+  `ModelClient.stream` at Tier 2 budget with a role-prefixed headless system prompt; an
+  optional per-subtask `provider`/`model` rides the existing `forced_provider`/`forced_model`
+  hook (a provider-only pick resolves that provider's Tier 2 default from
+  `_PROVIDER_DEFAULTS`). Sub-agents never message each other — the main turn synthesises.
+- **Scoped read-only tool set** for sub-agents: `web_search` (Tavily), `browse_web`
+  (browser runner, no live panel), `search_memory` (Mnemon + Second Brain — new minimal
+  schema; chat normally injects memory via context rather than a tool), `read_artifact`
+  (blob-store bytes + text/pdf/docx/xlsx extraction — new minimal schema). No state-changing
+  tools, which keeps the model client's pre-content fallback invariant safe. Each subtask
+  opens its own DB session — AsyncSession is not concurrency-safe, so the caller's session is
+  never shared across the gather.
+- **Chat wiring.** `ORCHESTRATE_PARALLEL_TOOL` schema in `model_client.py`; registered in the
+  chat tool list for Tier 2/3 only (Tier 1 turns are quick Q&A). Dispatch in chat's
+  `_tool_executor` wires `on_event` straight into the SSE queue: `parallel_started`,
+  `subtask_progress` (throttled ~1/sec/subtask, rolling preview), `subtask_done`. The tool
+  result returned to the model truncates each subtask output to 4k chars; a persisted
+  `parallel_run` summary card in the message's `tool_results` records per-subtask status,
+  model, and token totals for analytics and reload. Prompt guidance added to
+  `context_assembler.py` (Tier 2/3 capabilities block only).
+- **Frontend.** New `components/chat/ParallelRunCard.tsx` — collapsible card with per-subtask
+  status dot (running/done/failed), role chip, model badge, and rolling one-line preview;
+  expanded while running, collapses to an outcome summary when the run settles. Live state
+  keyed by `run_id` in the chat page's streaming state; after the turn the card re-renders
+  from the persisted `parallel_run` tool_result via `InlineMessageCards`.
+- No schema changes, no new dependencies. This is a chat tool — unrelated to the retired
+  Agent Jobs feature.
+
+### v2.27.4 — 2026-09-14
+**Feature: shared docgen builders, `generate_spreadsheet` chat tool, save_to_brain piping**
+
+- **`core/docgen.py` (new).** The rich markdown→file builders that were locked inside
+  the Second Brain export route are now shared: `build_docx(title, content,
+  personal_note)` (inline **bold** / *italic* / `code`, styled headings/lists) and
+  `build_pdf(...)` (styled reportlab layout). `second_brain.py`
+  `/items/{id}/export?format=docx|pdf|gdoc` imports them — zero behavior change for
+  exports. Adds `build_xlsx(title, sheets)` (openpyxl): multi-sheet workbooks with a
+  bold frozen header row and content-sized column widths.
+- **Chat generation tools upgraded.** `generate_document` and `generate_pdf` handlers
+  switch to the shared builders (previously weaker near-duplicates — they gain inline
+  formatting and better styling for free; tool schemas' core args unchanged).
+  `generate_presentation` build logic unchanged.
+- **New `generate_spreadsheet` tool** — args `title`, `sheets` (array of
+  `{name, headers[], rows[][]}`), optional `filename`. Saves via the blob store as
+  `type="spreadsheet"` and emits the standard `artifact_created` card. Prompt guidance
+  in `context_assembler.py` mentions it; Rokid `_TOOL_LABELS` gains labels for all
+  four generation tools.
+- **`save_to_brain` on all four generation tools** (bool, default false): when true,
+  the source text the binary was built from is filed into Second Brain via
+  `browser_downloads.save_artifact_to_brain(..., text=…)`. That function gains a `text`
+  override because blob-stored (`storage_path`) artifacts carry no `content` and would
+  otherwise be skipped; the "browser" tag is now only applied when the artifact's
+  source is actually `browser`. No conversation↔artifact `Link` row — the Link model's
+  valid types don't include `conversation`, and `source="chat"` + `source_id` on the
+  Artifact already records provenance.
+- Harness only, no schema change, no new dependencies (openpyxl was already installed).
+
+### v2.27.3 — 2026-09-14
+**Feature: Kimi (Moonshot AI) added as a third model provider + new `research` task category**
+
+- **New provider `kimi`.** `ModelClient` gains a lazy `kimi` client — `AsyncAnthropic`
+  pointed at `KIMI_BASE_URL` (default `https://api.kimi.com/coding`) with `TARS_KIMI_API_KEY`
+  (env alias follows the `TARS_ANTHROPIC_API_KEY` pattern). `_PROVIDER_DEFAULTS` maps all four
+  tier keys (tier1/2/3/vision) to `kimi-k3` — one model everywhere, K3 has native vision.
+  Wired through `_client_for`, `reset()`, `_probe`, and `_stream_with_fallback` (both already
+  provider-agnostic). Per-tier backups work unchanged (`tierN_backup_provider="kimi"`).
+- **Endpoint scoping in `_stream_anthropic`.** The old `_is_zai = client is not anthropic`
+  test would have lumped Kimi into Z.ai's quirks. Split into two explicit checks:
+  `cache_control: ephemeral` is sent ONLY on the real Anthropic client (Kimi and Z.ai both
+  get the plain system string), and the 8192 thinking-budget bump stays Z.ai-only — Kimi
+  keeps the caller's `max_tokens`.
+- **New `research` category** in the router (`CATEGORIES`, `_RESEARCH_RE` fast-path —
+  deep dive / research report / "in depth" / "compare options" / "write a report on" /
+  literature review / multi-part long prompts — checked before writing/analysis so those
+  prompts no longer land in `analysis`). Research classifies tier3 via the existing
+  `_TIER3_RE` deep-dive signals; the two-token classifier prompt can also emit `research`.
+- **Classifier + utility-call provider mapping.** The tier1 classifier
+  (`router.classify_full`) and the small utility calls in `chat.py` (fact extraction, title
+  generation, compaction — now share one `_tier1_client_params` helper), `second_brain.py`
+  (inline-edit, generate, auto-triage), `ingest/parsers/image.py`, and
+  `jobs/meeting_processor.py` all map `kimi` → kimi key/base_url/`KIMI_MODEL` instead of
+  falling through to the Anthropic key with a Claude model name.
+- **Settings API + UI.** Provider whitelists (`/settings/model-routing` PATCH, backups,
+  category routing) accept `kimi`; the duplicated `_PROVIDER_DEFAULTS` in
+  `api/routes/settings.py` gained kimi rows. API-keys endpoints manage and test a Kimi key
+  (`ApiKeysOut.kimi`, env_map → `tars_kimi_api_key`, test branch pings kimi-k3 via the
+  Anthropic-compatible endpoint). Settings page: `Provider` union, `KIMI_MODELS`,
+  `PROVIDER_DEFAULTS`, provider picker options, and a Research row in Task-Category Routing.
+- **No built-in category defaults** — `category_routing_json` stays `{}` (pure user config).
+  Recommended mapping documented in CLAUDE.md §4: `research → kimi/kimi-k3` when a Kimi key
+  is configured.
+- Web + harness, no schema change. `.env.example` gains `TARS_KIMI_API_KEY` and the
+  previously undocumented `ZAI_API_KEY`.
+
+### v2.27.2 — 2026-09-14
+**Feature: Gmail attachment sync with a smart filter — reference-worthy email attachments land in Artifacts**
+
+- **Attachments were silently dropped.** The Gmail connector only walked text body
+  parts; boarding passes, tickets, receipts, and invoices never entered the system.
+  `GmailClient` gains `list_attachments(message)` (recursive MIME walk for parts with
+  `body.attachmentId` + filename) and `get_attachment(message_id, attachment_id)`
+  (`messages().attachments().get`, base64url-decode — the existing `gmail.readonly`
+  scope covers it, no OAuth change).
+- **New hourly scheduler job `gmail_attachment_sync`** (`jobs/gmail_attachment_sync.py`,
+  registered in `jobs/scheduler.py`) sweeps both Gmail account slots for
+  `has:attachment newer_than:2d`. First run seeds the dedupe set
+  (`conn.config["processed_attachment_ids"]`, capped at 2000) with current matches
+  WITHOUT downloading — no backlog import on deploy. Sync failures leave the id
+  unprocessed so the next run retries (bounded by the 2-day window).
+- **Smart filter, cheap first.** Images <50KB and `logo|signature|banner|icon|spacer|pixel`
+  filenames are skipped with no model call; everything else gets a Tier-1 strict-JSON
+  verdict (`{keep, category}` — boarding_pass/ticket/receipt/invoice/document/junk)
+  from filename/mime/size/subject/sender. Any model or parse failure defaults to
+  keep=false (safe) and is logged.
+- **Kept files become Artifacts** (`source="email"`, `tags=[category]`,
+  `source_id`=Gmail message id) via the shared `store_upload_as_artifact` blob-store
+  path. Each save publishes a new `attachment_saved` WebSocket event — the app shell
+  shows a subtle auto-dismissing toast with an Open link to `/artifacts?open=<id>`.
+- **Boarding passes and tickets also raise a `fyi` Signal** on /today
+  (`source="gmail"`, `urgency="time"`, `source_ref`=artifact id,
+  `dedupe_key=email-attachment:<msg>:<att>`).
+- Artifacts page source filter gains **Email**. Per-attachment errors are contained —
+  one bad message never aborts the batch.
+- Web + harness, no schema change.
+
+### v2.27.1 — 2026-09-13
+**Change: binary artifacts move to a disk blob store; chat uploads are persisted**
+
+- **Blob store.** Binary artifact payloads (PDFs, DOCX, images, media, archives) used to
+  live in the `artifacts.content` Postgres Text column as `"base64:"`-prefixed strings —
+  multi-MB rows that made every Artifacts list/detail load slow. New `core/blob_store.py`
+  writes payloads to `TARS_BLOB_DIR` (default `/opt/tars/data/blobs`, created lazily on
+  first store) as `<user_id>/<uuid4>.<ext>`; the row keeps extracted text only plus a new
+  nullable `artifacts.storage_path` column (migration `5be03b800395`).
+  `resolve_artifact_bytes()` is the single read path — blob first, legacy base64 content
+  as fallback — used by `/download`, `/view`, `/preview`, and chat artifact injection.
+- **Backfill.** `scripts/backfill_artifact_blobs.py` moves existing base64 rows to the
+  blob store in committed batches of 50 (safe to re-run; `--dry-run` supported).
+  Verified locally: 4 legacy webm artifacts migrated, content nulled, blobs readable.
+- **All writers repointed.** `POST /artifacts/ingest` (now via the shared
+  `core/artifact_store.store_upload_as_artifact`), the chat generate_document/
+  presentation/pdf tools, browser downloads, failed-run video, archive_page captures,
+  and `POST /api/artifacts` base64 bodies (Rokid glasses bridge) all store to disk.
+  Deleting an artifact removes its blob.
+- **`has_file`.** Artifact list/detail payloads carry a `has_file` boolean computed in
+  SQL (`storage_path IS NOT NULL OR content LIKE 'base64:%'`) with the `content` column
+  deferred — the client picks a renderer without the payload ever being loaded. The
+  Artifacts page uses it instead of sniffing for the `base64:` prefix.
+- **Chat uploads persist.** Files attached in chat are now also saved as Artifacts
+  (`source="upload"`) and surfaced as `artifact_created` cards in the stream; failures
+  to persist are logged, never break the send. Inline camera shots (`image_base64`) are
+  deliberately not persisted.
+- **Artifacts page Upload button** in the header — hidden file input →
+  `POST /artifacts/ingest` → list refresh.
+- Web + harness. Schema: `artifacts.storage_path` (nullable String).
 
 ### v2.27.0 — 2026-09-13
 **Feature: retry a failed tool call, and To-Dos become checkboxes**

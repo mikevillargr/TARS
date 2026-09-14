@@ -5,6 +5,7 @@ GET /api/notifications/stream?token=<jwt>
 
 Events pushed to the client:
   {type: "new_message",  conversation_id, message_id, preview, created_at}
+  {type: "attachment_saved", artifact_id, filename, category}  ← gmail_attachment_sync
   {type: "ping"}                          ← keepalive every 25 s
 
 Phase 2: extend publish() calls with calendar, task, meeting events.

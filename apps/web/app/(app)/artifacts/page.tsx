@@ -9,9 +9,9 @@ import {
   FileText, Code2, FileSpreadsheet, FileAudio, BarChart2,
   ChevronDown, Loader2, Trash2, Eye, Brain, ListTodo, Check, Image,
   BookOpen, LayoutList, AlignLeft, Table,
-  Braces, FileVideo, FileMusic, Film,
+  Braces, FileVideo, FileMusic, Film, Upload,
 } from "lucide-react"
-import { apiGet, apiDelete } from "@/lib/api-client"
+import { apiGet, apiDelete, apiUpload } from "@/lib/api-client"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 
@@ -29,6 +29,9 @@ interface Artifact {
   version: number
   parent_id: string | null
   created_at: string
+  // True when a binary payload exists on disk (or as a legacy base64 row) —
+  // render via /view or /preview rather than expecting displayable content.
+  has_file: boolean
 }
 
 interface ArtifactDetail extends Artifact {
@@ -129,11 +132,11 @@ function formatSize(bytes: number) {
 }
 
 function sourceLabel(source: string) {
-  return { chat: "Chat", cron: "Cron", meeting: "Meeting", upload: "Upload", browser: "Browser" }[source] ?? source
+  return { chat: "Chat", cron: "Cron", email: "Email", meeting: "Meeting", upload: "Upload", browser: "Browser" }[source] ?? source
 }
 
 function isBinaryArtifact(detail: ArtifactDetail | null) {
-  return detail?.content?.startsWith("base64:") ?? false
+  return detail?.has_file ?? false
 }
 
 function isPdf(detail: ArtifactDetail | null) {
@@ -315,7 +318,7 @@ function ArtifactModal({
     try {
       let content = detail.content ?? ""
       // Binary artifacts: extract text via /preview endpoint
-      if (content.startsWith("base64:")) {
+      if (detail.has_file) {
         if (isPdf(detail) || isDocx(detail) || isPptx(detail) || isXlsx(detail)) {
           const p = await fetch(`/api/proxy/artifacts/${detail.id}/preview`).then(r => r.json()) as PreviewResult
           content = p.text ?? `${detail.filename}\n(No text extracted)`
@@ -382,7 +385,7 @@ function ArtifactModal({
         // PDF handled by iframe; images handled by <img>; code / text displayed directly
         const isImageFile = isImageArtifact(d)
         const skipExtract = isImageFile || isVideoArtifact(d) || isArchiveArtifact(d)
-        if (d.content?.startsWith("base64:") && !d.filename?.toLowerCase().endsWith(".pdf") && !skipExtract) {
+        if (d.has_file && !d.filename?.toLowerCase().endsWith(".pdf") && !skipExtract) {
           setPreviewLoading(true)
           try {
             const p = await fetch(`/api/proxy/artifacts/${artifactId}/preview`)
@@ -813,7 +816,7 @@ function DeepLinkHandler({ onOpen }: { onOpen: (id: string) => void }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const TYPE_FILTERS  = ["All Types", "document", "image", "code", "report", "spreadsheet", "transcript"]
-const SOURCE_FILTERS = ["All Sources", "chat", "cron", "meeting", "upload"]
+const SOURCE_FILTERS = ["All Sources", "chat", "cron", "email", "meeting", "upload"]
 
 export default function ArtifactsPage() {
   const [artifacts, setArtifacts]   = useState<Artifact[]>([])
@@ -825,6 +828,8 @@ export default function ArtifactsPage() {
   const [srcFilter, setSrcFilter]   = useState("All Sources")
   const [showTypeMenu, setTypeMenu] = useState(false)
   const [showSrcMenu, setSrcMenu]   = useState(false)
+  const [uploading, setUploading]   = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -840,6 +845,20 @@ export default function ArtifactsPage() {
   }, [typeFilter, srcFilter])
 
   useEffect(() => { load() }, [load])
+
+  async function handleUploadFile(file: File) {
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      await apiUpload<ArtifactDetail>("/artifacts/ingest", formData)
+      await load()
+    } catch (e) { console.error(e) }
+    finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
 
   const filtered = artifacts.filter(a =>
     a.filename.toLowerCase().includes(search.toLowerCase()) ||
@@ -868,6 +887,25 @@ export default function ArtifactsPage() {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) handleUploadFile(file)
+                }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium mr-1"
+                style={{ backgroundColor: "var(--c-moss)", color: "var(--c-surface)" }}
+                title="Upload a file to Artifacts"
+              >
+                {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                Upload
+              </button>
               <button onClick={() => setViewMode("grid")} className="p-2 rounded-lg transition-colors"
                 style={{ backgroundColor: viewMode === "grid" ? "var(--c-surface-2)" : "transparent", color: viewMode === "grid" ? "var(--c-ink)" : "var(--c-ink-faint)" }}><Grid2x2 size={16} /></button>
               <button onClick={() => setViewMode("list")} className="p-2 rounded-lg transition-colors"

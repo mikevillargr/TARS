@@ -510,6 +510,63 @@ SAVE_ARTIFACT_TO_BRAIN_TOOL = {
     },
 }
 
+SEARCH_ARTIFACTS_TOOL = {
+    "name": "search_artifacts",
+    "description": (
+        "Search Mike's Artifacts library — generated documents, browser downloads and "
+        "archives, saved email attachments (boarding passes, tickets, receipts, "
+        "invoices), files uploaded in chat — by filename. Returns compact rows: id, "
+        "filename, type, source, tags, size, date, and a text snippet when one exists. "
+        "Pass a row's id to read_artifact to open it."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Filename text to match (case-insensitive substring).",
+            },
+            "type": {
+                "type": "string",
+                "description": "Optional filter: document, spreadsheet, image, code, transcript.",
+            },
+            "source": {
+                "type": "string",
+                "description": "Optional filter: email, upload, browser, chat, cron, meeting.",
+            },
+            "tag": {
+                "type": "string",
+                "description": "Optional tag filter, e.g. boarding_pass, ticket, receipt, invoice.",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Max results (default 10).",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+READ_ARTIFACT_TOOL = {
+    "name": "read_artifact",
+    "description": (
+        "Read the text content of one artifact by id (from search_artifacts or an "
+        "artifact card). Text formats decode directly; PDF/DOCX/XLSX are "
+        "text-extracted; images and other binaries without extractable text return a "
+        "note instead."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "artifact_id": {
+                "type": "string",
+                "description": "Artifact id from search_artifacts.",
+            },
+        },
+        "required": ["artifact_id"],
+    },
+}
+
 BROWSE_WEB_TOOL = {
     "name": "browse_web",
     "description": (
@@ -616,6 +673,10 @@ GENERATE_DOCUMENT_TOOL = {
                 "type": "string",
                 "description": "Optional base filename (no extension). Defaults to slugified title.",
             },
+            "save_to_brain": {
+                "type": "boolean",
+                "description": "Also save the document's text content to Second Brain. Default false.",
+            },
         },
         "required": ["title", "content"],
     },
@@ -659,6 +720,10 @@ GENERATE_PRESENTATION_TOOL = {
                 "type": "string",
                 "description": "Optional base filename (no extension).",
             },
+            "save_to_brain": {
+                "type": "boolean",
+                "description": "Also save the presentation's text content to Second Brain. Default false.",
+            },
         },
         "required": ["title", "slides"],
     },
@@ -686,8 +751,61 @@ GENERATE_PDF_TOOL = {
                 "type": "string",
                 "description": "Optional base filename (no extension).",
             },
+            "save_to_brain": {
+                "type": "boolean",
+                "description": "Also save the document's text content to Second Brain. Default false.",
+            },
         },
         "required": ["title", "content"],
+    },
+}
+
+GENERATE_SPREADSHEET_TOOL = {
+    "name": "generate_spreadsheet",
+    "description": (
+        "Generate an Excel spreadsheet (XLSX) with one or more sheets and save it to Artifacts. "
+        "Use when Mike asks to create, build, or generate a spreadsheet, workbook, table, tracker, "
+        "budget, or any tabular data he wants as a file. Each sheet has a name, a header row, and "
+        "data rows. Returns the artifact ID and filename so Mike can download it."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Workbook title — used as the default filename.",
+            },
+            "sheets": {
+                "type": "array",
+                "description": "One or more worksheets.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "Sheet tab name."},
+                        "headers": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Column header row.",
+                        },
+                        "rows": {
+                            "type": "array",
+                            "items": {"type": "array", "items": {"type": "string"}},
+                            "description": "Data rows, one string per cell, aligned with headers.",
+                        },
+                    },
+                    "required": ["name", "headers", "rows"],
+                },
+            },
+            "filename": {
+                "type": "string",
+                "description": "Optional base filename (no extension). Defaults to slugified title.",
+            },
+            "save_to_brain": {
+                "type": "boolean",
+                "description": "Also save a text version of the data to Second Brain. Default false.",
+            },
+        },
+        "required": ["title", "sheets"],
     },
 }
 
@@ -1328,6 +1446,65 @@ REQUEST_ESCALATION_TOOL = {
     },
 }
 
+ORCHESTRATE_PARALLEL_TOOL = {
+    "name": "orchestrate_parallel",
+    "description": (
+        "Fan a request out to multiple independent sub-agents that run in PARALLEL "
+        "(mixture of experts), then synthesise their outputs yourself. "
+        "Use when Mike's ask naturally splits into several independent research or "
+        "analysis streams — e.g. comparing options, researching multiple companies/"
+        "topics at once, or getting a researcher + analyst + critic pass on the same "
+        "question. Do NOT use for a single lookup, for sequential work where one step "
+        "depends on another, or for anything that writes state (sub-agents are "
+        "read-only: web_search, browse_web, memory search, artifact reads). "
+        "Give each subtask a role and pick the best provider/model for it based on "
+        "what's configured and the task type: kimi for long-horizon research, "
+        "anthropic for writing/analysis, zai for quick lookups. Omit provider/model "
+        "to use the default tier model. Max 8 subtasks; each times out after 5 "
+        "minutes without blocking the others."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "subtasks": {
+                "type": "array",
+                "description": "One entry per independent stream of work.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Short label for the subtask (shown in the UI).",
+                        },
+                        "prompt": {
+                            "type": "string",
+                            "description": (
+                                "Complete, self-contained instructions for the sub-agent. "
+                                "It sees none of the conversation — include all needed context."
+                            ),
+                        },
+                        "role": {
+                            "type": "string",
+                            "description": "Persona for the sub-agent, e.g. 'researcher', 'analyst', 'critic'.",
+                        },
+                        "provider": {
+                            "type": "string",
+                            "enum": ["anthropic", "zai", "kimi"],
+                            "description": "Optional. Provider for this subtask; omit to use the default tier model.",
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "Optional. Model name; required only when pinning a specific model. If provider is set without model, that provider's default is used.",
+                        },
+                    },
+                    "required": ["title", "prompt"],
+                },
+            },
+        },
+        "required": ["subtasks"],
+    },
+}
+
 READ_GOOGLE_DOC_TOOL = {
     "name": "read_google_doc",
     "description": (
@@ -1543,6 +1720,11 @@ _PROVIDER_DEFAULTS = {
     ("zai",       "tier2"): "glm-4.7",
     ("zai",       "tier3"): "glm-5.1",
     ("zai",       "vision"): "glm-5v-turbo",   # OpenAI endpoint
+    # Kimi K3 is one model for everything — long-horizon agentic + native vision
+    ("kimi",      "tier1"): "kimi-k3",
+    ("kimi",      "tier2"): "kimi-k3",
+    ("kimi",      "tier3"): "kimi-k3",
+    ("kimi",      "vision"): "kimi-k3",
 }
 
 
@@ -1615,6 +1797,7 @@ class ModelClient:
     def __init__(self):
         self._anthropic: Optional[anthropic.AsyncAnthropic] = None
         self._zai: Optional[anthropic.AsyncAnthropic] = None
+        self._kimi: Optional[anthropic.AsyncAnthropic] = None
         self._zai_openai = None   # openai.AsyncOpenAI, lazy-init
         # Circuit breaker: tier_key -> epoch when the primary went degraded.
         # In-memory on the singleton — correct for a single pm2 worker. If the
@@ -1639,6 +1822,17 @@ class ModelClient:
         return self._zai
 
     @property
+    def kimi(self):  # -> AsyncAnthropic (string to avoid shadowing the module import)
+        """Kimi (Moonshot AI) Anthropic-compatible client for kimi-k3."""
+        if not self._kimi:
+            import anthropic as _anthropic  # re-import in local scope to avoid shadowing
+            self._kimi = _anthropic.AsyncAnthropic(
+                api_key=settings.kimi_api_key,
+                base_url=settings.kimi_base_url,
+            )
+        return self._kimi
+
+    @property
     def zai_openai(self):
         """Z.ai OpenAI-compatible client for GLM-5.x and glm-5v-turbo."""
         if not self._zai_openai:
@@ -1650,12 +1844,17 @@ class ModelClient:
         return self._zai_openai
 
     def _client_for(self, provider: str):
-        return self.zai if provider == "zai" else self.anthropic
+        if provider == "zai":
+            return self.zai
+        if provider == "kimi":
+            return self.kimi
+        return self.anthropic
 
     def reset(self) -> None:
         """Clear cached clients so next call picks up updated API keys/config."""
         self._anthropic = None
         self._zai = None
+        self._kimi = None
         self._zai_openai = None
         self._degraded.clear()   # config changed — give the primary a clean slate
         logger.info("ModelClient reset — API clients will re-initialise on next request")
@@ -1912,9 +2111,14 @@ class ModelClient:
             "propose_calendar_event", "propose_task",
         }
 
-        # Use provided client (e.g. z.ai) or fall back to the default Anthropic client
+        # Use provided client (e.g. z.ai, kimi) or fall back to the default Anthropic client
         _client = client if client is not None else self.anthropic
-        _is_zai = _client is not self.anthropic  # Z.ai doesn't support cache_control
+        # Only the real Anthropic endpoint supports cache_control — Z.ai and Kimi
+        # reject it, so any non-default client gets the plain system string.
+        _supports_cache_control = _client is self.anthropic
+        # Only Z.ai's GLM models need the thinking-token budget bump below —
+        # Kimi stays on the plain path with the caller's max_tokens unchanged.
+        _is_zai = _client is self.zai
         model = model or "claude-sonnet-5"
         current_messages = list(messages)
         total_input = 0
@@ -1926,8 +2130,8 @@ class ModelClient:
             for _round in range(8):  # max 8 tool-call rounds before giving up
                 # Prompt caching: mark system prompt as ephemeral on Anthropic path
                 # so turns 2+ pay only 10% of input tokens for the (static) system prompt.
-                # Z.ai / GLM don't support cache_control — omit it there.
-                if system and not _is_zai:
+                # Z.ai / Kimi don't support cache_control — omit it there.
+                if system and _supports_cache_control:
                     system_param = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
                 else:
                     system_param = system

@@ -27,8 +27,12 @@ async def extract(content_bytes: bytes, mime_type: str, filename: str = "") -> s
         return "[image parser unavailable — model client not found]"
 
     _p = settings.tier1_provider
-    client = _gmc_img().zai if _p == "zai" else _gmc_img().anthropic
-    _vision_model = settings.tier1_model_override or ("glm-4.5-air" if _p == "zai" else settings.tier1_model)
+    client = _gmc_img()._client_for(_p)
+    _vision_model = settings.tier1_model_override or (
+        "glm-4.5-air" if _p == "zai"
+        else settings.kimi_model if _p == "kimi"
+        else settings.tier1_model
+    )
 
     b64 = base64.standard_b64encode(content_bytes).decode()
 

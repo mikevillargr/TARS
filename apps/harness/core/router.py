@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Detection is regex-first (instant); the tier-1 classifier refines ambiguous
 # cases by emitting a category token alongside the tier.
 
-CATEGORIES = ("quick_lookup", "writing", "coding", "data_viz", "analysis", "general")
+CATEGORIES = ("quick_lookup", "writing", "coding", "data_viz", "analysis", "research", "general")
 
 
 # ── No-op stubs ───────────────────────────────────────────────────────────────
@@ -49,21 +49,24 @@ _CLASSIFY_SYSTEM = (
     "tier1 — simple, fast requests: status lookups, single tool calls, short Q&A. "
     "Examples: 'what's my battery?', 'what's on my calendar', 'show my tasks', "
     "'lock the car', 'what's my Strava this week'\n"
-    "tier2 — standard work: writing, coding, analysis, summarization, research, "
+    "tier2 — standard work: writing, coding, analysis, summarization, "
     "multi-step reasoning, most chat\n"
     "tier3 — ANY of the following: "
     "(a) actions that change state: create/add/book/schedule/remind/mark/cancel/update/track/follow-up/note/log/capture; "
     "(b) requests needing web search (current events, live prices, recent news); "
     "(c) document/file generation: create a document/report/PDF/PPTX/DOCX/presentation/slide deck; "
     "(d) data visualization: plot/chart/graph/visualize/draw a chart/show a graph/make a chart; "
-    "(e) frontier tasks: strategy, proposals, client deliverables, deep analysis. "
+    "(e) frontier tasks: strategy, proposals, client deliverables, deep analysis, "
+    "in-depth research reports. "
     "Default to tier3 whenever there is any doubt.\n\n"
     "CATEGORY (second word):\n"
     "quick_lookup — status checks, single-tool reads, short factual Q&A\n"
     "writing — drafting prose: documents, reports, proposals, emails, memos, summaries, decks\n"
     "coding — writing/debugging code, technical/programming questions\n"
     "data_viz — charts, plots, graphs, visualizing data\n"
-    "analysis — strategy, deep analysis, research synthesis, client deliverables\n"
+    "analysis — strategy, deep analysis, client deliverables\n"
+    "research — deep dives, research reports, literature reviews, in-depth "
+    "multi-source investigation, comparing options\n"
     "general — conversational or anything that fits none of the above\n\n"
     "Reply with exactly two words, e.g. 'tier2 writing' or 'tier1 quick_lookup'."
 )
@@ -188,7 +191,7 @@ _PERSONAL_RE = re.compile(
 # ── Category fast-paths ───────────────────────────────────────────────────────
 # Focused regexes used only for category detection (the tier regexes above mix
 # many signals, so categories get their own dedicated patterns). Checked in the
-# order data_viz → coding → writing → analysis → quick_lookup → general.
+# order data_viz → coding → research → writing → analysis → quick_lookup → general.
 
 _DATAVIZ_RE = re.compile(
     r"\b("
@@ -242,6 +245,20 @@ _ANALYSIS_RE = re.compile(
     re.IGNORECASE,
 )
 
+_RESEARCH_RE = re.compile(
+    r"\b("
+    r"deep dive"
+    r"|research (report|paper|study|brief|the|on|about|into)"
+    r"|do (a |an |some )?(research|deep dive)"
+    r"|in.?depth (analysis|look|review|research|report|dive|comparison)"
+    r"|compare (the )?options"
+    r"|write (a |an |the |me )?(research )?report on"
+    r"|literature (review|survey)"
+    r"|state of the art"
+    r")\b",
+    re.IGNORECASE,
+)
+
 _SHORT = 30
 _LONG = 500
 
@@ -253,6 +270,12 @@ def classify_category(prompt: str) -> str:
         return "data_viz"
     if _CODING_RE.search(s):
         return "coding"
+    # Research before writing/analysis: "write a report on X" and "deep dive"
+    # are research tasks, not generic prose/analysis.
+    # Multi-part long prompts (several questions in a long message) are
+    # long-horizon research work too.
+    if _RESEARCH_RE.search(s) or (len(s) > _LONG and s.count("?") >= 2):
+        return "research"
     if _WRITING_RE.search(s):
         return "writing"
     if _ANALYSIS_RE.search(s):
@@ -304,17 +327,23 @@ async def classify_full(prompt: str) -> Tuple[ModelTier, str]:
 
     # No key for the tier1 provider — use heuristics (instant)
     provider = settings.tier1_provider
-    key = settings.zai_api_key if provider == "zai" else settings.anthropic_api_key
+    if provider == "zai":
+        key, base_url = settings.zai_api_key, settings.zai_base_url
+    elif provider == "kimi":
+        key, base_url = settings.kimi_api_key, settings.kimi_base_url
+    else:
+        key, base_url = settings.anthropic_api_key, None
     if not key:
         return _heuristic(prompt), cat
 
     # Ambiguous — ask the tier1 model (~200ms, max_tokens=8 for two tokens)
     model = settings.tier1_model_override or (
-        "glm-4.5-air" if provider == "zai" else settings.tier1_model
+        "glm-4.5-air" if provider == "zai"
+        else settings.kimi_model if provider == "kimi"
+        else settings.tier1_model
     )
     try:
         import anthropic as _anthropic
-        base_url = settings.zai_base_url if provider == "zai" else None
         _aclient = _anthropic.AsyncAnthropic(api_key=key, **({"base_url": base_url} if base_url else {}))
         # Z.ai's Anthropic-compatible endpoint (GLM 4.x "hybrid reasoning" models)
         # puts a mandatory thinking block at content[0] with text=None before any

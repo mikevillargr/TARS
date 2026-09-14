@@ -21,7 +21,6 @@ there when it is wanted and invisible when it is not. The old It carries a DOM s
     attaching one to every successful run would be weight nobody opens.
 """
 
-import base64
 import logging
 import os
 import re
@@ -31,13 +30,14 @@ import urllib.parse
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from core import blob_store
 from db.models import Artifact
 
 log = logging.getLogger(__name__)
 
-# Base64 inflates by ~33% and this lands in a Text column. A minute of 1280x800
-# webm is roughly 1-3MB; the cap is there to stop a pathological 20-minute run
-# putting 60MB in one row, not to be stingy about normal ones.
+# A minute of 1280x800 webm is roughly 1-3MB; the cap is there to stop a
+# pathological 20-minute run filling the blob store with footage nobody opens,
+# not to be stingy about normal ones.
 MAX_MEDIA_BYTES = 12 * 1024 * 1024
 
 
@@ -240,7 +240,7 @@ def artifacts_for_run(
                 )
                 continue
             with open(path, "rb") as fh:
-                encoded = "base64:" + base64.b64encode(fh.read()).decode()
+                storage_path = blob_store.store(fh.read(), ext, user_id)
             out.append(
                 Artifact(
                     user_id=user_id,
@@ -251,7 +251,8 @@ def artifacts_for_run(
                     type="transcript" if kind == "trace" else "video",
                     source="browser",
                     source_id=job_id,
-                    content=encoded,
+                    content=None,
+                    storage_path=storage_path,
                     size_bytes=size,
                     tags=["browser", kind],
                 )

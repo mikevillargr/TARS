@@ -160,12 +160,24 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     if (pathname.startsWith("/chat")) clearUnread()
   }, [pathname, clearUnread])
 
-  // Notification handler — audio chime + browser notification only (no toast)
+  // Notification handler — new_message: audio chime + browser notification.
+  // attachment_saved: subtle toast with a link into Artifacts.
   const soundOnRef = useRef(soundOn)
   useEffect(() => { soundOnRef.current = soundOn })
 
+  const [attachToast, setAttachToast] = useState<{ artifact_id: string; filename: string } | null>(null)
+  useEffect(() => {
+    if (!attachToast) return
+    const t = setTimeout(() => setAttachToast(null), 6000)
+    return () => clearTimeout(t)
+  }, [attachToast])
+
   useEffect(() => {
     const unsub = subscribe((notif) => {
+      if (notif.type === "attachment_saved") {
+        setAttachToast({ artifact_id: notif.artifact_id, filename: notif.filename })
+        return
+      }
       if (notif.type !== "new_message") return
 
       // Audio chime
@@ -415,6 +427,34 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
 
       {/* Global Command Palette */}
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
+
+      {/* attachment_saved toast — subtle, auto-dismisses, links into Artifacts */}
+      {attachToast && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-lg max-w-[90vw]"
+          style={{
+            bottom: "calc(6rem + env(safe-area-inset-bottom, 0px))",
+            backgroundColor: "var(--c-surface)",
+            border: "1px solid var(--c-border)",
+            animation: "tars-pill-in 220ms cubic-bezier(0.25, 1, 0.5, 1)",
+          }}
+        >
+          <span className="tars-label truncate" style={{ color: "var(--c-ink-muted)" }}>
+            Saved attachment: {attachToast.filename}
+          </span>
+          <button
+            onClick={() => {
+              const id = attachToast.artifact_id
+              setAttachToast(null)
+              router.push(`/artifacts?open=${id}`)
+            }}
+            className="tars-label shrink-0 hover:opacity-70"
+            style={{ color: "var(--c-moss)" }}
+          >
+            Open
+          </button>
+        </div>
+      )}
 
     </SidebarProvider>
     </>

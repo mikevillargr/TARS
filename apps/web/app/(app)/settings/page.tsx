@@ -43,7 +43,7 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void 
 }
 
 // ─── Model routing types & constants ──────────────────────────────────────
-type Provider = "anthropic" | "zai"
+type Provider = "anthropic" | "zai" | "kimi"
 
 interface TierConfig { provider: Provider; model: string; backupProvider: Provider | ""; backupModel: string }
 interface ModelRouting { tier1: TierConfig; tier2: TierConfig; tier3: TierConfig; vision: TierConfig }
@@ -71,6 +71,7 @@ const CATEGORY_DEFS = [
   { key: "coding",       label: "Coding & Technical",  desc: "Code generation, debugging, technical Q&A" },
   { key: "data_viz",     label: "Data & Charts",       desc: "Charts, plots, graphs, visualizing data" },
   { key: "analysis",     label: "Analysis & Strategy", desc: "Deep analysis, research, client deliverables" },
+  { key: "research",     label: "Research",            desc: "Deep dives, research reports, literature reviews" },
   { key: "general",      label: "General Chat",        desc: "Conversational / everything else" },
 ] as const
 type CategoryKey = typeof CATEGORY_DEFS[number]["key"]
@@ -112,18 +113,36 @@ const ZAI_VISION_MODELS = [
   { value: "glm-5v-turbo",    label: "GLM-5V Turbo" },
 ]
 
+const KIMI_MODELS = [
+  { value: "kimi-k3", label: "Kimi K3 (long-horizon, native vision)" },
+]
+
 const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
   anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-5", tier3: "claude-sonnet-5", vision: "claude-sonnet-5" },
   zai:       { tier1: "glm-4.5-flash",             tier2: "glm-4.7",           tier3: "glm-5.1",           vision: "glm-5v-turbo" },
+  kimi:      { tier1: "kimi-k3",                   tier2: "kimi-k3",           tier3: "kimi-k3",           vision: "kimi-k3" },
+}
+
+function modelOptionsFor(provider: Provider | "", isVision = false) {
+  if (provider === "zai") return isVision ? ZAI_VISION_MODELS : ZAI_MODELS
+  if (provider === "kimi") return KIMI_MODELS
+  return ANTHROPIC_MODELS
+}
+
+function providerLabel(provider: Provider | ""): string {
+  if (provider === "zai") return "Z.ai"
+  if (provider === "kimi") return "Kimi"
+  return "Anthropic"
 }
 
 // ─── API key types ──────────────────────────────────────────────────────────
-interface ApiKeys { anthropic: string; zai: string; runpod: string; tavily: string; fireflies: string; github: string; always_sunny: string; tessie: string; tessie_vin: string }
+interface ApiKeys { anthropic: string; zai: string; kimi: string; runpod: string; tavily: string; fireflies: string; github: string; always_sunny: string; tessie: string; tessie_vin: string }
 interface KeyEntry { id: keyof ApiKeys; label: string; description: string; editValue: string; testState: "idle" | "testing" | "ok" | "error"; testMsg: string; isPlainText?: boolean }
 
 const KEY_DEFS: { id: keyof ApiKeys; label: string; description: string; isPlainText?: boolean }[] = [
   { id: "anthropic",    label: "Anthropic",    description: "Claude models — Haiku, Sonnet, Opus" },
   { id: "zai",          label: "Z.ai (GLM)",   description: "GLM models via Z.ai API" },
+  { id: "kimi",         label: "Kimi",         description: "Kimi K3 via Moonshot AI (Anthropic-compatible)" },
   { id: "runpod",       label: "RunPod",       description: "GPU inference endpoints" },
   { id: "tavily",       label: "Tavily",       description: "Web search tool" },
   { id: "fireflies",    label: "Fireflies",    description: "Meeting transcription" },
@@ -216,7 +235,7 @@ export default function SettingsPage() {
   const [keyEntries, setKeyEntries] = useState<KeyEntry[]>(
     KEY_DEFS.map(d => ({ ...d, editValue: "", testState: "idle", testMsg: "" }))
   )
-  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", runpod: "", tavily: "", fireflies: "", github: "", always_sunny: "", tessie: "", tessie_vin: "" })
+  const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", kimi: "", runpod: "", tavily: "", fireflies: "", github: "", always_sunny: "", tessie: "", tessie_vin: "" })
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
 
   // PWA install state
@@ -438,7 +457,7 @@ export default function SettingsPage() {
 
   function modelLabel(provider: Provider | "", model: string, isVision: boolean): string {
     if (!provider || !model) return ""
-    const list = provider === "zai" ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS) : ANTHROPIC_MODELS
+    const list = modelOptionsFor(provider, isVision)
     return list.find(m => m.value === model)?.label ?? model
   }
 
@@ -449,10 +468,10 @@ export default function SettingsPage() {
       const isVision = target.tier === "vision"
       return {
         title: `${TIER_LABELS[target.tier]} — Primary`,
-        providerOptions: [["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][],
+        providerOptions: [["anthropic", "Anthropic"], ["zai", "Z.ai"], ["kimi", "Kimi"]] as [Provider | "", string][],
         provider: cfg.provider as Provider | "",
         onProvider: (p: Provider | "") => p && setTierProvider(target.tier, p),
-        modelOptions: cfg.provider === "zai" ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS) : ANTHROPIC_MODELS,
+        modelOptions: modelOptionsFor(cfg.provider, isVision),
         model: cfg.model,
         onModel: (m: string) => setTierModel(target.tier, m),
       }
@@ -462,10 +481,10 @@ export default function SettingsPage() {
       const isVision = target.tier === "vision"
       return {
         title: `${TIER_LABELS[target.tier]} — Backup`,
-        providerOptions: [["", "Off"], ["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][],
+        providerOptions: [["", "Off"], ["anthropic", "Anthropic"], ["zai", "Z.ai"], ["kimi", "Kimi"]] as [Provider | "", string][],
         provider: cfg.backupProvider,
         onProvider: (p: Provider | "") => setTierBackupProvider(target.tier, p),
-        modelOptions: cfg.backupProvider === "zai" ? (isVision ? ZAI_VISION_MODELS : ZAI_MODELS) : ANTHROPIC_MODELS,
+        modelOptions: modelOptionsFor(cfg.backupProvider, isVision),
         model: cfg.backupModel,
         onModel: (m: string) => setTierBackupModel(target.tier, m),
       }
@@ -475,10 +494,10 @@ export default function SettingsPage() {
     const catDef = CATEGORY_DEFS.find(c => c.key === target.cat)!
     return {
       title: catDef.label,
-      providerOptions: [["", "Default"], ["anthropic", "Anthropic"], ["zai", "Z.ai"]] as [Provider | "", string][],
+      providerOptions: [["", "Default"], ["anthropic", "Anthropic"], ["zai", "Z.ai"], ["kimi", "Kimi"]] as [Provider | "", string][],
       provider: cfg.provider,
       onProvider: (p: Provider | "") => setCategoryProvider(target.cat, p),
-      modelOptions: cfg.provider === "zai" ? ZAI_MODELS : ANTHROPIC_MODELS,
+      modelOptions: modelOptionsFor(cfg.provider),
       model: cfg.model,
       onModel: (m: string) => setCategoryModel(target.cat, m),
     }
@@ -580,7 +599,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function testKey(id: "anthropic" | "zai") {
+  async function testKey(id: "anthropic" | "zai" | "kimi") {
     setKeyEntries(prev => prev.map(k => k.id === id ? { ...k, testState: "testing", testMsg: "" } : k))
     try {
       const res = await apiPost<{ ok: boolean; latency_ms?: number; error?: string }>(
@@ -918,7 +937,7 @@ export default function SettingsPage() {
                     <ValueRow
                       sub
                       label="Primary"
-                      value={`${cfg.provider === "zai" ? "Z.ai" : "Anthropic"} · ${modelLabel(cfg.provider, cfg.model, isVision)}`}
+                      value={`${providerLabel(cfg.provider)} · ${modelLabel(cfg.provider, cfg.model, isVision)}`}
                       placeholder="Choose model"
                       onClick={() => setSheet({ kind: "tier-primary", tier: tier.key })}
                     />
@@ -927,7 +946,7 @@ export default function SettingsPage() {
                     <ValueRow
                       sub
                       label="Backup"
-                      value={cfg.backupProvider ? `${cfg.backupProvider === "zai" ? "Z.ai" : "Anthropic"} · ${modelLabel(cfg.backupProvider, cfg.backupModel, isVision)}` : ""}
+                      value={cfg.backupProvider ? `${providerLabel(cfg.backupProvider)} · ${modelLabel(cfg.backupProvider, cfg.backupModel, isVision)}` : ""}
                       placeholder="No fallback"
                       onClick={() => setSheet({ kind: "tier-backup", tier: tier.key })}
                     />
@@ -977,7 +996,7 @@ export default function SettingsPage() {
                   <ValueRow
                     label={cat.label}
                     desc={cat.desc}
-                    value={cfg.provider ? `${cfg.provider === "zai" ? "Z.ai" : "Anthropic"} · ${modelLabel(cfg.provider, cfg.model, false)}` : ""}
+                    value={cfg.provider ? `${providerLabel(cfg.provider)} · ${modelLabel(cfg.provider, cfg.model, false)}` : ""}
                     placeholder="Tier default"
                     onClick={() => setSheet({ kind: "category", cat: cat.key })}
                   />
@@ -1332,7 +1351,7 @@ export default function SettingsPage() {
           <div className="flex flex-col gap-3">
             {keyEntries.map(k => {
               const masked = maskedKeys[k.id] || "••••••••••••••••"
-              const canTest = k.id === "anthropic" || k.id === "zai"
+              const canTest = k.id === "anthropic" || k.id === "zai" || k.id === "kimi"
               return (
                 <div key={k.id} className="rounded-lg px-3 py-3 flex flex-col gap-2"
                   style={{ backgroundColor: "var(--c-surface)", border: "1px solid var(--c-border-faint)" }}>
@@ -1342,10 +1361,10 @@ export default function SettingsPage() {
                       <div className="text-[11px]" style={{ color: "var(--c-ink-faint)" }}>{k.description}</div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {/* Test button (Anthropic + Z.ai only) */}
+                      {/* Test button (Anthropic + Z.ai + Kimi only) */}
                       {canTest && (
                         <button
-                          onClick={() => testKey(k.id as "anthropic" | "zai")}
+                          onClick={() => testKey(k.id as "anthropic" | "zai" | "kimi")}
                           disabled={k.testState === "testing"}
                           className="text-[11px] px-2 py-0.5 rounded font-medium transition-colors flex items-center gap-1 disabled:opacity-50"
                           style={{

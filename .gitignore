@@ -58,3 +58,6 @@ __pycache__/
 # Reference APKs (not source)
 Hi+Rokid+*.xapk
 *.xapk
+
+# Local blob store (binary artifact payloads — dev TARS_BLOB_DIR)
+data/

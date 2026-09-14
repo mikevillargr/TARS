@@ -197,6 +197,45 @@ class GmailClient:
         )
         return f"Email sent to {to} (id: {result.get('id', '?')})."
 
+    def list_attachments(self, message: dict) -> List[dict]:
+        """Recursively walk a message's MIME tree for real attachments.
+
+        Returns [{attachment_id, filename, mime_type, size}] — one entry per
+        part that has both a body.attachmentId and a filename. Inline bodies
+        (text/plain, text/html) carry data inline instead of an attachmentId,
+        so they never show up here.
+        """
+        out: List[dict] = []
+
+        def _walk(part: dict) -> None:
+            body = part.get("body", {}) or {}
+            filename = part.get("filename", "")
+            attachment_id = body.get("attachmentId")
+            if attachment_id and filename:
+                out.append({
+                    "attachment_id": attachment_id,
+                    "filename": filename,
+                    "mime_type": part.get("mimeType", ""),
+                    "size": body.get("size", 0),
+                })
+            for sub in part.get("parts", []) or []:
+                _walk(sub)
+
+        _walk(message.get("payload", {}) or {})
+        return out
+
+    def get_attachment(self, message_id: str, attachment_id: str) -> bytes:
+        """Download one attachment's raw bytes (gmail.readonly covers this)."""
+        result = (
+            self._service.users()
+            .messages()
+            .attachments()
+            .get(userId="me", messageId=message_id, id=attachment_id)
+            .execute()
+        )
+        data = result.get("data", "")
+        return base64.urlsafe_b64decode(data + "==")
+
 
 def extract_thread_text(thread: dict) -> str:
     """Pull plain-text body from all messages in a thread."""
