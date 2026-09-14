@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.8 |
+| Version | v2.27.9 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -167,6 +167,16 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.9 — 2026-09-14
+**Fix: provider names clipped in the model-picker sheet on mobile**
+
+- The segmented provider control (Anthropic / Z.ai / Kimi, plus Default/Off where
+  applicable) in Settings → Models used `px-3` + `text-xs` per segment inside an
+  `overflow-hidden` pill — on ≤360px viewports "Anthropic" (and neighbors) were
+  clipped. Segments now use `px-1.5`/`text-[11px]` on mobile (`sm:` restores the
+  desktop sizing) with `whitespace-nowrap`, so all four providers fit the narrowest
+  phones.
 
 ### v2.27.8 — 2026-09-14
 **Fix: Kimi model IDs — `kimi-k3` is not a valid Kimi Code model**

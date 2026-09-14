@@ -1684,12 +1684,12 @@ export default function SettingsPage() {
                 </button>
               </div>
               <div className="overflow-y-auto px-4 py-4 flex flex-col gap-4">
-                <div className="flex rounded-full overflow-hidden text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
+                <div className="flex rounded-full overflow-hidden text-[11px] sm:text-xs" style={{ border: "1px solid var(--c-border-faint)" }}>
                   {config.providerOptions.map(([p, lbl]) => (
                     <button
                       key={p || "off"}
                       onClick={() => config.onProvider(p)}
-                      className="flex-1 px-3 py-1.5 font-medium transition-colors"
+                      className="flex-1 px-1.5 sm:px-3 py-1.5 font-medium transition-colors whitespace-nowrap"
                       style={{
                         backgroundColor: config.provider === p ? "var(--c-moss)" : "transparent",
                         color: config.provider === p ? "#fff" : "var(--c-ink-faint)",
