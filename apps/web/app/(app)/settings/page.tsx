@@ -123,7 +123,7 @@ const KIMI_MODELS = [
 const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
   anthropic: { tier1: "claude-haiku-4-5-20251001", tier2: "claude-sonnet-5", tier3: "claude-sonnet-5", vision: "claude-sonnet-5" },
   zai:       { tier1: "glm-4.5-flash",             tier2: "glm-4.7",           tier3: "glm-5.1",           vision: "glm-5v-turbo" },
-  kimi:      { tier1: "kimi-k3",                   tier2: "kimi-k3",           tier3: "kimi-k3",           vision: "kimi-k3" },
+  kimi:      { tier1: "kimi-for-coding",           tier2: "kimi-for-coding",   tier3: "kimi-for-coding",   vision: "kimi-for-coding" },
 }
 
 function modelOptionsFor(provider: Provider | "", isVision = false) {
