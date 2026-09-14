@@ -59,7 +59,7 @@ class Settings(BaseSettings):
 
     # Per-tier model overrides (blank = use sensible provider default)
     # Anthropic defaults: haiku-4-5 / sonnet-5 / sonnet-5  Z.ai defaults: glm-4.5-air / glm-4.6 / glm-4.7
-    # Kimi default: kimi-k3 (all tiers)
+    # Kimi default: kimi-for-coding (all tiers)
     tier1_model_override: str = ""
     tier2_model_override: str = ""
     tier3_model_override: str = ""

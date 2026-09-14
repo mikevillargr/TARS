@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.9 |
+| Version | v2.27.10 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -167,6 +167,16 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.10 — 2026-09-14
+**Fix: model badge hidden on Kimi turns + stale `kimi-k3` in settings UI defaults**
+
+- `formatModelName` in the chat page had branches for Anthropic, GLM, and Qwen but
+  returned `null` for every Kimi model ID, so Kimi turns rendered no model badge.
+  It now matches `kimi*` / `k3*` IDs. (Backend always sent `model_used` correctly.)
+- The settings page's `PROVIDER_DEFAULTS` map was missed in v2.27.8 and still seeded
+  `kimi-k3` when switching a tier to Kimi — now `kimi-for-coding`, matching the
+  backend defaults. Stale config comment corrected too.
 
 ### v2.27.9 — 2026-09-14
 **Fix: provider names clipped in the model-picker sheet on mobile**

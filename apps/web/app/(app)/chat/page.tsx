@@ -899,6 +899,8 @@ function formatModelName(model?: string): string | null {
   if (m === "glm-4.5-air")   return "glm-4.5-air"
   if (m === "glm-4.5-flash") return "glm-4.5-flash"
   if (m.startsWith("glm"))   return m   // any other glm variant
+  // Kimi (Moonshot)
+  if (m.includes("kimi") || m === "k3" || m.startsWith("k3-")) return m
   // RunPod Qwen
   if (m.includes("qwen") && m.includes("32")) return "qwen 32b"
   if (m.includes("qwen") && m.includes("8"))  return "qwen 8b"
