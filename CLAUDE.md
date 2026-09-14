@@ -803,7 +803,11 @@ Prompt Jobs tab:
   routing. Backed by `GET/PATCH /api/settings/model-routing/categories`
 - Notification preferences per component
 - PWA install prompt
-- API key management
+- API key management — `PATCH /api/settings/api-keys` writes .env and updates the live
+  settings object, mapping env-var aliases (`tars_anthropic_api_key`, `tars_kimi_api_key`)
+  back to their field names so saves take effect without a restart (fixed v2.27.7). Stored
+  keys are only ever returned masked; the per-key eye toggle reveals the new-key input
+  while typing, not the saved key
 - Cron default schedule config
 - Voice section: voice selector (alloy, echo, fable, onyx, nova, shimmer), speed slider (0.5×–2.0×), preview button; preferences persisted server-side via `/api/proxy/settings` so they work across browser and PWA contexts
 

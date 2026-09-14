@@ -11,7 +11,7 @@ from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import require_auth, verify_password
-from core.config import settings
+from core.config import Settings, settings
 from db.models import User
 from db.session import get_db
 
@@ -20,13 +20,22 @@ router = APIRouter()
 # Path to the .env file the harness reads (apps/harness/.env)
 _ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
+# Env var name → Settings field name. Fields with an explicit alias
+# (tars_anthropic_api_key → anthropic_api_key, tars_kimi_api_key → kimi_api_key)
+# must be set on the live object by field name, not env var name.
+_ENV_TO_FIELD: dict = {}
+for _fname, _ffield in Settings.model_fields.items():
+    _ENV_TO_FIELD[_fname] = _fname
+    if _ffield.alias:
+        _ENV_TO_FIELD[_ffield.alias] = _fname
+
 
 def _set_env(key: str, value: str) -> None:
     """Persist a value to .env and update the live settings object in memory."""
     # quote_mode="never" prevents dotenv_set_key from wrapping values in single
     # quotes, which would make pydantic-settings read "'zai'" instead of "zai"
     dotenv_set_key(str(_ENV_PATH), key, value, quote_mode="never")
-    object.__setattr__(settings, key, value)
+    object.__setattr__(settings, _ENV_TO_FIELD.get(key, key), value)
 
 
 def _mask(key: str, show: int = 6) -> str:
