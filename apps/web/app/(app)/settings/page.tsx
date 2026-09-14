@@ -114,7 +114,10 @@ const ZAI_VISION_MODELS = [
 ]
 
 const KIMI_MODELS = [
-  { value: "kimi-k3", label: "Kimi K3 (long-horizon, native vision)" },
+  { value: "kimi-for-coding",           label: "Kimi for Coding (K2.8 Preview, 1M ctx, all members)" },
+  { value: "kimi-for-coding-highspeed", label: "Kimi for Coding HighSpeed (K2.7, Allegretto+)" },
+  { value: "k3",                        label: "Kimi K3 (1M ctx, Moderato+)" },
+  { value: "k3-256k",                   label: "Kimi K3 256K (Moderato+)" },
 ]
 
 const PROVIDER_DEFAULTS: Record<Provider, Record<string, string>> = {
