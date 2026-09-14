@@ -358,32 +358,52 @@ async def get_api_keys(_user_id: str = Depends(require_auth)):
     )
 
 
+_PROVIDER_ENV = {
+    "anthropic":    "tars_anthropic_api_key",
+    "zai":          "zai_api_key",
+    "kimi":         "tars_kimi_api_key",
+    "runpod":       "runpod_api_key",
+    "tavily":       "tavily_api_key",
+    "fireflies":    "fireflies_api_key",
+    "github":       "github_token",
+    "always_sunny": "always_sunny_api_key",
+    "tessie":       "tessie_api_key",
+    "tessie_vin":   "tessie_vin",
+}
+
+
 @router.patch("/api-keys")
 async def update_api_key(
     body: ApiKeyUpdate,
     _user_id: str = Depends(require_auth),
 ):
-    env_map = {
-        "anthropic":    "tars_anthropic_api_key",
-        "zai":          "zai_api_key",
-        "kimi":         "tars_kimi_api_key",
-        "runpod":       "runpod_api_key",
-        "tavily":       "tavily_api_key",
-        "fireflies":    "fireflies_api_key",
-        "github":       "github_token",
-        "always_sunny": "always_sunny_api_key",
-        "tessie":       "tessie_api_key",
-        "tessie_vin":   "tessie_vin",
-    }
-    if body.provider not in env_map:
+    if body.provider not in _PROVIDER_ENV:
         raise HTTPException(status_code=400, detail="Unknown provider")
 
-    _set_env(env_map[body.provider], body.key)
+    _set_env(_PROVIDER_ENV[body.provider], body.key)
     if body.provider in ("anthropic", "zai", "kimi", "runpod"):
         from core.model_client import get_model_client
         get_model_client().reset()
 
     return {"ok": True}
+
+
+class ApiKeyRevealRequest(BaseModel):
+    provider: str   # any key in _PROVIDER_ENV
+
+
+@router.post("/api-keys/reveal")
+async def reveal_api_key(
+    body: ApiKeyRevealRequest,
+    _user_id: str = Depends(require_auth),
+):
+    """Return the full stored key for one provider (single-user system; the
+    settings UI's eye toggle calls this on demand)."""
+    env_name = _PROVIDER_ENV.get(body.provider)
+    if not env_name:
+        raise HTTPException(status_code=400, detail="Unknown provider")
+    field = _ENV_TO_FIELD.get(env_name, env_name)
+    return {"key": getattr(settings, field, "") or ""}
 
 
 @router.post("/api-keys/test", response_model=ApiKeyTestResult)
