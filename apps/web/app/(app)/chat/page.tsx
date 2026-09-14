@@ -1286,6 +1286,7 @@ interface MessageAreaProps {
   setReminderLists: React.Dispatch<React.SetStateAction<ReminderListSet[]>>
   setParallelRuns: React.Dispatch<React.SetStateAction<ParallelRun[]>>
   onAsk: (q: string) => void
+  onPrefill?: (text: string) => void
   quoteIndex: number | null
   messagesEndRef: React.RefObject<HTMLDivElement | null>
   newResponseTopRef: React.RefObject<HTMLDivElement | null>
@@ -1323,6 +1324,7 @@ const MessageArea = memo(function MessageArea({
   setReminderLists,
   setParallelRuns,
   onAsk,
+  onPrefill,
   quoteIndex,
   messagesEndRef,
   newResponseTopRef,
@@ -1396,7 +1398,7 @@ const MessageArea = memo(function MessageArea({
                     )}
                     {"follow_ups" in msg && Array.isArray((msg as Message).follow_ups) && (msg as Message).follow_ups!.length > 0 && (
                       <div className="max-w-3xl mx-auto pl-0 sm:pl-11">
-                        <FollowUpChips suggestions={(msg as Message).follow_ups!} onAsk={onAsk} />
+                        <FollowUpChips suggestions={(msg as Message).follow_ups!} onAsk={onAsk} onPrefill={onPrefill} />
                       </div>
                     )}
                   </>
@@ -2825,6 +2827,7 @@ export default function ChatPage() {
           setReminderLists={setReminderLists}
           setParallelRuns={setParallelRuns}
           onAsk={handleAsk}
+          onPrefill={(q) => setInputValue(q)}
           quoteIndex={quoteIndex}
           messagesEndRef={messagesEndRef}
           newResponseTopRef={newResponseTopRef}

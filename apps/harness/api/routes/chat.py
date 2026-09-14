@@ -183,9 +183,15 @@ async def _generate_actions(
                     "Return a JSON array of 2-3 objects. Each is either:\n"
                     '  {"kind":"action","tool":"<one of the above>",'
                     '"label":"<= 5 words, imperative","value":"<the field content, ready to save>"}\n'
-                    '  {"kind":"ask","label":"<a question, <= 8 words>"}\n\n'
+                    '  {"kind":"ask","label":"<a complete request Mike would send, <= 10 words>"}\n\n'
                     "Rules:\n"
                     "- Prefer actions. Only use 'ask' when nothing is genuinely actionable.\n"
+                    "- An 'ask' label is sent verbatim to TARS as Mike's next message. "
+                    "Phrase it as a self-contained instruction or question FROM Mike TO "
+                    "TARS — never a question directed at Mike, never a placeholder, "
+                    "never a trailing '...'.\n"
+                    "- If a follow-up needs information only Mike has, omit it rather "
+                    "than asking for it.\n"
                     "- Never propose an action for something already done this turn.\n"
                     "- `value` must be finished text, not a placeholder or instruction.\n"
                     "- Labels say what happens ('Add to To-Dos'), never 'Click here'.\n"
@@ -228,6 +234,11 @@ async def _generate_actions(
                     "field": CHIP_ACTIONS[tool]["field"],
                 })
             else:
+                # Drop degenerate ask labels — placeholders or trailing-ellipsis
+                # fragments that read as prompts for Mike's input. Sending those
+                # verbatim as Mike's message is nonsense.
+                if _re.search(r"(\.{3}|…)\s*$|<[^>]+>|\[[^\]]+\]", label):
+                    continue
                 out.append({"kind": "ask", "label": label[:80]})
         return out
     except Exception as err:  # noqa: BLE001
@@ -1040,6 +1051,7 @@ async def send_message(
         tier = ModelTier(tier_override)
     elif content:
         tier, task_category = await classify_full(content)
+        log.info("Classified tier=%s category=%s", tier.value, task_category)
     elif doc_snippets:
         tier = ModelTier.TIER2
     else:

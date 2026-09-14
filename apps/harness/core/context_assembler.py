@@ -130,7 +130,11 @@ TESLA (via Tessie — full real-time control):
 • get_tesla_sessions — data_type: "drives", "charges", or "battery_health".
 Always call get_tesla_status before state-dependent commands. No confirmation needed for direct commands.
 
-ESCALATION:
+"""
+
+# Tier 1/2 only — the request_escalation tool is withheld from Tier 3 (there is
+# no higher tier to escalate to), so Tier 3 must not be told about it either.
+_ESCALATION_BLOCK = """ESCALATION:
 • request_escalation(reason) — call BEFORE generating any response when task needs a more capable tier. Harness re-runs at next tier automatically.
 
 """
@@ -412,6 +416,8 @@ async def assemble(
 
     is_lightweight = (tier == ModelTier.TIER1)
     capabilities_section = _CAPABILITIES_BLOCK  # all tiers — tool support is available everywhere
+    if tier != ModelTier.TIER3:
+        capabilities_section += _ESCALATION_BLOCK  # request_escalation is Tier 1/2 only
     if not is_lightweight:
         capabilities_section += _PARALLEL_BLOCK  # orchestrate_parallel is Tier 2/3 only
 
