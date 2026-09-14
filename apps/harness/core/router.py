@@ -66,7 +66,8 @@ _CLASSIFY_SYSTEM = (
     "data_viz — charts, plots, graphs, visualizing data\n"
     "analysis — strategy, deep analysis, client deliverables\n"
     "research — deep dives, research reports, literature reviews, in-depth "
-    "multi-source investigation, comparing options\n"
+    "multi-source investigation, comparing options, product/service comparisons "
+    "('X vs Y'), recommendations, and what-should-I-choose decisions\n"
     "general — conversational or anything that fits none of the above\n\n"
     "Reply with exactly two words, e.g. 'tier2 writing' or 'tier1 quick_lookup'."
 )
@@ -255,6 +256,14 @@ _RESEARCH_RE = re.compile(
     r"|write (a |an |the |me )?(research )?report on"
     r"|literature (review|survey)"
     r"|state of the art"
+    # Everyday research phrasings — comparisons, recommendations, decisions
+    r"|[\w\s]+\bvs\.?\b[\w\s]+"                      # "notion vs obsidian"
+    r"|what('s| is| are) the best"
+    r"|best (way|option|tool|app|product|approach|service|platform)s? (for|to)"
+    r"|(which|what) (one )?should (i|we) (choose|pick|buy|use|get|go with)"
+    r"|recommend(ation|ations)? (for|on|about)"
+    r"|alternatives? (to|for)"
+    r"|(latest|current) (trends|developments|state|advancements) (in|of|on)"
     r")\b",
     re.IGNORECASE,
 )

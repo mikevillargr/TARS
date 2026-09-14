@@ -27,9 +27,11 @@ export interface Suggestion {
 export function FollowUpChips({
   suggestions,
   onAsk,
+  onPrefill,
 }: {
   suggestions: (Suggestion | string)[]
   onAsk: (q: string) => void
+  onPrefill?: (text: string) => void
 }) {
   // Older messages persisted plain strings before chips carried actions.
   const items: Suggestion[] = (suggestions ?? []).map(s =>
@@ -128,7 +130,15 @@ export function FollowUpChips({
         return (
           <button
             key={i}
-            onClick={() => (isAction ? open(i, s) : onAsk(s.label))}
+            onClick={() => {
+              if (isAction) return open(i, s)
+              // Chips that read as prompts for Mike's input (trailing "…" or a
+              // [placeholder]) land in the composer for editing instead of being
+              // sent verbatim as Mike's message.
+              const needsInput = /(\.{3}|…)\s*$/.test(s.label) || /<[^>]+>|\[[^\]]+\]/.test(s.label)
+              if (needsInput && onPrefill) onPrefill(s.label.replace(/\s*(\.{3}|…)\s*$/, ""))
+              else onAsk(s.label)
+            }}
             className="follow-up-chip flex items-center justify-between gap-2 text-left px-3 py-2 rounded-lg"
             style={{
               background: "var(--c-surface)",

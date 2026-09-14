@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.11 |
+| Version | v2.27.12 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -167,6 +167,29 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.12 — 2026-09-14
+**Classifier: broader research detection + per-turn logging; chips: ask-label phrasing fix; prompt nit**
+
+- **Research category broadened** (`core/router.py`). The regex only fired on literal
+  research vocabulary ("deep dive", "research report on"), so everyday research —
+  "X vs Y", "what's the best…", "which should I choose…", "alternatives to…",
+  "recommend…", "latest trends in…" — classified `general`/`analysis` and never hit
+  category-forced routing (e.g. research → kimi). Those phrasings now classify
+  `research`, and the LLM classifier's category definition was widened to match.
+  Verified against a 13-phrase regression set (other categories unchanged).
+- **Per-turn classification logging.** Every classified turn now logs
+  `Classified tier=… category=…` (`api/routes/chat.py`), so routing decisions are
+  auditable instead of only logging when an override applies.
+- **Ask chips no longer read as input prompts.** The chip generator's prompt never
+  told Haiku an ask label is sent verbatim as Mike's next message, so it emitted
+  Mike-directed questions and trailing-"…" fragments. The prompt now requires
+  self-contained FROM-Mike-TO-TARS instructions, degenerate labels (trailing
+  ellipsis / placeholders) are filtered server-side, and any that slip through land
+  in the composer for editing (new `onPrefill` path) instead of auto-sending.
+- **Tier 3 prompt/tool mismatch.** `_CAPABILITIES_BLOCK` documented
+  `request_escalation` for all tiers while the tool is Tier 1/2 only; the
+  ESCALATION block now renders only for tiers that have the tool.
 
 ### v2.27.11 — 2026-09-14
 **Feature: reveal saved API keys in Settings**

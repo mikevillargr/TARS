@@ -604,6 +604,13 @@ chat conversation.
   for a stale ref/rate limit/bad chart spec is sometimes not "do the identical thing again."
   Deliberately scoped to these four tools, not a blanket wrapper — most tool failures
   already recover in place (an email draft's own Send button just works again).
+- **Action chips** (v2.24.0, ask-chip phrasing tightened v2.27.12) — after each turn a cheap
+  Haiku call proposes 2–3 next steps: action chips (tool + prefilled payload from a small
+  allowlist, confirmed in an editable inline form before writing) or ask chips (a complete
+  request sent verbatim as Mike's next message). Ask chips are prompted and filtered to be
+  self-contained instructions FROM Mike TO TARS — never questions directed at Mike,
+  placeholders, or trailing "…" fragments; any that slip through land in the composer for
+  editing instead of auto-sending.
 - **Inline To-Dos** (since v2.27.0) — `list_reminders` also emits a `reminders_list` card
   rendering the list as real checkboxes (`RemindersListCard.tsx`), PATCHing
   `/api/reminders/{id}` on click with an optimistic toggle that reverts on failure. Same
@@ -799,8 +806,11 @@ Prompt Jobs tab:
 - Model routing config: tier assignments (provider + model per tier) **plus an optional backup
   model per tier** — used as automatic fallback when the primary errors/times out (see §4)
 - Task-Category Routing: force a specific provider+model per task category
-  (quick_lookup / writing / coding / data_viz / analysis / general); "Default" = normal tier
-  routing. Backed by `GET/PATCH /api/settings/model-routing/categories`
+  (quick_lookup / writing / coding / data_viz / analysis / research / general); "Default" = normal tier
+  routing. Backed by `GET/PATCH /api/settings/model-routing/categories`. Research detection
+  covers everyday comparison/recommendation phrasings ("X vs Y", "what's the best…",
+  "which should I…", alternatives, latest trends) since v2.27.12, not just literal
+  "research report" vocabulary; every turn logs its classified tier+category
 - Notification preferences per component
 - PWA install prompt
 - API key management — `PATCH /api/settings/api-keys` writes .env and updates the live
