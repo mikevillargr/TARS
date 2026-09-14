@@ -240,6 +240,7 @@ export default function SettingsPage() {
   )
   const [maskedKeys, setMaskedKeys] = useState<ApiKeys>({ anthropic: "", zai: "", kimi: "", runpod: "", tavily: "", fireflies: "", github: "", always_sunny: "", tessie: "", tessie_vin: "" })
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({})
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({})
 
   // PWA install state
   const installPromptRef = useRef<BeforeInstallPromptEvent | null>(null)
@@ -390,8 +391,15 @@ export default function SettingsPage() {
     }
   }
 
-  const toggleKeyVisibility = (id: string) => {
-    setVisibleKeys(prev => ({ ...prev, [id]: !prev[id] }))
+  const toggleKeyVisibility = async (id: keyof ApiKeys) => {
+    const next = !visibleKeys[id]
+    setVisibleKeys(prev => ({ ...prev, [id]: next }))
+    if (next && !revealedKeys[id]) {
+      try {
+        const res = await apiPost<{ key: string }>("/settings/api-keys/reveal", { provider: id })
+        if (res.key) setRevealedKeys(prev => ({ ...prev, [id]: res.key }))
+      } catch { /* leave masked */ }
+    }
   }
 
   // Model routing handlers
@@ -597,6 +605,7 @@ export default function SettingsPage() {
       const val = entry.editValue
       setMaskedKeys(prev => ({ ...prev, [id]: "•".repeat(Math.max(0, val.length - 6)) + val.slice(-6) }))
       setKeyEntries(prev => prev.map(k => k.id === id ? { ...k, editValue: "" } : k))
+      setRevealedKeys(prev => { const n = { ...prev }; delete n[id]; return n })
     } catch (err) {
       console.error(err)
     }
@@ -1389,7 +1398,7 @@ export default function SettingsPage() {
                   {/* Current key (masked) + show/hide */}
                   <div className="flex items-center gap-2">
                     <div className="flex-1 text-[11px] font-mono truncate" style={{ color: "var(--c-ink-faint)" }}>
-                      {k.isPlainText ? (k.editValue || masked) : (visibleKeys[k.id] ? (k.editValue || masked) : masked)}
+                      {k.isPlainText ? (k.editValue || masked) : (visibleKeys[k.id] ? (k.editValue || revealedKeys[k.id] || masked) : masked)}
                     </div>
                     {!k.isPlainText && (
                       <button onClick={() => toggleKeyVisibility(k.id)} className="p-1 rounded shrink-0"

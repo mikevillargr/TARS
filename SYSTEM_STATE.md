@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.10 |
+| Version | v2.27.11 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -167,6 +167,16 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.11 — 2026-09-14
+**Feature: reveal saved API keys in Settings**
+
+- The eye toggle previously had nothing to show — the backend only ever returned
+  masked keys, so it appeared inop. New `POST /api/settings/api-keys/reveal`
+  (`api/routes/settings.py`) returns the full stored key for one provider
+  (auth-gated, single-user system); the settings page fetches on first reveal,
+  caches it in component state, and invalidates the cache on save. The toggle also
+  still switches the new-key input between password/text while typing.
 
 ### v2.27.10 — 2026-09-14
 **Fix: model badge hidden on Kimi turns + stale `kimi-k3` in settings UI defaults**
