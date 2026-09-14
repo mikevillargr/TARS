@@ -179,10 +179,10 @@ _PROVIDER_DEFAULTS = {
     ("zai",       "tier2"):  "glm-4.7",
     ("zai",       "tier3"):  "glm-5.1",
     ("zai",       "vision"): "glm-5v-turbo",  # OpenAI endpoint, now supported
-    ("kimi",      "tier1"):  "kimi-k3",
-    ("kimi",      "tier2"):  "kimi-k3",
-    ("kimi",      "tier3"):  "kimi-k3",
-    ("kimi",      "vision"): "kimi-k3",
+    ("kimi",      "tier1"):  "kimi-for-coding",
+    ("kimi",      "tier2"):  "kimi-for-coding",
+    ("kimi",      "tier3"):  "kimi-for-coding",
+    ("kimi",      "vision"): "kimi-for-coding",
 }
 
 

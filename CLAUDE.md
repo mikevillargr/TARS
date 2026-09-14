@@ -157,7 +157,7 @@ Claude Haiku classifier (~200ms, Anthropic API)
 | Classifier + Tier 1 | Claude Haiku | Fast, cheap, always available via Anthropic API |
 | Tier 2 workhorse | Z.ai GLM-4.7 (default) | Configurable via Settings UI per-tier |
 | Tier 3 frontier | Claude Sonnet | Tool use, long context, client-facing work |
-| Kimi (Moonshot AI) | kimi-k3 | Third provider (`provider="kimi"`), Anthropic-compatible endpoint (`KIMI_BASE_URL`, default `https://api.kimi.com/coding`). One model for all tiers + vision (K3 has native vision). Selectable per-tier/per-backup/per-category in Settings; recommended as the `research` category model. Env key: `TARS_KIMI_API_KEY`. |
+| Kimi (Moonshot AI) | kimi-for-coding (default) | Third provider (`provider="kimi"`), Anthropic-compatible endpoint (`KIMI_BASE_URL`, default `https://api.kimi.com/coding`). Valid model IDs: `kimi-for-coding` (K2.8 Preview, all members), `kimi-for-coding-highspeed` (K2.7, Allegretto+), `k3` / `k3-256k` (Moderato+). One model for all tiers + vision. Selectable per-tier/per-backup/per-category in Settings; recommended as the `research` category model. Env key: `TARS_KIMI_API_KEY` (create keys in the Kimi Code Console — Moonshot platform keys are not valid here). |
 | Embeddings | nomic-embed-text | pgvector semantic search |
 | Speech-to-text | faster-whisper — **open source** (MIT, [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)), self-hosted CPU int8 | `POST /transcribe` (`api/routes/transcribe.py`); model size via `WHISPER_MODEL` env (default "small"); lazy-loaded singleton, ~500MB RAM |
 | Text-to-speech | Kokoro TTS — **open source** ([hexgrad/Kokoro-82M](https://github.com/hexgrad/Kokoro-82M) model, Apache-2.0, run via [kokoro-onnx](https://github.com/thewh1teagle/kokoro-onnx)), embedded in harness process | Sentence-by-sentence streaming via `/api/proxy/tts`; voice + speed configurable in Settings |
@@ -194,7 +194,7 @@ excluded (vision routing owns model choice).
 
 There are **no built-in category defaults** — `category_routing_json` starts as `{}` (pure user
 config). Recommended mapping when `TARS_KIMI_API_KEY` is set:
-`research → {"provider": "kimi", "model": "kimi-k3"}` (set it in Settings → Task-Category Routing).
+`research → {"provider": "kimi", "model": "kimi-for-coding"}` (set it in Settings → Task-Category Routing).
 
 The same `forced_provider`/`forced_model` per-call hook also powers per-subtask model selection
 in `orchestrate_parallel` (since v2.27.5) — the chat model can pin each parallel sub-agent to a
@@ -971,7 +971,7 @@ ZAI_API_KEY=your_zai_api_key_here
 # Kimi / Moonshot AI (optional third provider — Anthropic-compatible endpoint)
 TARS_KIMI_API_KEY=your_kimi_api_key_here
 # KIMI_BASE_URL=https://api.kimi.com/coding   (default)
-# KIMI_MODEL=kimi-k3                          (default)
+# KIMI_MODEL=kimi-for-coding                (default)
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here

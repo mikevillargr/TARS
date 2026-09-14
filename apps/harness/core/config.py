@@ -48,7 +48,9 @@ class Settings(BaseSettings):
     # follows the Anthropic alias pattern to avoid env-var collisions.
     kimi_api_key: str = Field(default="", alias="tars_kimi_api_key")
     kimi_base_url: str = "https://api.kimi.com/coding"
-    kimi_model: str = "kimi-k3"
+    # Valid Kimi Code model IDs: k3, k3-256k (Moderato+), kimi-for-coding (all members),
+    # kimi-for-coding-highspeed (Allegretto+)
+    kimi_model: str = "kimi-for-coding"
 
     # Per-tier provider selection: "anthropic" | "zai" | "kimi"
     tier1_provider: str = "anthropic"

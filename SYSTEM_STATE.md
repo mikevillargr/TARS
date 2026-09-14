@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.7 |
+| Version | v2.27.8 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -167,6 +167,20 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.8 — 2026-09-14
+**Fix: Kimi model IDs — `kimi-k3` is not a valid Kimi Code model**
+
+- The Kimi provider shipped with a made-up default model `kimi-k3`, which the
+  `api.kimi.com/coding` endpoint rejects. Valid IDs per the official Kimi Code docs:
+  `kimi-for-coding` (K2.8 Preview, all members — new default everywhere),
+  `kimi-for-coding-highspeed` (K2.7, Allegretto+), `k3` and `k3-256k` (Moderato+).
+- Updated: `core/config.py kimi_model` default, `_PROVIDER_DEFAULTS` in both
+  `api/routes/settings.py` and `core/model_client.py`, the Settings UI model dropdown
+  (now lists all four valid IDs), `.env.example`, and CLAUDE.md.
+- Note: a 401 from the Test button means the key itself is invalid — keys must be
+  created in the Kimi Code Console; Moonshot platform (`api.moonshot.cn`) keys are a
+  different system and are rejected by the coding endpoint.
 
 ### v2.27.7 — 2026-09-14
 **Fix: Kimi/Anthropic API key saves not taking effect + inop key-visibility toggle**
