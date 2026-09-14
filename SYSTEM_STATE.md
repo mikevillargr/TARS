@@ -9,7 +9,7 @@
 
 | Field | Value |
 |---|---|
-| Version | v2.27.6 |
+| Version | v2.27.7 |
 | Released | 2026-09-14 |
 | Branch | main |
 | Repo | https://github.com/mikevillargr/TARS |
@@ -167,6 +167,20 @@ Phone↔Glasses protocol: `connection_update`, `session_list`, `chat_message`, `
 ---
 
 ## Version History
+
+### v2.27.7 — 2026-09-14
+**Fix: Kimi/Anthropic API key saves not taking effect + inop key-visibility toggle**
+
+- **Aliased env vars broke live settings updates.** `_set_env` in
+  `api/routes/settings.py` updated the in-memory settings object by env var name, so
+  saving a Kimi (`tars_kimi_api_key`) or Anthropic (`tars_anthropic_api_key`) key set a
+  stray attribute and left `settings.kimi_api_key` / `settings.anthropic_api_key` empty —
+  the key persisted to .env but GET kept showing it unset and Test reported "No key
+  configured" until a harness restart. `_set_env` now maps env var names to Settings
+  field names via `Settings.model_fields` aliases.
+- **Eye toggle had no visible effect.** The settings page only ever holds masked keys,
+  so hide/unhide rendered the identical string. The toggle now switches the new-key
+  input between password and text, so you can verify a pasted key before saving.
 
 ### v2.27.6 — 2026-09-14
 **Feature: chat agent artifact retrieval (`search_artifacts` / `read_artifact`)**

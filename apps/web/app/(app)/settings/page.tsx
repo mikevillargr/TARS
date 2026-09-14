@@ -1399,7 +1399,7 @@ export default function SettingsPage() {
                   {/* New key input + Save */}
                   <div className="flex items-center gap-2">
                     <input
-                      type={k.isPlainText ? "text" : "password"}
+                      type={k.isPlainText || visibleKeys[k.id] ? "text" : "password"}
                       placeholder={k.isPlainText ? "Enter value…" : "Paste new key to update…"}
                       value={k.editValue}
                       onChange={e => setKeyEntries(prev => prev.map(x => x.id === k.id ? { ...x, editValue: e.target.value, testState: "idle", testMsg: "" } : x))}
